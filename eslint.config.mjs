@@ -35,7 +35,7 @@ const MAX_DEPTH = 3;
 /**
 The only module allowed to read process.env. Everything else takes a Config.
 */
-const CONFIG_BOUNDARY_FILES = ['src/config.ts', 'src/main.ts'];
+const CONFIG_BOUNDARY_FILES = ['src/config/**/*.ts', 'src/main.ts'];
 
 /**
 The only module allowed to spawn a child process (the managed `bw serve`).
@@ -236,6 +236,7 @@ export default tseslint.config(
       'vitest/prefer-strict-equal': 'error',
       'vitest/no-standalone-expect': 'error',
       'vitest/require-top-level-describe': 'error',
+      'unicorn/prefer-https': 'off', // fixtures deliberately contain plain-http URLs to reject
       'max-lines': 'off',
       'max-lines-per-function': 'off',
       'sonarjs/cognitive-complexity': 'off',

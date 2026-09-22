@@ -1,6 +1,6 @@
 import { type DestinationStream, type Logger, pino } from 'pino';
 
-import type { LogLevel } from './config.ts';
+import type { LogLevel } from './config/index.ts';
 
 export type { Logger } from 'pino';
 

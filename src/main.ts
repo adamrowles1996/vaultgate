@@ -1,17 +1,22 @@
 import { serve } from '@hono/node-server';
 
-import { loadConfig } from './config.ts';
+import { describeConfig, loadConfig } from './config/index.ts';
 import { createApp } from './http/app.ts';
 import { createLogger } from './logger.ts';
 
-const configResult = loadConfig(process.env);
-if (!configResult.ok) {
-  process.stderr.write(`vaultgate: ${configResult.error.message}\n`);
+const loaded = loadConfig(process.env);
+if (!loaded.ok) {
+  process.stderr.write(`vaultgate: ${loaded.error.message}\n`);
   process.exit(1);
 }
 
-const config = configResult.value;
+const { config, warnings } = loaded.value;
 const logger = createLogger(config.logLevel);
+for (const warning of warnings) {
+  logger.warn({ warning }, 'configuration warning');
+}
+logger.info({ config: describeConfig(config) }, 'configuration loaded');
+
 const app = createApp({ logger });
 
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (address) => {
