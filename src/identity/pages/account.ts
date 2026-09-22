@@ -92,7 +92,7 @@ export function renderAccount(view: AccountView): string {
           </tbody>
         </table>
       </section>
-      <section>
+      <section id="sensitive-actions">
         <h3>Sensitive actions</h3>
         ${when(
           !view.isReauthenticated,

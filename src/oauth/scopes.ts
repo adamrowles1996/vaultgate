@@ -1,6 +1,6 @@
 import { fail, ok, type Result } from '../result.ts';
 
-export type Scope = 'vault:read' | 'vault:reveal' | 'vault:write' | 'vault:generate';
+export type Scope = 'vault:read' | 'vault:reveal' | 'vault:generate' | 'vault:write';
 
 export interface ScopeDefinition {
   readonly scope: Scope;
@@ -15,8 +15,10 @@ export interface ScopeDefinition {
 }
 
 /**
- * The registry, in the order the metadata documents list it (OAUTH-1).
- * No scope implies another (OAUTH-36).
+ * The registry, in the order the metadata documents list it (OAUTH-1,
+ * OAUTH-2): the same order as `SCOPES` in `src/mcp/scopes.ts`, which the
+ * layering rules keep this module from importing at runtime; the scope
+ * tests hold the two in step. No scope implies another (OAUTH-36).
  */
 export const SCOPE_DEFINITIONS: readonly ScopeDefinition[] = [
   {
@@ -31,14 +33,14 @@ export const SCOPE_DEFINITIONS: readonly ScopeDefinition[] = [
     risky: true,
   },
   {
-    scope: 'vault:write',
-    explanation: 'Create, update and trash items and folders.',
-    risky: true,
-  },
-  {
     scope: 'vault:generate',
     explanation: 'Generate passwords and passphrases.',
     risky: false,
+  },
+  {
+    scope: 'vault:write',
+    explanation: 'Create, update and trash items and folders.',
+    risky: true,
   },
 ];
 

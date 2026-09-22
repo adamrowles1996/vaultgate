@@ -112,7 +112,8 @@ export function listConnectedClients(
 
 /**
  * `POST /oauth/consents/:id/revoke` (OAUTH-30), the account page's
- * "Disconnect" button: same session and ID-18 checks as every account action.
+ * "Disconnect" button: the session and ID-18 checks of every account action,
+ * then the ID-15 re-authentication window of every sensitive one.
  */
 export type ConsentRevokeHandler = (context: OAuthContext, consentId: string) => Promise<Response>;
 
@@ -129,6 +130,9 @@ export function createConsentRevokeHandler(
     const denied = dependencies.guards.stateChange(context, fields, session.csrfToken);
     if (denied !== undefined) {
       return denied;
+    }
+    if (!session.isReauthenticated) {
+      return dependencies.guards.deny(context, 're-authentication required');
     }
     return revokeConsent(dependencies, session.operatorId, consentId) === undefined
       ? dependencies.guards.deny(context, 'unknown consent')

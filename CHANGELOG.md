@@ -6,7 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- ID-15: revoking a connected client from the account page now needs a password confirmation
+  within the last five minutes, like every other sensitive action; the Disconnect buttons appear
+  only inside that window and the page points at the re-authentication form until then.
+- OAUTH-37: CORS preflight on `/mcp`, the well-known documents and the OAuth machine routes now
+  allows the `Mcp-Method` and `Mcp-Name` request headers of the 2026-07-28 wire format.
+- VAULT-13: `list_folders` no longer returns the `No Folder` pseudo-folder, whose id current
+  Bitwarden CLIs report as an empty string rather than `null`; the `bw serve` double now emits the
+  real shape.
+- VAULT-7: shutdown logs `vault locked` and `bw serve stopped` (and `vault lock failed` when the
+  lock is refused) instead of stopping silently.
+- OAUTH-1, OAUTH-2: `scopes_supported` lists the scopes in the same order in the protected
+  resource and authorization server metadata (`vault:read`, `vault:reveal`, `vault:generate`,
+  `vault:write`).
+
+### Added
+
+- MCP protocol coverage: the in-process test client speaks both `2025-11-25` and `2026-07-28`
+  (per-request `_meta` envelope, `Mcp-Method` and `Mcp-Name` headers), and the `/mcp` tests run
+  `initialize`, `tools/list`, `tools/call` and the scope gate under both.
 
 ## [0.1.0-rc.1] - 2026-09-22
 

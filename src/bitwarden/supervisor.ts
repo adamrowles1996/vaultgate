@@ -265,8 +265,18 @@ class Supervisor implements VaultSupervisor {
     this.#cli.abort();
     this.#becomeUnready();
     if (this.#serve !== undefined) {
-      await this.#api.call({ method: 'POST', path: '/lock', schema: messageDataSchema });
+      const locked = await this.#api.call({
+        method: 'POST',
+        path: '/lock',
+        schema: messageDataSchema,
+      });
+      if (locked.ok) {
+        this.#logger.info('vault locked');
+      } else {
+        this.#logger.warn({ err: locked.error }, 'vault lock failed');
+      }
       await this.#stopServe();
+      this.#logger.info('bw serve stopped');
     }
     await this.#loop;
     this.#credentials.dispose();

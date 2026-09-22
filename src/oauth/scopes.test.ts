@@ -15,12 +15,12 @@ import {
 } from './scopes.ts';
 
 describe('scope registry', () => {
-  it('OAUTH-1 lists the four scopes in the documented order', () => {
+  it('OAUTH-1 OAUTH-2 lists the four scopes in the documented order', () => {
     expect(SCOPES_SUPPORTED).toStrictEqual([
       'vault:read',
       'vault:reveal',
-      'vault:write',
       'vault:generate',
+      'vault:write',
     ]);
   });
 

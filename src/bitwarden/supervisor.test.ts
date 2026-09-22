@@ -213,6 +213,23 @@ describe('startVaultSupervisor stop', () => {
     expect(harness.serveChild().signals).toStrictEqual(['SIGTERM']);
     expect(harness.messages()).not.toContain('bw serve exited');
     expect(harness.clock.pending()).toBe(0);
+    const messages = harness.messages();
+    expect(messages.indexOf('vault locked')).toBeGreaterThan(messages.indexOf('vault ready'));
+    expect(messages.indexOf('bw serve stopped')).toBeGreaterThan(messages.indexOf('vault locked'));
+    expect(harness.linesFor('vault locked')[0]).toMatchObject({ level: 30 });
+    expect(harness.linesFor('bw serve stopped')[0]).toMatchObject({ level: 30 });
+  });
+
+  it('VAULT-7 logs a refused lock and still stops bw serve', async () => {
+    const harness = new SupervisorHarness();
+    harness.fake.override('POST', '/lock', { success: false, message: 'Vault is busy.' });
+    const supervisor = harness.start();
+    await harness.until(() => supervisor.isReady());
+    await supervisor.stop();
+    expect(harness.messages()).not.toContain('vault locked');
+    expect(harness.linesFor('vault lock failed')[0]).toMatchObject({ level: 40 });
+    expect(harness.messages()).toContain('bw serve stopped');
+    expect(harness.serveChild().signals).toStrictEqual(['SIGTERM']);
   });
 
   it('VAULT-8 never runs bw logout', async () => {

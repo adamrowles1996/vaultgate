@@ -231,11 +231,20 @@ describe('BwServeVaultClient.getSecret', () => {
 });
 
 describe('BwServeVaultClient.listFolders and listCollections', () => {
-  it('drops the pseudo "No Folder" entry', async () => {
-    const { client } = clientFor(new FakeBwServe());
-    expect(unwrapOk(await client.listFolders())).toStrictEqual([
-      { id: FIXTURE_IDS.folder, name: 'Work' },
-    ]);
+  it('VAULT-13 drops the "No Folder" pseudo-folder whether its id is "" (current CLIs) or null', async () => {
+    const fake = new FakeBwServe();
+    const { client } = clientFor(fake);
+    const listed = await fake.fetch('http://bw.test/list/object/folders');
+    const raw = await listed.json();
+    expect(raw).toMatchObject({ data: { data: [{}, { id: '', name: 'No Folder' }] } });
+    const work = [{ id: FIXTURE_IDS.folder, name: 'Work' }];
+    expect(unwrapOk(await client.listFolders())).toStrictEqual(work);
+    const older = [{ object: 'folder', id: null, name: 'No Folder' }, ...fake.folders];
+    fake.override('GET', '/list/object/folders', {
+      success: true,
+      data: { object: 'list', data: older },
+    });
+    expect(unwrapOk(await client.listFolders())).toStrictEqual(work);
   });
 
   it('lists collections with their organisation', async () => {

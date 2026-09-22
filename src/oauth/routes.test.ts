@@ -31,7 +31,7 @@ describe('OAuth routes', () => {
     '/oauth/token',
     '/oauth/revoke',
     '/oauth/register',
-  ])('OAUTH-37 %s answers a preflight with the MCP header set', async (path) => {
+  ])('OAUTH-37 %s answers a preflight with the exact MCP header list', async (path) => {
     const harness = createOAuthHarness();
     const response = await harness.exchange(path, PREFLIGHT);
     expect(response.status).toBe(204);
@@ -41,6 +41,8 @@ describe('OAuth routes', () => {
       'Content-Type',
       'Mcp-Session-Id',
       'Mcp-Protocol-Version',
+      'Mcp-Method',
+      'Mcp-Name',
     ]);
     expect(response.headers.get('access-control-expose-headers')?.split(',')).toStrictEqual([
       'WWW-Authenticate',

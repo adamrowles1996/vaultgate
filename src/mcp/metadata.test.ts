@@ -42,16 +42,20 @@ describe('protected resource metadata', () => {
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
   });
 
-  it.each(PATHS)('OAUTH-37 answers preflight at %s', async (path) => {
+  it.each(PATHS)('OAUTH-37 answers preflight at %s with the exact header list', async (path) => {
     const { app } = createTestApp();
     const response = await app.request(path, {
       method: 'OPTIONS',
-      headers: { origin: 'https://agent.example', 'access-control-request-method': 'GET' },
+      headers: {
+        origin: 'https://agent.example',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'authorization,mcp-protocol-version,mcp-method',
+      },
     });
     expect(response.status).toBe(204);
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
     expect(response.headers.get('access-control-allow-headers')).toBe(
-      'Authorization,Content-Type,Mcp-Session-Id,Mcp-Protocol-Version',
+      'Authorization,Content-Type,Mcp-Session-Id,Mcp-Protocol-Version,Mcp-Method,Mcp-Name',
     );
     expect(response.headers.get('access-control-expose-headers')).toBe(
       'WWW-Authenticate,Mcp-Session-Id',

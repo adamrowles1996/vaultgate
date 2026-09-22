@@ -102,15 +102,19 @@ describe('POST /mcp transport guards', () => {
     expect(response.message).toStrictEqual({ error: 'payload_too_large' });
   });
 
-  it('OAUTH-37 answers preflight on /mcp', async () => {
+  it('OAUTH-37 answers preflight on /mcp with the exact header list, 2026-07-28 headers included', async () => {
     const { app } = createTestApp();
     const response = await app.request('/mcp', {
       method: 'OPTIONS',
-      headers: { origin: 'https://agent.example', 'access-control-request-method': 'POST' },
+      headers: {
+        origin: 'https://agent.example',
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization,content-type,mcp-method,mcp-name',
+      },
     });
     expect(response.status).toBe(204);
     expect(response.headers.get('access-control-allow-headers')).toBe(
-      'Authorization,Content-Type,Mcp-Session-Id,Mcp-Protocol-Version',
+      'Authorization,Content-Type,Mcp-Session-Id,Mcp-Protocol-Version,Mcp-Method,Mcp-Name',
     );
     expect(response.headers.get('access-control-allow-methods')).toBe('POST,GET,DELETE,OPTIONS');
   });

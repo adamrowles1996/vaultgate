@@ -31,7 +31,8 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
   backoff; only a CLI below the minimum version (VAULT-2) stops the retry loop, since no retry
   can fix it.
 - **VAULT-7** On `SIGTERM`/`SIGINT` vaultgate calls `POST /lock`, then sends `SIGTERM` to the
-  child and waits up to 5 s before `SIGKILL`.
+  child and waits up to 5 s before `SIGKILL`, logging `vault locked` and `bw serve stopped` as each
+  step completes.
 - **VAULT-8** vaultgate never calls `bw logout` and never deletes the CLI app-data directory.
 
 ## 5.2 Synchronisation
