@@ -6,14 +6,20 @@ import { createMetadataApp } from '../mcp/metadata.ts';
 import { createMcpRoutes } from '../mcp/routes.ts';
 
 import type { Config } from '../config/index.ts';
+import type { Identity, IdentityVariables } from '../identity/index.ts';
 import type { Logger } from '../logger.ts';
 import type { AuditSink } from '../mcp/audit.ts';
 import type { TokenVerifier } from '../mcp/token-verifier.ts';
 import type { VaultClient } from '../vault/client.ts';
 
 interface AppEnvironment {
-  readonly Variables: RequestIdVariables;
+  readonly Variables: RequestIdVariables & IdentityVariables;
 }
+
+/**
+ID-20, verbatim; only sent when the public URL is https.
+*/
+const STRICT_TRANSPORT_SECURITY = 'max-age=31536000; includeSubDomains';
 
 export type App = Hono<AppEnvironment>;
 
@@ -30,6 +36,7 @@ export interface AppDependencies {
   readonly config: Config;
   readonly logger: Logger;
   readonly readiness: () => Readiness;
+  readonly identity: Identity;
   readonly vaultClient: VaultClient;
   readonly tokenVerifier: TokenVerifier;
   readonly auditSink: AuditSink;
@@ -41,15 +48,21 @@ export interface AppDependencies {
 
 /**
  * Builds the HTTP application: probes, the protected resource metadata and
- * the MCP endpoint. The OAuth authorization server and the consent UI mount
- * here in later milestones (see docs/PLAN.md).
+ * the MCP endpoint and the operator pages. The OAuth authorization server
+ * mounts here in a later milestone (see docs/PLAN.md).
  */
 export function createApp(dependencies: AppDependencies): App {
-  const { config, logger, readiness } = dependencies;
+  const { config, logger, readiness, identity } = dependencies;
   const app = new Hono<AppEnvironment>();
 
   app.use(requestId());
-  app.use(secureHeaders());
+  // -- identity: HSTS per ID-20 --
+  app.use(
+    secureHeaders({
+      strictTransportSecurity: identity.cookiePolicy.isSecure && STRICT_TRANSPORT_SECURITY,
+    }),
+  );
+  // -- end identity --
 
   app.get('/healthz', (context) => context.json({ status: 'ok' }));
   // -- storage: readiness reflects the store; later milestones add bw serve --
@@ -60,6 +73,11 @@ export function createApp(dependencies: AppDependencies): App {
       : context.json({ status: 'unavailable', failing: [...failing] }, 503);
   });
   // -- end storage --
+
+  // -- identity: operator session, setup, login and account pages (spec §04) --
+  app.use(identity.attachSession);
+  app.route('/', identity.routes);
+  // -- end identity --
 
   // -- MCP resource server (spec §06) ------------------------------------
   app.route('/', createMetadataApp(config));

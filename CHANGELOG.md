@@ -31,6 +31,14 @@ All notable changes to this project are documented here. The format follows
   runner that refuses a changed or newer schema, the v1 schema with its hot-path indexes, typed
   query helpers, and the hourly retention task; `/readyz` now reports the store and answers
   `503` with the failing components.
+- Identity (spec §04): first-run bootstrap token and `/setup`, the operator account with scrypt
+  password hashing (parameter upgrade on login) and a bundled 10 000 common-password list, RFC 6238
+  TOTP on `node:crypto` verified against the RFC vectors with replay protection, TOTP secrets sealed
+  with HKDF + AES-256-GCM under `VAULTGATE_SECRET_KEY`, eight single-use recovery codes, hashed
+  sessions with `__Host-` cookies, idle and absolute expiry and rotation on login, Origin plus
+  synchroniser-token CSRF checks, exponential login backoff without lockout, server-rendered
+  `/login`, `/logout` and `/account` pages under a strict CSP with a single stylesheet, HSTS, and
+  the `IdentityProvider` interface the authorization server consumes.
 - Azure Container Apps deployment (spec §09.3): `deploy/azure/` ARM template with linked
   modules (Log Analytics, Container Apps environment, Key Vault with RBAC and purge protection,
   Azure Files share at `/data`, single-replica Container App with Key Vault secret references),

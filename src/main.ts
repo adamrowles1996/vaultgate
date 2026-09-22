@@ -1,7 +1,12 @@
+import { randomBytes } from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
+
 import { serve } from '@hono/node-server';
+import { getConnInfo } from '@hono/node-server/conninfo';
 
 import { describeConfig, loadConfig } from './config/index.ts';
 import { createApp } from './http/app.ts';
+import { createIdentity, CURRENT_PARAMETERS } from './identity/index.ts';
 import { createLogger } from './logger.ts';
 import { LoggingAuditSink } from './mcp/audit.ts';
 import { RejectAllTokenVerifier } from './mcp/token-verifier.ts';
@@ -30,9 +35,27 @@ if (!opened.ok) {
 const store = opened.value;
 // -- end storage -------------------------------------------------------------
 
+// -- identity: spec 04, wired with real entropy, clock, sleep and socket addresses --
+const identity = createIdentity({
+  config,
+  database: store.db,
+  logger,
+  audit: (event) => {
+    logger.info({ audit: event }, 'audit event');
+  },
+  random: (bytes) => randomBytes(bytes),
+  clock: () => Date.now(),
+  delay: (ms) => sleep(ms),
+  clientAddress: (context) => getConnInfo(context).remote.address,
+  passwordParameters: CURRENT_PARAMETERS,
+});
+identity.bootstrap.ensureToken();
+// -- end identity --
+
 const app = createApp({
   config,
   logger,
+  identity,
   // -- storage: bw serve joins this report in the vault-backend milestone --
   readiness: () =>
     store.db.isOpen ? { ready: true, failing: [] } : { ready: false, failing: ['store'] },

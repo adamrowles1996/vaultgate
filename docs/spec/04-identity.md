@@ -33,8 +33,10 @@ added without touching the OAuth layer (see `PLAN.md`).
 
 - **ID-8** RFC 6238 with HMAC-SHA1, 6 digits, 30 s step, implemented on `node:crypto` (no
   dependency) and verified against the RFC 6238 Appendix B test vectors.
-- **ID-9** Enrolment shows an `otpauth://totp/vaultgate:<name>?secret=…&issuer=vaultgate` URI as a
-  QR code and as text. The secret is 20 random bytes, stored encrypted at rest with a key derived
+- **ID-9** Enrolment shows an `otpauth://totp/vaultgate:<name>?secret=…&issuer=vaultgate` URI as
+  text together with the base32 key for manual entry. (v1 renders no QR image: a QR encoder would
+  be a dependency, and every authenticator app accepts a manual key. A QR image is a post-1.0
+  option once an in-tree encoder is justified.) The secret is 20 random bytes, stored encrypted at rest with a key derived
   from `VAULTGATE_SECRET_KEY` (HKDF, AES-256-GCM), never logged.
 - **ID-10** Verification accepts the current step and one step either side and MUST reject a code
   whose step is ≤ the last accepted step (replay protection), persisted per operator.
@@ -86,3 +88,11 @@ interface IdentityProvider {
 
 - **ID-21** The OAuth authorize flow depends only on `SessionState.operatorId`; it never inspects
   which provider produced it.
+
+## 4.8 Verification
+
+- **ID-22** Every browser flow in this section (setup → recovery codes → logout → login with TOTP
+  or a recovery code → re-authentication → password change, TOTP rotation, recovery-code
+  regeneration) is exercised in-process through `app.request()` with a cookie jar in
+  `src/test-support/browser.ts`, so no headless browser is needed in CI (ARCH-5). Pages carry no
+  JavaScript, so there is no client-side behaviour a real browser would add.

@@ -46,8 +46,8 @@ exactly the expired rows; the server boots with a full configuration and reports
 3. `feat(identity)`: bootstrap flow (`/setup`), login and logout pages, account page skeleton,
    static stylesheet, CSP.
 
-Exit: a browser (Playwright, headless, in CI) can complete setup → logout → login with TOTP →
-re-authentication; every negative path in 04 is covered.
+Exit: the in-process browser double (`app.request()` plus a cookie jar) completes setup → logout →
+login with TOTP → re-authentication; every negative path in 04 is covered (ID-22).
 
 ### M3 Authorization server (spec 03)
 
