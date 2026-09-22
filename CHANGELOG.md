@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- OAuth 2.1 authorization server (spec §03, milestone M3): RFC 8414 metadata, client resolution
+  (pre-registered, CIMD with an SSRF-safe fetcher and bounded cache, RFC 7591 registration of
+  public clients), the authorize endpoint with server-side pending requests bound to the browser,
+  the consent page (client name, redirect host, registration mechanism, loopback warning, per-scope
+  explanations and risk markers), single-use PKCE-bound authorization codes with `iss`, the token
+  endpoint (authorization code and rotating refresh tokens with family revocation, `invalid_grant`
+  on replay), RFC 7009 revocation, consent revocation from the account page, per-surface rate limits
+  and a store-backed bearer verifier for the MCP resource server. Contract tests drive the real
+  application with `@modelcontextprotocol/client`'s OAuth helpers for all three registration paths.
 - Project scaffold: TypeScript on Node 26, strict lint and type gates, 100% coverage gate,
   file-size and commit-subject gates, pinned CI with CodeQL, Scorecard and Dependabot.
 - Repository-wide gates: actionlint, shellcheck and shfmt, markdownlint, cspell (en-GB),

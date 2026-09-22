@@ -44,12 +44,15 @@ export interface AppDependencies {
   Injected clock for rate limits and audit timestamps; defaults to the wall clock.
   */
   readonly now?: () => number;
+  // -- oauth: the authorization server's routes (spec §03), mounted at the root
+  readonly oauth?: Hono<AppEnvironment> | undefined;
+  // -- end oauth ------------------------------------------------------------
 }
 
 /**
  * Builds the HTTP application: probes, the protected resource metadata and
- * the MCP endpoint and the operator pages. The OAuth authorization server
- * mounts here in a later milestone (see docs/PLAN.md).
+ * the MCP endpoint, the operator pages and, when supplied, the OAuth
+ * authorization server.
  */
 export function createApp(dependencies: AppDependencies): App {
   const { config, logger, readiness, identity } = dependencies;
@@ -93,6 +96,12 @@ export function createApp(dependencies: AppDependencies): App {
     }),
   );
   // -- end MCP resource server --------------------------------------------
+
+  // -- oauth: after the session middleware, so consent sees the operator ----
+  if (dependencies.oauth !== undefined) {
+    app.route('/', dependencies.oauth);
+  }
+  // -- end oauth ------------------------------------------------------------
 
   app.notFound((context) => context.json({ error: 'not_found' }, 404));
   app.onError((error, context) => {

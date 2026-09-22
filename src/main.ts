@@ -1,4 +1,5 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 import { serve } from '@hono/node-server';
@@ -7,10 +8,16 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 import { startVaultSupervisor } from './bitwarden/index.ts';
 import { describeConfig, loadConfig } from './config/index.ts';
 import { createApp } from './http/app.ts';
-import { createIdentity, CURRENT_PARAMETERS } from './identity/index.ts';
+import {
+  type ConnectedClientsRenderer,
+  createIdentity,
+  CURRENT_PARAMETERS,
+} from './identity/index.ts';
+import { EMPTY } from './identity/pages/template.ts';
 import { createLogger } from './logger.ts';
 import { LoggingAuditSink } from './mcp/audit.ts';
-import { RejectAllTokenVerifier } from './mcp/token-verifier.ts';
+import { createLoggingAuditSink } from './oauth/audit.ts';
+import { createAuthorizationServer } from './oauth/server.ts';
 import { openStore } from './storage/index.ts';
 
 const loaded = loadConfig(process.env);
@@ -40,6 +47,12 @@ const store = opened.value;
 const vault = startVaultSupervisor(config, logger, { environment: process.env });
 // -- end vault ---------------------------------------------------------------
 
+// -- oauth: the account page's connected-clients section is bound once the
+// authorization server exists; identity is composed first because the
+// server needs its guards.
+const accountSlot: { render: ConnectedClientsRenderer } = { render: () => EMPTY };
+// -- end oauth --
+
 // -- identity: spec 04, wired with real entropy, clock, sleep and socket addresses --
 const identity = createIdentity({
   config,
@@ -53,9 +66,34 @@ const identity = createIdentity({
   delay: (ms) => sleep(ms),
   clientAddress: (context) => getConnInfo(context).remote.address,
   passwordParameters: CURRENT_PARAMETERS,
+  connectedClients: (session) => accountSlot.render(session), // -- oauth --
 });
 identity.bootstrap.ensureToken();
 // -- end identity --
+
+// -- oauth: the authorization server over the open store (spec 03) ----------
+const oauth = createAuthorizationServer({
+  config,
+  db: store.db,
+  guards: identity.guards,
+  audit: createLoggingAuditSink(logger),
+  logger,
+  fetch: (url, init) => fetch(url, init),
+  lookup: async (hostname) => {
+    const entries = await lookup(hostname, { all: true });
+    return entries.map((entry) => entry.address);
+  },
+  now: Date.now,
+  random: randomBytes,
+  newId: randomUUID,
+});
+if (!oauth.ok) {
+  logger.fatal({ err: oauth.error }, 'invalid pre-registered OAuth clients');
+  store.close();
+  process.exit(1);
+}
+accountSlot.render = oauth.value.renderConnectedClients;
+// -- end oauth ---------------------------------------------------------------
 
 const app = createApp({
   config,
@@ -68,11 +106,12 @@ const app = createApp({
     ];
     return { ready: failing.length === 0, failing };
   },
-  // -- MCP: the OAuth token store replaces the verifier in a later milestone --
   vaultClient: vault.client, // -- vault --
-  tokenVerifier: new RejectAllTokenVerifier(),
-  auditSink: new LoggingAuditSink(logger),
-  // -- end MCP ---------------------------------------------------------------
+  auditSink: new LoggingAuditSink(logger), // -- MCP --
+  // -- oauth: bearer tokens are verified against the token store ------------
+  tokenVerifier: oauth.value.tokenVerifier,
+  oauth: oauth.value.routes,
+  // -- end oauth -------------------------------------------------------------
 });
 
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (address) => {

@@ -58,8 +58,10 @@ export default {
     {
       name: 'oauth-is-independent-of-mcp-and-the-vault',
       severity: 'error',
+      comment:
+        'The bearer contract (TokenVerifier, VerifiedToken) is shared as types only; no runtime code crosses.',
       from: { path: '^src/oauth/' },
-      to: { path: '^src/(mcp|bitwarden)/' },
+      to: { path: '^src/(mcp|bitwarden)/', dependencyTypesNot: ['type-only'] },
     },
     {
       name: 'identity-is-independent-of-other-features',

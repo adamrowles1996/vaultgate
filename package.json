@@ -66,6 +66,7 @@
   "devDependencies": {
     "@eslint-community/eslint-plugin-eslint-comments": "4.8.1",
     "@eslint/js": "10.0.1",
+    "@modelcontextprotocol/client": "2.0.0",
     "@types/node": "26.6.2",
     "@vitest/coverage-v8": "5.0.1",
     "@vitest/eslint-plugin": "1.6.27",

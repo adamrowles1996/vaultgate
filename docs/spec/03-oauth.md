@@ -27,7 +27,8 @@ below are testable requirements.
   `revocation_endpoint`, `registration_endpoint`, `response_types_supported: ["code"]`,
   `grant_types_supported: ["authorization_code","refresh_token"]`,
   `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`,
-  `revocation_endpoint_auth_methods_supported: ["none"]`, `scopes_supported`,
+  `revocation_endpoint_auth_methods_supported: ["none"]`, `scopes_supported` (the scopes this
+  deployment will grant, OAUTH-16, so a client that requests everything advertised succeeds),
   `client_id_metadata_document_supported: true`,
   `authorization_response_iss_parameter_supported: true`.
 - **OAUTH-3** Both documents MUST be served with `Content-Type: application/json`,
@@ -58,7 +59,9 @@ Three mechanisms, resolved in this order when a `client_id` is presented:
   `redirect_uris` (non-empty, each passing OAUTH-6). Optional fields are validated when present and
   the document is otherwise passed through untouched.
 - **OAUTH-10** CIMD documents are cached honouring `Cache-Control: max-age` bounded to
-  [60 s, 24 h]; a fetch failure while a cached copy exists uses the cached copy and logs a warning.
+  [60 s, 24 h] (five minutes when the header is absent); a fetch failure while a cached copy exists
+  uses the cached copy and logs a warning. A presented `redirect_uri` the cached document does not
+  list forces a refetch before the request is refused (T22).
 - **OAUTH-11** DCR is rate limited (10 registrations per IP per hour) and rejects requests larger
   than 16 KiB. `application_type`, `grant_types`, `response_types` and `scope` are validated;
   unknown fields are ignored. The response is `201` with `client_id` (`vg_c_…`), `client_id_issued_at`
@@ -80,7 +83,10 @@ Three mechanisms, resolved in this order when a `client_id` is presented:
   otherwise `invalid_scope`. An empty `scope` defaults to `vault:read`.
 - **OAUTH-17** If there is no operator session the request is stored server-side under a random
   `request_id` cookie-bound key and the user is redirected to `/login?next=/oauth/authorize/<id>`;
-  parameters are never round-tripped through the login form.
+  parameters are never round-tripped through the login form. The binding is the session when one
+  exists, otherwise a `vg_authz` cookie (`__Host-`, `Secure` under https) set on the anonymous
+  browser; only that browser can claim the request after logging in. Pending requests expire after
+  ten minutes.
 - **OAUTH-18** Consent is a `POST` with a synchroniser token; `GET` never issues a code.
   The operator may untick individual scopes; the issued scope set is what was ticked.
 - **OAUTH-19** Approval issues a single-use authorization code (`vg_ac_…`, 32 random bytes,
@@ -107,7 +113,8 @@ Three mechanisms, resolved in this order when a `client_id` is presented:
 scope, resource}` with `Cache-Control: no-store`.
 - **OAUTH-27** Error responses follow RFC 6749 §5.2 (`invalid_request`, `invalid_client`,
   `invalid_grant`, `unsupported_grant_type`, `invalid_scope`, `invalid_target`) with
-  `error_description`. Never include stack traces or internal ids.
+  `error_description`; `invalid_client` is answered `401`, the rest `400`, and every error response
+  carries `Cache-Control: no-store`. Never include stack traces or internal ids.
 - **OAUTH-28** The token endpoint is rate limited (60 requests per IP per minute) and answers
   `429` with `Retry-After`.
 
@@ -117,7 +124,8 @@ scope, resource}` with `Cache-Control: no-store`.
   `200 {}` (RFC 7009 §2.2), and revokes: an access token (itself), a refresh token (its family and
   all access tokens issued from it).
 - **OAUTH-30** The operator's account page lists connected clients with last-used time and can
-  revoke a client's consent, which revokes all of its tokens.
+  revoke a client's consent (`POST /oauth/consents/<id>/revoke`, guarded like every account
+  action), which revokes all of its tokens.
 
 ## 3.7 Resource server behaviour
 

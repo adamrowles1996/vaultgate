@@ -13,7 +13,6 @@ import {
 import { ipSubject, operatorSubject } from './login-throttle.ts';
 import { type AccountView, renderAccount, renderTotpRotation } from './pages/account.ts';
 import { renderRecoveryCodes } from './pages/recovery-codes.ts';
-import { EMPTY } from './pages/template.ts';
 import { checkPasswordPolicy, hashPassword, isCorrectPassword } from './password.ts';
 import { loginLocation } from './provider.ts';
 import { generateRecoveryCodes, hashRecoveryCode } from './recovery-codes.ts';
@@ -57,7 +56,7 @@ function accountView(
     sessions,
     notice,
     error,
-    connectedClients: EMPTY,
+    connectedClients: services.connectedClients(session),
   };
 }
 

@@ -2,7 +2,12 @@ import { Hono } from 'hono';
 import { requestId } from 'hono/request-id';
 
 import { base32Decode } from '../identity/base32.ts';
-import { createIdentity, type Identity, type IdentityAuditEvent } from '../identity/index.ts';
+import {
+  type ConnectedClientsRenderer,
+  createIdentity,
+  type Identity,
+  type IdentityAuditEvent,
+} from '../identity/index.ts';
 import { createIdentityStores, type IdentityStores } from '../identity/repositories/index.ts';
 import { totp } from '../identity/totp.ts';
 
@@ -23,6 +28,10 @@ export interface HarnessOptions {
   readonly publicUrl?: string;
   readonly trustProxy?: boolean;
   readonly bootstrapToken?: string;
+  /**
+  The account page's connected-clients section, supplied by the OAuth harness.
+  */
+  readonly connectedClients?: ConnectedClientsRenderer;
 }
 
 export interface Harness {
@@ -74,6 +83,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     },
     clientAddress: () => '203.0.113.7',
     passwordParameters: FAST_SCRYPT,
+    connectedClients: options.connectedClients,
   });
   const app = new Hono<IdentityEnvironment>();
   app.use(requestId());
