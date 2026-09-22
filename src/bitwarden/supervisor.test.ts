@@ -165,7 +165,7 @@ describe('startVaultSupervisor stop', () => {
   it('VAULT-7 escalates to SIGKILL when bw serve ignores SIGTERM for five seconds', async () => {
     const harness = new SupervisorHarness();
     harness.spawner.on('serve', ({ child }) => {
-      child.exitOn('SIGKILL');
+      child.ignore('SIGTERM');
     });
     const supervisor = harness.start();
     await harness.until(() => supervisor.isReady());

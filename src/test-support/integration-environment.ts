@@ -4,6 +4,8 @@
  * so a mis-configured job can never pass by doing nothing.
  */
 export interface IntegrationEnvironment {
+  readonly path: string | undefined;
+  readonly home: string | undefined;
   readonly bin: string;
   readonly server: string | undefined;
   readonly clientId: string;
@@ -23,6 +25,8 @@ export function readIntegrationEnvironment(): IntegrationEnvironment {
     throw new Error(`integration test needs ${missing.join(', ')}`);
   }
   return {
+    path: process.env['PATH'],
+    home: process.env['HOME'],
     bin: process.env['VAULTGATE_TEST_BW_BIN'] ?? 'bw',
     server: process.env['VAULTGATE_TEST_BW_SERVER'],
     clientId: process.env['VAULTGATE_TEST_BW_CLIENT_ID'] ?? '',

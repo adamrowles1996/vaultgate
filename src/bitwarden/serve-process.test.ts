@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  exitOnSigterm,
-  FakeSpawner,
-  type SpawnRecord,
-} from '../test-support/fake-child-process.ts';
+import { FakeSpawner, type SpawnRecord } from '../test-support/fake-child-process.ts';
 import { ManualClock } from '../test-support/manual-clock.ts';
 import { unwrapFail, unwrapOk } from '../test-support/result.ts';
 
@@ -231,10 +227,9 @@ describe('BwCli.serve', () => {
   });
 
   it('VAULT-7 stops with SIGTERM when the child obeys', async () => {
-    const spawner = new FakeSpawner({ serve: exitOnSigterm });
+    const spawner = new FakeSpawner();
     const clock = new ManualClock();
     const handle = cliWith(spawner, clock).serve(1);
-    await clock.settle();
     await handle.stop();
     expect(spawner.records[0]!.child.signals).toStrictEqual(['SIGTERM']);
     await expect(handle.exited).resolves.toStrictEqual({ code: null, signal: 'SIGTERM' });
@@ -244,12 +239,11 @@ describe('BwCli.serve', () => {
   it('VAULT-7 escalates to SIGKILL after five seconds', async () => {
     const spawner = new FakeSpawner({
       serve: ({ child }) => {
-        child.exitOn('SIGKILL');
+        child.ignore('SIGTERM');
       },
     });
     const clock = new ManualClock();
     const handle = cliWith(spawner, clock).serve(1);
-    await clock.settle();
     const stopping = handle.stop();
     await clock.advance(4999);
     expect(spawner.records[0]!.child.signals).toStrictEqual(['SIGTERM']);

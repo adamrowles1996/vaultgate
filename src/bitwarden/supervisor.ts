@@ -58,7 +58,7 @@ class Supervisor implements VaultSupervisor {
   #ready = false;
   #stopping = false;
   #failures = 0;
-  #backoff: Sleep | undefined;
+  #waiting: Sleep | undefined;
   #cancelSync: (() => void) | undefined;
   #loop: Promise<void> = Promise.resolve();
   readonly client: VaultClient;
@@ -111,6 +111,15 @@ class Supervisor implements VaultSupervisor {
     return this.#cli.login(this.#credentials);
   }
 
+  /**
+  A pause that `stop()` can cut short.
+  */
+  async #pause(delayMs: number): Promise<void> {
+    this.#waiting = sleep(this.#clock, delayMs);
+    await this.#waiting.done;
+    this.#waiting = undefined;
+  }
+
   async #awaitServe(): Promise<Result<void>> {
     const deadline = this.#clock.now() + SERVE_START_TIMEOUT_MS;
     while (this.#clock.now() < deadline && !this.#stopping) {
@@ -122,7 +131,7 @@ class Supervisor implements VaultSupervisor {
       if (status.ok) {
         return ok(undefined);
       }
-      await sleep(this.#clock, SERVE_START_POLL_MS).done;
+      await this.#pause(SERVE_START_POLL_MS);
     }
     return fail(new Error('bw serve did not answer /status in time'));
   }
@@ -169,8 +178,8 @@ class Supervisor implements VaultSupervisor {
     if (serve === undefined) {
       return;
     }
-    await serve.stop();
     this.#serve = undefined;
+    await serve.stop();
   }
 
   #scheduleSync(): void {
@@ -233,9 +242,7 @@ class Supervisor implements VaultSupervisor {
     } else {
       this.#logger.warn(fields, 'vault backend start failed');
     }
-    this.#backoff = sleep(this.#clock, delayMs);
-    await this.#backoff.done;
-    this.#backoff = undefined;
+    await this.#pause(delayMs);
   }
 
   async #run(): Promise<void> {
@@ -269,7 +276,7 @@ class Supervisor implements VaultSupervisor {
   */
   async stop(): Promise<void> {
     this.#stopping = true;
-    this.#backoff?.cancel();
+    this.#waiting?.cancel();
     this.#becomeUnready();
     if (this.#serve !== undefined) {
       await this.#api.call({ method: 'POST', path: '/lock', schema: messageDataSchema });

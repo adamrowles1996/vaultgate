@@ -2,19 +2,21 @@ import { PassThrough } from 'node:stream';
 
 import type { ChildLike, ExitListener, SpawnFunction } from '../bitwarden/serve-process.ts';
 
-/**
- * A stand-in for `ChildProcess`: the test writes its output and decides when
- * and how it ends. `exit` closes the stdio streams first and emits `close`
- * on the next turn, mirroring the real ordering.
- */
 type ErrorListener = (error: Error) => void;
 
+/**
+ * A stand-in for `ChildProcess`: the test writes its output and decides when
+ * and how it ends. As with a real child, `exit`, `close` and `error` are
+ * emitted on a later turn, so a script may end the child before the caller
+ * has attached its listeners. A signal ends the child unless the test has
+ * told it to `ignore` that signal.
+ */
 export class FakeChild implements ChildLike {
   readonly #exitListeners: ExitListener[] = [];
   readonly #closeListeners: ExitListener[] = [];
   readonly #errorListeners: ErrorListener[] = [];
+  readonly #ignoredSignals = new Set<NodeJS.Signals>();
   #ended = false;
-  #exitOnSignal: NodeJS.Signals | undefined;
   readonly stdout = new PassThrough();
   readonly stderr = new PassThrough();
   readonly signals: NodeJS.Signals[] = [];
@@ -34,17 +36,17 @@ export class FakeChild implements ChildLike {
 
   kill(signal: NodeJS.Signals = 'SIGTERM'): boolean {
     this.signals.push(signal);
-    if (signal === this.#exitOnSignal) {
+    if (!this.#ignoredSignals.has(signal)) {
       this.exit(null, signal);
     }
     return true;
   }
 
   /**
-  Makes the child exit when it receives `signal`, as the real CLI does on `SIGTERM`.
+  Makes the child survive `signal`, as a wedged process does, so escalation can be tested.
   */
-  exitOn(signal: NodeJS.Signals): void {
-    this.#exitOnSignal = signal;
+  ignore(signal: NodeJS.Signals): void {
+    this.#ignoredSignals.add(signal);
   }
 
   exit(code: number | null, signal: NodeJS.Signals | null = null): void {
@@ -54,10 +56,10 @@ export class FakeChild implements ChildLike {
     this.#ended = true;
     this.stdout.end();
     this.stderr.end();
-    for (const listener of this.#exitListeners.splice(0)) {
-      listener(code, signal);
-    }
     setImmediate(() => {
+      for (const listener of this.#exitListeners.splice(0)) {
+        listener(code, signal);
+      }
       for (const listener of this.#closeListeners.splice(0)) {
         listener(code, signal);
       }
@@ -66,13 +68,15 @@ export class FakeChild implements ChildLike {
 
   fail(error: Error): void {
     this.#ended = true;
-    for (const listener of this.#errorListeners.splice(0)) {
-      listener(error);
-    }
+    setImmediate(() => {
+      for (const listener of this.#errorListeners.splice(0)) {
+        listener(error);
+      }
+    });
   }
 
   /**
-  Writes to stdout and exits with `code` — the shape of every one-shot CLI command.
+  Writes to stdout and exits with `code`: the shape of every one-shot CLI command.
   */
   finish(stdout: string, code = 0): void {
     this.stdout.write(stdout);
@@ -92,8 +96,7 @@ export type ChildScript = (record: SpawnRecord) => void;
 /**
  * A `SpawnFunction` that records every call and hands each child to the
  * script keyed by its first argument (`--version`, `status`, `serve`, …).
- * A `SIGTERM` to a scripted `serve` child exits it unless the script says
- * otherwise.
+ * An unscripted child simply runs until it is signalled.
  */
 export class FakeSpawner {
   readonly #scripts = new Map<string, ChildScript>();
@@ -103,10 +106,7 @@ export class FakeSpawner {
     const child = new FakeChild();
     const record = { command, argv, environment, child };
     this.records.push(record);
-    const script = this.#scripts.get(argv[0] ?? '');
-    setImmediate(() => {
-      script?.(record);
-    });
+    this.#scripts.get(argv[0] ?? '')?.(record);
     return child;
   };
 
@@ -124,11 +124,4 @@ export class FakeSpawner {
   spawned(subcommand: string): SpawnRecord[] {
     return this.records.filter((record) => record.argv[0] === subcommand);
   }
-}
-
-/**
-Scripts a `serve` child that exits on `SIGTERM`, as the real CLI does.
-*/
-export function exitOnSigterm({ child }: SpawnRecord): void {
-  child.exitOn('SIGTERM');
 }

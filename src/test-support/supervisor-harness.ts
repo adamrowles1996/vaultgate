@@ -4,7 +4,7 @@ import { startVaultSupervisor, type VaultSupervisor } from '../bitwarden/index.t
 import { loadConfig } from '../config/index.ts';
 
 import { FakeBwServe } from './fake-bw-serve.ts';
-import { exitOnSigterm, FakeSpawner, type SpawnRecord } from './fake-child-process.ts';
+import { FakeSpawner, type SpawnRecord } from './fake-child-process.ts';
 import { CANARY } from './fake-vault-fixture.ts';
 import { captureLogger } from './logging.ts';
 import { ManualClock } from './manual-clock.ts';
@@ -58,7 +58,6 @@ export class SupervisorHarness {
     status: finishing(UNAUTHENTICATED),
     config: finishing('Saved setting `config`.\n'),
     login: finishing('You are logged in!\n'),
-    serve: exitOnSigterm,
   });
   readonly logs = captureLogger();
   readonly config: Config;

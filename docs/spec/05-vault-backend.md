@@ -10,22 +10,26 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 - **VAULT-1** `src/bitwarden/serve-process.ts` is the only module that spawns processes (ARCH-2).
   It runs `bw serve --hostname 127.0.0.1 --port <free port chosen by binding port 0 first>`
   with `BITWARDENCLI_APPDATA_DIR=${DATA_DIR}/bw` and a minimal environment (no inherited
-  variables other than `PATH`, `HOME`, `TMPDIR`).
+  variables other than `PATH`, `HOME`, `TMPDIR`; vaultgate adds `BW_NOINTERACTION=true` so the
+  CLI can never wait on a prompt).
 - **VAULT-2** The `bw` binary path comes from `VAULTGATE_BW_BIN` (default: `bw` on `PATH`). At
   start-up vaultgate runs `bw --version`, logs it, and refuses versions below the minimum recorded
   in `src/bitwarden/versions.ts`.
 - **VAULT-3** Server selection: if `VAULTGATE_BW_SERVER` is set, `bw config server <url>` is run
   before login. It accepts any `https://` URL (self-hosted / Vaultwarden) and the literal
   `bitwarden.eu`.
-- **VAULT-4** Login: if the CLI reports `unauthenticated`, vaultgate runs
-  `bw login --apikey` with `BW_CLIENTID` and `BW_CLIENTSECRET` in the child environment only.
+- **VAULT-4** Login: if `bw status` (run before `bw serve`) reports `unauthenticated`, vaultgate
+  runs `bw login --apikey` with `BW_CLIENTID` and `BW_CLIENTSECRET` in the child environment only.
   Unlock: `POST /unlock` with the master password in the request body over loopback. Both
   secrets are read at start-up and kept only in process memory.
 - **VAULT-5** Readiness is `true` only after `GET /status` reports `unlocked`. Until then `/readyz`
   answers `503` and MCP tool calls return a structured `vault_unavailable` error.
 - **VAULT-6** If the child exits, vaultgate restarts it with exponential backoff (1 s → 60 s),
   re-unlocks, and logs each attempt. After 10 consecutive failures readiness stays `false` and
-  the failure is logged at `error` level once per minute.
+  the failure is logged at `error` level once per minute. A start-up failure (missing binary,
+  rejected login or master password, `bw serve` not answering within 30 s) follows the same
+  backoff; only a CLI below the minimum version (VAULT-2) stops the retry loop, since no retry
+  can fix it.
 - **VAULT-7** On `SIGTERM`/`SIGINT` vaultgate calls `POST /lock`, then sends `SIGTERM` to the
   child and waits up to 5 s before `SIGKILL`.
 - **VAULT-8** vaultgate never calls `bw logout` and never deletes the CLI app-data directory.
@@ -33,10 +37,12 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 ## 5.2 Synchronisation
 
 - **VAULT-9** `POST /sync` runs after unlock and then every `VAULTGATE_BW_SYNC_INTERVAL` (default
-  15 minutes, minimum 1 minute). A sync failure is logged and does not affect readiness; the
-  cached vault continues to serve reads.
-- **VAULT-10** Write tools trigger no sync; they poll `GET /object/item/<id>` until the new
-  `revisionDate` is visible (bounded to 5 s) so a read-after-write is consistent.
+  15 minutes, minimum 1 minute). A sync failure, including the initial one, is logged and does not
+  affect readiness; the cached vault continues to serve reads.
+- **VAULT-10** Write tools trigger no sync; they poll `GET /object/item/<id>` every 100 ms until
+  the new `revisionDate` (or, for trash, the `deletedDate`) is visible, bounded to 5 s, so a
+  read-after-write is consistent. If the bound elapses the write has still succeeded, so the last
+  observed item is returned rather than an error.
 
 ## 5.3 Vault client
 
@@ -69,13 +75,14 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 | Condition                              | Tool error code        | HTTP (non-MCP) |
 | -------------------------------------- | ---------------------- | -------------- |
 | `bw serve` not running or not unlocked | `vault_unavailable`    | 503            |
-| Item not found                         | `not_found`            | n/a            |
+| Item, folder or secret field not found | `not_found`            | n/a            |
 | Ambiguous name match                   | `ambiguous`            | n/a            |
 | Vault rejected write (validation)      | `invalid_item`         | n/a            |
 | Unexpected response shape              | `vault_protocol_error` | 502            |
 
 - **VAULT-14** Error messages returned to agents never contain vault content, the master
-  password, session keys or file paths.
+  password, session keys or file paths. The client therefore never forwards the text of a
+  `bw serve` rejection; each error code carries one fixed message.
 
 ## 5.5 Secret material in memory
 
