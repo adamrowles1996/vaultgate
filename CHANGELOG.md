@@ -26,5 +26,10 @@ All notable changes to this project are documented here. The format follows
   unit; a tag-driven release workflow that publishes the signed multi-arch image with SBOM and
   provenance and a GitHub release with `vaultgate-<version>.tgz` and its `.sha256`; a hadolint
   gate and a pull-request image build.
+- Azure Container Apps deployment (spec §09.3): `deploy/azure/` ARM template with linked
+  modules (Log Analytics, Container Apps environment, Key Vault with RBAC and purge protection,
+  Azure Files share at `/data`, single-replica Container App with Key Vault secret references),
+  a portal form with a Deploy to Azure button, a README covering custom domains and first-run
+  bootstrap, and an ARM-TTK template validation job in CI.
 
 [Unreleased]: https://github.com/adamrowles1996/vaultgate/commits/main

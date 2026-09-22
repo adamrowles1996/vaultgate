@@ -37,11 +37,15 @@ private interface.
 
 ## 9.3 Azure Container App (ARM)
 
-- **DEP-6** `deploy/azure/mainTemplate.json` provisions: a resource group scope deployment with a
-  Log Analytics workspace, a Container Apps environment, a Key Vault (RBAC mode, purge protection),
-  a storage account with an Azure Files share mounted at `/data`, and the Container App with a
-  system-assigned managed identity holding **Key Vault Secrets User** on the vault. Secrets are
-  referenced by the app as Key Vault secret references, never as plain environment values.
+- **DEP-6** `deploy/azure/mainTemplate.json` (with linked templates under `deploy/azure/modules/`,
+  one per concern) provisions: a resource group scope deployment with a Log Analytics workspace, a
+  Container Apps environment, a Key Vault (RBAC mode, purge protection), a storage account with an
+  Azure Files share mounted at `/data`, and the Container App with a user-assigned managed identity
+  holding **Key Vault Secrets User** on the vault. The identity is user-assigned rather than
+  system-assigned because the app's Key Vault references must resolve when the app is created,
+  which needs the role assignment to exist first; a system-assigned identity only exists after
+  creation and would force a two-pass deployment. Secrets are referenced by the app as Key Vault
+  secret references, never as plain environment values.
 - **DEP-7** The template parameters are: `name`, `location`, `imageTag`, `publicUrl` (optional
   custom domain), `bitwardenServer` (optional), and the secret values (`bwPassword`, `bwClientId`,
   `bwClientSecret`, `secretKey`) marked `securestring`. A `createUiDefinition.json` powers the
@@ -50,9 +54,10 @@ private interface.
   on an SMB share is safe only with one writer and rollback-journal mode (STORE-2).
 - **DEP-9** Ingress is external, HTTPS only, target port 8080, `VAULTGATE_TRUST_PROXY=true`.
   The template's README documents adding a custom domain and managed certificate.
-- **DEP-10** CI validates the template with `az bicep`-independent tooling: ARM-TTK on every PR
-  touching `deploy/azure/**`, and a `what-if` deployment against a sandbox subscription on release
-  candidates (manual approval environment).
+- **DEP-10** CI validates the template with `az bicep`-independent tooling: JSON parsing and
+  ARM-TTK (pinned to a commit, no tests skipped) over `deploy/azure/` on every PR and on `main`
+  (the `template-validate` job), and a `what-if` deployment against a sandbox subscription on
+  release candidates (manual approval environment).
 
 ## 9.4 Reverse proxy requirements
 

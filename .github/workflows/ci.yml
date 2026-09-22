@@ -148,3 +148,49 @@ jobs:
         with:
           fail-on-severity: low
           deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, LGPL-3.0
+
+  template-validate:
+    name: Azure template validation (ARM-TTK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out ARM-TTK at a pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Azure/arm-ttk
+          ref: 0ec9a41a4503e970a0ec8efb0cd08415cc172175 # 20260213
+          path: arm-ttk
+          persist-credentials: false
+      - name: Every JSON file under deploy/azure parses
+        run: |
+          find deploy/azure -name '*.json' -print0 | while IFS= read -r -d '' file; do
+            python3 -m json.tool "$file" > /dev/null
+            echo "ok $file"
+          done
+      - name: ARM-TTK over deploy/azure (main template, linked modules, parameters, UI definition)
+        shell: pwsh
+        run: |
+          Import-Module ./arm-ttk/arm-ttk/arm-ttk.psd1
+          # Every ARM-TTK test applies to this template set, so nothing is skipped.
+          $results = @(Test-AzTemplate -TemplatePath deploy/azure)
+          $results | Format-Table -AutoSize -Property Name, Passed, @{ Name = 'File'; Expression = { $_.File.Name } }
+          foreach ($warning in ($results | Where-Object { $_.Warnings } | ForEach-Object { $_.Warnings })) {
+            Write-Warning $warning.Message
+          }
+          $failed = @($results | Where-Object { -not $_.Passed })
+          foreach ($failure in $failed) {
+            foreach ($problem in $failure.Errors) {
+              Write-Host "::error file=deploy/azure/$($failure.File.Name)::$($failure.Name): $($problem.Exception.Message)"
+            }
+          }
+          if ($failed.Count -gt 0) {
+            Write-Error "$($failed.Count) ARM-TTK test(s) failed."
+            exit 1
+          }
+          Write-Host "ARM-TTK: $($results.Count) tests passed."

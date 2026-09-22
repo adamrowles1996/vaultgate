@@ -1,0 +1,121 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Platform for vaultgate: Log Analytics workspace, consumption Container Apps environment, storage account with the Azure Files share and the environment storage binding (SMB). Linked from ../mainTemplate.json."
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": { "description": "Azure region for every resource." }
+    },
+    "workspaceName": {
+      "type": "string",
+      "metadata": { "description": "Log Analytics workspace name." }
+    },
+    "environmentName": {
+      "type": "string",
+      "metadata": { "description": "Container Apps managed environment name." }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 24,
+      "metadata": { "description": "Storage account name (3-24 lowercase alphanumerics)." }
+    },
+    "shareName": {
+      "type": "string",
+      "metadata": { "description": "Azure Files share and environment storage name." }
+    }
+  },
+  "variables": {
+    "workspaceApiVersion": "2025-07-01",
+    "storageApiVersion": "2025-06-01",
+    "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
+    "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+    "environmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2025-07-01",
+      "name": "[parameters('workspaceName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": { "name": "PerGB2018" },
+        "retentionInDays": 30
+      }
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2026-01-01",
+      "name": "[parameters('environmentName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": ["[variables('workspaceId')]"],
+      "properties": {
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(variables('workspaceId')).customerId]",
+            "sharedKey": "[listKeys(variables('workspaceId'), variables('workspaceApiVersion')).primarySharedKey]"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2025-06-01",
+      "name": "[parameters('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "kind": "StorageV2",
+      "sku": { "name": "Standard_LRS" },
+      "properties": {
+        "accessTier": "Hot",
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true,
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": true,
+        "publicNetworkAccess": "Enabled",
+        "networkAcls": { "defaultAction": "Allow", "bypass": "AzureServices" }
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+      "apiVersion": "2025-06-01",
+      "name": "[format('{0}/default/{1}', parameters('storageAccountName'), parameters('shareName'))]",
+      "dependsOn": ["[variables('storageAccountId')]"],
+      "properties": {
+        "enabledProtocols": "SMB",
+        "accessTier": "TransactionOptimized",
+        "shareQuota": 16
+      }
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments/storages",
+      "apiVersion": "2026-01-01",
+      "name": "[format('{0}/{1}', parameters('environmentName'), parameters('shareName'))]",
+      "dependsOn": [
+        "[variables('environmentId')]",
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', parameters('storageAccountName'), 'default', parameters('shareName'))]"
+      ],
+      "properties": {
+        "azureFile": {
+          "accountName": "[parameters('storageAccountName')]",
+          "accountKey": "[listKeys(variables('storageAccountId'), variables('storageApiVersion')).keys[0].value]",
+          "shareName": "[parameters('shareName')]",
+          "accessMode": "ReadWrite"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "environmentId": {
+      "type": "string",
+      "value": "[variables('environmentId')]"
+    },
+    "environmentDefaultDomain": {
+      "type": "string",
+      "value": "[reference(variables('environmentId')).defaultDomain]"
+    }
+  }
+}

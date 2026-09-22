@@ -1,0 +1,185 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "Deploys vaultgate, a remote MCP server for Bitwarden with its own OAuth 2.1 authorization server, as an Azure Container App. Your Bitwarden credentials go straight into a Key Vault; the app reads them through a managed identity.",
+        "location": {
+          "visible": true,
+          "resourceTypes": ["Microsoft.App/managedEnvironments", "Microsoft.KeyVault/vaults"]
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "name",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Name",
+        "defaultValue": "vaultgate",
+        "toolTip": "Base name for every resource and the Container App itself: 3 to 20 lowercase letters, digits and hyphens, starting with a letter.",
+        "constraints": {
+          "required": true,
+          "regex": "^[a-z][a-z0-9-]{1,18}[a-z0-9]$",
+          "validationMessage": "3 to 20 lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen."
+        },
+        "visible": true
+      }
+    ],
+    "steps": [
+      {
+        "name": "secrets",
+        "label": "Bitwarden credentials",
+        "elements": [
+          {
+            "name": "bwClientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "API key client id",
+            "toolTip": "Personal API key client id from Bitwarden Settings > Security > Keys; it starts with user.",
+            "constraints": {
+              "required": true,
+              "regex": "^user\\.[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Expected user. followed by a UUID."
+            },
+            "visible": true
+          },
+          {
+            "name": "bwClientSecret",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "API key client secret",
+              "confirmPassword": "Confirm client secret"
+            },
+            "toolTip": "Personal API key client secret from the same Bitwarden page.",
+            "constraints": {
+              "required": true,
+              "regex": "^\\S{16,}$",
+              "validationMessage": "At least 16 characters without whitespace."
+            },
+            "options": { "hideConfirmation": false },
+            "visible": true
+          },
+          {
+            "name": "bwPassword",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Master password",
+              "confirmPassword": "Confirm master password"
+            },
+            "toolTip": "Your Bitwarden master password. It is written to Key Vault only; the Container App receives it through a secret reference.",
+            "constraints": {
+              "required": true,
+              "regex": "^.{12,}$",
+              "validationMessage": "Bitwarden master passwords are at least 12 characters."
+            },
+            "options": { "hideConfirmation": false },
+            "visible": true
+          },
+          {
+            "name": "secretKey",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Secret key (optional)",
+              "confirmPassword": "Confirm secret key"
+            },
+            "toolTip": "VAULTGATE_SECRET_KEY: at least 32 bytes as base64 (openssl rand -base64 32) or 64 hex characters. Leave empty to generate one; retrieve it from Key Vault afterwards and back it up with the database.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[A-Za-z0-9+/_-]{43,}={0,2}$|^[0-9a-fA-F]{64,}$",
+              "validationMessage": "Empty, or at least 32 bytes as base64 (43+ characters) or hex (64+ characters)."
+            },
+            "options": { "hideConfirmation": false },
+            "visible": true
+          }
+        ]
+      },
+      {
+        "name": "options",
+        "label": "Options",
+        "elements": [
+          {
+            "name": "imageTag",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Image tag",
+            "defaultValue": "latest",
+            "toolTip": "Tag of ghcr.io/adamrowles1996/vaultgate to run. Pin a release such as 1.0.0 for production.",
+            "constraints": {
+              "required": true,
+              "regex": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+              "validationMessage": "A container image tag: up to 128 letters, digits, dots, underscores and hyphens."
+            },
+            "visible": true
+          },
+          {
+            "name": "bitwardenServer",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Bitwarden server (optional)",
+            "defaultValue": "",
+            "toolTip": "Leave empty for bitwarden.com. Enter bitwarden.eu, or the https:// URL of a self-hosted Bitwarden server or Vaultwarden.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^bitwarden\\.eu$|^https://\\S{1,253}$",
+              "validationMessage": "Empty, bitwarden.eu, or an https:// URL."
+            },
+            "visible": true
+          },
+          {
+            "name": "publicUrl",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Custom public URL (optional)",
+            "defaultValue": "",
+            "toolTip": "Set this only once you bind a custom domain to the app (see the README): the https:// origin, for example https://vault.example.com. Otherwise the generated azurecontainerapps.io host is used.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^https://[A-Za-z0-9.-]{1,253}$",
+              "validationMessage": "Empty, or an https:// origin without a path."
+            },
+            "visible": true
+          },
+          {
+            "name": "enableWriteScope",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Allow clients to request the vault:write scope",
+            "toolTip": "Off by default: agents may only read. Turn on to let clients request vault:write; each client still has to be granted it at authorization time.",
+            "constraints": { "required": false },
+            "visible": true
+          },
+          {
+            "name": "logLevel",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Log level",
+            "defaultValue": "info",
+            "toolTip": "VAULTGATE_LOG_LEVEL. Logs are JSON lines in the Log Analytics workspace.",
+            "constraints": {
+              "required": true,
+              "allowedValues": [
+                { "label": "fatal", "value": "fatal" },
+                { "label": "error", "value": "error" },
+                { "label": "warn", "value": "warn" },
+                { "label": "info", "value": "info" },
+                { "label": "debug", "value": "debug" },
+                { "label": "trace", "value": "trace" }
+              ]
+            },
+            "visible": true
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "name": "[basics('name')]",
+      "location": "[location()]",
+      "imageTag": "[steps('options').imageTag]",
+      "publicUrl": "[steps('options').publicUrl]",
+      "bitwardenServer": "[steps('options').bitwardenServer]",
+      "enableWriteScope": "[bool(steps('options').enableWriteScope)]",
+      "logLevel": "[steps('options').logLevel]",
+      "bwPassword": "[steps('secrets').bwPassword]",
+      "bwClientId": "[steps('secrets').bwClientId]",
+      "bwClientSecret": "[steps('secrets').bwClientSecret]",
+      "secretKey": "[if(empty(steps('secrets').secretKey), replace(concat(guid(), guid()), '-', ''), steps('secrets').secretKey)]"
+    }
+  }
+}
