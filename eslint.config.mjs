@@ -35,7 +35,11 @@ const MAX_DEPTH = 3;
 /**
 The only module allowed to read process.env. Everything else takes a Config.
 */
-const CONFIG_BOUNDARY_FILES = ['src/config/**/*.ts', 'src/main.ts'];
+const CONFIG_BOUNDARY_FILES = [
+  'src/config/**/*.ts',
+  'src/main.ts',
+  'src/test-support/integration-environment.ts',
+];
 
 /**
 The only module allowed to spawn a child process (the managed `bw serve`).
