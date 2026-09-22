@@ -3,7 +3,10 @@ import { serve } from '@hono/node-server';
 import { describeConfig, loadConfig } from './config/index.ts';
 import { createApp } from './http/app.ts';
 import { createLogger } from './logger.ts';
+import { LoggingAuditSink } from './mcp/audit.ts';
+import { RejectAllTokenVerifier } from './mcp/token-verifier.ts';
 import { openStore } from './storage/index.ts';
+import { UnavailableVaultClient } from './vault/unavailable-client.ts';
 
 const loaded = loadConfig(process.env);
 if (!loaded.ok) {
@@ -28,10 +31,16 @@ const store = opened.value;
 // -- end storage -------------------------------------------------------------
 
 const app = createApp({
+  config,
   logger,
   // -- storage: bw serve joins this report in the vault-backend milestone --
   readiness: () =>
     store.db.isOpen ? { ready: true, failing: [] } : { ready: false, failing: ['store'] },
+  // -- MCP: the vault backend and the OAuth token store replace these ------
+  vaultClient: new UnavailableVaultClient(),
+  tokenVerifier: new RejectAllTokenVerifier(),
+  auditSink: new LoggingAuditSink(logger),
+  // -- end MCP ---------------------------------------------------------------
 });
 
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (address) => {
