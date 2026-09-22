@@ -13,7 +13,7 @@ const pendingRow = z.object({
   expires_at: timestamp,
 });
 
-export interface PendingAuthorizationRecord {
+interface PendingAuthorizationRecord {
   readonly id: string;
   readonly sessionBindingHash: string;
   readonly parameters: Readonly<Record<string, string>>;
@@ -32,7 +32,7 @@ export function createPendingAuthorizationsRepo(database: DatabaseSync): Pending
       run(
         database,
         `INSERT INTO pending_authorizations (id, session_binding_hash, parameters, expires_at)
-         VALUES (?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?)`,
         record.id,
         record.sessionBindingHash,
         JSON.stringify(record.parameters),

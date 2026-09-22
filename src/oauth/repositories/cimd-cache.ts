@@ -45,12 +45,12 @@ export function createCimdCacheRepo(database: DatabaseSync): CimdCacheRepo {
       run(
         database,
         `INSERT INTO cimd_cache (client_id, document, fetched_at, expires_at, etag)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (client_id) DO UPDATE SET
-           document = excluded.document,
-           fetched_at = excluded.fetched_at,
-           expires_at = excluded.expires_at,
-           etag = excluded.etag`,
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT (client_id) DO UPDATE SET
+            document = excluded.document,
+            fetched_at = excluded.fetched_at,
+            expires_at = excluded.expires_at,
+            etag = excluded.etag`,
         entry.clientId,
         JSON.stringify(entry.document),
         entry.fetchedAt,

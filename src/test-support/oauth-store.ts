@@ -18,7 +18,7 @@ export function openTestRepos(): OAuthRepos {
   run(
     database,
     `INSERT INTO operators (id, display_name, password_hash, created_at, password_changed_at)
-     VALUES (?, ?, ?, ?, ?)`,
+      VALUES (?, ?, ?, ?, ?)`,
     TEST_OPERATOR_ID,
     'Operator',
     'hash',

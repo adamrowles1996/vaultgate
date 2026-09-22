@@ -16,9 +16,9 @@ import {
 import { formBody, parseJson } from './oauth-http.ts';
 
 export const VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
-export const CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+const CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
 export const CLIENT_ID = 'vg_c_test-client';
-export const REDIRECT = 'https://agent.example.com/cb';
+const REDIRECT = 'https://agent.example.com/cb';
 export const DAY_MS = 86_400_000;
 
 export interface SeedOptions {
@@ -39,7 +39,7 @@ export interface TokenReply {
 
 export const counters = { code: 0, id: 0 };
 
-export function seed(harness: OAuthHarness, options: SeedOptions = {}): string {
+function seed(harness: OAuthHarness, options: SeedOptions = {}): string {
   const at = harness.now();
   harness.ensureOperator();
   harness.repos.clients.upsert({

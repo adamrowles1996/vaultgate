@@ -85,9 +85,9 @@ export function createTokensRepo(database: DatabaseSync): TokensRepo {
       run(
         database,
         `INSERT INTO tokens
-           (id, token_hash, kind, family_id, parent_id, replaced_by_id, client_id, consent_id,
+            (id, token_hash, kind, family_id, parent_id, replaced_by_id, client_id, consent_id,
             scopes, resource, issued_at, expires_at, revoked_at, last_used_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         record.id,
         record.tokenHash,
         record.kind,

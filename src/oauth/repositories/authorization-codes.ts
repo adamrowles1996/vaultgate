@@ -65,9 +65,9 @@ export function createAuthorizationCodesRepo(database: DatabaseSync): Authorizat
       run(
         database,
         `INSERT INTO authorization_codes
-           (code_hash, client_id, consent_id, redirect_uri, code_challenge, resource, scopes,
+            (code_hash, client_id, consent_id, redirect_uri, code_challenge, resource, scopes,
             expires_at, used_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         record.codeHash,
         record.clientId,
         record.consentId,

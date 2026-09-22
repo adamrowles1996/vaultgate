@@ -73,7 +73,7 @@ export function createConsentsRepo(database: DatabaseSync): ConsentsRepo {
       const row = get(
         database,
         `SELECT * FROM consents WHERE operator_id = ? AND client_id = ? AND revoked_at IS NULL
-         ORDER BY granted_at DESC LIMIT 1`,
+          ORDER BY granted_at DESC LIMIT 1`,
         consentRow,
         operatorId,
         clientId,
@@ -84,7 +84,7 @@ export function createConsentsRepo(database: DatabaseSync): ConsentsRepo {
       run(
         database,
         `INSERT INTO consents (id, operator_id, client_id, scopes, granted_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?)`,
         record.id,
         record.operatorId,
         record.clientId,
@@ -109,9 +109,9 @@ export function createConsentsRepo(database: DatabaseSync): ConsentsRepo {
         database,
         `SELECT c.*, k.client_name,
                 (SELECT MAX(t.last_used_at) FROM tokens t WHERE t.consent_id = c.id) AS last_used_at
-         FROM consents c JOIN oauth_clients k ON k.client_id = c.client_id
-         WHERE c.operator_id = ? AND c.revoked_at IS NULL
-         ORDER BY c.granted_at DESC`,
+          FROM consents c JOIN oauth_clients k ON k.client_id = c.client_id
+          WHERE c.operator_id = ? AND c.revoked_at IS NULL
+          ORDER BY c.granted_at DESC`,
         connectedRow,
         operatorId,
       ).map((row) => ({

@@ -66,12 +66,12 @@ export function createClientsRepo(database: DatabaseSync): ClientsRepo {
       run(
         database,
         `INSERT INTO oauth_clients
-           (id, client_id, mode, client_name, redirect_uris, metadata, created_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (client_id) DO UPDATE SET
-           client_name = excluded.client_name,
-           redirect_uris = excluded.redirect_uris,
-           metadata = excluded.metadata`,
+            (id, client_id, mode, client_name, redirect_uris, metadata, created_at, revoked_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT (client_id) DO UPDATE SET
+            client_name = excluded.client_name,
+            redirect_uris = excluded.redirect_uris,
+            metadata = excluded.metadata`,
         record.id,
         record.clientId,
         record.mode,

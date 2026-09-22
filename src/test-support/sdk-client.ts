@@ -29,7 +29,7 @@ export const CIMD_ID = 'https://agent.example.com/.well-known/oauth-client.json'
 export const REDIRECT = 'https://agent.example.com/callback';
 export const DESK = { clientId: 'desk', clientName: 'Desk', redirectUris: [REDIRECT] };
 export const SCOPE = 'vault:read vault:reveal';
-export const INITIALIZE = {
+const INITIALIZE = {
   jsonrpc: '2.0',
   id: 1,
   method: 'initialize',

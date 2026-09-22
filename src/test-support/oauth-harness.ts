@@ -113,7 +113,7 @@ function ensureOperator(identity: IdentityHarness, operatorId: string): void {
     run(
       identity.database,
       `INSERT INTO operators (id, display_name, password_hash, created_at, password_changed_at)
-       VALUES (?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?)`,
       operatorId,
       'Operator',
       'hash',
