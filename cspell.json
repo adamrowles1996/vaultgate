@@ -10,13 +10,16 @@
     "coverage/**",
     "package-lock.json",
     "LICENSE",
-    ".mise.toml"
+    ".mise.toml",
+    "src/identity/common-passwords-data.ts"
   ],
   "ignoreRegExpList": [
     "/\\b[0-9a-f]{40}\\b/g",
     "/\\b[0-9a-f]{64}\\b/g",
     "/https?:\\/\\/[^\\s)\\]'\"]+/g",
-    "/\\bvg_[a-z]+_[A-Za-z0-9_-]+/g"
+    "/\\bvg_[a-z]+_[A-Za-z0-9_-]+/g",
+    "/%[0-9A-Fa-f]{2}[A-Za-z0-9]*/g",
+    "/&[#a-z0-9]+;/g"
   ],
   "words": [
     "actionlint",
@@ -34,6 +37,8 @@
     "CLIENTSECRET",
     "codeql",
     "collectionid",
+    "Conn",
+    "conninfo",
     "containerapp",
     "cosign",
     "Cowork",
@@ -50,6 +55,9 @@
     "healthz",
     "HKDF",
     "Hono",
+    "HOTP",
+    "HSTS",
+    "inputmode",
     "journalctl",
     "jsonc",
     "Keycloak",
@@ -59,6 +67,7 @@
     "lockfile",
     "lychee",
     "markdownlint",
+    "maxlength",
     "modelcontextprotocol",
     "Nemo",
     "Nix",
@@ -71,6 +80,7 @@
     "privkey",
     "readyz",
     "reauthenticated",
+    "reauthentication",
     "ReDoS",
     "regenerable",
     "rootfs",

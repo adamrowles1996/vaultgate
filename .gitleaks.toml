@@ -13,3 +13,7 @@ keywords = ["vg_at_", "vg_rt_", "vg_ac_", "vg_c_"]
 [[allowlists]]
 description = "Generated lockfile"
 paths = ['''package-lock\.json''']
+
+[[allowlists]]
+description = "Generated, compressed public word list (base64 chunks look like credentials)"
+paths = ['''src/identity/common-passwords-data\.ts''']

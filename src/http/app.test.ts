@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createTestApp, type TestApp } from '../test-support/test-app.ts';
+import { createTestApp, type TestApp, testConfig } from '../test-support/test-app.ts';
 
 import type { Readiness } from './app.ts';
 
@@ -46,6 +46,26 @@ describe('createApp', () => {
     const response = await app.request('/nope');
     expect(response.status).toBe(404);
     expect(await response.json()).toStrictEqual({ error: 'not_found' });
+  });
+
+  it('ID-20 sends HSTS only when the public URL is https', async () => {
+    const secure = await appWithLogSink().app.request('/healthz');
+    const plainConfig = testConfig({ VAULTGATE_PUBLIC_URL: 'http://localhost:8080' });
+    const plain = await createTestApp({ config: plainConfig }).app.request('/healthz');
+    expect(secure.headers.get('strict-transport-security')).toBe(
+      'max-age=31536000; includeSubDomains',
+    );
+    expect(plain.headers.get('strict-transport-security')).toBeNull();
+  });
+
+  it('mounts the operator pages and resolves the session cookie', async () => {
+    const { app } = appWithLogSink();
+    const setup = await app.request('/setup');
+    const account = await app.request('/account');
+    expect(setup.status).toBe(200);
+    expect(setup.headers.get('content-security-policy')).toContain("default-src 'none'");
+    expect(account.status).toBe(303);
+    expect(account.headers.get('location')).toBe('/login?next=%2Faccount');
   });
 
   it('logs and masks unhandled errors', async () => {

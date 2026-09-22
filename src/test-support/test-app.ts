@@ -4,11 +4,13 @@ import { loadConfig } from '../config/index.ts';
 import { type App, createApp, type Readiness } from '../http/app.ts';
 import { createLogger } from '../logger.ts';
 
+import { createHarness } from './identity-app.ts';
 import { InMemoryTokenVerifier } from './in-memory-token-verifier.ts';
 import { InMemoryVaultClient } from './in-memory-vault-client.ts';
 import { unwrapOk } from './result.ts';
 
 import type { Config } from '../config/index.ts';
+import type { Identity } from '../identity/index.ts';
 import type { AuditEvent, AuditSink } from '../mcp/audit.ts';
 
 export const TEST_PUBLIC_URL = 'https://vault.example.com';
@@ -81,6 +83,10 @@ export interface TestAppOptions {
   readonly vault?: InMemoryVaultClient;
   readonly readiness?: () => Readiness;
   readonly withClock?: boolean;
+  /**
+  The identity module; defaults to one over a fresh in-memory store.
+  */
+  readonly identity?: Identity;
 }
 
 export function createTestApp(options: TestAppOptions = {}): TestApp {
@@ -103,6 +109,7 @@ export function createTestApp(options: TestAppOptions = {}): TestApp {
     config,
     logger: createLogger('info', sink),
     readiness: options.readiness ?? (() => ({ ready: true, failing: [] })),
+    identity: options.identity ?? createHarness({ publicUrl: config.publicUrl }).identity,
     vaultClient: vault,
     tokenVerifier: verifier,
     auditSink: audit,
