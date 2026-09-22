@@ -11,14 +11,18 @@ const CLIENT_ID = 'https://agent.example.com/client.json';
 const PUBLIC = '93.184.216.34';
 
 function jsonResponse(body: unknown, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), {
+  return Response.json(body, {
     status: 200,
     headers: { 'content-type': 'application/json', ...headers },
   });
 }
 
 function validDocument(name = 'Agent'): Record<string, unknown> {
-  return { client_id: CLIENT_ID, client_name: name, redirect_uris: ['https://agent.example.com/cb'] };
+  return {
+    client_id: CLIENT_ID,
+    client_name: name,
+    redirect_uris: ['https://agent.example.com/cb'],
+  };
 }
 
 function serving(response: () => Response): FetchLike {
@@ -55,7 +59,11 @@ function harness(
     lookup: () => Promise.resolve([PUBLIC]),
     now: () => at,
     cache: repos.cimdCache,
-    logger: { warn: (fields, message) => warnings.push({ ...fields, message }) },
+    logger: {
+      warn: (fields, message) => {
+        warnings.push({ ...fields, message });
+      },
+    },
     rateLimiter: { take: () => ({ allowed: true }) },
     ...overrides,
   });
@@ -123,17 +131,21 @@ describe('createCimdFetcher', () => {
   });
 
   it('OAUTH-10 uses the cached copy and warns when a refetch fails', async () => {
-    let healthy = true;
+    let isHealthy = true;
     const healthyFetch = servingDocument();
     const h = harness((url, init) =>
-      healthy ? healthyFetch(url, init) : Promise.reject(new TypeError('down')),
+      isHealthy ? healthyFetch(url, init) : Promise.reject(new TypeError('down')),
     );
     await h.fetcher.fetch(CLIENT_ID);
-    healthy = false;
+    isHealthy = false;
     h.tick(600_000);
     expect(await nameOf(h)).toBe('Agent');
     expect(h.warnings()).toStrictEqual([
-      { clientId: CLIENT_ID, reason: 'fetch failed: down', message: 'CIMD fetch failed; using the cached document' },
+      {
+        clientId: CLIENT_ID,
+        reason: 'fetch failed: down',
+        message: 'CIMD fetch failed; using the cached document',
+      },
     ]);
   });
 
@@ -169,12 +181,14 @@ describe('createCimdFetcher', () => {
   });
 
   it('§10.4 falls back to the cache when the process-wide fetch limit is reached', async () => {
-    let allowed = true;
+    let isAllowed = true;
     const h = harness(servingDocument(), {
-      rateLimiter: { take: () => (allowed ? { allowed: true } : { allowed: false, retryAfterSeconds: 1 }) },
+      rateLimiter: {
+        take: () => (isAllowed ? { allowed: true } : { allowed: false, retryAfterSeconds: 1 }),
+      },
     });
     await h.fetcher.fetch(CLIENT_ID);
-    allowed = false;
+    isAllowed = false;
     h.tick(600_000);
     expect(await nameOf(h)).toBe('Agent');
     expect(h.warnings()[0]).toMatchObject({ reason: 'fetch rate limit reached' });
@@ -183,7 +197,13 @@ describe('createCimdFetcher', () => {
 
   it('OAUTH-10 ignores a cached document that no longer validates', async () => {
     const h = harness(servingDocument());
-    h.repos.cimdCache.put({ clientId: CLIENT_ID, document: { client_id: 'other' }, fetchedAt: 0, expiresAt: 9_999_999, etag: undefined });
+    h.repos.cimdCache.put({
+      clientId: CLIENT_ID,
+      document: { client_id: 'other' },
+      fetchedAt: 0,
+      expiresAt: 9_999_999,
+      etag: undefined,
+    });
     expect(await nameOf(h)).toBe('Agent');
     expect(h.fetch).toHaveBeenCalledTimes(1);
   });

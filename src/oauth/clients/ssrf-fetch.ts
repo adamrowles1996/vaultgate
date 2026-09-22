@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 import { fail, ok, type Result } from '../../result.ts';
 import { isPublicAddress } from '../ip-ranges.ts';
 
@@ -58,7 +60,7 @@ async function resolveAll(hostname: string, lookup: Lookup): Promise<readonly st
  */
 async function assertPublicHost(url: URL, lookup: Lookup): Promise<void> {
   const literal = literalAddress(url.hostname);
-  const addresses = isPublicAddress(literal) ? [literal] : await resolveAll(url.hostname, lookup);
+  const addresses = isIP(literal) === 0 ? await resolveAll(url.hostname, lookup) : [literal];
   if (addresses.length === 0 || addresses.some((address) => !isPublicAddress(address))) {
     throw new SafeFetchError(`host "${url.hostname}" does not resolve to a public address`);
   }

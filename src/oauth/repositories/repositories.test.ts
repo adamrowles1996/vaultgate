@@ -55,7 +55,13 @@ describe('clients repository', () => {
     const repos = openTestRepos();
     repos.clients.upsert(CLIENT);
     expect(repos.clients.findByClientId('client-a')).toStrictEqual(CLIENT);
-    repos.clients.upsert({ ...CLIENT, id: 'ignored', clientName: 'B', redirectUris: ['https://b.example/cb'], createdAt: 99 });
+    repos.clients.upsert({
+      ...CLIENT,
+      id: 'ignored',
+      clientName: 'B',
+      redirectUris: ['https://b.example/cb'],
+      createdAt: 99,
+    });
     expect(repos.clients.findByClientId('client-a')).toStrictEqual({
       ...CLIENT,
       clientName: 'B',
@@ -67,18 +73,31 @@ describe('clients repository', () => {
   it('stores an unnamed, revoked client', () => {
     const repos = openTestRepos();
     repos.clients.upsert({ ...CLIENT, clientName: undefined, revokedAt: 3 });
-    expect(repos.clients.findByClientId('client-a')).toMatchObject({ clientName: undefined, revokedAt: 3 });
+    expect(repos.clients.findByClientId('client-a')).toMatchObject({
+      clientName: undefined,
+      revokedAt: 3,
+    });
   });
 });
 
 describe('cimd cache repository', () => {
   it('round-trips and replaces an entry', () => {
     const repos = openTestRepos();
-    const entry = { clientId: 'https://a/c.json', document: { a: 1 }, fetchedAt: 1, expiresAt: 2, etag: undefined };
+    const entry = {
+      clientId: 'https://a/c.json',
+      document: { a: 1 },
+      fetchedAt: 1,
+      expiresAt: 2,
+      etag: undefined,
+    };
     repos.cimdCache.put(entry);
     expect(repos.cimdCache.find(entry.clientId)).toStrictEqual(entry);
     repos.cimdCache.put({ ...entry, document: { a: 2 }, etag: 'e' });
-    expect(repos.cimdCache.find(entry.clientId)).toStrictEqual({ ...entry, document: { a: 2 }, etag: 'e' });
+    expect(repos.cimdCache.find(entry.clientId)).toStrictEqual({
+      ...entry,
+      document: { a: 2 },
+      etag: 'e',
+    });
     expect(repos.cimdCache.find('none')).toBeUndefined();
   });
 });
@@ -89,7 +108,10 @@ describe('consents repository', () => {
     expect(repos.consents.findActive(TEST_OPERATOR_ID, 'client-a')?.id).toBe('consent-1');
     expect(repos.consents.findActive(TEST_OPERATOR_ID, 'other')).toBeUndefined();
     repos.consents.updateScopes('consent-1', ['vault:read', 'vault:reveal']);
-    expect(repos.consents.findById('consent-1')?.scopes).toStrictEqual(['vault:read', 'vault:reveal']);
+    expect(repos.consents.findById('consent-1')?.scopes).toStrictEqual([
+      'vault:read',
+      'vault:reveal',
+    ]);
     repos.tokens.insert(token({ lastUsedAt: 77 }));
     repos.tokens.insert(token({ id: 't2', tokenHash: 'h2', lastUsedAt: 99 }));
     expect(repos.consents.listConnected(TEST_OPERATOR_ID)).toStrictEqual([
@@ -116,7 +138,10 @@ describe('consents repository', () => {
   it('lists a connected client that was never used and has no name', () => {
     const repos = seeded();
     repos.clients.upsert({ ...CLIENT, clientName: undefined });
-    expect(repos.consents.listConnected(TEST_OPERATOR_ID)[0]).toMatchObject({ clientName: undefined, lastUsedAt: undefined });
+    expect(repos.consents.listConnected(TEST_OPERATOR_ID)[0]).toMatchObject({
+      clientName: undefined,
+      lastUsedAt: undefined,
+    });
   });
 });
 
@@ -166,7 +191,10 @@ describe('authorization codes repository', () => {
       expiresAt: 1,
       usedAt: 3,
     });
-    expect(repos.authorizationCodes.claim('x', 4)).toMatchObject({ kind: 'reused', code: { resource: undefined, usedAt: 3 } });
+    expect(repos.authorizationCodes.claim('x', 4)).toMatchObject({
+      kind: 'reused',
+      code: { resource: undefined, usedAt: 3 },
+    });
   });
 });
 
@@ -176,7 +204,9 @@ describe('tokens repository', () => {
     const first = token({});
     repos.tokens.insert(first);
     repos.tokens.insert(token({ id: 't2', tokenHash: 'h2', kind: 'refresh', parentId: 't1' }));
-    repos.tokens.insert(token({ id: 't3', tokenHash: 'h3', familyId: 'other', resource: undefined }));
+    repos.tokens.insert(
+      token({ id: 't3', tokenHash: 'h3', familyId: 'other', resource: undefined }),
+    );
     expect(repos.tokens.findByHash('h1')).toStrictEqual(first);
     expect(repos.tokens.findByHash('h3')?.resource).toBeUndefined();
     expect(repos.tokens.findByHash('none')).toBeUndefined();
@@ -196,7 +226,12 @@ describe('tokens repository', () => {
 describe('pending authorizations repository', () => {
   it('OAUTH-17 stores, finds and deletes a pending request', () => {
     const repos = openTestRepos();
-    const record = { id: 'p1', sessionBindingHash: 'bind', parameters: { client_id: 'x' }, expiresAt: 9 };
+    const record = {
+      id: 'p1',
+      sessionBindingHash: 'bind',
+      parameters: { client_id: 'x' },
+      expiresAt: 9,
+    };
     repos.pendingAuthorizations.insert(record);
     expect(repos.pendingAuthorizations.find('p1')).toStrictEqual(record);
     repos.pendingAuthorizations.delete('p1');

@@ -34,8 +34,16 @@ describe('validatePreregisteredClients', () => {
         [
           { clientId: 'dup', clientName: undefined, redirectUris: ['http://evil.example.com/cb'] },
           { clientId: 'dup', clientName: undefined, redirectUris: ['https://ok.example.com/cb'] },
-          { clientId: 'https://cimd.example.com/c.json', clientName: undefined, redirectUris: ['https://ok.example.com/cb'] },
-          { clientId: 'vg_c_reserved', clientName: undefined, redirectUris: ['https://ok.example.com/cb'] },
+          {
+            clientId: 'https://cimd.example.com/c.json',
+            clientName: undefined,
+            redirectUris: ['https://ok.example.com/cb'],
+          },
+          {
+            clientId: 'vg_c_reserved',
+            clientName: undefined,
+            redirectUris: ['https://ok.example.com/cb'],
+          },
         ],
         options,
       ),
@@ -52,7 +60,18 @@ describe('validatePreregisteredClients', () => {
 
   it('OAUTH-12 treats an unparsable client_id as a plain identifier', () => {
     expect(
-      unwrapOk(validatePreregisteredClients([{ clientId: 'not a url', clientName: undefined, redirectUris: ['https://ok.example.com/cb'] }], options)),
+      unwrapOk(
+        validatePreregisteredClients(
+          [
+            {
+              clientId: 'not a url',
+              clientName: undefined,
+              redirectUris: ['https://ok.example.com/cb'],
+            },
+          ],
+          options,
+        ),
+      ),
     ).toHaveLength(1);
   });
 });

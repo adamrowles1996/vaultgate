@@ -5,9 +5,10 @@ import { openTestRepos } from '../../test-support/oauth-store.ts';
 import { unwrapFail, unwrapOk } from '../../test-support/result.ts';
 import { OAuthError } from '../errors.ts';
 
-import { type CimdFetcher, createClientResolver, isCimdClientId } from './resolve.ts';
+import { createClientResolver, isCimdClientId } from './resolve.ts';
 
 import type { CimdDocument } from './cimd-document.ts';
+import type { CimdFetcher } from './cimd.ts';
 
 const CIMD_ID = 'https://agent.example.com/client.json';
 
@@ -81,7 +82,11 @@ describe('createClientResolver', () => {
       redirectUris: ['https://agent.example.com/cb'],
       loopbackOnly: false,
     });
-    expect(repos.clients.findByClientId(CIMD_ID)).toMatchObject({ id: 'id-1', mode: 'cimd', createdAt: 42 });
+    expect(repos.clients.findByClientId(CIMD_ID)).toMatchObject({
+      id: 'id-1',
+      mode: 'cimd',
+      createdAt: 42,
+    });
     await resolver.resolve(CIMD_ID);
     expect(repos.clients.findByClientId(CIMD_ID)).toMatchObject({ id: 'id-1', createdAt: 42 });
     expect(cimd.fetch).toHaveBeenCalledTimes(2);
@@ -89,10 +94,17 @@ describe('createClientResolver', () => {
 
   it('T22 forces a refetch when the cached document does not list the redirect', async () => {
     const cimd = {
-      fetch: vi.fn<CimdFetcher['fetch']>((_clientId, options) =>
-        Promise.resolve(
-          ok(cimdDocument(options?.force === true ? ['https://agent.example.com/new'] : ['https://agent.example.com/old'])),
-        ),
+      fetch: vi.fn<CimdFetcher['fetch']>(
+        (_clientId: string, options?: { readonly force?: boolean }) =>
+          Promise.resolve(
+            ok(
+              cimdDocument([
+                options?.force === true
+                  ? 'https://agent.example.com/new'
+                  : 'https://agent.example.com/old',
+              ]),
+            ),
+          ),
       ),
     };
     const { resolver } = setup(cimd);
@@ -108,7 +120,9 @@ describe('createClientResolver', () => {
       ),
     };
     const { resolver } = setup(cimd);
-    expect(unwrapFail(await resolver.resolve(CIMD_ID, 'https://x/cb')).description).toBe('no document');
+    expect(unwrapFail(await resolver.resolve(CIMD_ID, 'https://x/cb')).description).toBe(
+      'no document',
+    );
   });
 
   it('§3.3 resolves a stored dynamic client and rejects unknown, non-dynamic or revoked ids', async () => {

@@ -13,10 +13,17 @@ import {
 const PUBLIC = '93.184.216.34';
 const URL_A = 'https://a.example/1';
 
+const resolvesPublic: Lookup = () => Promise.resolve([PUBLIC]);
+const resolvesPublicAndPrivate: Lookup = () => Promise.resolve([PUBLIC, '10.0.0.5']);
+const resolvesNothing: Lookup = () => Promise.resolve([]);
+const lookupThrows: Lookup = () => Promise.reject(new Error('ENOTFOUND'));
+const privateUnlessA: Lookup = (host) =>
+  Promise.resolve([host === 'a.example' ? PUBLIC : '192.168.0.1']);
+
 function options(overrides: Partial<SafeFetchOptions> = {}): SafeFetchOptions {
   return {
     fetch: () => Promise.resolve(new Response('{}', { status: 200 })),
-    lookup: () => Promise.resolve([PUBLIC]),
+    lookup: resolvesPublic,
     timeoutMs: 4000,
     maxRedirects: 2,
     maxBodyBytes: 1024,
@@ -42,7 +49,10 @@ async function failureOf(url: string, overrides: Partial<SafeFetchOptions>): Pro
   return unwrapFail(result).message;
 }
 
-async function successOf(url: string, overrides: Partial<SafeFetchOptions>): Promise<SafeFetchResult> {
+async function successOf(
+  url: string,
+  overrides: Partial<SafeFetchOptions>,
+): Promise<SafeFetchResult> {
   const result = await safeFetch(url, options(overrides));
   return unwrapOk(result);
 }
@@ -73,7 +83,7 @@ describe('safeFetch', () => {
 
   it('T6 rejects a host that resolves to a private address', async () => {
     const fetch = vi.fn<FetchLike>();
-    const lookup: Lookup = () => Promise.resolve([PUBLIC, '10.0.0.5']);
+    const lookup = resolvesPublicAndPrivate;
     expect(await failureOf('https://agent.example.com/c.json', { fetch, lookup })).toBe(
       'host "agent.example.com" does not resolve to a public address',
     );
@@ -81,13 +91,15 @@ describe('safeFetch', () => {
   });
 
   it('T6 rejects a host that does not resolve or whose lookup throws', async () => {
-    const empty: Lookup = () => Promise.resolve([]);
-    const throwing: Lookup = () => Promise.reject(new Error('ENOTFOUND'));
-    expect(await failureOf('https://a.example/', { lookup: empty })).toContain('does not resolve');
-    expect(await failureOf('https://a.example/', { lookup: throwing })).toContain('does not resolve');
+    expect(await failureOf('https://a.example/', { lookup: resolvesNothing })).toContain(
+      'does not resolve',
+    );
+    expect(await failureOf('https://a.example/', { lookup: lookupThrows })).toContain(
+      'does not resolve',
+    );
   });
 
-  it('T6 rejects a private IP literal and accepts a public one without lookup', async () => {
+  it('T6 rejects a private IP literal and accepts a public one, never consulting DNS', async () => {
     const lookup = vi.fn<Lookup>();
     expect(await failureOf('https://127.0.0.1/c.json', { lookup })).toContain('does not resolve');
     expect(await failureOf('https://[::1]/c.json', { lookup })).toContain('does not resolve');
@@ -97,7 +109,7 @@ describe('safeFetch', () => {
   });
 
   it('OAUTH-8 follows at most two redirects, re-validating each hop', async () => {
-    const lookup = vi.fn<Lookup>(() => Promise.resolve([PUBLIC]));
+    const lookup = vi.fn<Lookup>(resolvesPublic);
     const hops = new Map<string, Response>([
       [URL_A, redirect('/2')],
       ['https://a.example/2', redirect('https://b.example/3')],
@@ -127,7 +139,7 @@ describe('safeFetch', () => {
   });
 
   it('T6 rejects a redirect to a private host', async () => {
-    const lookup: Lookup = (host) => Promise.resolve([host === 'a.example' ? PUBLIC : '192.168.0.1']);
+    const lookup = privateUnlessA;
     const fetch = vi.fn<FetchLike>((url) =>
       Promise.resolve(url === URL_A ? redirect('https://internal.example/') : new Response('x')),
     );
@@ -147,12 +159,12 @@ describe('safeFetch', () => {
   });
 
   it('OAUTH-8 wraps a network failure', async () => {
-    expect(await failureOf('https://a.example/', { fetch: failing(new TypeError('fetch failed')) })).toBe(
+    const typed = failing(new TypeError('fetch failed'));
+    const untyped = failing('string reason');
+    expect(await failureOf('https://a.example/', { fetch: typed })).toBe(
       'fetch failed: fetch failed',
     );
-    expect(await failureOf('https://a.example/', { fetch: failing('string reason') })).toBe(
-      'fetch failed: unknown',
-    );
+    expect(await failureOf('https://a.example/', { fetch: untyped })).toBe('fetch failed: unknown');
   });
 
   it('OAUTH-8 wraps an unexpected throw from the body stream', async () => {
