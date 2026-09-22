@@ -28,13 +28,15 @@ Exit: CI green on `main`; branch protection on; repository settings applied (see
 
 ### M1 Store and configuration (spec 07, 08)
 
-1. `feat(config)`: full environment schema with `_FILE` variants, durations, secret masking (CFG-1…4).
-2. `feat(storage)`: `node:sqlite` connection, pragmas, migration runner with checksums, v1 schema,
-   repositories with typed row mappers, maintenance task (STORE-1…6).
-3. `feat(audit)`: append-only writer and query API (MCP-13…15 data path).
+1. `feat(config)`: full environment schema with `_FILE` variants, durations, URL rules, secret
+   masking for the start-up summary (CFG-1…4).
+2. `feat(storage)`: `node:sqlite` connection, pragmas, migration runner with checksums, the v1
+   schema, and the hourly maintenance task (STORE-1…6). Repositories land with their first
+   consumer in M2 and M3 so no code is dead on arrival; the audit writer lands with the first
+   audited event (login) in M2.
 
-Exit: migrations apply on an empty directory and are idempotent; repository tests run against a
-temporary database; maintenance deletes exactly the expired rows.
+Exit: migrations apply on an empty directory and are idempotent; the maintenance task deletes
+exactly the expired rows; the server boots with a full configuration and reports it masked.
 
 ### M2 Identity (spec 04)
 
@@ -93,8 +95,9 @@ Vaultwarden.
 2. `build(install)`: `install.sh` with checksum verification and the hardened systemd unit.
 3. `ci(release)`: tag-driven multi-arch build, cosign signing, SBOM, provenance, GitHub release.
 
-Exit: `docker compose up` on a clean VM reaches the setup page over HTTPS; the release workflow
-publishes `v0.1.0-rc.1`.
+Exit: `docker compose up` on a clean VM (the maintainer's Proxmox host is the reference) reaches
+the setup page over HTTPS; `install.sh` completes on a clean Ubuntu LTS VM on the same host; the
+release workflow publishes `v0.1.0-rc.1`.
 
 ### M7 Azure (spec 09.3)
 
@@ -124,14 +127,19 @@ Exit: `v1.0.0`.
 - Prometheus metrics.
 - Organisation collections filtering and per-client item allowlists.
 
-## Inputs needed from the maintainer
+## Test environments
 
-| Item                                                                                                       | Needed by |
-| ---------------------------------------------------------------------------------------------------------- | --------- |
-| A public hostname for the reference deployment                                                             | M6        |
-| A dedicated Bitwarden (or Vaultwarden) test account and personal API key for the scheduled integration job | M5        |
-| An Azure sandbox subscription and service principal for `what-if` runs                                     | M7        |
-| Decision on the default `VAULTGATE_ACCESS_TOKEN_TTL` for hosted agents (1 h proposed)                      | M3        |
+Provided by the maintainer (details are kept out of this repository):
+
+| Environment                                                                             | Used by                                    |
+| --------------------------------------------------------------------------------------- | ------------------------------------------ |
+| A dedicated test account on a self-hosted Vaultwarden instance, with a personal API key | M5 integration job, M8 compatibility suite |
+| An Azure subscription for template deployments                                          | M7 `what-if` and real deployments          |
+| A Proxmox host for VM and container deployments                                         | M6 Compose and `install.sh` verification   |
+| A public hostname for the reference deployment                                          | M6 onwards (to be assigned)                |
+
+Open decision: the default `VAULTGATE_ACCESS_TOKEN_TTL` for hosted agents (1 h proposed), due by
+M3.
 
 ## Risks
 
