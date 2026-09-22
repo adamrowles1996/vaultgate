@@ -15,6 +15,8 @@ All notable changes to this project are documented here. The format follows
   dependency-cruiser layering rules, lockfile-lint, sort-package-json, editorconfig-checker,
   gitleaks and `npm audit signatures`, with non-npm tools pinned in `.mise.toml`.
 - Minimal server with validated configuration, redacting logger and health probes.
+- Full configuration schema (spec §08): every variable validated in one pass, `_FILE` variants
+  for secrets with permission warnings, duration and URL rules, and a masked start-up summary.
 - Specification (`docs/spec/`), delivery plan, threat model and initial ADRs.
 
 [Unreleased]: https://github.com/adamrowles1996/vaultgate/commits/main
