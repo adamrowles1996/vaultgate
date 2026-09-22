@@ -1,16 +1,19 @@
-import { createApp, type App } from '../http/app.ts';
-import { type AuditEvent } from '../oauth/audit.ts';
-import { createAuthorizationServer, type AuthorizationServer } from '../oauth/server.ts';
+import { loadConfig, type Config } from '../config/index.ts';
+import { type App, createApp } from '../http/app.ts';
 import { createOAuthRepos, type OAuthRepos } from '../oauth/repositories/index.ts';
+import { createAuthorizationServer, type AuthorizationServer } from '../oauth/server.ts';
 import { IN_MEMORY, openDatabase } from '../storage/database.ts';
 import { migrate } from '../storage/migrate.ts';
 import { MIGRATIONS } from '../storage/migrations/index.ts';
 import { run } from '../storage/query.ts';
 
+import { InMemoryVaultClient } from './in-memory-vault-client.ts';
 import { captureLogger } from './logging.ts';
 import { unwrapOk } from './result.ts';
 
 import type { PreregisteredClient } from '../config/primitives.ts';
+import type { AuditEvent as McpAuditEvent } from '../mcp/audit.ts';
+import type { AuditEvent } from '../oauth/audit.ts';
 import type { OperatorSession } from '../oauth/session.ts';
 
 export const PUBLIC_URL = 'https://vault.example.com';
@@ -25,7 +28,10 @@ export interface HarnessOptions {
   readonly oauthClients?: readonly PreregisteredClient[];
   readonly trustProxy?: boolean;
   readonly loginPath?: string;
-  readonly startAt?: number;
+  /**
+  DNS answers for CIMD hosts; every host resolves to one public address by default.
+  */
+  readonly lookup?: (hostname: string) => Promise<readonly string[]>;
 }
 
 export interface Browser {
@@ -36,11 +42,19 @@ export interface Browser {
   readonly headers: Readonly<Record<string, string>>;
 }
 
+export interface Exchange {
+  readonly status: number;
+  readonly headers: Headers;
+  readonly text: string;
+}
+
 export interface OAuthHarness {
   readonly app: App;
+  readonly config: Config;
   readonly server: AuthorizationServer;
   readonly repos: OAuthRepos;
   readonly audit: readonly AuditEvent[];
+  readonly mcpAudit: readonly McpAuditEvent[];
   readonly logLines: () => readonly Record<string, unknown>[];
   /**
   CIMD documents served by the injected fetch, keyed by URL.
@@ -51,27 +65,52 @@ export interface OAuthHarness {
   readonly advance: (ms: number) => void;
   readonly signIn: (operatorId?: string) => Browser;
   readonly request: (path: string, init?: RequestInit) => Promise<Response>;
+  /**
+  A request whose body has been read, so tests never chain members off an await.
+  */
+  readonly exchange: (path: string, init?: RequestInit) => Promise<Exchange>;
+}
+
+function harnessConfig(options: HarnessOptions): Config {
+  const clients = (options.oauthClients ?? []).map((client) => ({
+    client_id: client.clientId,
+    client_name: client.clientName,
+    redirect_uris: client.redirectUris,
+  }));
+  const loaded = loadConfig({
+    VAULTGATE_PUBLIC_URL: options.publicUrl ?? PUBLIC_URL,
+    VAULTGATE_SECRET_KEY: Buffer.alloc(32, 7).toString('base64'),
+    VAULTGATE_BW_PASSWORD: 'test-master-password',
+    VAULTGATE_BW_CLIENT_ID: 'user.test',
+    VAULTGATE_BW_CLIENT_SECRET: 'test-client-secret',
+    VAULTGATE_ENABLE_WRITE_SCOPE: options.enableWriteScope === true ? 'true' : 'false',
+    VAULTGATE_TRUST_PROXY: options.trustProxy === true ? 'true' : 'false',
+    VAULTGATE_OAUTH_CLIENTS: JSON.stringify(clients),
+  });
+  return unwrapOk(loaded).config;
 }
 
 /**
- * The full authorization server over an in-memory store with every external
- * dependency faked: sessions come from a `sid` cookie, the clock and random
- * source are deterministic, and fetch/lookup never touch the network (QG-2).
+ * The full application — probes, MCP resource server and the authorization
+ * server — over an in-memory store with every external dependency faked:
+ * sessions come from a `sid` cookie, the clock and random source are
+ * deterministic, and fetch/lookup never touch the network (QG-2).
  */
 export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
-  const publicUrl = options.publicUrl ?? PUBLIC_URL;
-  let at = options.startAt ?? 1_700_000_000_000;
+  const config = harnessConfig(options);
+  let at = 1_700_000_000_000;
   let counter = 0;
   const sessions = new Map<string, OperatorSession>();
   const audit: AuditEvent[] = [];
+  const mcpAudit: McpAuditEvent[] = [];
   const cimd = new Map<string, () => Response>();
   const fetchedUrls: string[] = [];
   const { logger, lines } = captureLogger();
 
-  const db = openDatabase({ path: IN_MEMORY, networkFs: false });
-  unwrapOk(migrate(db, MIGRATIONS, new Date(0)));
+  const database = openDatabase({ path: IN_MEMORY, networkFs: false });
+  unwrapOk(migrate(database, MIGRATIONS, new Date(0)));
   run(
-    db,
+    database,
     `INSERT INTO operators (id, display_name, password_hash, created_at, password_changed_at)
      VALUES (?, ?, ?, ?, ?)`,
     OPERATOR_ID,
@@ -83,15 +122,8 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
 
   const server = unwrapOk(
     createAuthorizationServer({
-      config: {
-        publicUrl,
-        enableWriteScope: options.enableWriteScope ?? false,
-        oauthClients: options.oauthClients ?? [],
-        accessTokenTtlMs: 3_600_000,
-        refreshTokenTtlMs: 30 * 86_400_000,
-        trustProxy: options.trustProxy ?? false,
-      },
-      db,
+      config,
+      db: database,
       sessions: {
         resolve: (request) => {
           const cookie = request.headers.get('cookie') ?? '';
@@ -108,9 +140,11 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
       fetch: (url) => {
         fetchedUrls.push(url);
         const document = cimd.get(url);
-        return Promise.resolve(document === undefined ? new Response('', { status: 404 }) : document());
+        return Promise.resolve(
+          document === undefined ? new Response('', { status: 404 }) : document(),
+        );
       },
-      lookup: () => Promise.resolve([PUBLIC_ADDRESS]),
+      lookup: options.lookup ?? (() => Promise.resolve([PUBLIC_ADDRESS])),
       now: () => at,
       random: (bytes) => {
         counter += 1;
@@ -123,13 +157,30 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
       loginPath: options.loginPath,
     }),
   );
-  const app = createApp({ logger, readiness: () => ({ ready: true, failing: [] }), oauth: server.routes });
+  const app = createApp({
+    config,
+    logger,
+    readiness: () => ({ ready: true, failing: [] }),
+    vaultClient: new InMemoryVaultClient(),
+    tokenVerifier: server.tokenVerifier,
+    auditSink: {
+      record: (event) => {
+        mcpAudit.push(event);
+      },
+    },
+    now: () => at,
+    oauth: server.routes,
+  });
+  const request = (path: string, init?: RequestInit): Promise<Response> =>
+    Promise.resolve(app.request(`${config.publicUrl}${path}`, init));
 
   return {
     app,
+    config,
     server,
-    repos: createOAuthRepos(db),
+    repos: createOAuthRepos(database),
     audit,
+    mcpAudit,
     logLines: lines,
     cimd,
     fetchedUrls,
@@ -145,26 +196,43 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
         csrfToken: `csrf-${counter}`,
       };
       sessions.set(session.sessionKey, session);
-      return { session, headers: { cookie: `sid=${session.sessionKey}`, origin: new URL(publicUrl).origin } };
+      return {
+        session,
+        headers: { cookie: `sid=${session.sessionKey}`, origin: new URL(config.publicUrl).origin },
+      };
     },
-    request: (path, init) => app.request(`${publicUrl}${path}`, init),
+    request,
+    exchange: async (path, init) => {
+      const response = await request(path, init);
+      return { status: response.status, headers: response.headers, text: await response.text() };
+    },
   };
 }
 
-export function formBody(fields: Readonly<Record<string, string>>): RequestInit {
+export function formBody(
+  fields: Readonly<Record<string, string>>,
+  headers: Readonly<Record<string, string>> = {},
+): RequestInit {
   return {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
     body: new URLSearchParams(fields).toString(),
   };
 }
 
-export function jsonBody(body: unknown): RequestInit {
+export function jsonBody(
+  body: unknown,
+  headers: Readonly<Record<string, string>> = {},
+): RequestInit {
   return {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   };
+}
+
+export function parseJson(exchange: Exchange): Record<string, unknown> {
+  return JSON.parse(exchange.text) as Record<string, unknown>;
 }
 
 export interface ConsentForm {
@@ -181,8 +249,29 @@ export function parseConsentForm(html: string): ConsentForm {
 
 export function cimdDocument(clientId: string, redirectUris: readonly string[]): () => Response {
   return () =>
-    new Response(JSON.stringify({ client_id: clientId, client_name: 'CIMD Agent', redirect_uris: redirectUris }), {
-      status: 200,
-      headers: { 'content-type': 'application/json', 'cache-control': 'max-age=300' },
-    });
+    Response.json(
+      { client_id: clientId, client_name: 'CIMD Agent', redirect_uris: redirectUris },
+      {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'cache-control': 'max-age=300' },
+      },
+    );
+}
+
+/**
+ * Drives the browser half of the authorization flow (spec §02.3.1 steps 4–6)
+ * for a signed-in operator and yields the consent form ready to post.
+ */
+export async function openConsent(
+  harness: OAuthHarness,
+  browser: Browser,
+  parameters: Readonly<Record<string, string>>,
+): Promise<ConsentForm> {
+  const search = new URLSearchParams(parameters).toString();
+  const started = await harness.exchange(`/oauth/authorize?${search}`, {
+    headers: browser.headers,
+  });
+  const path = started.headers.get('location') ?? '';
+  const page = await harness.exchange(path, { headers: browser.headers });
+  return parseConsentForm(page.text);
 }

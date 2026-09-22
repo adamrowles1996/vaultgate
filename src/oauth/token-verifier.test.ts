@@ -85,14 +85,22 @@ describe('StoreTokenVerifier', () => {
 
   it('OAUTH-34 rejects anything without the vg_at_ prefix as malformed', async () => {
     const { verifier } = setup();
-    for (const candidate of ['', 'vg_at_', 'vg_rt_abc', 'eyJhbGciOiJSUzI1NiJ9.e30.sig', 'Bearer x']) {
+    for (const candidate of [
+      '',
+      'vg_at_',
+      'vg_rt_abc',
+      'eyJhbGciOiJSUzI1NiJ9.e30.sig',
+      'Bearer x',
+    ]) {
       expect(unwrapFail(await verifier.verify(candidate)).reason).toBe('malformed');
     }
   });
 
   it('OAUTH-32 rejects an unknown token', async () => {
     const { verifier } = setup();
-    const unknown = mintCredential(CREDENTIAL_PREFIX.accessToken, (bytes) => Buffer.alloc(bytes, 1));
+    const unknown = mintCredential(CREDENTIAL_PREFIX.accessToken, (bytes) =>
+      Buffer.alloc(bytes, 1),
+    );
     expect(unwrapFail(await verifier.verify(unknown)).reason).toBe('unknown');
   });
 

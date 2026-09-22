@@ -1,31 +1,17 @@
-import type { Result } from '../result.ts';
+/**
+ * The bearer contract the MCP resource server consumes (spec §03.7) is
+ * declared in `src/mcp/token-verifier.ts`. This module depends on it as
+ * types only, so the two features meet through the interface and never
+ * through runtime code (ARCH boundary in `.dependency-cruiser.mjs`).
+ */
+import type { TokenRejectionReason } from '../mcp/token-verifier.ts';
+
+export type { TokenRejectionReason, TokenVerifier, VerifiedToken } from '../mcp/token-verifier.ts';
 
 /**
- * The bearer contract the MCP resource server consumes (spec §03.7). It is
- * structurally identical to `src/mcp/token-verifier.ts`; the OAuth module
- * declares it so the two features depend on the shape, not on each other.
+ * Structurally identical to the MCP module's `TokenRejection`, so a
+ * `Result` carrying it satisfies `TokenVerifier` without importing the class.
  */
-export interface VerifiedToken {
-  /**
-  First 12 hex characters of the token's SHA-256 (MCP-13); never the token itself.
-  */
-  readonly tokenId: string;
-  readonly clientId: string;
-  readonly clientName: string;
-  /**
-  The operator who approved the consent.
-  */
-  readonly subject: string;
-  readonly scopes: readonly string[];
-  /**
-  Milliseconds since the Unix epoch.
-  */
-  readonly expiresAt: number;
-  readonly resource: string;
-}
-
-export type TokenRejectionReason = 'malformed' | 'unknown' | 'revoked' | 'expired';
-
 export class TokenRejection extends Error {
   readonly reason: TokenRejectionReason;
 
@@ -34,8 +20,4 @@ export class TokenRejection extends Error {
     this.name = 'TokenRejection';
     this.reason = reason;
   }
-}
-
-export interface TokenVerifier {
-  verify(token: string): Promise<Result<VerifiedToken, TokenRejection>>;
 }

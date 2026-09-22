@@ -24,7 +24,12 @@ describe('renderConsentPage', () => {
   });
 
   it('OAUTH-13 / T7 warns prominently when every redirect is loopback', () => {
-    const html = renderConsentPage({ ...VIEW, loopbackOnly: true, redirectHost: '127.0.0.1:53211', mode: 'dcr' });
+    const html = renderConsentPage({
+      ...VIEW,
+      loopbackOnly: true,
+      redirectHost: '127.0.0.1:53211',
+      mode: 'dcr',
+    });
     expect(html).toContain('<p class="warning"><strong>Warning:</strong>');
     expect(html).toContain('loopback address (<code>127.0.0.1:53211</code>)');
     expect(html).toContain('registered dynamically; nobody has vetted this client');
@@ -42,7 +47,9 @@ describe('renderConsentPage', () => {
     expect(html).toContain(
       `<input type="checkbox" checked disabled><input type="hidden" name="${scopeFieldName('vault:read')}" value="on">`,
     );
-    expect(html).toContain(`<input type="checkbox" name="${scopeFieldName('vault:reveal')}" value="on" checked>`);
+    expect(html).toContain(
+      `<input type="checkbox" name="${scopeFieldName('vault:reveal')}" value="on" checked>`,
+    );
     expect(html).toContain('<form method="post" action="/oauth/authorize">');
     expect(html).toContain('<input type="hidden" name="request_id" value="req-1">');
     expect(html).toContain('<input type="hidden" name="csrf_token" value="csrf-1">');
@@ -54,7 +61,9 @@ describe('renderConsentPage', () => {
 
 describe('renderErrorPage', () => {
   it('OAUTH-14 names the error code and description without any redirect', () => {
-    const html = renderErrorPage(new OAuthError('invalid_request', 'client_id & redirect_uri are required'));
+    const html = renderErrorPage(
+      new OAuthError('invalid_request', 'client_id & redirect_uri are required'),
+    );
     expect(html).toContain('<code>invalid_request</code>');
     expect(html).toContain('client_id &amp; redirect_uri are required');
     expect(html).not.toContain('http-equiv');
