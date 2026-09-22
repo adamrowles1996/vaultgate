@@ -31,3 +31,8 @@ updates:
       timezone: Europe/London
     commit-message:
       prefix: 'ci(deps)'
+    groups:
+      # One PR per week for all action bumps; a single action used in several
+      # jobs must move as one change so pins never disagree.
+      github-actions:
+        patterns: ['*']
