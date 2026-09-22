@@ -16,11 +16,10 @@ import { InMemoryVaultClient } from './in-memory-vault-client.ts';
 import { captureLogger } from './logging.ts';
 import { unwrapOk } from './result.ts';
 
+import type { AuditEvent } from '../audit/event.ts';
 import type { PreregisteredClient } from '../config/primitives.ts';
 import type { ConnectedClientsRenderer } from '../identity/index.ts';
 import type { SessionState } from '../identity/session-manager.ts';
-import type { AuditEvent as McpAuditEvent } from '../mcp/audit.ts';
-import type { AuditEvent } from '../oauth/audit.ts';
 
 export const PUBLIC_URL = 'https://vault.example.com';
 export const RESOURCE = `${PUBLIC_URL}/mcp`;
@@ -61,7 +60,7 @@ export interface OAuthHarness {
   readonly server: AuthorizationServer;
   readonly repos: OAuthRepos;
   readonly audit: readonly AuditEvent[];
-  readonly mcpAudit: readonly McpAuditEvent[];
+  readonly mcpAudit: readonly AuditEvent[];
   readonly logLines: () => readonly Record<string, unknown>[];
   /**
   CIMD documents served by the injected fetch, keyed by URL.
@@ -139,7 +138,7 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
   });
   let counter = 0;
   const audit: AuditEvent[] = [];
-  const mcpAudit: McpAuditEvent[] = [];
+  const mcpAudit: AuditEvent[] = [];
   const cimd = new Map<string, () => Response>();
   const fetchedUrls: string[] = [];
   const { logger, lines } = captureLogger();

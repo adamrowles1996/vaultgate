@@ -30,10 +30,11 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov'],
       include: ['src/**/*.ts'],
-      // main.ts is the process entrypoint (argument parsing, signal wiring,
-      // process.exit). It is exercised by the CI smoke job, which boots the
-      // real binary and probes /healthz, rather than by unit tests.
-      exclude: ['src/**/*.test.ts', 'src/test-support/**', 'src/main.ts'],
+      // main.ts and cli.ts are the process entrypoints (environment, argument
+      // parsing, signal wiring, process.exit). The CI smoke job exercises
+      // them, booting the real binary to probe /healthz and running the audit
+      // export CLI against a fresh data directory, rather than unit tests.
+      exclude: ['src/**/*.test.ts', 'src/test-support/**', 'src/main.ts', 'src/cli.ts'],
       thresholds: {
         lines: 100,
         functions: 100,

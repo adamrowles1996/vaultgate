@@ -91,6 +91,10 @@ jobs:
         run: scripts/smoke-test.sh node dist/main.js
       - name: Boot from source via Node type stripping and probe /healthz
         run: scripts/smoke-test.sh node src/main.ts
+      - name: Export an empty audit log through the compiled CLI
+        run: scripts/cli-smoke.sh node dist/cli.js
+      - name: Export an empty audit log through the CLI from source
+        run: scripts/cli-smoke.sh node src/cli.ts
 
   docker-build:
     name: Container image builds (no push)

@@ -14,7 +14,7 @@ import { isCodeVerifierFor } from './pkce.ts';
 import { enabledScopes, isScopeSubset, parseScopeParameter } from './scopes.ts';
 import { type IssuedPair, issueTokenPair, type TokenIssuerOptions } from './token-issuance.ts';
 
-import type { AuditSink, OAuthAuditAction } from './audit.ts';
+import type { OAuthAuditAction, OAuthAuditSink } from './audit.ts';
 import type { RateLimiter } from './rate-limit.ts';
 import type { AuthorizationCodeRecord } from './repositories/authorization-codes.ts';
 import type { OAuthRepos } from './repositories/index.ts';
@@ -27,7 +27,7 @@ export interface TokenEndpointDependencies extends Omit<TokenIssuerOptions, 'tok
   readonly publicUrl: string;
   readonly enableWriteScope: boolean;
   readonly repos: OAuthRepos;
-  readonly audit: AuditSink;
+  readonly audit: OAuthAuditSink;
   /**
   60 per minute per ip (OAUTH-28).
   */
@@ -96,7 +96,7 @@ function claimCode(
     dependencies.audit.record({
       category: 'oauth',
       action: 'token_revoked',
-      outcome: 'success',
+      outcome: 'ok',
       clientId: claim.code.clientId,
       tokenPrefix: auditPrefix(code),
       details: { reason: 'authorization code reuse', revoked },
@@ -158,7 +158,7 @@ function replayed(
   dependencies.audit.record({
     category: 'oauth',
     action: 'token_revoked',
-    outcome: 'success',
+    outcome: 'ok',
     clientId: record.clientId,
     tokenPrefix: auditPrefix(presented),
     details: { reason: 'refresh token replay', revoked },
@@ -282,7 +282,7 @@ export function createTokenHandler(dependencies: TokenEndpointDependencies): OAu
     dependencies.audit.record({
       category: 'oauth',
       action,
-      outcome: 'success',
+      outcome: 'ok',
       clientId: result.value.clientId,
       tokenPrefix: auditPrefix(result.value.response.access_token),
       requestId: context.req.header('x-request-id'),

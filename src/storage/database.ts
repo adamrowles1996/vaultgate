@@ -1,4 +1,4 @@
-import { chmodSync, closeSync, mkdirSync, openSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -56,5 +56,19 @@ export function openDatabase({ path, networkFs }: OpenDatabaseOptions): Database
   for (const pragma of [...(networkFs ? NETWORK_FS_PRAGMAS : LOCAL_PRAGMAS), ...COMMON_PRAGMAS]) {
     database.exec(pragma);
   }
+  return database;
+}
+
+/**
+ * Opens an existing database read-only, for the audit export CLI running
+ * beside (or after) the server. `undefined` when no file exists yet: a store
+ * that was never created holds no events, which is not an error.
+ */
+export function openReadOnlyDatabase(path: string): DatabaseSync | undefined {
+  if (!existsSync(path)) {
+    return undefined;
+  }
+  const database = new DatabaseSync(path, { readOnly: true, enableForeignKeyConstraints: true });
+  database.exec('PRAGMA busy_timeout = 5000');
   return database;
 }

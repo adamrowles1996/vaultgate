@@ -97,11 +97,12 @@ Only what its token's scopes allow, and the operator picks those on the consent 
 | `VAULTGATE_SECRET_KEY`        | Set a new key and restart. Tokens are unaffected; sign in with a recovery code and set up a new authenticator ([Backup and restore](backup-and-restore.md#if-the-key-is-lost)). |
 | The Bitwarden master password | Change it in Bitwarden, update `VAULTGATE_BW_PASSWORD` (or its file), restart.                                                                                                  |
 | The Bitwarden API key         | Rotate it in the web vault (Settings → Security → Keys), update the configuration, delete the CLI app data under `VAULTGATE_DATA_DIR/bw`, restart.                              |
-| The host itself               | Stop the service (which locks the vault), rotate the API key and master password in Bitwarden, review the audit events in the log, rebuild the host.                            |
+| The host itself               | Stop the service (which locks the vault), rotate the API key and master password in Bitwarden, export and review the audit trail, rebuild the host.                             |
 
 Every tool call, login, consent, token issue, refresh and revocation is an audit event in the
-log (`audit event` lines, JSON), so after any of the above you can see exactly which items and
-fields were touched, by which client, from which address.
+database, exported from the account page or with `node dist/cli.js audit export` (see the
+[FAQ](faq.md#where-is-the-audit-log)), so after any of the above you can see exactly which items
+and fields were touched, by which client, from which address.
 
 ## Accepted residual risks
 

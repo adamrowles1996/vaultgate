@@ -8,8 +8,8 @@ import { type CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import { type Scope, toolsAllowedBy } from './scopes.ts';
 import { ALL_TOOLS } from './tools/index.ts';
 
+import type { AuditEvent, AuditSink } from '../audit/event.ts';
 import type { Result } from '../result.ts';
-import type { AuditEvent, AuditSink } from './audit.ts';
 import type { VerifiedToken } from './token-verifier.ts';
 import type { VaultClient } from '../vault/client.ts';
 import type { Tool, ToolFailure } from './tools/definition.ts';
@@ -74,18 +74,18 @@ function registerVaultTool(
       const result = await tool.run(dependencies.vault, input);
       const reference = tool.auditReference(input);
       const event: AuditEvent = {
-        timestamp: new Date(dependencies.now()).toISOString(),
-        clientId: context.token.clientId,
-        clientName: context.token.clientName,
-        subject: context.token.subject,
-        tokenId: context.token.tokenId,
-        tool: tool.name,
+        category: 'mcp',
+        action: tool.name,
         outcome: result.ok ? 'ok' : `error:${result.error.code}`,
-        itemId: reference.itemId ?? null,
-        field: reference.field ?? null,
-        durationMs: dependencies.now() - startedAt,
+        operatorId: context.token.subject,
+        clientId: context.token.clientId,
+        tokenPrefix: context.token.tokenId,
+        itemId: reference.itemId,
+        field: reference.field,
         requestId: context.requestId,
-        sourceIp: context.sourceIp,
+        ip: context.sourceIp,
+        durationMs: dependencies.now() - startedAt,
+        details: { clientName: context.token.clientName },
       };
       dependencies.audit.record(event);
       return toCallToolResult(result);

@@ -44,15 +44,15 @@
 
 ## 2.2 Module boundaries (enforced)
 
-| Rule ID | Requirement                                                                                                                   | Enforcement                                        |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| ARCH-1  | `process.env` is read only in `src/config.ts` (and passed in by `src/main.ts`). Every other module receives a `Config` value. | ESLint `no-restricted-syntax`                      |
-| ARCH-2  | `child_process` is imported only by `src/bitwarden/serve-process.ts`.                                                         | ESLint `no-restricted-imports`                     |
-| ARCH-3  | No module writes to `console`; all output goes through the pino logger with redaction.                                        | ESLint `no-console`                                |
-| ARCH-4  | Vault secret values never enter the store, the logger, an error message or a non-`get_secret` tool result.                    | Code review, redaction tests, tool contract tests  |
-| ARCH-5  | Every HTTP handler is testable in-process through `app.request()`; no handler depends on a live socket.                       | Test suite design                                  |
-| ARCH-6  | The MCP tool layer depends on a `VaultClient` interface, never on `bw serve` directly, so tools are tested against a fake.    | TypeScript interface + fake in `src/test-support/` |
-| ARCH-7  | No import cycles.                                                                                                             | ESLint `import-x/no-cycle`                         |
+| Rule ID | Requirement                                                                                                                                    | Enforcement                                        |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| ARCH-1  | `process.env` is read only in `src/config.ts` (and passed in by `src/main.ts` and `src/cli.ts`). Every other module receives a `Config` value. | ESLint `no-restricted-syntax`                      |
+| ARCH-2  | `child_process` is imported only by `src/bitwarden/serve-process.ts`.                                                                          | ESLint `no-restricted-imports`                     |
+| ARCH-3  | No module writes to `console`; all output goes through the pino logger with redaction.                                                         | ESLint `no-console`                                |
+| ARCH-4  | Vault secret values never enter the store, the logger, an error message or a non-`get_secret` tool result.                                     | Code review, redaction tests, tool contract tests  |
+| ARCH-5  | Every HTTP handler is testable in-process through `app.request()`; no handler depends on a live socket.                                        | Test suite design                                  |
+| ARCH-6  | The MCP tool layer depends on a `VaultClient` interface, never on `bw serve` directly, so tools are tested against a fake.                     | TypeScript interface + fake in `src/test-support/` |
+| ARCH-7  | No import cycles.                                                                                                                              | ESLint `import-x/no-cycle`                         |
 
 ## 2.3 Request flows
 
@@ -95,6 +95,7 @@
 ```text
 src/
   main.ts                 process entrypoint (excluded from unit coverage; covered by the CI smoke job)
+  cli.ts                  audit export entrypoint (excluded from unit coverage; covered by the CI CLI smoke step)
   config.ts               environment schema → Config
   logger.ts               pino with redaction
   result.ts               Result<T, E>
@@ -104,7 +105,7 @@ src/
   mcp/                    bearer verifier, server factory, tool registry, tool contracts
   bitwarden/              serve-process (spawn boundary), vault-client, types, error mapping
   storage/                database, migrations/, repositories
-  audit/                  event writer and export
+  audit/                  the AuditEvent shape, the store-backed sink, listing and export
   test-support/           fakes (in-memory VaultClient, fake bw serve HTTP double), fixtures
 ```
 

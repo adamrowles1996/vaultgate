@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { type IdentityEnvironment, pageHeaders } from './browser.ts';
 import { STYLESHEET } from './pages/stylesheet.ts';
 import { registerAccountRoutes } from './routes-account.ts';
+import { registerAuditRoutes } from './routes-audit.ts';
 import { registerLoginRoutes } from './routes-login.ts';
 import { registerSetupRoutes } from './routes-setup.ts';
 
@@ -34,5 +35,6 @@ export function createIdentityRoutes(services: IdentityServices): Hono<IdentityE
   registerSetupRoutes(app, services);
   registerLoginRoutes(app, services);
   registerAccountRoutes(app, services);
+  registerAuditRoutes(app, services);
   return app;
 }

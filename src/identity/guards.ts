@@ -1,8 +1,8 @@
 import { isSameOriginRequest, isValidCsrfToken } from './csrf.ts';
 
-import type { AuditSink } from './audit.ts';
 import type { ClientAddressResolver, Form, IdentityContext } from './context.ts';
 import type { ClientInfo } from './session-manager.ts';
+import type { AuditSink } from '../audit/event.ts';
 
 export interface GuardDependencies {
   readonly publicUrl: string;
@@ -39,7 +39,7 @@ export function createGuards(dependencies: GuardDependencies): Guards {
   };
   const deny = (context: IdentityContext, reason: string): Response => {
     const details = { reason, path: context.req.path };
-    audit({
+    audit.record({
       category: 'identity',
       action: 'request.denied',
       outcome: 'denied',

@@ -24,7 +24,7 @@ import { createOAuthRoutes, type OAuthRoutes } from './routes.ts';
 import { StoreTokenVerifier } from './token-verifier.ts';
 import { createTokenHandler } from './token.ts';
 
-import type { AuditSink } from './audit.ts';
+import type { OAuthAuditSink } from './audit.ts';
 import type { Config } from '../config/index.ts';
 import type { Guards } from '../identity/guards.ts';
 import type { Html } from '../identity/pages/template.ts';
@@ -48,7 +48,7 @@ export interface AuthorizationServerDependencies {
   The identity module's ID-18 guards and proxy-aware client address.
   */
   readonly guards: Guards;
-  readonly audit: AuditSink;
+  readonly audit: OAuthAuditSink;
   readonly logger: WarnLogger;
   readonly fetch: FetchLike;
   readonly lookup: Lookup;

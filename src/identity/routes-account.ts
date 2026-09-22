@@ -18,7 +18,7 @@ import { loginLocation } from './provider.ts';
 import { generateRecoveryCodes, hashRecoveryCode } from './recovery-codes.ts';
 import { describeEnrolment, generateTotpSecret, verifyTotp } from './totp.ts';
 
-import type { IdentityAuditEvent } from './audit.ts';
+import type { AuditEvent } from '../audit/event.ts';
 import type { OperatorRecord } from './repositories/operators.ts';
 import type { IdentityServices } from './services.ts';
 import type { SessionState } from './session-manager.ts';
@@ -30,12 +30,12 @@ const NOTICES: Readonly<Record<string, string>> = {
   'totp-rotated': 'Your authenticator has been replaced.',
 };
 
-interface Authenticated {
+export interface Authenticated {
   readonly session: SessionState;
   readonly operator: OperatorRecord;
 }
 
-function accountView(
+export function accountView(
   services: IdentityServices,
   authenticated: Authenticated,
   notice: string | undefined,
@@ -85,7 +85,7 @@ function requireAuthenticated(
 /**
 ID-15: the sensitive actions additionally need a password check within five minutes.
 */
-function requireReauthenticated(
+export function requireReauthenticated(
   context: IdentityContext,
   services: IdentityServices,
   form: Form,
@@ -99,16 +99,16 @@ function requireReauthenticated(
     : services.guards.deny(context, 're-authentication required');
 }
 
-function auditEvent(
+export function auditEvent(
   context: IdentityContext,
   services: IdentityServices,
   action: string,
   operatorId: string,
-): IdentityAuditEvent {
+): AuditEvent {
   return {
     category: 'identity',
     action,
-    outcome: 'success',
+    outcome: 'ok',
     operatorId,
     ip: services.guards.clientInfo(context).ip,
     requestId: context.get('requestId'),
@@ -130,7 +130,7 @@ async function reauthenticate(context: IdentityContext, services: IdentityServic
   const isCorrect = await isCorrectPassword(field(form, 'password'), operator.passwordHash);
   services.throttle.record(subjects, isCorrect);
   if (!isCorrect) {
-    services.audit({
+    services.audit.record({
       ...auditEvent(context, services, 'reauthentication.failed', operator.id),
       outcome: 'failure',
     });
@@ -143,7 +143,7 @@ async function reauthenticate(context: IdentityContext, services: IdentityServic
     return context.html(renderAccount(view), 401);
   }
   services.sessions.markReauthenticated(session.idHash);
-  services.audit(auditEvent(context, services, 'reauthentication.succeeded', operator.id));
+  services.audit.record(auditEvent(context, services, 'reauthentication.succeeded', operator.id));
   return context.redirect('/account?notice=reauthenticated', 303);
 }
 
@@ -162,7 +162,7 @@ async function changePassword(context: IdentityContext, services: IdentityServic
   const hash = await hashPassword(password.value, services.random, services.passwordParameters);
   services.stores.operators.updatePasswordHash(operator.id, hash, services.clock());
   services.sessions.endOthers(operator.id, session.idHash);
-  services.audit(auditEvent(context, services, 'password.changed', operator.id));
+  services.audit.record(auditEvent(context, services, 'password.changed', operator.id));
   return context.redirect('/account?notice=password-changed', 303);
 }
 
@@ -204,7 +204,7 @@ async function rotateTotp(context: IdentityContext, services: IdentityServices) 
   services.stores.operators.updateTotpSecret(operator.id, services.totpBox.seal(secret));
   services.stores.operators.updateTotpLastStep(operator.id, step);
   clearStateCookie(context, services);
-  services.audit(auditEvent(context, services, 'totp.rotated', operator.id));
+  services.audit.record(auditEvent(context, services, 'totp.rotated', operator.id));
   return context.redirect('/account?notice=totp-rotated', 303);
 }
 
@@ -219,7 +219,7 @@ async function regenerateRecoveryCodes(context: IdentityContext, services: Ident
   transaction(services.database, () => {
     services.stores.recoveryCodes.replaceAll(authenticated.operator.id, hashes);
   });
-  services.audit(
+  services.audit.record(
     auditEvent(context, services, 'recovery-codes.regenerated', authenticated.operator.id),
   );
   return context.html(renderRecoveryCodes(codes));
