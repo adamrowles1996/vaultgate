@@ -11,6 +11,10 @@ updates:
     commit-message:
       prefix: 'build(deps)'
       prefix-development: 'build(deps-dev)'
+    ignore:
+      # @types/node must track the Node major the project runs on (ADR 0001).
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     groups:
       runtime-minor-and-patch:
         dependency-type: production
