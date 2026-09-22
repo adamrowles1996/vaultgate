@@ -94,7 +94,7 @@ export function createConsentsRepo(database: DatabaseSync): ConsentsRepo {
       );
     },
     updateScopes(id, scopes) {
-      run(db, 'UPDATE consents SET scopes = ? WHERE id = ?', JSON.stringify(scopes), id);
+      run(database, 'UPDATE consents SET scopes = ? WHERE id = ?', JSON.stringify(scopes), id);
     },
     revoke(id, at) {
       return run(

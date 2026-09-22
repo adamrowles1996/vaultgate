@@ -15,18 +15,19 @@ export interface AuditEvent {
   readonly category: 'oauth';
   readonly action: OAuthAuditAction;
   readonly outcome: 'success' | 'failure';
-  readonly operatorId?: string;
-  readonly clientId?: string;
+  readonly operatorId?: string | undefined;
+  readonly clientId?: string | undefined;
   /**
   The recognisable prefix of a credential, never the credential.
   */
-  readonly tokenPrefix?: string;
-  readonly requestId?: string;
-  readonly ip?: string;
+  readonly tokenPrefix?: string | undefined;
+  readonly requestId?: string | undefined;
+  readonly ip?: string | undefined;
   /**
   Secret-free structured detail.
   */
-  readonly details?: Readonly<Record<string, string | number | boolean | readonly string[]>>;
+  readonly details?:
+    Readonly<Record<string, string | number | boolean | readonly string[]>> | undefined;
 }
 
 export interface AuditSink {

@@ -108,7 +108,7 @@ export function registerDynamicClient(
     mode: 'dcr',
     clientName: response.client_name,
     redirectUris: response.redirect_uris,
-    metadata: response,
+    metadata: Object.fromEntries(Object.entries(response)),
     createdAt: at,
     revokedAt: undefined,
   });

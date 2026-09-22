@@ -1,17 +1,22 @@
-import { auditPrefix, CREDENTIAL_PREFIX, hasCredentialPrefix, hashCredential } from './credentials.ts';
+import {
+  auditPrefix,
+  CREDENTIAL_PREFIX,
+  hasCredentialPrefix,
+  hashCredential,
+} from './credentials.ts';
 import { respondWithOAuthError } from './errors.ts';
 import { readForm, requireField } from './form.ts';
 
-import type { Context } from 'hono';
 import type { AuditSink } from './audit.ts';
 import type { ClientIpResolver } from './client-ip.ts';
 import type { Clock } from './clock.ts';
-import type { OAuthRepos } from './repositories/index.ts';
 import type { ConnectedClient } from './repositories/consents.ts';
+import type { OAuthRepos } from './repositories/index.ts';
+import type { Context } from 'hono';
 
 const MAX_FORM_BYTES = 16 * 1024;
 
-export interface RevocationDeps {
+export interface RevocationDependencies {
   readonly repos: OAuthRepos;
   readonly audit: AuditSink;
   readonly now: Clock;
@@ -22,22 +27,22 @@ export interface RevocationDeps {
  * OAUTH-29: an access token revokes itself; a refresh token revokes its
  * whole family. Anything else is a silent no-op.
  */
-function revokeToken(deps: RevocationDeps, token: string, ip: string): void {
+function revokeToken(dependencies: RevocationDependencies, token: string, ip: string): void {
   const isAccess = hasCredentialPrefix(token, CREDENTIAL_PREFIX.accessToken);
   const isRefresh = hasCredentialPrefix(token, CREDENTIAL_PREFIX.refreshToken);
   if (!isAccess && !isRefresh) {
     return;
   }
-  const record = deps.repos.tokens.findByHash(hashCredential(token));
+  const record = dependencies.repos.tokens.findByHash(hashCredential(token));
   if (record === undefined) {
     return;
   }
-  const at = deps.now();
+  const at = dependencies.now();
   const revoked =
     record.kind === 'refresh'
-      ? deps.repos.tokens.revokeFamily(record.familyId, at)
-      : deps.repos.tokens.revokeById(record.id, at);
-  deps.audit.record({
+      ? dependencies.repos.tokens.revokeFamily(record.familyId, at)
+      : dependencies.repos.tokens.revokeById(record.id, at);
+  dependencies.audit.record({
     category: 'oauth',
     action: 'token_revoked',
     outcome: 'success',
@@ -51,7 +56,9 @@ function revokeToken(deps: RevocationDeps, token: string, ip: string): void {
 /**
  * `POST /oauth/revoke` (RFC 7009): `200 {}` whether or not the token existed.
  */
-export function createRevokeHandler(deps: RevocationDeps): (context: Context) => Promise<Response> {
+export function createRevokeHandler(
+  dependencies: RevocationDependencies,
+): (context: Context) => Promise<Response> {
   return async (context) => {
     const form = await readForm(context.req.raw, MAX_FORM_BYTES);
     if (!form.ok) {
@@ -61,31 +68,32 @@ export function createRevokeHandler(deps: RevocationDeps): (context: Context) =>
     if (!token.ok) {
       return respondWithOAuthError(context, token.error);
     }
-    revokeToken(deps, token.value, deps.clientIp(context.req.raw));
+    revokeToken(dependencies, token.value, dependencies.clientIp(context.req.raw));
     context.header('Cache-Control', 'no-store');
     return context.json({}, 200);
   };
 }
 
 /**
- * OAUTH-30: revoking a consent revokes every token issued under it. Returns
- * false when the consent was unknown, revoked already or not the operator's.
+ * OAUTH-30: revoking a consent revokes every token issued under it. Yields
+ * the number of tokens revoked, or `undefined` when the consent was unknown,
+ * already revoked or not the operator's.
  */
 export function revokeConsent(
-  deps: Pick<RevocationDeps, 'repos' | 'audit' | 'now'>,
+  dependencies: Pick<RevocationDependencies, 'repos' | 'audit' | 'now'>,
   operatorId: string,
   consentId: string,
-): boolean {
-  const consent = deps.repos.consents.findById(consentId);
+): number | undefined {
+  const consent = dependencies.repos.consents.findById(consentId);
   if (consent?.operatorId !== operatorId) {
-    return false;
+    return undefined;
   }
-  const at = deps.now();
-  if (deps.repos.consents.revoke(consentId, at) === 0) {
-    return false;
+  const at = dependencies.now();
+  if (dependencies.repos.consents.revoke(consentId, at) === 0) {
+    return undefined;
   }
-  const revoked = deps.repos.tokens.revokeByConsent(consentId, at);
-  deps.audit.record({
+  const revoked = dependencies.repos.tokens.revokeByConsent(consentId, at);
+  dependencies.audit.record({
     category: 'oauth',
     action: 'consent_revoked',
     outcome: 'success',
@@ -93,12 +101,12 @@ export function revokeConsent(
     clientId: consent.clientId,
     details: { revoked },
   });
-  return true;
+  return revoked;
 }
 
 export function listConnectedClients(
-  deps: Pick<RevocationDeps, 'repos'>,
+  dependencies: Pick<RevocationDependencies, 'repos'>,
   operatorId: string,
 ): readonly ConnectedClient[] {
-  return deps.repos.consents.listConnected(operatorId);
+  return dependencies.repos.consents.listConnected(operatorId);
 }

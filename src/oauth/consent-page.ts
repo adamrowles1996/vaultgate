@@ -23,7 +23,7 @@ const MODE_LABELS: Readonly<Record<ClientMode, string>> = {
 /**
  * The scope every client starts from; it cannot be unticked (OAUTH-16).
  */
-const UNTICKABLE: readonly Scope[] = ['vault:read'];
+const UNTICKABLE: ReadonlySet<Scope> = new Set(['vault:read']);
 
 export const APPROVE = 'approve';
 export const DENY = 'deny';
@@ -34,10 +34,10 @@ export function scopeFieldName(scope: Scope): string {
 
 function scopeRow(scope: Scope): string {
   const definition = scopeDefinition(scope);
-  const fixed = UNTICKABLE.includes(scope);
+  const isFixed = UNTICKABLE.has(scope);
   const name = escapeHtml(scopeFieldName(scope));
   const risk = definition.risky ? ' <strong class="risk">Sensitive</strong>' : '';
-  const control = fixed
+  const control = isFixed
     ? `<input type="checkbox" checked disabled><input type="hidden" name="${name}" value="on">`
     : `<input type="checkbox" name="${name}" value="on" checked>`;
   return `<li><label>${control} <code>${escapeHtml(scope)}</code>${risk} — ${escapeHtml(definition.explanation)}</label></li>`;

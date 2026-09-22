@@ -1,5 +1,10 @@
-import { CREDENTIAL_PREFIX, hashCredential, mintCredential, type RandomSource } from './credentials.ts';
 import { type Clock, toSeconds } from './clock.ts';
+import {
+  CREDENTIAL_PREFIX,
+  hashCredential,
+  mintCredential,
+  type RandomSource,
+} from './credentials.ts';
 
 import type { TokensRepo } from './repositories/tokens.ts';
 

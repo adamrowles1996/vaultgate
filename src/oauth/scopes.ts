@@ -101,7 +101,7 @@ export function parseScopeParameter(
   return ok(scopes);
 }
 
-export function isScopeSubset(requested: readonly Scope[], granted: readonly Scope[]): boolean {
+export function isScopeSubset(requested: readonly string[], granted: readonly string[]): boolean {
   return requested.every((scope) => granted.includes(scope));
 }
 

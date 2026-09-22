@@ -1,6 +1,6 @@
 import { parseAuthorizationRequest, toPendingParameters } from './authorize-request.ts';
 import {
-  type AuthorizeDeps,
+  type AuthorizeDependencies as AuthorizeDependencies,
   PENDING_TTL_MS,
   ensureBindingCookie,
   errorPage,
@@ -16,9 +16,9 @@ import { OAuthError } from './errors.ts';
 import { HTML_HEADERS } from './html.ts';
 import { isScope, type Scope } from './scopes.ts';
 
-import type { Context } from 'hono';
 import type { ClientMode } from './repositories/clients.ts';
 import type { PendingAuthorizationRecord } from './repositories/pending-authorizations.ts';
+import type { Context } from 'hono';
 
 function tooManyRequests(context: Context, retryAfterSeconds: number): Response {
   context.header('Retry-After', String(retryAfterSeconds));
@@ -34,31 +34,34 @@ function tooManyRequests(context: Context, retryAfterSeconds: number): Response 
  * server-side under a random id bound to this browser, and send the operator
  * to log in or to the consent page.
  */
-export function createAuthorizeHandler(deps: AuthorizeDeps): (context: Context) => Promise<Response> {
+export function createAuthorizeHandler(
+  dependencies: AuthorizeDependencies,
+): (context: Context) => Promise<Response> {
   return async (context) => {
-    const session = await deps.sessions.resolve(context.req.raw);
-    const limit = deps.rateLimiter.take(rateLimitKey(context, deps, session));
+    const session = await dependencies.sessions.resolve(context.req.raw);
+    const limit = dependencies.rateLimiter.take(rateLimitKey(context, dependencies, session));
     if (!limit.allowed) {
       return tooManyRequests(context, limit.retryAfterSeconds);
     }
-    const parsed = await parseAuthorizationRequest(new URL(context.req.url), deps);
+    const parsed = await parseAuthorizationRequest(new URL(context.req.url), dependencies);
     if (!parsed.ok) {
-      return parsed.error.kind === 'page'
-        ? errorPage(context, parsed.error.error, 400)
-        : redirectWithError(context, deps, parsed.error, parsed.error.error);
+      return parsed.error.redirect === undefined
+        ? errorPage(context, parsed.error.oauthError, 400)
+        : redirectWithError(context, dependencies, parsed.error.redirect, parsed.error.oauthError);
     }
-    const binding = session === undefined ? ensureBindingCookie(context, deps) : session.sessionKey;
-    const id = mintCredential(CREDENTIAL_PREFIX.authorizationCode, deps.random).slice(
+    const binding =
+      session === undefined ? ensureBindingCookie(context, dependencies) : session.sessionKey;
+    const id = mintCredential(CREDENTIAL_PREFIX.authorizationCode, dependencies.random).slice(
       CREDENTIAL_PREFIX.authorizationCode.length,
     );
-    deps.repos.pendingAuthorizations.insert({
+    dependencies.repos.pendingAuthorizations.insert({
       id,
       sessionBindingHash: hashCredential(binding),
       parameters: toPendingParameters(parsed.value),
-      expiresAt: deps.now() + PENDING_TTL_MS,
+      expiresAt: dependencies.now() + PENDING_TTL_MS,
     });
     if (session === undefined) {
-      return loginRedirect(context, deps, id);
+      return loginRedirect(context, dependencies, id);
     }
     context.header('Cache-Control', 'no-store');
     return context.redirect(`/oauth/authorize/${encodeURIComponent(id)}`, 302);
@@ -74,11 +77,11 @@ export function pendingScopes(pending: PendingAuthorizationRecord): readonly Sco
  * it never issues a code.
  */
 export function createConsentPageHandler(
-  deps: AuthorizeDeps,
+  dependencies: AuthorizeDependencies,
 ): (context: Context) => Promise<Response> {
   return async (context) => {
-    const id = context.req.param('id');
-    const pending = livePending(deps, id);
+    const id = context.req.param('id') ?? '';
+    const pending = livePending(dependencies, id);
     if (pending === undefined) {
       return errorPage(
         context,
@@ -86,11 +89,11 @@ export function createConsentPageHandler(
         400,
       );
     }
-    const session = await deps.sessions.resolve(context.req.raw);
+    const session = await dependencies.sessions.resolve(context.req.raw);
     if (session === undefined) {
-      return loginRedirect(context, deps, id);
+      return loginRedirect(context, dependencies, id);
     }
-    if (!isBoundToBrowser(context, deps, session, pending)) {
+    if (!isBoundToBrowser(context, dependencies, session, pending)) {
       return errorPage(
         context,
         new OAuthError('access_denied', 'this authorization request belongs to another browser'),

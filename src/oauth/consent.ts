@@ -1,8 +1,7 @@
 import { transaction } from '../storage/query.ts';
 
-import { pendingScopes } from './authorize.ts';
 import {
-  type AuthorizeDeps,
+  type AuthorizeDependencies as AuthorizeDependencies,
   errorPage,
   isBoundToBrowser,
   livePending,
@@ -11,15 +10,16 @@ import {
   redirectWithError,
   requestIdOf,
 } from './authorize-shared.ts';
+import { pendingScopes } from './authorize.ts';
 import { APPROVE, scopeFieldName } from './consent-page.ts';
 import { auditPrefix, CREDENTIAL_PREFIX, hashCredential, mintCredential } from './credentials.ts';
 import { OAuthError } from './errors.ts';
 import { type FormFields, readForm } from './form.ts';
 
-import type { Context } from 'hono';
 import type { PendingAuthorizationRecord } from './repositories/pending-authorizations.ts';
-import type { OperatorSession } from './session.ts';
 import type { Scope } from './scopes.ts';
+import type { OperatorSession } from './session.ts';
+import type { Context } from 'hono';
 
 const MAX_FORM_BYTES = 16 * 1024;
 
@@ -38,7 +38,10 @@ function target(pending: PendingAuthorizationRecord): {
   readonly redirectUri: string;
   readonly state: string | undefined;
 } {
-  return { redirectUri: pending.parameters['redirect_uri'] ?? '', state: pending.parameters['state'] };
+  return {
+    redirectUri: pending.parameters['redirect_uri'] ?? '',
+    state: pending.parameters['state'],
+  };
 }
 
 /**
@@ -49,17 +52,21 @@ function tickedScopes(pending: PendingAuthorizationRecord, form: FormFields): re
   return pendingScopes(pending).filter((scope) => form.get(scopeFieldName(scope)) === 'on');
 }
 
-function issueCode(deps: AuthorizeDeps, decision: Decision, scopes: readonly Scope[]): string {
+function issueCode(
+  dependencies: AuthorizeDependencies,
+  decision: Decision,
+  scopes: readonly Scope[],
+): string {
   const { pending, session } = decision;
   const clientId = pending.parameters['client_id'] ?? '';
-  const at = deps.now();
-  const code = mintCredential(CREDENTIAL_PREFIX.authorizationCode, deps.random);
-  transaction(deps.repos.db, () => {
-    const existing = deps.repos.consents.findActive(session.operatorId, clientId);
+  const at = dependencies.now();
+  const code = mintCredential(CREDENTIAL_PREFIX.authorizationCode, dependencies.random);
+  transaction(dependencies.repos.db, () => {
+    const existing = dependencies.repos.consents.findActive(session.operatorId, clientId);
     let consentId: string;
     if (existing === undefined) {
-      consentId = deps.newId();
-      deps.repos.consents.insert({
+      consentId = dependencies.newId();
+      dependencies.repos.consents.insert({
         id: consentId,
         operatorId: session.operatorId,
         clientId,
@@ -69,9 +76,11 @@ function issueCode(deps: AuthorizeDeps, decision: Decision, scopes: readonly Sco
       });
     } else {
       consentId = existing.id;
-      deps.repos.consents.updateScopes(consentId, [...new Set([...existing.scopes, ...scopes])]);
+      dependencies.repos.consents.updateScopes(consentId, [
+        ...new Set([...existing.scopes, ...scopes]),
+      ]);
     }
-    deps.repos.authorizationCodes.insert({
+    dependencies.repos.authorizationCodes.insert({
       codeHash: hashCredential(code),
       clientId,
       consentId,
@@ -86,31 +95,35 @@ function issueCode(deps: AuthorizeDeps, decision: Decision, scopes: readonly Sco
   return code;
 }
 
-function deny(context: Context, deps: AuthorizeDeps, decision: Decision): Response {
-  deps.audit.record({
+function deny(context: Context, dependencies: AuthorizeDependencies, decision: Decision): Response {
+  dependencies.audit.record({
     category: 'oauth',
     action: 'consent_denied',
     outcome: 'success',
     operatorId: decision.session.operatorId,
     clientId: decision.pending.parameters['client_id'] ?? '',
     requestId: requestIdOf(context),
-    ip: deps.clientIp(context.req.raw),
+    ip: dependencies.clientIp(context.req.raw),
   });
   return redirectWithError(
     context,
-    deps,
+    dependencies,
     target(decision.pending),
     new OAuthError('access_denied', 'the operator denied the request'),
   );
 }
 
-function approve(context: Context, deps: AuthorizeDeps, decision: Decision): Response {
+function approve(
+  context: Context,
+  dependencies: AuthorizeDependencies,
+  decision: Decision,
+): Response {
   const scopes = tickedScopes(decision.pending, decision.form);
   if (scopes.length === 0) {
-    return deny(context, deps, decision);
+    return deny(context, dependencies, decision);
   }
-  const code = issueCode(deps, decision, scopes);
-  deps.audit.record({
+  const code = issueCode(dependencies, decision, scopes);
+  dependencies.audit.record({
     category: 'oauth',
     action: 'consent_granted',
     outcome: 'success',
@@ -118,41 +131,44 @@ function approve(context: Context, deps: AuthorizeDeps, decision: Decision): Res
     clientId: decision.pending.parameters['client_id'] ?? '',
     tokenPrefix: auditPrefix(code),
     requestId: requestIdOf(context),
-    ip: deps.clientIp(context.req.raw),
+    ip: dependencies.clientIp(context.req.raw),
     details: { scopes },
   });
   const { redirectUri, state } = target(decision.pending);
-  return redirectToClient(context, deps, redirectUri, { code, state });
+  return redirectToClient(context, dependencies, redirectUri, { code, state });
 }
 
 async function readDecision(
   context: Context,
-  deps: AuthorizeDeps,
+  dependencies: AuthorizeDependencies,
 ): Promise<Decision | { readonly error: OAuthError; readonly status: 400 | 403 }> {
   const form = await readForm(context.req.raw, MAX_FORM_BYTES);
   if (!form.ok) {
     return { error: form.error, status: 400 };
   }
-  const pending = livePending(deps, form.value.get('request_id') ?? '');
+  const pending = livePending(dependencies, form.value.get('request_id') ?? '');
   if (pending === undefined) {
     return {
       error: new OAuthError('invalid_request', 'this authorization request has expired'),
       status: 400,
     };
   }
-  const session = await deps.sessions.resolve(context.req.raw);
+  const session = await dependencies.sessions.resolve(context.req.raw);
   if (session === undefined) {
     return { error: new OAuthError('access_denied', 'sign in to continue'), status: 403 };
   }
-  const trusted =
-    deps.csrf.isTrusted({
+  const isTrusted =
+    dependencies.csrf.isTrusted({
       request: context.req.raw,
       session,
       formToken: form.value.get('csrf_token'),
-    }) && isBoundToBrowser(context, deps, session, pending);
-  return trusted
+    }) && isBoundToBrowser(context, dependencies, session, pending);
+  return isTrusted
     ? { pending, session, form: form.value }
-    : { error: new OAuthError('access_denied', 'the consent form could not be verified'), status: 403 };
+    : {
+        error: new OAuthError('access_denied', 'the consent form could not be verified'),
+        status: 403,
+      };
 }
 
 /**
@@ -160,14 +176,16 @@ async function readDecision(
  * bound to the browser that started the request, single use.
  */
 export function createConsentDecisionHandler(
-  deps: AuthorizeDeps,
+  dependencies: AuthorizeDependencies,
 ): (context: Context) => Promise<Response> {
   return async (context) => {
-    const decision = await readDecision(context, deps);
+    const decision = await readDecision(context, dependencies);
     if ('error' in decision) {
       return errorPage(context, decision.error, decision.status);
     }
-    const limit = deps.rateLimiter.take(rateLimitKey(context, deps, decision.session));
+    const limit = dependencies.rateLimiter.take(
+      rateLimitKey(context, dependencies, decision.session),
+    );
     if (!limit.allowed) {
       context.header('Retry-After', String(limit.retryAfterSeconds));
       return errorPage(
@@ -176,9 +194,9 @@ export function createConsentDecisionHandler(
         429,
       );
     }
-    deps.repos.pendingAuthorizations.delete(decision.pending.id);
+    dependencies.repos.pendingAuthorizations.delete(decision.pending.id);
     return decision.form.get('decision') === APPROVE
-      ? approve(context, deps, decision)
-      : deny(context, deps, decision);
+      ? approve(context, dependencies, decision)
+      : deny(context, dependencies, decision);
   };
 }

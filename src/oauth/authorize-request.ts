@@ -18,18 +18,26 @@ export interface AuthorizationRequest {
   readonly state: string | undefined;
 }
 
+export interface RedirectTarget {
+  readonly redirectUri: string;
+  readonly state: string | undefined;
+}
+
 /**
  * OAUTH-14: a failure either has a trusted redirect to carry the error, or
- * it does not and must be rendered as a page.
+ * it does not (`redirect` undefined) and must be rendered as a page.
  */
-export type AuthorizationFailure =
-  | { readonly kind: 'page'; readonly error: OAuthError }
-  | {
-      readonly kind: 'redirect';
-      readonly redirectUri: string;
-      readonly state: string | undefined;
-      readonly error: OAuthError;
-    };
+export class AuthorizationRequestError extends Error {
+  readonly oauthError: OAuthError;
+  readonly redirect: RedirectTarget | undefined;
+
+  constructor(oauthError: OAuthError, redirect?: RedirectTarget) {
+    super(oauthError.message);
+    this.name = 'AuthorizationRequestError';
+    this.oauthError = oauthError;
+    this.redirect = redirect;
+  }
+}
 
 export interface AuthorizationRequestOptions {
   readonly publicUrl: string;
@@ -37,8 +45,8 @@ export interface AuthorizationRequestOptions {
   readonly resolver: ClientResolver;
 }
 
-function page(error: OAuthError): AuthorizationFailure {
-  return { kind: 'page', error };
+function page(error: OAuthError): AuthorizationRequestError {
+  return new AuthorizationRequestError(error);
 }
 
 function required(fields: FormFields, name: string): string | undefined {
@@ -53,7 +61,7 @@ function required(fields: FormFields, name: string): string | undefined {
 async function trustedRedirect(
   fields: FormFields,
   resolver: ClientResolver,
-): Promise<Result<{ client: ResolvedClient; redirectUri: string }, AuthorizationFailure>> {
+): Promise<Result<{ client: ResolvedClient; redirectUri: string }, AuthorizationRequestError>> {
   const clientId = required(fields, 'client_id');
   const redirectUri = required(fields, 'redirect_uri');
   if (clientId === undefined || redirectUri === undefined) {
@@ -67,12 +75,11 @@ async function trustedRedirect(
   if (!client.ok) {
     return fail(page(client.error));
   }
-  if (!isRegisteredRedirect(redirectUri, client.value.redirectUris)) {
-    return fail(
-      page(new OAuthError('invalid_request', 'redirect_uri is not registered for this client')),
-    );
-  }
-  return ok({ client: client.value, redirectUri });
+  return isRegisteredRedirect(redirectUri, client.value.redirectUris)
+    ? ok({ client: client.value, redirectUri })
+    : fail(
+        page(new OAuthError('invalid_request', 'redirect_uri is not registered for this client')),
+      );
 }
 
 function validateRest(
@@ -94,10 +101,9 @@ function validateRest(
     return fail(new OAuthError('invalid_target', 'resource must be the canonical MCP resource'));
   }
   const scopes = parseScopeParameter(fields.get('scope'), enabledScopes(options));
-  if (!scopes.ok) {
-    return fail(new OAuthError('invalid_scope', scopes.error.message));
-  }
-  return ok({ codeChallenge, resource, scopes: scopes.value });
+  return scopes.ok
+    ? ok({ codeChallenge, resource, scopes: scopes.value })
+    : fail(new OAuthError('invalid_scope', scopes.error.message));
 }
 
 /**
@@ -106,7 +112,7 @@ function validateRest(
 export async function parseAuthorizationRequest(
   url: URL,
   options: AuthorizationRequestOptions,
-): Promise<Result<AuthorizationRequest, AuthorizationFailure>> {
+): Promise<Result<AuthorizationRequest, AuthorizationRequestError>> {
   const fields = readQuery(url);
   if (!fields.ok) {
     return fail(page(fields.error));
@@ -117,10 +123,14 @@ export async function parseAuthorizationRequest(
   }
   const state = required(fields.value, 'state');
   const rest = validateRest(fields.value, options);
-  if (!rest.ok) {
-    return fail({ kind: 'redirect', redirectUri: trusted.value.redirectUri, state, error: rest.error });
-  }
-  return ok({ ...trusted.value, ...rest.value, state });
+  return rest.ok
+    ? ok({ ...trusted.value, ...rest.value, state })
+    : fail(
+        new AuthorizationRequestError(rest.error, {
+          redirectUri: trusted.value.redirectUri,
+          state,
+        }),
+      );
 }
 
 /**
@@ -138,6 +148,6 @@ export function toPendingParameters(request: AuthorizationRequest): Record<strin
     code_challenge: request.codeChallenge,
     resource: request.resource,
     scope: request.scopes.join(' '),
-    ...(request.state === undefined ? {} : { state: request.state }),
+    ...(request.state !== undefined && { state: request.state }),
   };
 }

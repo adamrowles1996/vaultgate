@@ -5,7 +5,9 @@ import { CREDENTIAL_PREFIX, hasCredentialPrefix, hashCredential } from './creden
 import { canonicalResource } from './metadata.ts';
 import { TokenRejection, type TokenVerifier, type VerifiedToken } from './verified-token.ts';
 
+import type { ConsentRecord } from './repositories/consents.ts';
 import type { OAuthRepos } from './repositories/index.ts';
+import type { TokenRecord } from './repositories/tokens.ts';
 
 const TOKEN_ID_LENGTH = 12;
 
@@ -25,6 +27,42 @@ export interface StoreTokenVerifierOptions {
  * hash, unrevoked, unexpired and bound to this deployment's resource, is
  * accepted. Nothing else (JWTs, upstream tokens) can pass the prefix check.
  */
+interface LiveToken {
+  readonly record: TokenRecord;
+  readonly consent: ConsentRecord;
+  readonly at: number;
+}
+
+function findLiveToken(
+  options: StoreTokenVerifierOptions,
+  resource: string,
+  hash: string,
+): Result<LiveToken, TokenRejection> {
+  const record = options.repos.tokens.findByHash(hash);
+  if (record?.kind !== 'access') {
+    return fail(new TokenRejection('unknown', 'unknown token'));
+  }
+  if (record.revokedAt !== undefined) {
+    return fail(new TokenRejection('revoked', 'token revoked'));
+  }
+  const at = options.now();
+  if (record.expiresAt <= at) {
+    return fail(new TokenRejection('expired', 'token expired'));
+  }
+  if (record.resource !== resource) {
+    return fail(new TokenRejection('unknown', 'token issued for another resource'));
+  }
+  const consent = options.repos.consents.findById(record.consentId);
+  return consent === undefined || consent.revokedAt !== undefined
+    ? fail(new TokenRejection('revoked', 'consent revoked'))
+    : ok({ record, consent, at });
+}
+
+/**
+ * OAUTH-32 and OAUTH-34: only an access token vaultgate minted, found by its
+ * hash, unrevoked, unexpired and bound to this deployment's resource, is
+ * accepted. Nothing else (JWTs, upstream tokens) can pass the prefix check.
+ */
 export class StoreTokenVerifier implements TokenVerifier {
   readonly #options: StoreTokenVerifierOptions;
   readonly #resource: string;
@@ -35,44 +73,29 @@ export class StoreTokenVerifier implements TokenVerifier {
   }
 
   verify(token: string): Promise<Result<VerifiedToken, TokenRejection>> {
-    return Promise.resolve(this.#verify(token));
-  }
-
-  #verify(token: string): Result<VerifiedToken, TokenRejection> {
     if (!hasCredentialPrefix(token, CREDENTIAL_PREFIX.accessToken)) {
-      return fail(new TokenRejection('malformed', 'not a vaultgate access token'));
+      return Promise.resolve(fail(new TokenRejection('malformed', 'not a vaultgate access token')));
     }
-    const { repos, now } = this.#options;
     const hash = hashCredential(token);
-    const record = repos.tokens.findByHash(hash);
-    if (record === undefined || record.kind !== 'access') {
-      return fail(new TokenRejection('unknown', 'unknown token'));
+    const live = findLiveToken(this.#options, this.#resource, hash);
+    if (!live.ok) {
+      return Promise.resolve(live);
     }
-    if (record.revokedAt !== undefined) {
-      return fail(new TokenRejection('revoked', 'token revoked'));
-    }
-    const at = now();
-    if (record.expiresAt <= at) {
-      return fail(new TokenRejection('expired', 'token expired'));
-    }
-    if (record.resource !== this.#resource) {
-      return fail(new TokenRejection('unknown', 'token issued for another resource'));
-    }
-    const consent = repos.consents.findById(record.consentId);
-    if (consent === undefined || consent.revokedAt !== undefined) {
-      return fail(new TokenRejection('revoked', 'consent revoked'));
-    }
+    const { record, consent, at } = live.value;
+    const { repos } = this.#options;
     if (record.lastUsedAt === undefined || at - record.lastUsedAt >= LAST_USED_GRANULARITY_MS) {
       repos.tokens.touchLastUsed(record.id, at);
     }
-    return ok({
-      tokenId: hash.slice(0, TOKEN_ID_LENGTH),
-      clientId: record.clientId,
-      clientName: repos.clients.findByClientId(record.clientId)?.clientName ?? record.clientId,
-      subject: consent.operatorId,
-      scopes: record.scopes,
-      expiresAt: record.expiresAt,
-      resource: this.#resource,
-    });
+    return Promise.resolve(
+      ok({
+        tokenId: hash.slice(0, TOKEN_ID_LENGTH),
+        clientId: record.clientId,
+        clientName: repos.clients.findByClientId(record.clientId)?.clientName ?? record.clientId,
+        subject: consent.operatorId,
+        scopes: record.scopes,
+        expiresAt: record.expiresAt,
+        resource: this.#resource,
+      }),
+    );
   }
 }
