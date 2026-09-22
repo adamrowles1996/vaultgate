@@ -66,7 +66,7 @@ Claude / Codex ──HTTPS + Bearer──▶ vaultgate ──loopback──▶ b
 
 ## Development
 
-Requires Node 24 (see `.nvmrc`).
+Requires Node 26 (see `.nvmrc`).
 
 ```bash
 npm ci

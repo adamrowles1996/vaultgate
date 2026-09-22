@@ -37,8 +37,8 @@ recorded evidence in the release PR):
 
 ## 12.4 Runtime
 
-- **COMPAT-2** Node 24 LTS or newer (`node:sqlite` is stable there; Node 22 prints an
-  experimental warning and is not supported). Linux x64 and arm64. macOS works for development.
+- **COMPAT-2** Node 26 or newer (the line that becomes LTS on 28 October 2026; `node:sqlite` is
+  stable there). Older lines are not supported. Linux x64 and arm64. macOS works for development.
 
 ## 12.5 Backwards compatibility promises
 

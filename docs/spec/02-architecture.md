@@ -6,7 +6,7 @@
                  HTTPS (reverse proxy or Container Apps ingress)
                                    │
    ┌───────────────────────────────┼─────────────────────────────────────┐
-   │ vaultgate (one Node 24 process)                                     │
+   │ vaultgate (one Node 26 process)                                     │
    │                               │                                     │
    │   ┌──────────────┐   ┌────────┴─────────┐   ┌───────────────────┐   │
    │   │ Consent UI   │   │ OAuth 2.1 AS     │   │ MCP resource      │   │
