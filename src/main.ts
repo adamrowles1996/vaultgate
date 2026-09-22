@@ -5,6 +5,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { serve } from '@hono/node-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 
+import { StoreAuditSink } from './audit/store-sink.ts'; // -- audit --
 import { startVaultSupervisor } from './bitwarden/index.ts';
 import { describeConfig, loadConfig } from './config/index.ts';
 import { createApp } from './http/app.ts';
@@ -15,8 +16,6 @@ import {
 } from './identity/index.ts';
 import { EMPTY } from './identity/pages/template.ts';
 import { createLogger } from './logger.ts';
-import { LoggingAuditSink } from './mcp/audit.ts';
-import { createLoggingAuditSink } from './oauth/audit.ts';
 import { createAuthorizationServer } from './oauth/server.ts';
 import { openStore } from './storage/index.ts';
 
@@ -42,6 +41,15 @@ if (!opened.ok) {
 const store = opened.value;
 // -- end storage -------------------------------------------------------------
 
+// -- audit: every identity, OAuth and MCP event appends to the store (MCP-13…15)
+const auditSink = new StoreAuditSink({
+  database: store.db,
+  logger,
+  now: Date.now,
+  newId: randomUUID,
+});
+// -- end audit ---------------------------------------------------------------
+
 // -- vault: bw serve starts in the background; the listener comes up regardless
 // and /readyz names the vault until it is unlocked (VAULT-5) -----------------
 const vault = startVaultSupervisor(config, logger, { environment: process.env });
@@ -58,9 +66,7 @@ const identity = createIdentity({
   config,
   database: store.db,
   logger,
-  audit: (event) => {
-    logger.info({ audit: event }, 'audit event');
-  },
+  audit: auditSink, // -- audit --
   random: (bytes) => randomBytes(bytes),
   clock: () => Date.now(),
   delay: (ms) => sleep(ms),
@@ -76,7 +82,7 @@ const oauth = createAuthorizationServer({
   config,
   db: store.db,
   guards: identity.guards,
-  audit: createLoggingAuditSink(logger),
+  audit: auditSink, // -- audit --
   logger,
   fetch: (url, init) => fetch(url, init),
   lookup: async (hostname) => {
@@ -107,7 +113,7 @@ const app = createApp({
     return { ready: failing.length === 0, failing };
   },
   vaultClient: vault.client, // -- vault --
-  auditSink: new LoggingAuditSink(logger), // -- MCP --
+  auditSink, // -- audit --
   // -- oauth: bearer tokens are verified against the token store ------------
   tokenVerifier: oauth.value.tokenVerifier,
   oauth: oauth.value.routes,

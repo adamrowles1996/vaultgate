@@ -7,7 +7,7 @@ import {
 import { respondWithOAuthError } from './errors.ts';
 import { readForm, requireField } from './form.ts';
 
-import type { AuditSink } from './audit.ts';
+import type { OAuthAuditSink } from './audit.ts';
 import type { Clock } from './clock.ts';
 import type { ConnectedClient } from './repositories/consents.ts';
 import type { ClientIpResolver, OAuthContext, OAuthHandler } from './request-context.ts';
@@ -18,7 +18,7 @@ const MAX_FORM_BYTES = 16 * 1024;
 
 export interface RevocationDependencies {
   readonly repos: OAuthRepos;
-  readonly audit: AuditSink;
+  readonly audit: OAuthAuditSink;
   readonly now: Clock;
   readonly clientIp: ClientIpResolver;
   readonly guards: Guards;
@@ -46,7 +46,7 @@ function revokeToken(dependencies: RevocationDependencies, token: string, ip: st
   dependencies.audit.record({
     category: 'oauth',
     action: 'token_revoked',
-    outcome: 'success',
+    outcome: 'ok',
     clientId: record.clientId,
     tokenPrefix: auditPrefix(token),
     ip,
@@ -95,7 +95,7 @@ export function revokeConsent(
   dependencies.audit.record({
     category: 'oauth',
     action: 'consent_revoked',
-    outcome: 'success',
+    outcome: 'ok',
     operatorId,
     clientId: consent.clientId,
     details: { revoked },

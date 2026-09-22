@@ -9,9 +9,9 @@ import { InMemoryTokenVerifier } from './in-memory-token-verifier.ts';
 import { InMemoryVaultClient } from './in-memory-vault-client.ts';
 import { unwrapOk } from './result.ts';
 
+import type { AuditEvent, AuditSink } from '../audit/event.ts';
 import type { Config } from '../config/index.ts';
 import type { Identity } from '../identity/index.ts';
-import type { AuditEvent, AuditSink } from '../mcp/audit.ts';
 
 export const TEST_PUBLIC_URL = 'https://vault.example.com';
 export const TEST_RESOURCE = `${TEST_PUBLIC_URL}/mcp`;

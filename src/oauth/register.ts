@@ -4,7 +4,7 @@ import { type DynamicRegistrationOptions, registerDynamicClient } from './client
 import { auditPrefix } from './credentials.ts';
 import { OAuthError, respondRateLimited, respondWithOAuthError } from './errors.ts';
 
-import type { AuditSink } from './audit.ts';
+import type { OAuthAuditSink } from './audit.ts';
 import type { RateLimiter } from './rate-limit.ts';
 import type { ClientIpResolver, OAuthHandler } from './request-context.ts';
 
@@ -14,7 +14,7 @@ import type { ClientIpResolver, OAuthHandler } from './request-context.ts';
 const MAX_BODY_BYTES = 16 * 1024;
 
 export interface RegistrationDependencies extends DynamicRegistrationOptions {
-  readonly audit: AuditSink;
+  readonly audit: OAuthAuditSink;
   /**
   10 per hour per ip (OAUTH-11).
   */
@@ -63,7 +63,7 @@ export function createRegisterHandler(dependencies: RegistrationDependencies): O
     dependencies.audit.record({
       category: 'oauth',
       action: 'client_registered',
-      outcome: 'success',
+      outcome: 'ok',
       clientId: registered.value.client_id,
       tokenPrefix: auditPrefix(registered.value.client_id),
       requestId: context.req.header('x-request-id'),

@@ -68,7 +68,7 @@ function recordFailure(
   step: 'password' | 'second-factor',
 ): void {
   services.throttle.record(subjects, false);
-  services.audit({
+  services.audit.record({
     category: 'identity',
     action: 'login.failed',
     outcome: 'failure',
@@ -173,10 +173,10 @@ async function secondStep(context: IdentityContext, services: IdentityServices):
   const started = services.sessions.start(operator.id, client);
   setSessionCookie(context, services, started.id);
   clearStateCookie(context, services);
-  services.audit({
+  services.audit.record({
     category: 'identity',
     action: 'login.succeeded',
-    outcome: 'success',
+    outcome: 'ok',
     operatorId: operator.id,
     ip: client.ip,
     requestId: context.get('requestId'),
@@ -215,10 +215,10 @@ export function registerLoginRoutes(
     }
     services.sessions.end(session.idHash);
     clearSessionCookie(context, services);
-    services.audit({
+    services.audit.record({
       category: 'identity',
       action: 'logout',
-      outcome: 'success',
+      outcome: 'ok',
       operatorId: session.operatorId,
       ip: services.guards.clientInfo(context).ip,
       requestId: context.get('requestId'),

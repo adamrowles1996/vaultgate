@@ -19,10 +19,10 @@ import { checkHost, checkOrigin, hasQueryStringToken, resolveSourceIp } from './
 import { isToolName, missingScopes, requiredScopes, type ToolName } from './scopes.ts';
 import { type CallContext, createVaultMcpServer } from './server.ts';
 
+import type { TokenVerifier } from './token-verifier.ts';
+import type { AuditSink } from '../audit/event.ts';
 import type { Config } from '../config/index.ts';
 import type { Logger } from '../logger.ts';
-import type { AuditSink } from './audit.ts';
-import type { TokenVerifier } from './token-verifier.ts';
 import type { VaultClient } from '../vault/client.ts';
 import type { RequestIdVariables } from 'hono/request-id';
 
@@ -99,20 +99,18 @@ function recordDenied(
   verdict: BearerVerdict,
   tool: ToolName,
 ): void {
-  const { config, now } = gate.dependencies;
+  const { config } = gate.dependencies;
   gate.dependencies.auditSink.record({
-    timestamp: new Date(now()).toISOString(),
-    clientId: verdict.token.clientId,
-    clientName: verdict.token.clientName,
-    subject: verdict.token.subject,
-    tokenId: verdict.token.tokenId,
-    tool,
+    category: 'mcp',
+    action: tool,
     outcome: 'denied',
-    itemId: null,
-    field: null,
-    durationMs: 0,
+    operatorId: verdict.token.subject,
+    clientId: verdict.token.clientId,
+    tokenPrefix: verdict.token.tokenId,
     requestId: context.get('requestId'),
-    sourceIp: resolveSourceIp(context.req.raw, context.env, config),
+    ip: resolveSourceIp(context.req.raw, context.env, config),
+    durationMs: 0,
+    details: { clientName: verdict.token.clientName },
   });
 }
 

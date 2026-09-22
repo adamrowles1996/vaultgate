@@ -99,7 +99,7 @@ function deny(
   dependencies.audit.record({
     category: 'oauth',
     action: 'consent_denied',
-    outcome: 'success',
+    outcome: 'ok',
     operatorId: decision.session.operatorId,
     clientId: decision.pending.parameters.client_id,
     requestId: context.get('requestId'),
@@ -126,7 +126,7 @@ function approve(
   dependencies.audit.record({
     category: 'oauth',
     action: 'consent_granted',
-    outcome: 'success',
+    outcome: 'ok',
     operatorId: decision.session.operatorId,
     clientId: decision.pending.parameters.client_id,
     tokenPrefix: auditPrefix(code),

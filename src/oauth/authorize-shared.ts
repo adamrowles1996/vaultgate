@@ -12,7 +12,7 @@ import {
 } from './credentials.ts';
 import { oauthErrorBody, type OAuthError } from './errors.ts';
 
-import type { AuditSink } from './audit.ts';
+import type { OAuthAuditSink } from './audit.ts';
 import type { Guards } from '../identity/guards.ts';
 import type { SessionState } from '../identity/session-manager.ts';
 import type { ClientResolver } from './clients/resolve.ts';
@@ -30,7 +30,7 @@ export interface AuthorizeDependencies {
   ID-18 origin and synchroniser-token checks, shared with the identity pages.
   */
   readonly guards: Guards;
-  readonly audit: AuditSink;
+  readonly audit: OAuthAuditSink;
   readonly now: Clock;
   readonly random: RandomSource;
   readonly newId: () => string;

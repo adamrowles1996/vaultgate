@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["scripts/*.mjs"],
+  "entry": ["scripts/*.mjs", "src/cli.ts"],
   "project": ["src/**/*.ts", "scripts/**/*.mjs"],
   // Non-npm linters installed by mise (.mise.toml), invoked from package.json scripts.
   "ignoreBinaries": [

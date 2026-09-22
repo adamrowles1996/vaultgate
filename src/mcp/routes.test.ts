@@ -121,13 +121,17 @@ describe('POST /mcp scope gate and rate limit', () => {
     );
     expect(outcome.text).not.toContain(CANARIES[0] ?? '');
     expect(audit.events).toHaveLength(1);
-    expect(audit.events[0]).toMatchObject({
-      tool: 'get_secret',
+    expect(audit.events[0]).toStrictEqual({
+      category: 'mcp',
+      action: 'get_secret',
       outcome: 'denied',
-      itemId: null,
-      field: null,
-      clientName: 'Example Agent',
-      sourceIp: '10.0.0.7',
+      operatorId: 'operator-1',
+      clientId: 'https://agent.example/client.json',
+      tokenPrefix: audit.events[0]?.tokenPrefix,
+      requestId: audit.events[0]?.requestId,
+      ip: '10.0.0.7',
+      durationMs: 0,
+      details: { clientName: 'Example Agent' },
     });
   });
 
@@ -184,7 +188,7 @@ describe('POST /mcp scope gate and rate limit', () => {
 
 describe('POST /mcp audit', () => {
   it('MCP-13 records one event per call with identity, outcome, item, field, duration and source', async () => {
-    const { app, verifier, audit, clock } = createTestApp();
+    const { app, verifier, audit } = createTestApp();
     const token = verifier.issue({
       scopes: ALL,
       clientId: 'vg_c_abc',
@@ -201,25 +205,25 @@ describe('POST /mcp audit', () => {
     await callTool(app, 'list_folders', {}, { token });
     expect(
       audit.events.map((event) => [
-        event.tool,
+        event.action,
         event.outcome,
         event.itemId,
         event.field,
-        event.sourceIp,
+        event.ip,
       ]),
     ).toStrictEqual([
       ['get_secret', 'ok', 'item-login', 'password', '10.0.0.7'],
-      ['get_item', 'error:not_found', 'missing', null, 'unknown'],
-      ['list_folders', 'ok', null, null, 'unknown'],
+      ['get_item', 'error:not_found', 'missing', undefined, 'unknown'],
+      ['list_folders', 'ok', undefined, undefined, 'unknown'],
     ]);
     expect(audit.events[0]).toMatchObject({
+      category: 'mcp',
       clientId: 'vg_c_abc',
-      clientName: 'Cowork',
-      subject: 'op-9',
-      timestamp: new Date(clock.now()).toISOString(),
+      operatorId: 'op-9',
+      details: { clientName: 'Cowork' },
       durationMs: 0,
     });
-    expect(audit.events[0]?.tokenId).toMatch(/^[0-9a-f]{12}$/);
+    expect(audit.events[0]?.tokenPrefix).toMatch(/^[0-9a-f]{12}$/);
     expect(audit.events[0]?.requestId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -232,7 +236,7 @@ describe('POST /mcp audit', () => {
       {},
       { token, env: SOCKET, headers: { 'x-forwarded-for': '203.0.113.9, 10.0.0.1' } },
     );
-    expect(proxied.audit.events[0]?.sourceIp).toBe('203.0.113.9');
+    expect(proxied.audit.events[0]?.ip).toBe('203.0.113.9');
   });
 
   it('MCP-13 never puts arguments, results, the bearer token or a canary in an audit event or log line', async () => {
@@ -255,8 +259,6 @@ describe('POST /mcp audit', () => {
     const { app, verifier, audit } = createTestApp({ withClock: false });
     const token = verifier.issue({ scopes: ALL });
     await callTool(app, 'list_folders', {}, { token });
-    expect(Date.parse(audit.events[0]?.timestamp ?? '')).toBeGreaterThan(
-      Date.parse('2026-01-01T00:00:00Z'),
-    );
+    expect(audit.events[0]?.durationMs).toBeGreaterThanOrEqual(0);
   });
 });

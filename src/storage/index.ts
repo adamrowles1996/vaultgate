@@ -39,6 +39,13 @@ export class StoreOpenError extends Error {
 export type StoreError = StoreOpenError | MigrationError;
 
 /**
+The database file under the data directory; the one path the server and the CLI share.
+*/
+export function databasePath(config: Pick<StoreConfig, 'dataDir'>): string {
+  return join(config.dataDir, DATABASE_FILE);
+}
+
+/**
  * Opens the database under `config.dataDir`, applies pending migrations and
  * starts the hourly maintenance schedule (spec 07). A failure leaves nothing
  * open.
@@ -48,7 +55,7 @@ export function openStore(
   logger: Logger,
   clock: () => Date = () => new Date(),
 ): Result<Store, StoreError> {
-  const path = join(config.dataDir, DATABASE_FILE);
+  const path = databasePath(config);
   let database: DatabaseSync;
   try {
     database = openDatabase({ path, networkFs: config.sqliteNetworkFs });

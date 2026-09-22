@@ -5,10 +5,10 @@ import { secureHeaders } from 'hono/secure-headers';
 import { createMetadataApp } from '../mcp/metadata.ts';
 import { createMcpRoutes } from '../mcp/routes.ts';
 
+import type { AuditSink } from '../audit/event.ts'; // -- audit --
 import type { Config } from '../config/index.ts';
 import type { Identity, IdentityVariables } from '../identity/index.ts';
 import type { Logger } from '../logger.ts';
-import type { AuditSink } from '../mcp/audit.ts';
 import type { TokenVerifier } from '../mcp/token-verifier.ts';
 import type { VaultClient } from '../vault/client.ts';
 

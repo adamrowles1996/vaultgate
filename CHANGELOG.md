@@ -58,5 +58,13 @@ All notable changes to this project are documented here. The format follows
   Azure Files share at `/data`, single-replica Container App with Key Vault secret references),
   a portal form with a Deploy to Azure button, a README covering custom domains and first-run
   bootstrap, and an ARM-TTK template validation job in CI.
+- Audit trail (spec §06.4, §10.3): one `AuditEvent` shape for identity, OAuth and MCP events
+  (`src/audit/event.ts`), the append-only `StoreAuditSink` that writes every event to
+  `audit_events` inside the request, drops any credential-named detail key and logs rather than
+  raises a failed write; keyset-paginated listing and JSON Lines or RFC 4180 CSV export as a
+  stream; the re-authentication-gated "Audit log" download on the account page
+  (`POST /account/audit/export`); and `node dist/cli.js audit export --from --to [--format csv]`
+  over a read-only store, with a CI smoke step (`scripts/cli-smoke.sh`) that exports an empty
+  store from both the build and the source.
 
 [Unreleased]: https://github.com/adamrowles1996/vaultgate/commits/main

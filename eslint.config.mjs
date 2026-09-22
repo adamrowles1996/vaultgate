@@ -38,6 +38,7 @@ The only module allowed to read process.env. Everything else takes a Config.
 const CONFIG_BOUNDARY_FILES = [
   'src/config/**/*.ts',
   'src/main.ts',
+  'src/cli.ts',
   'src/test-support/integration-environment.ts',
 ];
 
@@ -47,9 +48,9 @@ The only module allowed to spawn a child process (the managed `bw serve`).
 const CHILD_PROCESS_BOUNDARY_FILES = ['src/bitwarden/serve-process.ts'];
 
 /**
-The only module allowed to end the process.
+The only modules allowed to end the process: the server and the CLI entrypoints.
 */
-const PROCESS_EXIT_BOUNDARY_FILES = ['src/main.ts'];
+const PROCESS_EXIT_BOUNDARY_FILES = ['src/main.ts', 'src/cli.ts'];
 
 const childProcessRestriction = {
   paths: [

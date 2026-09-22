@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { IN_MEMORY, openDatabase } from './database.ts';
+import { IN_MEMORY, openDatabase, openReadOnlyDatabase } from './database.ts';
 import { get } from './query.ts';
 
 import type { DatabaseSync } from 'node:sqlite';
@@ -77,5 +77,35 @@ describe('openDatabase', () => {
     expect(pragma(database, 'foreign_keys')).toBe(1);
     expect(pragma(database, 'busy_timeout')).toBe(5000);
     database.close();
+  });
+});
+
+describe('openReadOnlyDatabase', () => {
+  afterEach(() => {
+    for (const directory of created.splice(0)) {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('OPS-5 reads an existing database and refuses to write to it', () => {
+    const path = scratchPath();
+    const writer = openDatabase({ path, networkFs: false });
+    writer.exec('CREATE TABLE kept (id INTEGER); INSERT INTO kept VALUES (1)');
+    writer.close();
+    const reader = openReadOnlyDatabase(path);
+    expect(
+      Object.values(reader?.prepare('SELECT count(*) AS n FROM kept').get() ?? {}),
+    ).toStrictEqual([1]);
+    expect(pragma(reader ?? writer, 'busy_timeout')).toBe(5000);
+    expect(() => reader?.exec('INSERT INTO kept VALUES (2)')).toThrow(
+      'attempt to write a readonly database',
+    );
+    reader?.close();
+  });
+
+  it('OPS-5 reports no database when the file was never created', () => {
+    const path = scratchPath();
+    expect(openReadOnlyDatabase(path)).toBeUndefined();
+    expect(existsSync(path)).toBe(false);
   });
 });

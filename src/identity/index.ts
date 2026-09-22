@@ -11,17 +11,16 @@ import { createSessionManager } from './session-manager.ts';
 import { cookiePolicyFor, type CookiePolicy } from './sessions.ts';
 import { createStateCodec } from './state-cookie.ts';
 
-import type { Config } from '../config/index.ts';
-import type { Logger } from '../logger.ts';
-import type { AuditSink } from './audit.ts';
 import type { ClientAddressResolver, IdentityEnvironment } from './context.ts';
 import type { ScryptParameters } from './password.ts';
 import type { Clock, Delay, RandomSource } from './primitives.ts';
+import type { AuditSink } from '../audit/event.ts';
+import type { Config } from '../config/index.ts';
+import type { Logger } from '../logger.ts';
 import type { ConnectedClientsRenderer, IdentityServices } from './services.ts';
 import type { Hono, MiddlewareHandler } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
 
-export type { IdentityAuditEvent } from './audit.ts';
 export type { IdentityVariables } from './context.ts';
 export type { ConnectedClientsRenderer } from './services.ts';
 export { CURRENT_PARAMETERS } from './password.ts';

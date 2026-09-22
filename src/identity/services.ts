@@ -1,4 +1,3 @@
-import type { AuditSink } from './audit.ts';
 import type { Bootstrap } from './bootstrap.ts';
 import type { Guards } from './guards.ts';
 import type { LoginThrottle } from './login-throttle.ts';
@@ -10,6 +9,7 @@ import type { SecretBox } from './secret-box.ts';
 import type { SessionManager, SessionState } from './session-manager.ts';
 import type { CookiePolicy } from './sessions.ts';
 import type { StateCodec } from './state-cookie.ts';
+import type { AuditSink } from '../audit/event.ts';
 import type { DatabaseSync } from 'node:sqlite';
 
 /**

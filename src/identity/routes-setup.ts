@@ -129,10 +129,10 @@ async function completeSetup(
   const started = sessions.start(operatorId, client);
   setSessionCookie(context, services, started.id);
   clearStateCookie(context, services);
-  audit({
+  audit.record({
     category: 'identity',
     action: 'operator.created',
-    outcome: 'success',
+    outcome: 'ok',
     operatorId,
     ip: client.ip,
     requestId: context.get('requestId'),

@@ -104,8 +104,10 @@ so most clients need nothing pre-registered.
 
 ## Where is the audit log?
 
-In the process log: every tool call, login, consent, token and revocation is an `audit event`
-JSON line with the client, token id, tool, outcome, item id and field, but never arguments or
-results. Ship the log to whatever you keep logs in (Log Analytics on Azure, journald on Linux,
-your log driver with Compose). Audit rows are also kept in the database for
-`VAULTGATE_AUDIT_RETENTION_DAYS`.
+In the database, for `VAULTGATE_AUDIT_RETENTION_DAYS`: every tool call, login, consent, token
+and revocation is one row with the client, token id, tool, outcome, item id and field, but never
+arguments or results. Export it from the account page (**Audit log**, after confirming your
+password) as JSON Lines or CSV for a date range, or from the host with
+`node dist/cli.js audit export --from 2026-01-01 --to 2026-02-01 [--format csv]` under the same
+configuration as the server (`npm run audit:export -- …` from a source checkout). The window is
+UTC, `from` inclusive and `to` exclusive; ship the file to whatever you keep logs in.

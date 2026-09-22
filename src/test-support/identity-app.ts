@@ -2,12 +2,7 @@ import { Hono } from 'hono';
 import { requestId } from 'hono/request-id';
 
 import { base32Decode } from '../identity/base32.ts';
-import {
-  type ConnectedClientsRenderer,
-  createIdentity,
-  type Identity,
-  type IdentityAuditEvent,
-} from '../identity/index.ts';
+import { type ConnectedClientsRenderer, createIdentity, type Identity } from '../identity/index.ts';
 import { createIdentityStores, type IdentityStores } from '../identity/repositories/index.ts';
 import { totp } from '../identity/totp.ts';
 
@@ -16,6 +11,7 @@ import { openTestDatabase } from './database.ts';
 import { sequentialRandom } from './identity.ts';
 import { captureLogger } from './logging.ts';
 
+import type { AuditEvent } from '../audit/event.ts';
 import type { IdentityEnvironment } from '../identity/browser.ts';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -39,7 +35,7 @@ export interface Harness {
   readonly identity: Identity;
   readonly database: DatabaseSync;
   readonly stores: IdentityStores;
-  readonly audits: IdentityAuditEvent[];
+  readonly audits: AuditEvent[];
   readonly delays: number[];
   readonly logged: () => readonly Record<string, unknown>[];
   readonly now: () => number;
@@ -55,7 +51,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
   const publicUrl = options.publicUrl ?? PUBLIC_URL;
   const database = openTestDatabase();
   const { logger, lines } = captureLogger();
-  const audits: IdentityAuditEvent[] = [];
+  const audits: AuditEvent[] = [];
   const delays: number[] = [];
   let now = START;
   const identity = createIdentity({
@@ -72,8 +68,10 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     },
     database,
     logger,
-    audit: (event) => {
-      audits.push(event);
+    audit: {
+      record: (event) => {
+        audits.push(event);
+      },
     },
     random: sequentialRandom(),
     clock: () => now,

@@ -4,10 +4,12 @@
 // Layers, from the bottom up:
 //   result, config, logger      foundation: import nothing above themselves
 //   storage                     no feature knowledge
+//   audit                       the event shape and the store sink every
+//                               feature records through; knows no feature
 //   identity, oauth, mcp,       features: independent of each other except
-//   bitwarden, audit            through interfaces in the layer below them
+//   bitwarden                   through interfaces in the layers below them
 //   http                        composition of features into routes
-//   main.ts                     process entrypoint
+//   main.ts, cli.ts             process entrypoints
 const RUNTIME = { path: '^src/', pathNot: [String.raw`\.test\.ts$`, '^src/test-support/'] };
 const TEST_CODE = [String.raw`\.test\.ts$`, '^src/test-support/'];
 
@@ -49,6 +51,14 @@ export default {
       to: { path: '^src/(identity|oauth|mcp|bitwarden|audit|http)/' },
     },
     {
+      name: 'audit-knows-no-features',
+      severity: 'error',
+      comment:
+        'identity, oauth and mcp record events through src/audit/ (one AuditEvent shape, one sink); the audit module never looks back up at them.',
+      from: { path: '^src/audit/' },
+      to: { path: '^src/(identity|oauth|mcp|bitwarden)/' },
+    },
+    {
       name: 'mcp-uses-the-vault-interface-not-bitwarden',
       severity: 'error',
       comment: 'Tools depend on VaultClient; only composition wires the bw serve implementation.',
@@ -73,7 +83,7 @@ export default {
       name: 'features-do-not-import-the-composition-layer',
       severity: 'error',
       from: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit)/' },
-      to: { path: String.raw`^src/(http/|main\.ts$)` },
+      to: { path: String.raw`^src/(http/|main\.ts$|cli\.ts$)` },
     },
     {
       name: 'no-deprecated-core',

@@ -1,3 +1,4 @@
+import { auditExportSection } from './audit-export.ts';
 import { renderEnrolmentDetails } from './setup.ts';
 import { document, errorBanner, hidden, type Html, html, noticeBanner, when } from './template.ts';
 
@@ -103,7 +104,8 @@ export function renderAccount(view: AccountView): string {
               ${actionForm('/account/reauthenticate', view.csrfToken, 'Confirm', reauthenticateField)}`,
         )}
         ${when(view.isReauthenticated, () => sensitiveActions(view))}
-      </section>`,
+      </section>
+      ${auditExportSection(view)}`,
   );
 }
 

@@ -22,6 +22,7 @@
   "author": "Adam Rowles",
   "type": "module",
   "scripts": {
+    "audit:export": "node dist/cli.js audit export",
     "audit:signatures": "npm audit signatures",
     "build": "tsc -p tsconfig.build.json",
     "check:commit-message": "node scripts/check-commit-message.mjs",
