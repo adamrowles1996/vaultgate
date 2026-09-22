@@ -1,28 +1,13 @@
-import { Writable } from 'node:stream';
-
 import { describe, expect, it } from 'vitest';
 
-import { createLogger } from '../logger.ts';
+import { createTestApp, type TestApp } from '../test-support/test-app.ts';
 
-import { createApp, type Readiness } from './app.ts';
+import type { Readiness } from './app.ts';
 
 const READY: Readiness = { ready: true, failing: [] };
 
-function appWithLogSink(readiness: () => Readiness = () => READY): {
-  app: ReturnType<typeof createApp>;
-  logged: () => string;
-} {
-  const chunks: string[] = [];
-  const sink = new Writable({
-    write(chunk: Buffer, _encoding, callback) {
-      chunks.push(chunk.toString('utf8'));
-      callback();
-    },
-  });
-  return {
-    app: createApp({ logger: createLogger('error', sink), readiness }),
-    logged: () => chunks.join(''),
-  };
+function appWithLogSink(readiness: () => Readiness = () => READY): TestApp {
+  return createTestApp({ readiness });
 }
 
 describe('createApp', () => {
