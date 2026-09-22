@@ -1,4 +1,17 @@
-import type { SqlStore } from './sql-store.ts';
+import { z } from 'zod';
+
+import { get, run } from '../../storage/query.ts';
+
+import { jsonStringRecord, timestamp } from './rows.ts';
+
+import type { DatabaseSync } from 'node:sqlite';
+
+const pendingRow = z.object({
+  id: z.string(),
+  session_binding_hash: z.string(),
+  parameters: jsonStringRecord,
+  expires_at: timestamp,
+});
 
 export interface PendingAuthorizationRecord {
   readonly id: string;
@@ -13,10 +26,11 @@ export interface PendingAuthorizationsRepo {
   delete(id: string): void;
 }
 
-export function createPendingAuthorizationsRepo(store: SqlStore): PendingAuthorizationsRepo {
+export function createPendingAuthorizationsRepo(database: DatabaseSync): PendingAuthorizationsRepo {
   return {
     insert(record) {
-      store.run(
+      run(
+        database,
         `INSERT INTO pending_authorizations (id, session_binding_hash, parameters, expires_at)
          VALUES (?, ?, ?, ?)`,
         record.id,
@@ -26,18 +40,23 @@ export function createPendingAuthorizationsRepo(store: SqlStore): PendingAuthori
       );
     },
     find(id) {
-      const row = store.get('SELECT * FROM pending_authorizations WHERE id = ?', id);
+      const row = get(
+        database,
+        'SELECT * FROM pending_authorizations WHERE id = ?',
+        pendingRow,
+        id,
+      );
       return row === undefined
         ? undefined
         : {
-            id: String(row['id']),
-            sessionBindingHash: String(row['session_binding_hash']),
-            parameters: JSON.parse(String(row['parameters'])) as Record<string, string>,
-            expiresAt: Number(row['expires_at']),
+            id: row.id,
+            sessionBindingHash: row.session_binding_hash,
+            parameters: row.parameters,
+            expiresAt: row.expires_at,
           };
     },
     delete(id) {
-      store.run('DELETE FROM pending_authorizations WHERE id = ?', id);
+      run(database, 'DELETE FROM pending_authorizations WHERE id = ?', id);
     },
   };
 }

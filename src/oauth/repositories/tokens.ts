@@ -1,12 +1,29 @@
-import {
-  optionalNumber,
-  optionalString,
-  parseJsonArray,
-  type Row,
-  type SqlStore,
-} from './sql-store.ts';
+import { z } from 'zod';
 
-export type TokenKind = 'access' | 'refresh';
+import { get, run } from '../../storage/query.ts';
+
+import { jsonStringArray, optionalText, optionalTimestamp, timestamp } from './rows.ts';
+
+import type { DatabaseSync } from 'node:sqlite';
+
+const tokenRow = z.object({
+  id: z.string(),
+  token_hash: z.string(),
+  kind: z.enum(['access', 'refresh']),
+  family_id: z.string(),
+  parent_id: optionalText,
+  replaced_by_id: optionalText,
+  client_id: z.string(),
+  consent_id: z.string(),
+  scopes: jsonStringArray,
+  resource: optionalText,
+  issued_at: timestamp,
+  expires_at: timestamp,
+  revoked_at: optionalTimestamp,
+  last_used_at: optionalTimestamp,
+});
+
+export type TokenKind = z.output<typeof tokenRow>['kind'];
 
 export interface TokenRecord {
   readonly id: string;
@@ -32,7 +49,7 @@ export interface TokensRepo {
   insert(record: TokenRecord): void;
   findByHash(tokenHash: string): TokenRecord | undefined;
   /**
-  OAUTH-25: single use; returns false when the token was already rotated.
+  OAUTH-25: single use; false when the token was already rotated.
   */
   markReplaced(id: string, replacedById: string): boolean;
   revokeById(id: string, at: number): number;
@@ -41,31 +58,32 @@ export interface TokensRepo {
   touchLastUsed(id: string, at: number): void;
 }
 
-function toRecord(row: Row): TokenRecord {
+function toRecord(row: z.output<typeof tokenRow>): TokenRecord {
   return {
-    id: String(row['id']),
-    tokenHash: String(row['token_hash']),
-    kind: String(row['kind']) as TokenKind,
-    familyId: String(row['family_id']),
-    parentId: optionalString(row['parent_id']),
-    replacedById: optionalString(row['replaced_by_id']),
-    clientId: String(row['client_id']),
-    consentId: String(row['consent_id']),
-    scopes: parseJsonArray(row['scopes']),
-    resource: optionalString(row['resource']),
-    issuedAt: Number(row['issued_at']),
-    expiresAt: Number(row['expires_at']),
-    revokedAt: optionalNumber(row['revoked_at']),
-    lastUsedAt: optionalNumber(row['last_used_at']),
+    id: row.id,
+    tokenHash: row.token_hash,
+    kind: row.kind,
+    familyId: row.family_id,
+    parentId: row.parent_id,
+    replacedById: row.replaced_by_id,
+    clientId: row.client_id,
+    consentId: row.consent_id,
+    scopes: row.scopes,
+    resource: row.resource,
+    issuedAt: row.issued_at,
+    expiresAt: row.expires_at,
+    revokedAt: row.revoked_at,
+    lastUsedAt: row.last_used_at,
   };
 }
 
 const REVOKE_UNREVOKED = 'UPDATE tokens SET revoked_at = ? WHERE revoked_at IS NULL AND ';
 
-export function createTokensRepo(store: SqlStore): TokensRepo {
+export function createTokensRepo(database: DatabaseSync): TokensRepo {
   return {
     insert(record) {
-      store.run(
+      run(
+        database,
         `INSERT INTO tokens
            (id, token_hash, kind, family_id, parent_id, replaced_by_id, client_id, consent_id,
             scopes, resource, issued_at, expires_at, revoked_at, last_used_at)
@@ -87,12 +105,13 @@ export function createTokensRepo(store: SqlStore): TokensRepo {
       );
     },
     findByHash(tokenHash) {
-      const row = store.get('SELECT * FROM tokens WHERE token_hash = ?', tokenHash);
+      const row = get(database, 'SELECT * FROM tokens WHERE token_hash = ?', tokenRow, tokenHash);
       return row === undefined ? undefined : toRecord(row);
     },
     markReplaced(id, replacedById) {
       return (
-        store.run(
+        run(
+          database,
           'UPDATE tokens SET replaced_by_id = ? WHERE id = ? AND replaced_by_id IS NULL',
           replacedById,
           id,
@@ -100,16 +119,16 @@ export function createTokensRepo(store: SqlStore): TokensRepo {
       );
     },
     revokeById(id, at) {
-      return store.run(`${REVOKE_UNREVOKED}id = ?`, at, id);
+      return run(database, `${REVOKE_UNREVOKED}id = ?`, at, id);
     },
     revokeFamily(familyId, at) {
-      return store.run(`${REVOKE_UNREVOKED}family_id = ?`, at, familyId);
+      return run(database, `${REVOKE_UNREVOKED}family_id = ?`, at, familyId);
     },
     revokeByConsent(consentId, at) {
-      return store.run(`${REVOKE_UNREVOKED}consent_id = ?`, at, consentId);
+      return run(database, `${REVOKE_UNREVOKED}consent_id = ?`, at, consentId);
     },
     touchLastUsed(id, at) {
-      store.run('UPDATE tokens SET last_used_at = ? WHERE id = ?', at, id);
+      run(database, 'UPDATE tokens SET last_used_at = ? WHERE id = ?', at, id);
     },
   };
 }

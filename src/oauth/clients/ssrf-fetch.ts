@@ -70,13 +70,17 @@ async function readCapped(response: Response, maxBytes: number): Promise<string>
   }
   const chunks: Uint8Array[] = [];
   let received = 0;
-  for await (const chunk of response.body) {
-    received += chunk.byteLength;
-    if (received > maxBytes) {
-      throw new SafeFetchError(`response exceeds ${maxBytes} bytes`);
-    }
-    chunks.push(chunk);
-  }
+  await response.body.pipeTo(
+    new WritableStream<Uint8Array>({
+      write(chunk) {
+        received += chunk.byteLength;
+        if (received > maxBytes) {
+          throw new SafeFetchError(`response exceeds ${maxBytes} bytes`);
+        }
+        chunks.push(chunk);
+      },
+    }),
+  );
   return Buffer.concat(chunks).toString('utf8');
 }
 

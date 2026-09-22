@@ -1,29 +1,20 @@
 import {
-  createAuthorizationCodesRepo as createAuthorizationCodesRepo,
-  type AuthorizationCodesRepo as AuthorizationCodesRepo,
+  type AuthorizationCodesRepo,
+  createAuthorizationCodesRepo,
 } from './authorization-codes.ts';
+import { type CimdCacheRepo, createCimdCacheRepo } from './cimd-cache.ts';
+import { type ClientsRepo, createClientsRepo } from './clients.ts';
+import { type ConsentsRepo, createConsentsRepo } from './consents.ts';
 import {
-  createCimdCacheRepo as createCimdCacheRepo,
-  type CimdCacheRepo as CimdCacheRepo,
-} from './cimd-cache.ts';
-import {
-  createClientsRepo as createClientsRepo,
-  type ClientsRepo as ClientsRepo,
-} from './clients.ts';
-import {
-  createConsentsRepo as createConsentsRepo,
-  type ConsentsRepo as ConsentsRepo,
-} from './consents.ts';
-import {
-  createPendingAuthorizationsRepo as createPendingAuthorizationsRepo,
+  createPendingAuthorizationsRepo,
   type PendingAuthorizationsRepo,
 } from './pending-authorizations.ts';
-import { createTokensRepo as createTokensRepo, type TokensRepo } from './tokens.ts';
+import { createTokensRepo, type TokensRepo } from './tokens.ts';
 
-import type { SqlStore } from './sql-store.ts';
+import type { DatabaseSync } from 'node:sqlite';
 
 export interface OAuthRepos {
-  readonly store: SqlStore;
+  readonly db: DatabaseSync;
   readonly clients: ClientsRepo;
   readonly cimdCache: CimdCacheRepo;
   readonly consents: ConsentsRepo;
@@ -32,14 +23,14 @@ export interface OAuthRepos {
   readonly pendingAuthorizations: PendingAuthorizationsRepo;
 }
 
-export function createOAuthRepos(store: SqlStore): OAuthRepos {
+export function createOAuthRepos(database: DatabaseSync): OAuthRepos {
   return {
-    store,
-    clients: createClientsRepo(store),
-    cimdCache: createCimdCacheRepo(store),
-    consents: createConsentsRepo(store),
-    authorizationCodes: createAuthorizationCodesRepo(store),
-    tokens: createTokensRepo(store),
-    pendingAuthorizations: createPendingAuthorizationsRepo(store),
+    db: database,
+    clients: createClientsRepo(database),
+    cimdCache: createCimdCacheRepo(database),
+    consents: createConsentsRepo(database),
+    authorizationCodes: createAuthorizationCodesRepo(database),
+    tokens: createTokensRepo(database),
+    pendingAuthorizations: createPendingAuthorizationsRepo(database),
   };
 }

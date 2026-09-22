@@ -1,12 +1,23 @@
-import {
-  optionalNumber,
-  optionalString,
-  parseJsonArray,
-  type Row,
-  type SqlStore,
-} from './sql-store.ts';
+import { z } from 'zod';
 
-export type ClientMode = 'cimd' | 'dcr' | 'preregistered';
+import { get, run } from '../../storage/query.ts';
+
+import { jsonObject, jsonStringArray, optionalText, optionalTimestamp, timestamp } from './rows.ts';
+
+import type { DatabaseSync } from 'node:sqlite';
+
+const clientRow = z.object({
+  id: z.string(),
+  client_id: z.string(),
+  mode: z.enum(['cimd', 'dcr', 'preregistered']),
+  client_name: optionalText,
+  redirect_uris: jsonStringArray,
+  metadata: jsonObject,
+  created_at: timestamp,
+  revoked_at: optionalTimestamp,
+});
+
+export type ClientMode = z.output<typeof clientRow>['mode'];
 
 export interface ClientRecord {
   readonly id: string;
@@ -22,33 +33,40 @@ export interface ClientRecord {
 export interface ClientsRepo {
   findByClientId(clientId: string): ClientRecord | undefined;
   /**
-  Inserts or refreshes the name, redirect URIs and metadata of a client.
+  Inserts a client, or refreshes the name, redirect URIs and metadata of an existing one.
   */
   upsert(record: ClientRecord): void;
 }
 
-function toRecord(row: Row): ClientRecord {
+function toRecord(row: z.output<typeof clientRow>): ClientRecord {
   return {
-    id: String(row['id']),
-    clientId: String(row['client_id']),
-    mode: String(row['mode']) as ClientMode,
-    clientName: optionalString(row['client_name']),
-    redirectUris: parseJsonArray(row['redirect_uris']),
-    metadata: JSON.parse(String(row['metadata'])) as Record<string, unknown>,
-    createdAt: Number(row['created_at']),
-    revokedAt: optionalNumber(row['revoked_at']),
+    id: row.id,
+    clientId: row.client_id,
+    mode: row.mode,
+    clientName: row.client_name,
+    redirectUris: row.redirect_uris,
+    metadata: row.metadata,
+    createdAt: row.created_at,
+    revokedAt: row.revoked_at,
   };
 }
 
-export function createClientsRepo(store: SqlStore): ClientsRepo {
+export function createClientsRepo(database: DatabaseSync): ClientsRepo {
   return {
     findByClientId(clientId) {
-      const row = store.get('SELECT * FROM oauth_clients WHERE client_id = ?', clientId);
+      const row = get(
+        database,
+        'SELECT * FROM oauth_clients WHERE client_id = ?',
+        clientRow,
+        clientId,
+      );
       return row === undefined ? undefined : toRecord(row);
     },
     upsert(record) {
-      store.run(
-        `INSERT INTO oauth_clients (id, client_id, mode, client_name, redirect_uris, metadata, created_at, revoked_at)
+      run(
+        database,
+        `INSERT INTO oauth_clients
+           (id, client_id, mode, client_name, redirect_uris, metadata, created_at, revoked_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (client_id) DO UPDATE SET
            client_name = excluded.client_name,

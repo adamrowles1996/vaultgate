@@ -53,12 +53,9 @@ const BLOCKED = buildBlockList();
  * True only for a syntactically valid, globally routable unicast address.
  */
 export function isPublicAddress(address: string): boolean {
-  const family = isIP(address);
-  if (family === 0) {
-    return false;
-  }
-  if (family === 6 && address.toLowerCase().startsWith(IPV4_MAPPED_PREFIX)) {
-    return isPublicAddress(address.slice(IPV4_MAPPED_PREFIX.length));
-  }
-  return !BLOCKED.check(address, family === 4 ? 'ipv4' : 'ipv6');
+  const unmapped = address.toLowerCase().startsWith(IPV4_MAPPED_PREFIX)
+    ? address.slice(IPV4_MAPPED_PREFIX.length)
+    : address;
+  const family = isIP(unmapped);
+  return family !== 0 && !BLOCKED.check(unmapped, family === 4 ? 'ipv4' : 'ipv6');
 }
