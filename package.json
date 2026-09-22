@@ -1,0 +1,76 @@
+{
+  "name": "vaultgate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remote MCP server for Bitwarden with OAuth 2.1, so AI agents can use your vault over HTTPS without ever holding your master password.",
+  "license": "Apache-2.0",
+  "author": "Adam Rowles",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adamrowles1996/vaultgate.git"
+  },
+  "homepage": "https://github.com/adamrowles1996/vaultgate#readme",
+  "bugs": "https://github.com/adamrowles1996/vaultgate/issues",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "bitwarden",
+    "oauth2",
+    "oauth2.1",
+    "secrets",
+    "ai-agents"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
+    "start": "node dist/main.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "knip": "knip",
+    "check:file-sizes": "node scripts/check-file-sizes.mjs",
+    "check:commit-message": "node scripts/check-commit-message.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "quality": "npm run format:check && npm run lint && npm run typecheck && npm run knip && npm run check:file-sizes && npm run test:coverage",
+    "prepare": "simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx lint-staged",
+    "commit-msg": "node scripts/check-commit-message.mjs --file \"$1\""
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.1",
+    "hono": "4.13.8",
+    "pino": "10.3.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@eslint-community/eslint-plugin-eslint-comments": "4.8.1",
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.13.6",
+    "@vitest/coverage-v8": "5.0.1",
+    "eslint": "10.11.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-import-resolver-typescript": "4.4.5",
+    "eslint-plugin-import-x": "4.17.1",
+    "eslint-plugin-prettier": "5.5.6",
+    "eslint-plugin-sonarjs": "4.2.1",
+    "eslint-plugin-unused-imports": "4.4.1",
+    "globals": "17.12.0",
+    "knip": "6.37.0",
+    "lint-staged": "17.5.1",
+    "prettier": "3.9.8",
+    "simple-git-hooks": "2.14.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.1",
+    "vitest": "5.0.1"
+  }
+}

@@ -1,0 +1,35 @@
+name: Bug report
+description: Something behaves differently from the specification or documentation.
+labels: [bug]
+body:
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: Cite the spec section if you can (docs/spec/…).
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: Include redacted logs. Never paste tokens, cookies, vault items or your master password.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: vaultgate version / image tag
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client and version
+      placeholder: e.g. Claude desktop 1.2.3, MCP Inspector 0.9
