@@ -27,7 +27,7 @@ const MODE_LABELS: Readonly<Record<ClientMode, string>> = {
 const FIXED_SCOPES: ReadonlySet<Scope> = new Set(['vault:read']);
 
 export const APPROVE = 'approve';
-export const DENY = 'deny';
+const DENY = 'deny';
 
 export function scopeFieldName(scope: Scope): string {
   return `scope:${scope}`;

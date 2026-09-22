@@ -9,15 +9,14 @@ import {
   PENDING_TTL_MS,
   rateLimitKey,
   redirectWithError,
+  type LivePending,
 } from './authorize-shared.ts';
 import { renderConsentPage } from './consent-page.ts';
 import { CREDENTIAL_PREFIX, hashCredential, mintCredential } from './credentials.ts';
 import { OAuthError } from './errors.ts';
 import { isScope, type Scope } from './scopes.ts';
 
-import type { ClientMode } from './repositories/clients.ts';
-import type { PendingAuthorizationRecord } from './repositories/pending-authorizations.ts';
-import type { OAuthHandler } from './request-context.ts';
+import type { OAuthContext, OAuthHandler } from './request-context.ts';
 
 function tooManyRequests(
   context: Parameters<OAuthHandler>[0],
@@ -66,17 +65,18 @@ export function createAuthorizeHandler(dependencies: AuthorizeDependencies): OAu
   };
 }
 
-export function pendingScopes(pending: PendingAuthorizationRecord): readonly Scope[] {
-  return (pending.parameters['scope'] ?? '').split(' ').filter((entry) => isScope(entry));
+export function pendingScopes(pending: LivePending): readonly Scope[] {
+  return pending.parameters.scope.split(' ').filter((entry) => isScope(entry));
 }
+
+export type ConsentPageHandler = (context: OAuthContext, id: string) => Promise<Response>;
 
 /**
  * `GET /oauth/authorize/:id` (OAUTH-13, OAUTH-18): renders the consent page;
  * it never issues a code.
  */
-export function createConsentPageHandler(dependencies: AuthorizeDependencies): OAuthHandler {
-  return (context) => {
-    const id = context.req.param('id') ?? '';
+export function createConsentPageHandler(dependencies: AuthorizeDependencies): ConsentPageHandler {
+  return (context, id) => {
     const pending = livePending(dependencies, id);
     if (pending === undefined) {
       return Promise.resolve(
@@ -104,10 +104,10 @@ export function createConsentPageHandler(dependencies: AuthorizeDependencies): O
     const view = {
       requestId: id,
       csrfToken: session.csrfToken,
-      clientName: parameters['client_name'] ?? '',
-      redirectHost: parameters['redirect_host'] ?? '',
-      mode: (parameters['client_mode'] ?? 'dcr') as ClientMode,
-      loopbackOnly: parameters['loopback_only'] === '1',
+      clientName: parameters.client_name,
+      redirectHost: parameters.redirect_host,
+      mode: parameters.client_mode,
+      loopbackOnly: parameters.loopback_only === '1',
       scopes: pendingScopes(pending),
     };
     return Promise.resolve(context.html(renderConsentPage(view)));

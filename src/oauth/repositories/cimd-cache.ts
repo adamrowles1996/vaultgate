@@ -14,7 +14,7 @@ const cacheRow = z.object({
   etag: optionalText,
 });
 
-export interface CimdCacheEntry {
+interface CimdCacheEntry {
   readonly clientId: string;
   readonly document: Readonly<Record<string, unknown>>;
   readonly fetchedAt: number;

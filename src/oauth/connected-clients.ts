@@ -2,7 +2,7 @@ import { hidden, type Html, html, when } from '../identity/pages/template.ts';
 
 import type { ConnectedClient } from './repositories/consents.ts';
 
-export const CONSENT_REVOKE_PATH = '/oauth/consents/:id/revoke';
+export const CONSENT_REVOKE_PATH = '/oauth/consents/:id/revoke' as const;
 
 function revokePath(consentId: string): string {
   return `/oauth/consents/${encodeURIComponent(consentId)}/revoke`;

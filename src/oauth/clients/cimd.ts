@@ -24,7 +24,7 @@ export interface CimdFetcherOptions {
   readonly rateLimiter: RateLimiter;
 }
 
-export interface FetchOptions {
+interface FetchOptions {
   /**
   Bypasses a fresh cache entry (T22: redirect mismatch).
   */
@@ -38,9 +38,9 @@ export interface CimdFetcher {
 /**
  * OAUTH-8 limits.
  */
-export const CIMD_TIMEOUT_MS = 4 * SECOND_MS;
-export const CIMD_MAX_REDIRECTS = 2;
-export const CIMD_MAX_BODY_BYTES = 64 * 1024;
+const CIMD_TIMEOUT_MS = 4 * SECOND_MS;
+const CIMD_MAX_REDIRECTS = 2;
+const CIMD_MAX_BODY_BYTES = 64 * 1024;
 
 /**
  * OAUTH-10 bounds; a document without `max-age` is kept for five minutes.

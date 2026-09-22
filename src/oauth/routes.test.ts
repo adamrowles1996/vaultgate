@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  createOAuthHarness,
-  formBody,
-  parseJson,
-  PUBLIC_URL,
-} from '../test-support/oauth-harness.ts';
+import { createOAuthHarness, PUBLIC_URL } from '../test-support/oauth-harness.ts';
+import { formBody, parseJson } from '../test-support/oauth-http.ts';
 
 const PREFLIGHT: RequestInit = {
   method: 'OPTIONS',

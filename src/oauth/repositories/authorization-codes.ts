@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { get, run, transaction } from '../../storage/query.ts';
 
-import { jsonStringArray, optionalText, optionalTimestamp, timestamp } from './rows.ts';
+import { jsonStringArray, optionalTimestamp, timestamp } from './rows.ts';
 
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -12,7 +12,7 @@ const codeRow = z.object({
   consent_id: z.string(),
   redirect_uri: z.string(),
   code_challenge: z.string(),
-  resource: optionalText,
+  resource: z.string(),
   scopes: jsonStringArray,
   expires_at: timestamp,
   used_at: optionalTimestamp,
@@ -24,13 +24,13 @@ export interface AuthorizationCodeRecord {
   readonly consentId: string;
   readonly redirectUri: string;
   readonly codeChallenge: string;
-  readonly resource: string | undefined;
+  readonly resource: string;
   readonly scopes: readonly string[];
   readonly expiresAt: number;
   readonly usedAt: number | undefined;
 }
 
-export type ClaimOutcome =
+type ClaimOutcome =
   | { readonly kind: 'claimed'; readonly code: AuthorizationCodeRecord }
   | { readonly kind: 'reused'; readonly code: AuthorizationCodeRecord }
   | { readonly kind: 'unknown' };
@@ -73,7 +73,7 @@ export function createAuthorizationCodesRepo(database: DatabaseSync): Authorizat
         record.consentId,
         record.redirectUri,
         record.codeChallenge,
-        record.resource ?? null,
+        record.resource,
         JSON.stringify(record.scopes),
         record.expiresAt,
         record.usedAt ?? null,

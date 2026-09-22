@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { flattenHtml } from '../test-support/oauth-harness.ts';
+import { flattenHtml } from '../test-support/oauth-http.ts';
 
 import { renderConsentPage, renderErrorPage, scopeFieldName } from './consent-page.ts';
 import { OAuthError } from './errors.ts';

@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  cimdDocument,
   createOAuthHarness,
   type Exchange,
-  formBody,
   type OAuthHarness,
-  openConsent,
   OPERATOR_ID,
   RESOURCE,
   type SignedIn,
 } from '../test-support/oauth-harness.ts';
+import { cimdDocument, formBody, openConsent } from '../test-support/oauth-http.ts';
 
 import { hashCredential } from './credentials.ts';
 
@@ -213,6 +211,28 @@ describe('POST /oauth/authorize', () => {
     await decide(parked, APPROVE_ALL);
     const replay = await decide(parked, APPROVE_ALL);
     expect(replay.status).toBe(400);
+  });
+
+  it('OAUTH-17 refuses a decision without a request id or for a pending row that does not read back', async () => {
+    const parked = await park();
+    const missing = await parked.harness.exchange(
+      '/oauth/authorize',
+      formBody({ csrf: parked.csrfToken, decision: 'approve' }, parked.browser.headers),
+    );
+    expect(missing.status).toBe(400);
+    expect(missing.text).toContain('has expired');
+    parked.harness.repos.pendingAuthorizations.insert({
+      id: 'corrupt',
+      sessionBindingHash: hashCredential(parked.browser.session.idHash),
+      parameters: { client_id: 'only' },
+      expiresAt: parked.harness.now() + 60_000,
+    });
+    const corrupt = await decide({ ...parked, requestId: 'corrupt' }, APPROVE_ALL);
+    expect(corrupt.status).toBe(400);
+    const page = await parked.harness.exchange('/oauth/authorize/corrupt', {
+      headers: parked.browser.headers,
+    });
+    expect(page.status).toBe(400);
   });
 
   it('§10.4 counts the decision against the session limit', async () => {

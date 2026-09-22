@@ -9,7 +9,7 @@ export interface RateLimitOptions {
   readonly now: Clock;
 }
 
-export type RateLimitDecision =
+type RateLimitDecision =
   { readonly allowed: true } | { readonly allowed: false; readonly retryAfterSeconds: number };
 
 export interface RateLimiter {

@@ -12,7 +12,7 @@ const redirectUri = z.string().refine((text) => validateRedirectUri(text).ok, {
  * OAUTH-9 / OAUTH-5: the required fields, the optional fields validated when
  * present, everything else passed through untouched.
  */
-export const cimdDocumentSchema = z.looseObject({
+const cimdDocumentSchema = z.looseObject({
   client_id: httpsUrl,
   client_name: z.string().trim().min(1),
   redirect_uris: z.array(redirectUri).min(1),
@@ -33,6 +33,15 @@ export const cimdDocumentSchema = z.looseObject({
 export type CimdDocument = z.output<typeof cimdDocumentSchema>;
 
 /**
+ * Every problem zod found, path first, so an operator can fix a document in one pass.
+ */
+export function describeIssues(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => `${issue.path.map(String).join('.')}: ${issue.message}`)
+    .join('; ');
+}
+
+/**
  * OAUTH-9: the document's `client_id` must be exactly the URL it was
  * fetched from; a hosted document may not claim another identity.
  */
@@ -44,9 +53,7 @@ export function parseCimdDocument(
   | { readonly ok: false; readonly reason: string } {
   const parsed = cimdDocumentSchema.safeParse(json);
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const path = issue?.path.map(String).join('.') ?? '';
-    return { ok: false, reason: `${path}: ${issue?.message ?? 'invalid'}` };
+    return { ok: false, reason: describeIssues(parsed.error) };
   }
   return parsed.data.client_id === clientId
     ? { ok: true, document: parsed.data }

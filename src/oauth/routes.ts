@@ -15,7 +15,9 @@ import {
   TOKEN_PATH,
 } from './metadata.ts';
 
+import type { ConsentPageHandler } from './authorize.ts';
 import type { OAuthHandler } from './request-context.ts';
+import type { ConsentRevokeHandler } from './revoke.ts';
 import type { IdentityEnvironment } from '../identity/context.ts';
 
 export interface OAuthRouteHandlers {
@@ -24,9 +26,9 @@ export interface OAuthRouteHandlers {
   readonly token: OAuthHandler;
   readonly revoke: OAuthHandler;
   readonly authorize: OAuthHandler;
-  readonly consentPage: OAuthHandler;
+  readonly consentPage: ConsentPageHandler;
   readonly consentDecision: OAuthHandler;
-  readonly consentRevoke: OAuthHandler;
+  readonly consentRevoke: ConsentRevokeHandler;
 }
 
 export type OAuthRoutes = Hono<IdentityEnvironment>;
@@ -53,8 +55,12 @@ export function createOAuthRoutes(handlers: OAuthRouteHandlers): OAuthRoutes {
   app.use(`${AUTHORIZE_PATH}/*`, pageHeaders);
   app.get(AUTHORIZE_PATH, (context) => handlers.authorize(context));
   app.post(AUTHORIZE_PATH, (context) => handlers.consentDecision(context));
-  app.get(`${AUTHORIZE_PATH}/:id`, (context) => handlers.consentPage(context));
-  app.post(CONSENT_REVOKE_PATH, (context) => handlers.consentRevoke(context));
+  app.get(`${AUTHORIZE_PATH}/:id`, (context) =>
+    handlers.consentPage(context, context.req.param('id')),
+  );
+  app.post(CONSENT_REVOKE_PATH, (context) =>
+    handlers.consentRevoke(context, context.req.param('id')),
+  );
 
   return app;
 }

@@ -1,3 +1,5 @@
+import { fail, ok, type Result } from '../result.ts';
+
 import { type DynamicRegistrationOptions, registerDynamicClient } from './clients/dynamic.ts';
 import { auditPrefix } from './credentials.ts';
 import { OAuthError, respondRateLimited, respondWithOAuthError } from './errors.ts';
@@ -25,18 +27,18 @@ function isJsonContentType(request: Request): boolean {
   return type === 'application/json';
 }
 
-async function readJsonBody(request: Request): Promise<unknown> {
+async function readJsonBody(request: Request): Promise<Result<unknown, OAuthError>> {
   if (!isJsonContentType(request)) {
-    throw new OAuthError('invalid_client_metadata', 'the body must be application/json');
+    return fail(new OAuthError('invalid_client_metadata', 'the body must be application/json'));
   }
   const text = await request.text();
   if (Buffer.byteLength(text, 'utf8') > MAX_BODY_BYTES) {
-    throw new OAuthError('invalid_client_metadata', 'the request body is too large');
+    return fail(new OAuthError('invalid_client_metadata', 'the request body is too large'));
   }
   try {
-    return JSON.parse(text) as unknown;
+    return ok(JSON.parse(text) as unknown);
   } catch {
-    throw new OAuthError('invalid_client_metadata', 'the body is not valid JSON');
+    return fail(new OAuthError('invalid_client_metadata', 'the body is not valid JSON'));
   }
 }
 
@@ -50,18 +52,11 @@ export function createRegisterHandler(dependencies: RegistrationDependencies): O
     if (!limit.allowed) {
       return respondRateLimited(context, limit.retryAfterSeconds);
     }
-    let body: unknown;
-    try {
-      body = await readJsonBody(context.req.raw);
-    } catch (error) {
-      return respondWithOAuthError(
-        context,
-        error instanceof OAuthError
-          ? error
-          : new OAuthError('invalid_client_metadata', 'the body could not be read'),
-      );
+    const body = await readJsonBody(context.req.raw);
+    if (!body.ok) {
+      return respondWithOAuthError(context, body.error);
     }
-    const registered = registerDynamicClient(body, dependencies);
+    const registered = registerDynamicClient(body.value, dependencies);
     if (!registered.ok) {
       return respondWithOAuthError(context, registered.error);
     }

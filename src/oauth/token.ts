@@ -230,7 +230,7 @@ function refresh(
       familyId: record.familyId,
       parentId: record.id,
       scopes: requested,
-      resource: record.resource ?? canonicalResource(dependencies.publicUrl),
+      resource: record.resource,
       refreshExpiresAt: record.expiresAt,
     });
     if (!dependencies.repos.tokens.markReplaced(record.id, pair.refreshTokenId)) {
@@ -283,7 +283,7 @@ export function createTokenHandler(dependencies: TokenEndpointDependencies): OAu
       category: 'oauth',
       action,
       outcome: 'success',
-      clientId: form.value.get('client_id') ?? '',
+      clientId: result.value.clientId,
       tokenPrefix: auditPrefix(result.value.response.access_token),
       requestId: context.req.header('x-request-id'),
       ip,

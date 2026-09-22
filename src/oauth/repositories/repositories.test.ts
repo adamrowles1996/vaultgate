@@ -153,7 +153,7 @@ describe('authorization codes repository', () => {
       clientId: 'client-a',
       consentId: 'consent-1',
       redirectUri: 'https://a.example/cb',
-      codeChallenge: 'chal',
+      codeChallenge: 'challenge-fixture',
       resource: 'https://v/mcp',
       scopes: ['vault:read'],
       expiresAt: 100,
@@ -167,7 +167,7 @@ describe('authorization codes repository', () => {
         clientId: 'client-a',
         consentId: 'consent-1',
         redirectUri: 'https://a.example/cb',
-        codeChallenge: 'chal',
+        codeChallenge: 'challenge-fixture',
         resource: 'https://v/mcp',
         scopes: ['vault:read'],
         expiresAt: 100,
@@ -178,22 +178,22 @@ describe('authorization codes repository', () => {
     expect(repos.authorizationCodes.claim('other', 21)).toStrictEqual({ kind: 'unknown' });
   });
 
-  it('stores a code without a resource', () => {
+  it('reports a code that was already used at insert time as reused', () => {
     const repos = seeded();
     repos.authorizationCodes.insert({
       codeHash: 'x',
       clientId: 'client-a',
       consentId: 'consent-1',
       redirectUri: 'https://a.example/cb',
-      codeChallenge: 'chal',
-      resource: undefined,
+      codeChallenge: 'challenge-fixture',
+      resource: 'https://v/mcp',
       scopes: [],
       expiresAt: 1,
       usedAt: 3,
     });
     expect(repos.authorizationCodes.claim('x', 4)).toMatchObject({
       kind: 'reused',
-      code: { resource: undefined, usedAt: 3 },
+      code: { usedAt: 3 },
     });
   });
 });
@@ -204,11 +204,8 @@ describe('tokens repository', () => {
     const first = token({});
     repos.tokens.insert(first);
     repos.tokens.insert(token({ id: 't2', tokenHash: 'h2', kind: 'refresh', parentId: 't1' }));
-    repos.tokens.insert(
-      token({ id: 't3', tokenHash: 'h3', familyId: 'other', resource: undefined }),
-    );
+    repos.tokens.insert(token({ id: 't3', tokenHash: 'h3', familyId: 'other' }));
     expect(repos.tokens.findByHash('h1')).toStrictEqual(first);
-    expect(repos.tokens.findByHash('h3')?.resource).toBeUndefined();
     expect(repos.tokens.findByHash('none')).toBeUndefined();
     expect(repos.tokens.markReplaced('t2', 't3')).toBe(true);
     expect(repos.tokens.markReplaced('t2', 't1')).toBe(false);

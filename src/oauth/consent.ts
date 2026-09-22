@@ -8,46 +8,43 @@ import {
   rateLimitKey,
   redirectToClient,
   redirectWithError,
+  type LivePending,
 } from './authorize-shared.ts';
 import { pendingScopes } from './authorize.ts';
 import { APPROVE, scopeFieldName } from './consent-page.ts';
 import { auditPrefix, CREDENTIAL_PREFIX, hashCredential, mintCredential } from './credentials.ts';
 import { OAuthError } from './errors.ts';
-import { type FormFields, readForm } from './form.ts';
+import { type FormFields, readForm, requireField } from './form.ts';
 
-import type { SessionState } from '../identity/session-manager.ts';
-import type { PendingAuthorizationRecord } from './repositories/pending-authorizations.ts';
 import type { OAuthContext, OAuthHandler } from './request-context.ts';
 import type { Scope } from './scopes.ts';
+import type { SessionState } from '../identity/session-manager.ts';
 
 const MAX_FORM_BYTES = 16 * 1024;
 
 /**
  * OAUTH-19: five minutes.
  */
-export const CODE_TTL_MS = 5 * 60 * 1000;
+const CODE_TTL_MS = 5 * 60 * 1000;
 
 interface Decision {
-  readonly pending: PendingAuthorizationRecord;
+  readonly pending: LivePending;
   readonly session: SessionState;
   readonly form: FormFields;
 }
 
-function target(pending: PendingAuthorizationRecord): {
+function target(pending: LivePending): {
   readonly redirectUri: string;
   readonly state: string | undefined;
 } {
-  return {
-    redirectUri: pending.parameters['redirect_uri'] ?? '',
-    state: pending.parameters['state'],
-  };
+  return { redirectUri: pending.parameters.redirect_uri, state: pending.parameters.state };
 }
 
 /**
  * OAUTH-18: the ticked subset of what was requested; `vault:read` arrives
  * as a hidden field because its checkbox is disabled.
  */
-function tickedScopes(pending: PendingAuthorizationRecord, form: FormFields): readonly Scope[] {
+function tickedScopes(pending: LivePending, form: FormFields): readonly Scope[] {
   return pendingScopes(pending).filter((scope) => form.get(scopeFieldName(scope)) === 'on');
 }
 
@@ -57,7 +54,7 @@ function issueCode(
   scopes: readonly Scope[],
 ): string {
   const { pending, session } = decision;
-  const clientId = pending.parameters['client_id'] ?? '';
+  const clientId = pending.parameters.client_id;
   const at = dependencies.now();
   const code = mintCredential(CREDENTIAL_PREFIX.authorizationCode, dependencies.random);
   transaction(dependencies.repos.db, () => {
@@ -83,9 +80,9 @@ function issueCode(
       codeHash: hashCredential(code),
       clientId,
       consentId,
-      redirectUri: pending.parameters['redirect_uri'] ?? '',
-      codeChallenge: pending.parameters['code_challenge'] ?? '',
-      resource: pending.parameters['resource'],
+      redirectUri: pending.parameters.redirect_uri,
+      codeChallenge: pending.parameters.code_challenge,
+      resource: pending.parameters.resource,
       scopes,
       expiresAt: at + CODE_TTL_MS,
       usedAt: undefined,
@@ -104,7 +101,7 @@ function deny(
     action: 'consent_denied',
     outcome: 'success',
     operatorId: decision.session.operatorId,
-    clientId: decision.pending.parameters['client_id'] ?? '',
+    clientId: decision.pending.parameters.client_id,
     requestId: context.get('requestId'),
     ip: dependencies.clientIp(context),
   });
@@ -131,7 +128,7 @@ function approve(
     action: 'consent_granted',
     outcome: 'success',
     operatorId: decision.session.operatorId,
-    clientId: decision.pending.parameters['client_id'] ?? '',
+    clientId: decision.pending.parameters.client_id,
     tokenPrefix: auditPrefix(code),
     requestId: context.get('requestId'),
     ip: dependencies.clientIp(context),
@@ -160,7 +157,8 @@ async function readDecision(
   if (denied !== undefined) {
     return denied;
   }
-  const pending = livePending(dependencies, form.value.get('request_id') ?? '');
+  const requestId = requireField(form.value, 'request_id');
+  const pending = requestId.ok ? livePending(dependencies, requestId.value) : undefined;
   if (pending === undefined) {
     return errorPage(
       context,

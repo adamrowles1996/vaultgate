@@ -1,15 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  cimdDocument,
   createOAuthHarness,
   type Exchange,
   type OAuthHarness,
-  flattenHtml,
-  parseConsentForm,
   RESOURCE,
   type SignedIn,
 } from '../test-support/oauth-harness.ts';
+import { cimdDocument, flattenHtml, parseConsentForm } from '../test-support/oauth-http.ts';
 
 /**
  * RFC 7636 Appendix B challenge.

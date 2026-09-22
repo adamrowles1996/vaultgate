@@ -33,7 +33,7 @@ export interface Grant {
 /**
  * OAUTH-26 body.
  */
-export interface TokenResponse {
+interface TokenResponse {
   readonly access_token: string;
   readonly token_type: 'Bearer';
   readonly expires_in: number;
@@ -43,6 +43,7 @@ export interface TokenResponse {
 }
 
 export interface IssuedPair {
+  readonly clientId: string;
   readonly response: TokenResponse;
   readonly accessTokenId: string;
   readonly refreshTokenId: string;
@@ -86,6 +87,7 @@ export function issueTokenPair(options: TokenIssuerOptions, grant: Grant): Issue
     expiresAt: grant.refreshExpiresAt ?? at + options.refreshTokenTtlMs,
   });
   return {
+    clientId: grant.clientId,
     accessTokenId,
     refreshTokenId,
     response: {

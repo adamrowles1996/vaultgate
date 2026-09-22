@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import { fail, ok, type Result } from '../result.ts';
 
 import { OAuthError } from './errors.ts';
@@ -133,10 +135,33 @@ export async function parseAuthorizationRequest(
       );
 }
 
+const pendingParametersSchema = z.object({
+  client_id: z.string(),
+  client_name: z.string(),
+  client_mode: z.enum(['cimd', 'dcr', 'preregistered']),
+  loopback_only: z.enum(['0', '1']),
+  redirect_uri: z.string(),
+  redirect_host: z.string(),
+  code_challenge: z.string(),
+  resource: z.string(),
+  scope: z.string(),
+  state: z.string().optional(),
+});
+
 /**
  * What the pending authorization keeps: everything needed to render consent
  * and issue the code without a second client resolution.
  */
+export type PendingParameters = z.output<typeof pendingParametersSchema>;
+
+/**
+ * A stored row read back through the schema, so nothing downstream guesses.
+ */
+export function parsePendingParameters(raw: unknown): PendingParameters | undefined {
+  const parsed = pendingParametersSchema.safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
+}
+
 export function toPendingParameters(request: AuthorizationRequest): Record<string, string> {
   return {
     client_id: request.client.clientId,

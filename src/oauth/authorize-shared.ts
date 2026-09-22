@@ -2,6 +2,7 @@ import { getCookie, setCookie } from 'hono/cookie';
 
 import { safeNextPath } from '../identity/provider.ts';
 
+import { parsePendingParameters, type PendingParameters } from './authorize-request.ts';
 import { renderErrorPage } from './consent-page.ts';
 import {
   CREDENTIAL_PREFIX,
@@ -18,7 +19,6 @@ import type { ClientResolver } from './clients/resolve.ts';
 import type { Clock } from './clock.ts';
 import type { RateLimiter } from './rate-limit.ts';
 import type { OAuthRepos } from './repositories/index.ts';
-import type { PendingAuthorizationRecord } from './repositories/pending-authorizations.ts';
 import type { ClientIpResolver, OAuthContext } from './request-context.ts';
 
 export interface AuthorizeDependencies {
@@ -54,7 +54,7 @@ const SECOND_MS = 1000;
  * ID-16 applied to the binding cookie: `__Host-` and `Secure` unless the
  * deployment is plain-http loopback.
  */
-export function bindingCookieName(publicUrl: string): string {
+function bindingCookieName(publicUrl: string): string {
   return publicUrl.startsWith('https://') ? `${HOST_PREFIX}${BINDING_COOKIE}` : BINDING_COOKIE;
 }
 
@@ -92,25 +92,27 @@ export function ensureBindingCookie(
 }
 
 /**
- * Every key the current browser can prove: its session, its binding cookie.
+ * Every key the signed-in browser can prove: its session, and the binding
+ * cookie it may have received before logging in.
  */
 function bindingHashes(
   context: OAuthContext,
   dependencies: AuthorizeDependencies,
-  session: SessionState | undefined,
+  session: SessionState,
 ): readonly string[] {
   const cookie = bindingCookie(context, dependencies);
-  return [
-    ...(session === undefined ? [] : [hashCredential(session.idHash)]),
-    ...(cookie === undefined ? [] : [hashCredential(cookie)]),
-  ];
+  const hashes = [hashCredential(session.idHash)];
+  if (cookie !== undefined) {
+    hashes.push(hashCredential(cookie));
+  }
+  return hashes;
 }
 
 export function isBoundToBrowser(
   context: OAuthContext,
   dependencies: AuthorizeDependencies,
-  session: SessionState | undefined,
-  pending: PendingAuthorizationRecord,
+  session: SessionState,
+  pending: LivePending,
 ): boolean {
   return bindingHashes(context, dependencies, session).includes(pending.sessionBindingHash);
 }
@@ -135,12 +137,27 @@ export function errorPage(
   return context.html(renderErrorPage(error), status);
 }
 
+export interface LivePending {
+  readonly id: string;
+  readonly sessionBindingHash: string;
+  readonly parameters: PendingParameters;
+}
+
+/**
+ * A pending request that exists, has not expired and reads back intact.
+ */
 export function livePending(
   dependencies: AuthorizeDependencies,
   id: string,
-): PendingAuthorizationRecord | undefined {
+): LivePending | undefined {
   const pending = dependencies.repos.pendingAuthorizations.find(id);
-  return pending === undefined || pending.expiresAt <= dependencies.now() ? undefined : pending;
+  if (pending === undefined || pending.expiresAt <= dependencies.now()) {
+    return undefined;
+  }
+  const parameters = parsePendingParameters(pending.parameters);
+  return parameters === undefined
+    ? undefined
+    : { id: pending.id, sessionBindingHash: pending.sessionBindingHash, parameters };
 }
 
 /**

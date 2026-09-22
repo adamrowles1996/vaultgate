@@ -6,6 +6,8 @@ import { OAuthError } from '../errors.ts';
 import { validateRedirectUri } from '../redirect-uri.ts';
 import { enabledScopes, isScope, type Scope } from '../scopes.ts';
 
+import { describeIssues } from './cimd-document.ts';
+
 import type { Clock } from '../clock.ts';
 import type { ClientsRepo } from '../repositories/clients.ts';
 
@@ -31,7 +33,7 @@ const registrationSchema = z
   })
   .strip();
 
-export type RegistrationRequest = z.output<typeof registrationSchema>;
+type RegistrationRequest = z.output<typeof registrationSchema>;
 
 export interface RegistrationResponse extends RegistrationRequest {
   readonly client_id: string;
@@ -44,12 +46,6 @@ export interface DynamicRegistrationOptions {
   readonly random: RandomSource;
   readonly newId: () => string;
   readonly enableWriteScope: boolean;
-}
-
-function describeIssue(error: z.ZodError): string {
-  const issue = error.issues[0];
-  const path = issue?.path.map(String).join('.') ?? '';
-  return `${path}: ${issue?.message ?? 'invalid'}`;
 }
 
 function invalidScope(scope: string | undefined, enabled: readonly Scope[]): string | undefined {
@@ -86,7 +82,7 @@ export function registerDynamicClient(
   }
   const parsed = registrationSchema.safeParse(body);
   if (!parsed.success) {
-    const issue = describeIssue(parsed.error);
+    const issue = describeIssues(parsed.error);
     const code = issue.startsWith('redirect_uris')
       ? 'invalid_redirect_uri'
       : 'invalid_client_metadata';

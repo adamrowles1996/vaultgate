@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { createOAuthHarness, jsonBody, parseJson } from '../test-support/oauth-harness.ts';
+import { createOAuthHarness } from '../test-support/oauth-harness.ts';
+import { jsonBody, parseJson } from '../test-support/oauth-http.ts';
 
 const METADATA = { redirect_uris: ['https://agent.example.com/cb'], client_name: 'Agent' };
 

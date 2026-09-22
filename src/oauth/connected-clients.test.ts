@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { setUpOperator } from '../test-support/identity-app.ts';
-import {
-  createOAuthHarness,
-  formBody,
-  OPERATOR_ID,
-  RESOURCE,
-} from '../test-support/oauth-harness.ts';
+import { createOAuthHarness, OPERATOR_ID, RESOURCE } from '../test-support/oauth-harness.ts';
+import { formBody } from '../test-support/oauth-http.ts';
 
 import { renderConnectedClients } from './connected-clients.ts';
 import { CREDENTIAL_PREFIX, hashCredential, mintCredential } from './credentials.ts';
@@ -56,6 +52,26 @@ function connect(harness: ReturnType<typeof createOAuthHarness>, operatorId: str
 describe('renderConnectedClients', () => {
   it('OAUTH-30 says so when nothing is connected', () => {
     expect(renderConnectedClients([], 'csrf').markup).toContain('No clients are connected.');
+  });
+
+  it('OAUTH-30 falls back to the client id for an unnamed client that was never used', () => {
+    const markup = renderConnectedClients(
+      [
+        {
+          id: 'consent-9',
+          operatorId: OPERATOR_ID,
+          clientId: 'vg_c_unnamed',
+          scopes: ['vault:read'],
+          grantedAt: 0,
+          revokedAt: undefined,
+          clientName: undefined,
+          lastUsedAt: undefined,
+        },
+      ],
+      'csrf',
+    ).markup;
+    expect(markup).toContain('<td>vg_c_unnamed</td>');
+    expect(markup).toContain('<td>never</td>');
   });
 });
 

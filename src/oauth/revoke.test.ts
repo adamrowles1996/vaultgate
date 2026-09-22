@@ -3,12 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   createOAuthHarness,
   type Exchange,
-  formBody,
   type OAuthHarness,
   OPERATOR_ID,
-  parseJson,
   RESOURCE,
 } from '../test-support/oauth-harness.ts';
+import { formBody, parseJson } from '../test-support/oauth-http.ts';
 
 import { CREDENTIAL_PREFIX, hashCredential, mintCredential } from './credentials.ts';
 

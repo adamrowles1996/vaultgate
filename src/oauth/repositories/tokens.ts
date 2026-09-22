@@ -16,14 +16,14 @@ const tokenRow = z.object({
   client_id: z.string(),
   consent_id: z.string(),
   scopes: jsonStringArray,
-  resource: optionalText,
+  resource: z.string(),
   issued_at: timestamp,
   expires_at: timestamp,
   revoked_at: optionalTimestamp,
   last_used_at: optionalTimestamp,
 });
 
-export type TokenKind = z.output<typeof tokenRow>['kind'];
+type TokenKind = z.output<typeof tokenRow>['kind'];
 
 export interface TokenRecord {
   readonly id: string;
@@ -38,7 +38,7 @@ export interface TokenRecord {
   readonly clientId: string;
   readonly consentId: string;
   readonly scopes: readonly string[];
-  readonly resource: string | undefined;
+  readonly resource: string;
   readonly issuedAt: number;
   readonly expiresAt: number;
   readonly revokedAt: number | undefined;
@@ -97,7 +97,7 @@ export function createTokensRepo(database: DatabaseSync): TokensRepo {
         record.clientId,
         record.consentId,
         JSON.stringify(record.scopes),
-        record.resource ?? null,
+        record.resource,
         record.issuedAt,
         record.expiresAt,
         record.revokedAt ?? null,

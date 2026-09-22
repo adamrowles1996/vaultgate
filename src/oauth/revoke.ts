@@ -10,7 +10,7 @@ import { readForm, requireField } from './form.ts';
 import type { AuditSink } from './audit.ts';
 import type { Clock } from './clock.ts';
 import type { ConnectedClient } from './repositories/consents.ts';
-import type { ClientIpResolver, OAuthHandler } from './request-context.ts';
+import type { ClientIpResolver, OAuthContext, OAuthHandler } from './request-context.ts';
 import type { Guards } from '../identity/guards.ts';
 import type { OAuthRepos } from './repositories/index.ts';
 
@@ -114,8 +114,12 @@ export function listConnectedClients(
  * `POST /oauth/consents/:id/revoke` (OAUTH-30), the account page's
  * "Disconnect" button: same session and ID-18 checks as every account action.
  */
-export function createConsentRevokeHandler(dependencies: RevocationDependencies): OAuthHandler {
-  return async (context) => {
+export type ConsentRevokeHandler = (context: OAuthContext, consentId: string) => Promise<Response>;
+
+export function createConsentRevokeHandler(
+  dependencies: RevocationDependencies,
+): ConsentRevokeHandler {
+  return async (context, consentId) => {
     const session = context.get('session');
     if (session === undefined) {
       return dependencies.guards.deny(context, 'no session');
@@ -126,7 +130,6 @@ export function createConsentRevokeHandler(dependencies: RevocationDependencies)
     if (denied !== undefined) {
       return denied;
     }
-    const consentId = context.req.param('id') ?? '';
     return revokeConsent(dependencies, session.operatorId, consentId) === undefined
       ? dependencies.guards.deny(context, 'unknown consent')
       : context.redirect('/account', 303);

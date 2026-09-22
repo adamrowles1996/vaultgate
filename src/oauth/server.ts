@@ -36,7 +36,7 @@ import type { ConnectedClient } from './repositories/consents.ts';
 import type { TokenVerifier } from './verified-token.ts';
 import type { DatabaseSync } from 'node:sqlite';
 
-export type AuthorizationServerConfig = Pick<
+type AuthorizationServerConfig = Pick<
   Config,
   'publicUrl' | 'enableWriteScope' | 'oauthClients' | 'accessTokenTtlMs' | 'refreshTokenTtlMs'
 >;
