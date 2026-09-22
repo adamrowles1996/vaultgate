@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Azure template: `VAULTGATE_ENABLE_WRITE_SCOPE` is rendered as `true`/`false` (ARM `string()` produced
+  `True`, which the configuration schema rejects, so the container crash-looped).
 - ID-15: revoking a connected client from the account page now needs a password confirmation
   within the last five minutes, like every other sensitive action; the Disconnect buttons appear
   only inside that window and the page points at the re-authentication form until then.
