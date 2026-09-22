@@ -11,10 +11,13 @@ authorization server, so hosted AI agents such as Claude, Claude Cowork,
 Claude Code and Codex can use your vault over HTTPS without ever holding your
 master password.
 
-> **Status: pre-release.** The repository currently contains the specification,
-> the delivery plan and the project scaffold (milestone M0). Follow
-> [`docs/PLAN.md`](docs/PLAN.md) for progress. Nothing here is ready to point
-> at a real vault yet.
+> **Status: pre-release.** The implementation milestones for configuration and
+> storage (M1), identity (M2), the MCP resource server (M4), the managed
+> `bw serve` backend (M5), packaging (M6) and Azure (M7) are merged on `main`;
+> the OAuth 2.1 authorization server (M3) is being completed on a branch, and
+> M8 (hardening, compatibility evidence, user documentation) is in progress.
+> Until M3 merges, `/mcp` challenges every request and no token can be issued.
+> Follow [`docs/PLAN.md`](docs/PLAN.md) for progress.
 
 ## Why
 
@@ -70,14 +73,15 @@ plus `vaultgate-<version>.tgz` and its `.sha256` for the script install.
 
 ## Documentation
 
-| Document                                       | What it is                                        |
-| ---------------------------------------------- | ------------------------------------------------- |
-| [`docs/spec/`](docs/spec/README.md)            | The normative specification, one file per concern |
-| [`docs/PLAN.md`](docs/PLAN.md)                 | Milestones, exit criteria, risks                  |
-| [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | Assets, attackers, mitigations, residual risks    |
-| [`docs/adr/`](docs/adr/README.md)              | Architecture decision records                     |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development workflow and quality gates            |
-| [`SECURITY.md`](SECURITY.md)                   | Reporting vulnerabilities                         |
+| Document                                       | What it is                                                                                                                                                       |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`docs/guides/`](docs/guides/README.md)        | User guides: first run, connecting Claude, Claude Code, Codex and the Inspector, tools and scopes, self-hosted Bitwarden, backup, upgrading, security model, FAQ |
+| [`docs/spec/`](docs/spec/README.md)            | The normative specification, one file per concern                                                                                                                |
+| [`docs/PLAN.md`](docs/PLAN.md)                 | Milestones, exit criteria, risks                                                                                                                                 |
+| [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | Assets, attackers, mitigations, residual risks                                                                                                                   |
+| [`docs/adr/`](docs/adr/README.md)              | Architecture decision records                                                                                                                                    |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development workflow and quality gates                                                                                                                           |
+| [`SECURITY.md`](SECURITY.md)                   | Reporting vulnerabilities                                                                                                                                        |
 
 ## Development
 
