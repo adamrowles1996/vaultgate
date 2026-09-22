@@ -39,7 +39,7 @@
     "lint:lockfile": "lockfile-lint --path package-lock.json --type npm --allowed-hosts npm --validate-https --validate-integrity --validate-package-names",
     "lint:manifest": "sort-package-json --check",
     "lint:markdown": "markdownlint-cli2",
-    "lint:secrets": "gitleaks git --no-banner --redact",
+    "lint:secrets": "gitleaks git --no-banner --redact --log-opts=HEAD",
     "lint:shell": "shellcheck scripts/*.sh install.sh deploy/lib/*.sh && shfmt --diff --indent 2 --case-indent scripts/*.sh install.sh deploy/lib/*.sh",
     "lint:spelling": "cspell --no-progress --gitignore .",
     "lint:workflows": "actionlint",
