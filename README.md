@@ -53,6 +53,21 @@ Claude / Codex ──HTTPS + Bearer──▶ vaultgate ──loopback──▶ b
    secret field at a time, generate passwords and, if allowed, create or update
    items.
 
+## Install
+
+TLS is always terminated in front of vaultgate; every method below ends with a
+public `https://` origin that hosted agents can reach.
+
+| Method                                  | Guide                                                                            |
+| --------------------------------------- | -------------------------------------------------------------------------------- |
+| Docker Compose with Caddy (recommended) | [`docs/guides/install-docker-compose.md`](docs/guides/install-docker-compose.md) |
+| Debian or Ubuntu VM, `install.sh`       | [`docs/guides/install-linux.md`](docs/guides/install-linux.md)                   |
+| Your own reverse proxy (Caddy, nginx)   | [`docs/guides/reverse-proxy.md`](docs/guides/reverse-proxy.md)                   |
+
+Releases publish `ghcr.io/adamrowles1996/vaultgate:<version>` for `linux/amd64` and
+`linux/arm64`, signed with Sigstore cosign and carrying an SBOM and a provenance attestation,
+plus `vaultgate-<version>.tgz` and its `.sha256` for the script install.
+
 ## Documentation
 
 | Document                                       | What it is                                        |
@@ -70,7 +85,7 @@ Requires Node 26 (see `.nvmrc`) and [mise](https://mise.jdx.dev) for the pinned 
 linters.
 
 ```bash
-mise install         # actionlint, shellcheck, shfmt, gitleaks, editorconfig-checker
+mise install         # actionlint, shellcheck, shfmt, hadolint, gitleaks, editorconfig-checker
 npm ci
 npm run dev          # runs src/main.ts directly with Node's type stripping
 npm run quality      # format, every linter, types, dead code, file sizes, provenance, tests at 100%

@@ -8,6 +8,7 @@ export default {
   ],
   '*.md': ['markdownlint-cli2 --fix', 'prettier --write', 'cspell --no-must-find-files'],
   '*.sh': ['shellcheck', 'shfmt --diff --indent 2 --case-indent'],
+  Dockerfile: ['hadolint'],
   '.github/workflows/*.yml': ['actionlint'],
   '*.{json,jsonc,yml,yaml}': ['prettier --write'],
   'package.json': ['sort-package-json'],

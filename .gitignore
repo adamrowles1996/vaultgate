@@ -22,3 +22,6 @@ data/
 
 # Logs
 *.log
+
+# Release assets built by scripts/release-assets.sh
+release/
