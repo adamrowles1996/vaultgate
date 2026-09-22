@@ -26,6 +26,11 @@ All notable changes to this project are documented here. The format follows
   unit; a tag-driven release workflow that publishes the signed multi-arch image with SBOM and
   provenance and a GitHub release with `vaultgate-<version>.tgz` and its `.sha256`; a hadolint
   gate and a pull-request image build.
+- Storage (spec §07): the SQLite store on `node:sqlite` with the STORE-2 pragmas (network
+  filesystem mode included), a `0600` database file, the checksummed forward-only migration
+  runner that refuses a changed or newer schema, the v1 schema with its hot-path indexes, typed
+  query helpers, and the hourly retention task; `/readyz` now reports the store and answers
+  `503` with the failing components.
 - Azure Container Apps deployment (spec §09.3): `deploy/azure/` ARM template with linked
   modules (Log Analytics, Container Apps environment, Key Vault with RBAC and purge protection,
   Azure Files share at `/data`, single-replica Container App with Key Vault secret references),

@@ -124,6 +124,9 @@ const sharedRules = {
 
   // -- Node ---------------------------------------------------------------
   'n/prefer-node-protocol': 'error',
+  // ADR 0001 chose node:sqlite (no experimental warning since Node 24); eslint-plugin-n's
+  // feature table still lists it as experimental.
+  'n/no-unsupported-features/node-builtins': ['error', { ignores: ['sqlite'] }],
   'n/no-process-exit': 'error',
   'n/no-sync': 'off', // start-up and repo scripts read files synchronously on purpose
   'n/no-unpublished-import': 'off', // private package; knip and dependency-cruiser cover dev deps

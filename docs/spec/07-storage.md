@@ -8,9 +8,19 @@
   `busy_timeout=5000`. When `VAULTGATE_SQLITE_NETWORK_FS=true` (Azure Files) the journal mode is
   `TRUNCATE`, `synchronous=FULL`, and `locking_mode=EXCLUSIVE`, and the deployment MUST run a
   single replica (see 09).
-- **STORE-3** Migrations are numbered SQL files in `src/storage/migrations/` applied forward-only
-  inside one transaction each and recorded in `schema_migrations(version, applied_at, checksum)`.
-  A checksum mismatch on an applied migration is a fatal start-up error.
+- **STORE-3** Migrations are numbered TypeScript modules in `src/storage/migrations/` (each
+  exporting `{ version, name, sql }`, registered in `migrations/index.ts`), applied forward-only
+  inside one transaction each and recorded in `schema_migrations(version, applied_at, checksum)`
+  with the SHA-256 of the migration's SQL. Re-running is a no-op. A checksum mismatch on an
+  applied migration, or an applied version this build does not know (OPS-8), is a fatal start-up
+  error.
+
+### Column conventions
+
+- Identifiers (`id`, `*_id`) are TEXT UUIDs.
+- Every `*_at` column and `audit_events.at` is an INTEGER holding milliseconds since the Unix
+  epoch (`Date.now()`).
+- JSON columns are TEXT holding a serialised document; booleans are INTEGER `0`/`1`.
 
 ## 7.2 Schema (v1)
 
@@ -38,9 +48,9 @@
 ## 7.3 Retention
 
 - **STORE-6** A maintenance task runs hourly: delete expired authorization codes, expired
-  sessions, expired bootstrap tokens, tokens revoked or expired more than 7 days ago, login
-  attempts older than 24 hours, CIMD cache rows past expiry, audit events past retention. Each
-  run logs counts.
+  sessions, expired bootstrap tokens, expired pending authorizations, tokens revoked or expired
+  more than 7 days ago, login attempts older than 24 hours, CIMD cache rows past expiry, audit
+  events past retention. Each run logs counts and the first run happens at start-up.
 
 ## 7.4 Backup and restore
 
