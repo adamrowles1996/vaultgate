@@ -158,6 +158,6 @@ export function createAuthorizationServer(
     revokeConsent: (operatorId, consentId) => revokeConsent(shared, operatorId, consentId),
     listConnectedClients: (operatorId) => listConnectedClients(shared, operatorId),
     renderConnectedClients: (session) =>
-      renderConnectedClients(listConnectedClients(shared, session.operatorId), session.csrfToken),
+      renderConnectedClients(listConnectedClients(shared, session.operatorId), session),
   });
 }

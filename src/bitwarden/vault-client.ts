@@ -167,9 +167,11 @@ export class BwServeVaultClient implements VaultClient {
     if (!result.ok) {
       return result;
     }
+    // The "No Folder" pseudo-folder has a null id on older CLIs and an
+    // empty-string id on current ones; neither is a folder (spec §06.2).
     const folders: Folder[] = [];
     for (const folder of result.value.data) {
-      if (folder.id !== null) {
+      if (folder.id !== null && folder.id !== '') {
         folders.push({ id: folder.id, name: folder.name });
       }
     }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { SCOPES_SUPPORTED as OAUTH_SCOPES } from '../oauth/scopes.ts';
+
 import {
   effectiveScopes,
   enabledScopes,
@@ -16,6 +18,16 @@ import {
 const byName = (a: string, b: string): number => a.localeCompare(b);
 
 describe('scopes', () => {
+  it('OAUTH-1 OAUTH-2 lists the scopes in the one order both metadata documents advertise', () => {
+    expect([...SCOPES]).toStrictEqual([
+      'vault:read',
+      'vault:reveal',
+      'vault:generate',
+      'vault:write',
+    ]);
+    expect([...OAUTH_SCOPES]).toStrictEqual([...SCOPES]);
+  });
+
   it('OAUTH-36 defines every scope once with a description and marks reveal and write as risky', () => {
     expect(SCOPE_DEFINITIONS.map((definition) => definition.scope)).toStrictEqual([...SCOPES]);
     expect(

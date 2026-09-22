@@ -13,13 +13,17 @@ import type { Config } from '../config/index.ts';
 const RESOURCE_DOCUMENTATION_URL = 'https://github.com/adamrowles1996/vaultgate#readme';
 
 /**
-Header values shared by every CORS-enabled route (OAUTH-37).
-*/
+ * Header values shared by every CORS-enabled route (OAUTH-37): every request
+ * header the SDK's Streamable HTTP entry reads, including the per-request
+ * `Mcp-Method` and `Mcp-Name` of the 2026-07-28 wire format.
+ */
 export const CORS_ALLOW_HEADERS = [
   'Authorization',
   'Content-Type',
   'Mcp-Session-Id',
   'Mcp-Protocol-Version',
+  'Mcp-Method',
+  'Mcp-Name',
 ] as const;
 export const CORS_EXPOSE_HEADERS = ['WWW-Authenticate', 'Mcp-Session-Id'] as const;
 

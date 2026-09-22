@@ -21,14 +21,15 @@ below are testable requirements.
 ## 3.2 Metadata documents
 
 - **OAUTH-1** The PRM document MUST contain `resource` (canonical resource), `authorization_servers`
-  (`[issuer]`), `scopes_supported` (`["vault:read","vault:reveal","vault:write","vault:generate"]`),
+  (`[issuer]`), `scopes_supported` (`["vault:read","vault:reveal","vault:generate","vault:write"]`),
   `bearer_methods_supported: ["header"]` and `resource_documentation`.
 - **OAUTH-2** The AS metadata MUST contain `issuer`, `authorization_endpoint`, `token_endpoint`,
   `revocation_endpoint`, `registration_endpoint`, `response_types_supported: ["code"]`,
   `grant_types_supported: ["authorization_code","refresh_token"]`,
   `code_challenge_methods_supported: ["S256"]`, `token_endpoint_auth_methods_supported: ["none"]`,
   `revocation_endpoint_auth_methods_supported: ["none"]`, `scopes_supported` (the scopes this
-  deployment will grant, OAUTH-16, so a client that requests everything advertised succeeds),
+  deployment will grant, OAUTH-16, so a client that requests everything advertised succeeds, in
+  the OAUTH-1 order),
   `client_id_metadata_document_supported: true`,
   `authorization_response_iss_parameter_supported: true`.
 - **OAUTH-3** Both documents MUST be served with `Content-Type: application/json`,
@@ -159,6 +160,10 @@ resource_metadata="…", error_description="…"`, emitted in one challenge, nev
 
 - **OAUTH-37** `/.well-known/*`, `/oauth/token`, `/oauth/revoke`, `/oauth/register` and `/mcp`
   answer `OPTIONS` preflight and set `Access-Control-Allow-Origin: *`,
-  `Access-Control-Allow-Headers: Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version`,
-  `Access-Control-Expose-Headers: WWW-Authenticate, Mcp-Session-Id`. Cookie-bearing routes
+  `Access-Control-Expose-Headers: WWW-Authenticate, Mcp-Session-Id` and
+  `Access-Control-Allow-Headers` listing exactly `Authorization`, `Content-Type`, `Mcp-Session-Id`,
+  `Mcp-Protocol-Version`, `Mcp-Method` and `Mcp-Name`: every request header the SDK's Streamable
+  HTTP entry reads, the last two being the per-request headers of the 2026-07-28 wire format
+  (`Mcp-Param-*` headers exist only for tools that declare `x-mcp-header` inputs, which none of
+  the vault tools do). Cookie-bearing routes
   (`/login`, `/oauth/authorize`, `/account`) never set CORS headers.

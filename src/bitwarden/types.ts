@@ -133,7 +133,7 @@ export const itemListSchema = z.object({
 });
 
 /**
-`bw` lists a pseudo folder `{ id: null, name: 'No Folder' }`; the client drops it.
+`bw` lists a pseudo folder named `No Folder` whose id is `""` (current CLIs) or `null` (older ones); the client drops it.
 */
 const folderSchema = z.object({
   id: z.string().nullable(),

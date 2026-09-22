@@ -72,7 +72,13 @@ export interface OAuthHarness {
   /**
   A real session minted through the identity session manager, without the login pages.
   */
-  readonly signIn: (operatorId?: string) => SignedIn;
+  readonly signIn: (
+    operatorId?: string,
+    /**
+    `reauthenticated` marks the session as inside the ID-15 re-authentication window.
+    */
+    options?: { readonly reauthenticated?: boolean },
+  ) => SignedIn;
   /**
   Creates the operator row when absent, for tests that seed consents without signing in.
   */
@@ -214,11 +220,14 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
     ensureOperator: (operatorId = OPERATOR_ID) => {
       ensureOperator(identity, operatorId);
     },
-    signIn: (operatorId = OPERATOR_ID) => {
+    signIn: (operatorId = OPERATOR_ID, signInOptions = {}) => {
       ensureOperator(identity, operatorId);
       const started = sessions.start(operatorId, { ip: CLIENT_IP, userAgent: 'test' });
+      if (signInOptions.reauthenticated === true) {
+        sessions.markReauthenticated(started.state.idHash);
+      }
       return {
-        session: started.state,
+        session: sessions.resolve(started.id) ?? started.state,
         headers: {
           cookie: `${cookieName}=${started.id}`,
           origin: new URL(config.publicUrl).origin,

@@ -179,7 +179,7 @@ export class FakeBwServe {
       context.json(
         success({
           object: 'list',
-          data: [...this.folders, { object: 'folder', id: null, name: 'No Folder' }],
+          data: [...this.folders, { object: 'folder', id: '', name: 'No Folder' }],
         }),
       ),
     );
