@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  type Browser,
   cimdDocument,
   createOAuthHarness,
   type Exchange,
@@ -10,6 +9,7 @@ import {
   openConsent,
   OPERATOR_ID,
   RESOURCE,
+  type SignedIn,
 } from '../test-support/oauth-harness.ts';
 
 import { hashCredential } from './credentials.ts';
@@ -21,7 +21,7 @@ const ISSUER = 'https://vault.example.com';
 
 interface Parked {
   readonly harness: OAuthHarness;
-  readonly browser: Browser;
+  readonly browser: SignedIn;
   readonly requestId: string;
   readonly csrfToken: string;
 }
@@ -41,7 +41,7 @@ function authorizeParameters(scope: string, state: string | null): Record<string
 
 async function parkOn(
   harness: OAuthHarness,
-  browser: Browser,
+  browser: SignedIn,
   scope: string,
   state: string | null = 'xyz',
 ): Promise<Parked> {
@@ -65,7 +65,7 @@ function decide(
 ): Promise<Exchange> {
   return parked.harness.exchange(
     '/oauth/authorize',
-    formBody({ request_id: parked.requestId, csrf_token: parked.csrfToken, ...fields }, headers),
+    formBody({ request_id: parked.requestId, csrf: parked.csrfToken, ...fields }, headers),
   );
 }
 
@@ -175,7 +175,7 @@ describe('POST /oauth/authorize', () => {
     const parked = await park();
     const wrongToken = await decide({ ...parked, csrfToken: 'nope' }, APPROVE_ALL);
     expect(wrongToken.status).toBe(403);
-    expect(wrongToken.text).toContain('could not be verified');
+    expect(wrongToken.text).toBe('Forbidden');
     const foreign = await decide(parked, APPROVE_ALL, {
       ...parked.browser.headers,
       origin: 'https://evil.example.com',
@@ -193,9 +193,10 @@ describe('POST /oauth/authorize', () => {
       stranger.headers,
     );
     expect(other.status).toBe(403);
+    expect(other.text).toContain('belongs to another browser');
     const anonymous = await decide(parked, APPROVE_ALL, { origin: ISSUER });
     expect(anonymous.status).toBe(403);
-    expect(anonymous.text).toContain('sign in to continue');
+    expect(anonymous.text).toBe('Forbidden');
   });
 
   it('OAUTH-14 rejects a malformed form, an unknown request id and a consumed request', async () => {

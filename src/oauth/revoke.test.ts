@@ -20,6 +20,7 @@ interface Family {
 }
 
 function issueFamily(harness: OAuthHarness, familyId: string, fill: number): Family {
+  harness.ensureOperator();
   harness.repos.clients.upsert({
     id: `client-${fill}`,
     clientId: CLIENT_ID,

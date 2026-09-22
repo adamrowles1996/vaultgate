@@ -5,7 +5,6 @@
  */
 import {
   auth,
-  OAuthError,
   type OAuthClientMetadata,
   type OAuthClientProvider,
   type OAuthDiscoveryState,
@@ -15,11 +14,11 @@ import {
 } from '@modelcontextprotocol/client';
 import { describe, expect, it } from 'vitest';
 
+import { setUpOperator } from '../test-support/identity-app.ts';
 import { postJsonRpc } from '../test-support/mcp-client.ts';
 import {
   cimdDocument,
   createOAuthHarness,
-  formBody,
   type HarnessOptions,
   type OAuthHarness,
   parseConsentForm,
@@ -28,6 +27,8 @@ import {
 } from '../test-support/oauth-harness.ts';
 
 import { hashCredential } from './credentials.ts';
+
+import type { Browser as CookieBrowser } from '../test-support/browser.ts';
 
 const CIMD_ID = 'https://agent.example.com/.well-known/oauth-client.json';
 const REDIRECT = 'https://agent.example.com/callback';
@@ -63,6 +64,7 @@ class TestProvider implements OAuthClientProvider {
   readonly clientMetadata: OAuthClientMetadata;
   clientMetadataUrl?: string;
   authorizationUrl: URL | undefined;
+  readonly invalidated: string[] = [];
 
   constructor(options: ProviderOptions = {}) {
     this.redirectUrl = options.redirectUrl ?? REDIRECT;
@@ -117,6 +119,17 @@ class TestProvider implements OAuthClientProvider {
   discoveryState(): OAuthDiscoveryState | undefined {
     return this.#discovery;
   }
+
+  /**
+   * What a real host does when the server reports `invalid_grant`: forget the
+   * tokens so the retry starts a fresh authorization instead of replaying.
+   */
+  invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): void {
+    this.invalidated.push(scope);
+    if (scope === 'tokens' || scope === 'all') {
+      this.#tokens = undefined;
+    }
+  }
 }
 
 type FetchFunction = (input: string | URL, init?: RequestInit) => Promise<Response>;
@@ -150,23 +163,24 @@ function authorizationPath(provider: TestProvider): string {
 /**
  * The human half: open the authorization URL signed in, approve every scope.
  */
-async function approveInBrowser(harness: OAuthHarness, provider: TestProvider): Promise<Callback> {
-  const browser = harness.signIn();
-  const started = await harness.exchange(authorizationPath(provider), { headers: browser.headers });
+async function approveInBrowser(
+  harness: OAuthHarness,
+  provider: TestProvider,
+  browser: CookieBrowser = harness.browser(harness.signIn()),
+): Promise<Callback> {
+  const started = await browser.get(authorizationPath(provider));
   expect(started.status).toBe(302);
-  const page = await harness.exchange(started.headers.get('location') ?? '', {
-    headers: browser.headers,
-  });
-  const form = parseConsentForm(page.text);
+  const page = await browser.get(started.headers.get('location') ?? '');
+  const form = parseConsentForm(await page.text());
   const fields: Record<string, string> = {
     request_id: form.requestId,
-    csrf_token: form.csrfToken,
+    csrf: form.csrfToken,
     decision: 'approve',
   };
   for (const scope of form.html.matchAll(/name="scope:([\w:]+)"/g)) {
     fields[`scope:${scope[1] ?? ''}`] = 'on';
   }
-  const decided = await harness.exchange('/oauth/authorize', formBody(fields, browser.headers));
+  const decided = await browser.submit('/oauth/authorize', fields);
   expect(decided.status).toBe(302);
   const callback = new URL(decided.headers.get('location') ?? '');
   expect(callback.searchParams.get('error')).toBeNull();
@@ -185,11 +199,15 @@ interface Handshake {
 /**
  * Discovery → registration → authorization redirect → consent → exchange.
  */
-async function handshake(harness: OAuthHarness, provider: TestProvider): Promise<Handshake> {
+async function handshake(
+  harness: OAuthHarness,
+  provider: TestProvider,
+  browser?: CookieBrowser,
+): Promise<Handshake> {
   const fetchFunction = fetchThrough(harness);
   const first = await auth(provider, { serverUrl: RESOURCE, scope: SCOPE, fetchFn: fetchFunction });
   expect(first).toBe('REDIRECT');
-  const callback = await approveInBrowser(harness, provider);
+  const callback = await approveInBrowser(harness, provider, browser);
   expect(callback.state).toBe('state-123');
   expect(callback.iss).toBe(PUBLIC_URL);
   const second = await auth(provider, {
@@ -205,7 +223,7 @@ async function handshake(harness: OAuthHarness, provider: TestProvider): Promise
 }
 
 async function mcpStatus(harness: OAuthHarness, token: string | undefined): Promise<number> {
-  const reply = await postJsonRpc(harness.app, INITIALIZE, { token });
+  const reply = await postJsonRpc(harness.app, INITIALIZE, token === undefined ? {} : { token });
   return reply.status;
 }
 
@@ -249,6 +267,19 @@ describe('OAuth contract with the MCP client SDK', () => {
     expect(await mcpStatus(harness, undefined)).toBe(401);
   });
 
+  it('completes the handshake for an operator who set up and logged in through the real pages', async () => {
+    const harness = newHarness();
+    const setup = await setUpOperator(harness.identity);
+    const browser = harness.browser();
+    for (const [name, value] of setup.browser.cookies) {
+      browser.cookies.set(name, value);
+    }
+    const { tokens } = await handshake(harness, new TestProvider({ cimd: true }), browser);
+    expect(await mcpStatus(harness, tokens.access_token)).toBe(200);
+    const account = await browser.get('/account');
+    expect(await account.text()).toContain('<td>CIMD Agent</td>');
+  });
+
   it('completes the DCR handshake, minting a vg_c_ client without a secret', async () => {
     const harness = newHarness();
     const { provider, tokens } = await handshake(harness, new TestProvider());
@@ -278,7 +309,7 @@ describe('OAuth contract with the MCP client SDK', () => {
     expect(await mcpStatus(harness, rotated?.access_token)).toBe(200);
   });
 
-  it('OAUTH-25 a replayed refresh token is refused and the whole family is revoked', async () => {
+  it('OAUTH-25 a replayed refresh token revokes the whole family and the SDK re-authorizes', async () => {
     const harness = newHarness();
     const { provider, tokens } = await handshake(harness, new TestProvider({ cimd: true }));
     const fetchFunction = fetchThrough(harness);
@@ -286,11 +317,13 @@ describe('OAuth contract with the MCP client SDK', () => {
     expect(rotated).toBe('AUTHORIZED');
     const fresh = provider.tokens();
     provider.saveTokens(tokens);
-    await expect(
-      auth(provider, { serverUrl: RESOURCE, fetchFn: fetchFunction }),
-    ).rejects.toMatchObject({
-      message: 'the refresh token has already been used',
+    const replayed = await auth(provider, {
+      serverUrl: RESOURCE,
+      scope: SCOPE,
+      fetchFn: fetchFunction,
     });
+    expect(replayed).toBe('REDIRECT');
+    expect(provider.invalidated).toStrictEqual(['tokens']);
     expect(await mcpStatus(harness, tokens.access_token)).toBe(401);
     expect(await mcpStatus(harness, fresh?.access_token)).toBe(401);
   });
@@ -380,9 +413,13 @@ describe('OAuth contract with the MCP client SDK', () => {
     const consent = harness.repos.consents.findActive('operator-1', CIMD_ID);
     expect(harness.server.revokeConsent('operator-1', consent?.id ?? '')).toBe(2);
     expect(await mcpStatus(harness, tokens.access_token)).toBe(401);
-    await expect(
-      auth(provider, { serverUrl: RESOURCE, fetchFn: fetchThrough(harness) }),
-    ).rejects.toBeInstanceOf(OAuthError);
+    const fetchFunction = fetchThrough(harness);
+    const result = await auth(provider, {
+      serverUrl: RESOURCE,
+      scope: SCOPE,
+      fetchFn: fetchFunction,
+    });
+    expect(result).toBe('REDIRECT');
   });
 
   it('OAUTH-34 a token the server did not issue is refused', async () => {

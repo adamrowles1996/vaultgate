@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { flattenHtml } from '../test-support/oauth-harness.ts';
+
 import { renderConsentPage, renderErrorPage, scopeFieldName } from './consent-page.ts';
 import { OAuthError } from './errors.ts';
 
@@ -15,7 +17,7 @@ const VIEW = {
 
 describe('renderConsentPage', () => {
   it('OAUTH-13 shows the escaped client name, the full redirect host and the registration mechanism', () => {
-    const html = renderConsentPage(VIEW);
+    const html = flattenHtml(renderConsentPage(VIEW));
     expect(html).toContain('<strong>Agent &lt;One&gt;</strong>');
     expect(html).toContain('<dt>Will redirect to</dt><dd><code>agent.example.com:8443</code></dd>');
     expect(html).toContain('identified by its client metadata document');
@@ -24,35 +26,39 @@ describe('renderConsentPage', () => {
   });
 
   it('OAUTH-13 / T7 warns prominently when every redirect is loopback', () => {
-    const html = renderConsentPage({
-      ...VIEW,
-      loopbackOnly: true,
-      redirectHost: '127.0.0.1:53211',
-      mode: 'dcr',
-    });
-    expect(html).toContain('<p class="warning"><strong>Warning:</strong>');
+    const html = flattenHtml(
+      renderConsentPage({
+        ...VIEW,
+        loopbackOnly: true,
+        redirectHost: '127.0.0.1:53211',
+        mode: 'dcr',
+      }),
+    );
+    expect(html).toContain('<p class="warning"><strong>Warning:</strong>this client redirects');
     expect(html).toContain('loopback address (<code>127.0.0.1:53211</code>)');
     expect(html).toContain('registered dynamically; nobody has vetted this client');
   });
 
   it('OAUTH-36 lists each scope with its explanation and marks the risky ones', () => {
-    const html = renderConsentPage(VIEW);
-    expect(html).toContain('<code>vault:reveal</code> <strong class="risk">Sensitive</strong>');
-    expect(html).toContain('<code>vault:generate</code> — Generate passwords and passphrases.');
+    const html = flattenHtml(renderConsentPage(VIEW));
+    expect(html).toContain(
+      '<code>vault:reveal</code><strong class="risk">Sensitive</strong>— Reveal',
+    );
+    expect(html).toContain('<code>vault:generate</code>— Generate passwords and passphrases.');
     expect(html).not.toContain('vault:write');
   });
 
-  it('OAUTH-16 / OAUTH-18 makes vault:read untickable and the others ticked checkboxes in a CSRF-guarded form', () => {
-    const html = renderConsentPage({ ...VIEW, mode: 'preregistered' });
+  it('OAUTH-16 / OAUTH-18 makes vault:read untickable and the others ticked, in a CSRF-guarded form', () => {
+    const html = flattenHtml(renderConsentPage({ ...VIEW, mode: 'preregistered' }));
     expect(html).toContain(
-      `<input type="checkbox" checked disabled><input type="hidden" name="${scopeFieldName('vault:read')}" value="on">`,
+      `<input type="checkbox" checked disabled /><input type="hidden" name="${scopeFieldName('vault:read')}" value="on" /><code>vault:read</code>`,
     );
     expect(html).toContain(
-      `<input type="checkbox" name="${scopeFieldName('vault:reveal')}" value="on" checked>`,
+      `<input type="checkbox" name="${scopeFieldName('vault:reveal')}" value="on" checked /><code>vault:reveal</code>`,
     );
     expect(html).toContain('<form method="post" action="/oauth/authorize">');
-    expect(html).toContain('<input type="hidden" name="request_id" value="req-1">');
-    expect(html).toContain('<input type="hidden" name="csrf_token" value="csrf-1">');
+    expect(html).toContain('<input type="hidden" name="request_id" value="req-1" />');
+    expect(html).toContain('<input type="hidden" name="csrf" value="csrf-1" />');
     expect(html).toContain('name="decision" value="approve"');
     expect(html).toContain('name="decision" value="deny"');
     expect(html).toContain('pre-registered by the operator');

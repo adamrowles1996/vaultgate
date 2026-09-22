@@ -1,26 +1,28 @@
 import { parseAuthorizationRequest, toPendingParameters } from './authorize-request.ts';
 import {
-  type AuthorizeDependencies as AuthorizeDependencies,
-  PENDING_TTL_MS,
+  type AuthorizeDependencies,
   ensureBindingCookie,
   errorPage,
   isBoundToBrowser,
   livePending,
   loginRedirect,
+  PENDING_TTL_MS,
   rateLimitKey,
   redirectWithError,
 } from './authorize-shared.ts';
 import { renderConsentPage } from './consent-page.ts';
 import { CREDENTIAL_PREFIX, hashCredential, mintCredential } from './credentials.ts';
 import { OAuthError } from './errors.ts';
-import { HTML_HEADERS } from './html.ts';
 import { isScope, type Scope } from './scopes.ts';
 
 import type { ClientMode } from './repositories/clients.ts';
 import type { PendingAuthorizationRecord } from './repositories/pending-authorizations.ts';
-import type { Context } from 'hono';
+import type { OAuthHandler } from './request-context.ts';
 
-function tooManyRequests(context: Context, retryAfterSeconds: number): Response {
+function tooManyRequests(
+  context: Parameters<OAuthHandler>[0],
+  retryAfterSeconds: number,
+): Response {
   context.header('Retry-After', String(retryAfterSeconds));
   return errorPage(
     context,
@@ -34,11 +36,9 @@ function tooManyRequests(context: Context, retryAfterSeconds: number): Response 
  * server-side under a random id bound to this browser, and send the operator
  * to log in or to the consent page.
  */
-export function createAuthorizeHandler(
-  dependencies: AuthorizeDependencies,
-): (context: Context) => Promise<Response> {
+export function createAuthorizeHandler(dependencies: AuthorizeDependencies): OAuthHandler {
   return async (context) => {
-    const session = await dependencies.sessions.resolve(context.req.raw);
+    const session = context.get('session');
     const limit = dependencies.rateLimiter.take(rateLimitKey(context, dependencies, session));
     if (!limit.allowed) {
       return tooManyRequests(context, limit.retryAfterSeconds);
@@ -50,7 +50,7 @@ export function createAuthorizeHandler(
         : redirectWithError(context, dependencies, parsed.error.redirect, parsed.error.oauthError);
     }
     const binding =
-      session === undefined ? ensureBindingCookie(context, dependencies) : session.sessionKey;
+      session === undefined ? ensureBindingCookie(context, dependencies) : session.idHash;
     const id = mintCredential(CREDENTIAL_PREFIX.authorizationCode, dependencies.random).slice(
       CREDENTIAL_PREFIX.authorizationCode.length,
     );
@@ -60,11 +60,9 @@ export function createAuthorizeHandler(
       parameters: toPendingParameters(parsed.value),
       expiresAt: dependencies.now() + PENDING_TTL_MS,
     });
-    if (session === undefined) {
-      return loginRedirect(context, dependencies, id);
-    }
-    context.header('Cache-Control', 'no-store');
-    return context.redirect(`/oauth/authorize/${encodeURIComponent(id)}`, 302);
+    return session === undefined
+      ? loginRedirect(context, id)
+      : context.redirect(`/oauth/authorize/${encodeURIComponent(id)}`, 302);
   };
 }
 
@@ -76,43 +74,42 @@ export function pendingScopes(pending: PendingAuthorizationRecord): readonly Sco
  * `GET /oauth/authorize/:id` (OAUTH-13, OAUTH-18): renders the consent page;
  * it never issues a code.
  */
-export function createConsentPageHandler(
-  dependencies: AuthorizeDependencies,
-): (context: Context) => Promise<Response> {
-  return async (context) => {
+export function createConsentPageHandler(dependencies: AuthorizeDependencies): OAuthHandler {
+  return (context) => {
     const id = context.req.param('id') ?? '';
     const pending = livePending(dependencies, id);
     if (pending === undefined) {
-      return errorPage(
-        context,
-        new OAuthError('invalid_request', 'this authorization request has expired'),
-        400,
+      return Promise.resolve(
+        errorPage(
+          context,
+          new OAuthError('invalid_request', 'this authorization request has expired'),
+          400,
+        ),
       );
     }
-    const session = await dependencies.sessions.resolve(context.req.raw);
+    const session = context.get('session');
     if (session === undefined) {
-      return loginRedirect(context, dependencies, id);
+      return Promise.resolve(loginRedirect(context, id));
     }
     if (!isBoundToBrowser(context, dependencies, session, pending)) {
-      return errorPage(
-        context,
-        new OAuthError('access_denied', 'this authorization request belongs to another browser'),
-        403,
+      return Promise.resolve(
+        errorPage(
+          context,
+          new OAuthError('access_denied', 'this authorization request belongs to another browser'),
+          403,
+        ),
       );
     }
     const { parameters } = pending;
-    return context.html(
-      renderConsentPage({
-        requestId: id,
-        csrfToken: session.csrfToken,
-        clientName: parameters['client_name'] ?? '',
-        redirectHost: parameters['redirect_host'] ?? '',
-        mode: (parameters['client_mode'] ?? 'dcr') as ClientMode,
-        loopbackOnly: parameters['loopback_only'] === '1',
-        scopes: pendingScopes(pending),
-      }),
-      200,
-      HTML_HEADERS,
-    );
+    const view = {
+      requestId: id,
+      csrfToken: session.csrfToken,
+      clientName: parameters['client_name'] ?? '',
+      redirectHost: parameters['redirect_host'] ?? '',
+      mode: (parameters['client_mode'] ?? 'dcr') as ClientMode,
+      loopbackOnly: parameters['loopback_only'] === '1',
+      scopes: pendingScopes(pending),
+    };
+    return Promise.resolve(context.html(renderConsentPage(view)));
   };
 }

@@ -8,11 +8,11 @@ import { respondWithOAuthError } from './errors.ts';
 import { readForm, requireField } from './form.ts';
 
 import type { AuditSink } from './audit.ts';
-import type { ClientIpResolver } from './client-ip.ts';
 import type { Clock } from './clock.ts';
 import type { ConnectedClient } from './repositories/consents.ts';
+import type { ClientIpResolver, OAuthHandler } from './request-context.ts';
+import type { Guards } from '../identity/guards.ts';
 import type { OAuthRepos } from './repositories/index.ts';
-import type { Context } from 'hono';
 
 const MAX_FORM_BYTES = 16 * 1024;
 
@@ -21,6 +21,7 @@ export interface RevocationDependencies {
   readonly audit: AuditSink;
   readonly now: Clock;
   readonly clientIp: ClientIpResolver;
+  readonly guards: Guards;
 }
 
 /**
@@ -56,9 +57,7 @@ function revokeToken(dependencies: RevocationDependencies, token: string, ip: st
 /**
  * `POST /oauth/revoke` (RFC 7009): `200 {}` whether or not the token existed.
  */
-export function createRevokeHandler(
-  dependencies: RevocationDependencies,
-): (context: Context) => Promise<Response> {
+export function createRevokeHandler(dependencies: RevocationDependencies): OAuthHandler {
   return async (context) => {
     const form = await readForm(context.req.raw, MAX_FORM_BYTES);
     if (!form.ok) {
@@ -109,4 +108,27 @@ export function listConnectedClients(
   operatorId: string,
 ): readonly ConnectedClient[] {
   return dependencies.repos.consents.listConnected(operatorId);
+}
+
+/**
+ * `POST /oauth/consents/:id/revoke` (OAUTH-30), the account page's
+ * "Disconnect" button: same session and ID-18 checks as every account action.
+ */
+export function createConsentRevokeHandler(dependencies: RevocationDependencies): OAuthHandler {
+  return async (context) => {
+    const session = context.get('session');
+    if (session === undefined) {
+      return dependencies.guards.deny(context, 'no session');
+    }
+    const form = await readForm(context.req.raw, MAX_FORM_BYTES);
+    const fields = form.ok ? form.value : new Map<string, string>();
+    const denied = dependencies.guards.stateChange(context, fields, session.csrfToken);
+    if (denied !== undefined) {
+      return denied;
+    }
+    const consentId = context.req.param('id') ?? '';
+    return revokeConsent(dependencies, session.operatorId, consentId) === undefined
+      ? dependencies.guards.deny(context, 'unknown consent')
+      : context.redirect('/account', 303);
+  };
 }

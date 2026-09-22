@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  type Browser,
   cimdDocument,
   createOAuthHarness,
   type Exchange,
   type OAuthHarness,
+  flattenHtml,
   parseConsentForm,
   RESOURCE,
+  type SignedIn,
 } from '../test-support/oauth-harness.ts';
 
 /**
@@ -49,13 +50,13 @@ function query(overrides: Overrides = {}, resource = RESOURCE): string {
   return `/oauth/authorize?${search.toString()}`;
 }
 
-function authorize(harness: OAuthHarness, path: string, browser?: Browser): Promise<Exchange> {
+function authorize(harness: OAuthHarness, path: string, browser?: SignedIn): Promise<Exchange> {
   return harness.exchange(path, { headers: browser?.headers ?? {} });
 }
 
 async function parkedPath(
   harness: OAuthHarness,
-  browser: Browser,
+  browser: SignedIn,
   overrides: Overrides = {},
 ): Promise<string> {
   const response = await authorize(harness, query(overrides), browser);
@@ -138,7 +139,7 @@ describe('GET /oauth/authorize', () => {
     const response = await authorize(harness, query(overrides), harness.signIn());
     expect(response.status).toBe(400);
     expect(response.headers.get('location')).toBeNull();
-    expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    expect(response.headers.get('content-type')).toBe('text/html; charset=UTF-8');
     expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
     expect(response.text).toContain(text);
   });
@@ -147,7 +148,7 @@ describe('GET /oauth/authorize', () => {
     const harness = harnessWithClients();
     const response = await authorize(harness, `${query()}&state=again`, harness.signIn());
     expect(response.status).toBe(400);
-    expect(response.text).toContain('parameter &#34;state&#34; is repeated');
+    expect(response.text).toContain('parameter &quot;state&quot; is repeated');
   });
 
   it.each([
@@ -242,8 +243,8 @@ describe('GET /oauth/authorize/:id', () => {
     expect(form.html).toContain('<strong>CIMD Agent</strong>');
     expect(form.html).toContain('<code>agent.example.com</code>');
     expect(form.html).toContain('identified by its client metadata document');
-    expect(form.html).toContain(
-      '<code>vault:reveal</code> <strong class="risk">Sensitive</strong>',
+    expect(flattenHtml(form.html)).toContain(
+      '<code>vault:reveal</code><strong class="risk">Sensitive</strong>',
     );
     expect(form.html).not.toContain('class="warning"');
     expect(harness.audit).toStrictEqual([]);
@@ -255,10 +256,11 @@ describe('GET /oauth/authorize/:id', () => {
     const overrides = { client_id: 'desk', redirect_uri: 'http://127.0.0.1:61234/cb' };
     const path = await parkedPath(harness, browser, overrides);
     const page = await authorize(harness, path, browser);
-    expect(page.text).toContain('<p class="warning"><strong>Warning:</strong>');
-    expect(page.text).toContain('loopback address (<code>127.0.0.1:61234</code>)');
-    expect(page.text).toContain('<dt>Will redirect to</dt><dd><code>127.0.0.1:61234</code></dd>');
-    expect(page.text).toContain('pre-registered by the operator');
+    const text = flattenHtml(page.text);
+    expect(text).toContain('<p class="warning"><strong>Warning:</strong>this client redirects');
+    expect(text).toContain('loopback address (<code>127.0.0.1:61234</code>)');
+    expect(text).toContain('<dt>Will redirect to</dt><dd><code>127.0.0.1:61234</code></dd>');
+    expect(text).toContain('pre-registered by the operator');
   });
 
   it('OAUTH-17 redirects to login when the session is gone, preserving the request id', async () => {

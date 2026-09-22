@@ -41,6 +41,7 @@ const counters = { code: 0, id: 0 };
 
 function seed(harness: OAuthHarness, options: SeedOptions = {}): string {
   const at = harness.now();
+  harness.ensureOperator();
   harness.repos.clients.upsert({
     id: 'client-row',
     clientId: CLIENT_ID,
@@ -438,7 +439,7 @@ describe('POST /oauth/token refresh_token', () => {
       publicUrl: 'https://vault.example.com',
       enableWriteScope: false,
       repos: { ...harness.repos, tokens: { ...harness.repos.tokens, markReplaced: () => false } },
-      audit: { record: () => {} },
+      audit: { record: noop },
       rateLimiter: { take: () => ({ allowed: true }) },
       clientIp: () => 'ip',
       now: harness.now,

@@ -1,4 +1,5 @@
-import { escapeHtml, htmlDocument } from './html.ts';
+import { document, hidden, type Html, html, when } from '../identity/pages/template.ts';
+
 import { scopeDefinition, type Scope } from './scopes.ts';
 
 import type { OAuthError } from './errors.ts';
@@ -32,21 +33,28 @@ export function scopeFieldName(scope: Scope): string {
   return `scope:${scope}`;
 }
 
-function scopeRow(scope: Scope): string {
+function scopeRow(scope: Scope): Html {
   const definition = scopeDefinition(scope);
-  const isFixed = FIXED_SCOPES.has(scope);
-  const name = escapeHtml(scopeFieldName(scope));
-  const risk = definition.risky ? ' <strong class="risk">Sensitive</strong>' : '';
-  const control = isFixed
-    ? `<input type="checkbox" checked disabled><input type="hidden" name="${name}" value="on">`
-    : `<input type="checkbox" name="${name}" value="on" checked>`;
-  return `<li><label>${control} <code>${escapeHtml(scope)}</code>${risk} — ${escapeHtml(definition.explanation)}</label></li>`;
+  const name = scopeFieldName(scope);
+  const risk = when(definition.risky, () => html` <strong class="risk">Sensitive</strong>`);
+  const control = FIXED_SCOPES.has(scope)
+    ? html`<input type="checkbox" checked disabled />${hidden(name, 'on')}`
+    : html`<input type="checkbox" name="${name}" value="on" checked />`;
+  return html`<li>
+    <label>${control} <code>${scope}</code>${risk} — ${definition.explanation}</label>
+  </li>`;
 }
 
-function loopbackWarning(view: ConsentView): string {
-  return view.loopbackOnly
-    ? `<p class="warning"><strong>Warning:</strong> this client redirects only to a loopback address (<code>${escapeHtml(view.redirectHost)}</code>). Any program on the computer running your browser could be listening there; make sure you started this connection yourself.</p>`
-    : '';
+function loopbackWarning(view: ConsentView): Html {
+  return when(
+    view.loopbackOnly,
+    () =>
+      html`<p class="warning">
+        <strong>Warning:</strong> this client redirects only to a loopback address
+        (<code>${view.redirectHost}</code>). Any program on the computer running your browser could
+        be listening there; make sure you started this connection yourself.
+      </p>`,
+  );
 }
 
 /**
@@ -54,37 +62,44 @@ function loopbackWarning(view: ConsentView): string {
  * mechanism, loopback warning, one line per scope with a risk marker.
  */
 export function renderConsentPage(view: ConsentView): string {
-  const body = [
-    '<h1>Allow access to your vault?</h1>',
-    `<p><strong>${escapeHtml(view.clientName)}</strong> is asking to use your Bitwarden vault through vaultgate.</p>`,
-    '<dl>',
-    `<dt>Client name</dt><dd>${escapeHtml(view.clientName)}</dd>`,
-    `<dt>Will redirect to</dt><dd><code>${escapeHtml(view.redirectHost)}</code></dd>`,
-    `<dt>Registration</dt><dd>${escapeHtml(MODE_LABELS[view.mode])}</dd>`,
-    '</dl>',
-    loopbackWarning(view),
-    '<form method="post" action="/oauth/authorize">',
-    `<input type="hidden" name="request_id" value="${escapeHtml(view.requestId)}">`,
-    `<input type="hidden" name="csrf_token" value="${escapeHtml(view.csrfToken)}">`,
-    '<fieldset><legend>Permissions requested</legend><ul>',
-    ...view.scopes.map((scope) => scopeRow(scope)),
-    '</ul></fieldset>',
-    `<button type="submit" name="decision" value="${APPROVE}">Allow</button>`,
-    `<button type="submit" name="decision" value="${DENY}">Deny</button>`,
-    '</form>',
-  ].join('\n');
-  return htmlDocument('Allow access to your vault?', body);
+  return document(
+    'Allow access to your vault?',
+    html`<h2>Allow access to your vault?</h2>
+      <p>
+        <strong>${view.clientName}</strong> is asking to use your Bitwarden vault through vaultgate.
+      </p>
+      <dl>
+        <dt>Client name</dt>
+        <dd>${view.clientName}</dd>
+        <dt>Will redirect to</dt>
+        <dd><code>${view.redirectHost}</code></dd>
+        <dt>Registration</dt>
+        <dd>${MODE_LABELS[view.mode]}</dd>
+      </dl>
+      ${loopbackWarning(view)}
+      <form method="post" action="/oauth/authorize">
+        ${hidden('request_id', view.requestId)} ${hidden('csrf', view.csrfToken)}
+        <fieldset>
+          <legend>Permissions requested</legend>
+          <ul>
+            ${view.scopes.map((scope) => scopeRow(scope))}
+          </ul>
+        </fieldset>
+        <button type="submit" name="decision" value="${APPROVE}">Allow</button>
+        <button type="submit" name="decision" value="${DENY}">Deny</button>
+      </form>`,
+  );
 }
 
 /**
  * OAUTH-14: a request that cannot be trusted to redirect is answered here.
  */
 export function renderErrorPage(error: OAuthError): string {
-  const body = [
-    '<h1>Authorization request rejected</h1>',
-    `<p>vaultgate could not continue: <code>${escapeHtml(error.code)}</code>.</p>`,
-    `<p>${escapeHtml(error.description)}</p>`,
-    '<p>Nothing has been shared. Return to the application and try again.</p>',
-  ].join('\n');
-  return htmlDocument('Authorization request rejected', body);
+  return document(
+    'Authorization request rejected',
+    html`<h2>Authorization request rejected</h2>
+      <p>vaultgate could not continue: <code>${error.code}</code>.</p>
+      <p>${error.description}</p>
+      <p>Nothing has been shared. Return to the application and try again.</p>`,
+  );
 }

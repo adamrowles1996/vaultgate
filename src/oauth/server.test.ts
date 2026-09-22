@@ -20,10 +20,13 @@ describe('createAuthorizationServer', () => {
         ],
         accessTokenTtlMs: 1,
         refreshTokenTtlMs: 1,
-        trustProxy: false,
       },
       db: {} as DatabaseSync,
-      sessions: { resolve: () => Promise.resolve(undefined) },
+      guards: {
+        clientInfo: () => ({ ip: undefined, userAgent: undefined }),
+        deny: () => new Response('Forbidden', { status: 403 }),
+        stateChange: noop,
+      },
       audit: { record: noop },
       logger: { warn: noop },
       fetch: () => Promise.reject(new Error('unused')),
@@ -31,7 +34,6 @@ describe('createAuthorizationServer', () => {
       now: () => 0,
       random: (bytes) => Buffer.alloc(bytes),
       newId: () => 'x',
-      socketAddress: noop,
     });
     expect(unwrapFail(result).issues).toStrictEqual([
       'client "bad": redirect URI "http://evil.example.com/cb" must use https or a loopback http address',
@@ -52,6 +54,7 @@ describe('createAuthorizationServer', () => {
 
   it('OAUTH-30 exposes consent revocation and the connected-client list for the account page', () => {
     const harness = createOAuthHarness();
+    harness.ensureOperator();
     harness.repos.clients.upsert({
       id: 'c',
       clientId: 'vg_c_x',

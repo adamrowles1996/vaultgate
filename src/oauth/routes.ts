@@ -1,5 +1,8 @@
 import { Hono } from 'hono';
 
+import { pageHeaders } from '../identity/browser.ts';
+
+import { CONSENT_REVOKE_PATH } from './connected-clients.ts';
 import { publicCors } from './cors.ts';
 import {
   authorizationServerMetadata,
@@ -12,26 +15,28 @@ import {
   TOKEN_PATH,
 } from './metadata.ts';
 
-import type { Context } from 'hono';
-
-export type RouteHandler = (context: Context) => Promise<Response>;
+import type { OAuthHandler } from './request-context.ts';
+import type { IdentityEnvironment } from '../identity/context.ts';
 
 export interface OAuthRouteHandlers {
   readonly metadata: MetadataConfig;
-  readonly register: RouteHandler;
-  readonly token: RouteHandler;
-  readonly revoke: RouteHandler;
-  readonly authorize: RouteHandler;
-  readonly consentPage: RouteHandler;
-  readonly consentDecision: RouteHandler;
+  readonly register: OAuthHandler;
+  readonly token: OAuthHandler;
+  readonly revoke: OAuthHandler;
+  readonly authorize: OAuthHandler;
+  readonly consentPage: OAuthHandler;
+  readonly consentDecision: OAuthHandler;
+  readonly consentRevoke: OAuthHandler;
 }
 
+export type OAuthRoutes = Hono<IdentityEnvironment>;
+
 /**
- * §3.1 URL table. Cookie-bearing routes (`/oauth/authorize*`) never set CORS
- * headers (OAUTH-37).
+ * §3.1 URL table. The browser routes carry the ID-19 page headers and never
+ * CORS (OAUTH-37); the machine routes are CORS-open and cookie-free.
  */
-export function createOAuthRoutes(handlers: OAuthRouteHandlers): Hono {
-  const app = new Hono();
+export function createOAuthRoutes(handlers: OAuthRouteHandlers): OAuthRoutes {
+  const app = new Hono<IdentityEnvironment>();
   const document = JSON.stringify(authorizationServerMetadata(handlers.metadata));
 
   app.use(METADATA_PATH, publicCors());
@@ -44,9 +49,12 @@ export function createOAuthRoutes(handlers: OAuthRouteHandlers): Hono {
   app.post(REVOKE_PATH, (context) => handlers.revoke(context));
   app.post(REGISTER_PATH, (context) => handlers.register(context));
 
+  app.use(AUTHORIZE_PATH, pageHeaders);
+  app.use(`${AUTHORIZE_PATH}/*`, pageHeaders);
   app.get(AUTHORIZE_PATH, (context) => handlers.authorize(context));
   app.post(AUTHORIZE_PATH, (context) => handlers.consentDecision(context));
   app.get(`${AUTHORIZE_PATH}/:id`, (context) => handlers.consentPage(context));
+  app.post(CONSENT_REVOKE_PATH, (context) => handlers.consentRevoke(context));
 
   return app;
 }

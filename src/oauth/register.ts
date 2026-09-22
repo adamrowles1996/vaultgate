@@ -3,9 +3,8 @@ import { auditPrefix } from './credentials.ts';
 import { OAuthError, respondRateLimited, respondWithOAuthError } from './errors.ts';
 
 import type { AuditSink } from './audit.ts';
-import type { ClientIpResolver } from './client-ip.ts';
 import type { RateLimiter } from './rate-limit.ts';
-import type { Context } from 'hono';
+import type { ClientIpResolver, OAuthHandler } from './request-context.ts';
 
 /**
  * OAUTH-11: 16 KiB body cap.
@@ -44,9 +43,7 @@ async function readJsonBody(request: Request): Promise<unknown> {
 /**
  * `POST /oauth/register` (RFC 7591, OAUTH-5, OAUTH-11).
  */
-export function createRegisterHandler(
-  dependencies: RegistrationDependencies,
-): (context: Context) => Promise<Response> {
+export function createRegisterHandler(dependencies: RegistrationDependencies): OAuthHandler {
   return async (context) => {
     const ip = dependencies.clientIp(context);
     const limit = dependencies.rateLimiter.take(ip);

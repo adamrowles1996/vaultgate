@@ -1,32 +1,35 @@
 import { getCookie, setCookie } from 'hono/cookie';
 
+import { safeNextPath } from '../identity/provider.ts';
+
 import { renderErrorPage } from './consent-page.ts';
 import {
+  CREDENTIAL_PREFIX,
   hashCredential,
   mintCredential,
-  CREDENTIAL_PREFIX,
   type RandomSource,
 } from './credentials.ts';
 import { oauthErrorBody, type OAuthError } from './errors.ts';
-import { HTML_HEADERS } from './html.ts';
 
 import type { AuditSink } from './audit.ts';
-import type { ClientIpResolver } from './client-ip.ts';
+import type { Guards } from '../identity/guards.ts';
+import type { SessionState } from '../identity/session-manager.ts';
 import type { ClientResolver } from './clients/resolve.ts';
 import type { Clock } from './clock.ts';
 import type { RateLimiter } from './rate-limit.ts';
 import type { OAuthRepos } from './repositories/index.ts';
 import type { PendingAuthorizationRecord } from './repositories/pending-authorizations.ts';
-import type { CsrfGuard, OperatorSession, OperatorSessionResolver } from './session.ts';
-import type { Context } from 'hono';
+import type { ClientIpResolver, OAuthContext } from './request-context.ts';
 
 export interface AuthorizeDependencies {
   readonly publicUrl: string;
   readonly enableWriteScope: boolean;
   readonly resolver: ClientResolver;
   readonly repos: OAuthRepos;
-  readonly sessions: OperatorSessionResolver;
-  readonly csrf: CsrfGuard;
+  /**
+  ID-18 origin and synchroniser-token checks, shared with the identity pages.
+  */
+  readonly guards: Guards;
   readonly audit: AuditSink;
   readonly now: Clock;
   readonly random: RandomSource;
@@ -36,7 +39,6 @@ export interface AuthorizeDependencies {
   */
   readonly rateLimiter: RateLimiter;
   readonly clientIp: ClientIpResolver;
-  readonly loginPath: string;
 }
 
 /**
@@ -46,6 +48,7 @@ export const PENDING_TTL_MS = 10 * 60 * 1000;
 
 const BINDING_COOKIE = 'vg_authz';
 const HOST_PREFIX = '__Host-';
+const SECOND_MS = 1000;
 
 /**
  * ID-16 applied to the binding cookie: `__Host-` and `Secure` unless the
@@ -55,25 +58,35 @@ export function bindingCookieName(publicUrl: string): string {
   return publicUrl.startsWith('https://') ? `${HOST_PREFIX}${BINDING_COOKIE}` : BINDING_COOKIE;
 }
 
+function bindingCookie(
+  context: OAuthContext,
+  dependencies: AuthorizeDependencies,
+): string | undefined {
+  const value = getCookie(context, bindingCookieName(dependencies.publicUrl));
+  return value === undefined || value.length === 0 ? undefined : value;
+}
+
 /**
  * The browser's binding cookie, minted and set when absent, so a request
  * started without a session can be claimed only by the same browser.
  */
-export function ensureBindingCookie(context: Context, dependencies: AuthorizeDependencies): string {
-  const name = bindingCookieName(dependencies.publicUrl);
-  const existing = getCookie(context, name);
-  if (existing !== undefined && existing.length > 0) {
+export function ensureBindingCookie(
+  context: OAuthContext,
+  dependencies: AuthorizeDependencies,
+): string {
+  const existing = bindingCookie(context, dependencies);
+  if (existing !== undefined) {
     return existing;
   }
   const value = mintCredential(CREDENTIAL_PREFIX.authorizationCode, dependencies.random).slice(
     CREDENTIAL_PREFIX.authorizationCode.length,
   );
-  setCookie(context, name, value, {
+  setCookie(context, bindingCookieName(dependencies.publicUrl), value, {
     httpOnly: true,
     secure: dependencies.publicUrl.startsWith('https://'),
     sameSite: 'Lax',
     path: '/',
-    maxAge: PENDING_TTL_MS / 1000,
+    maxAge: PENDING_TTL_MS / SECOND_MS,
   });
   return value;
 }
@@ -81,41 +94,45 @@ export function ensureBindingCookie(context: Context, dependencies: AuthorizeDep
 /**
  * Every key the current browser can prove: its session, its binding cookie.
  */
-export function bindingHashes(
-  context: Context,
+function bindingHashes(
+  context: OAuthContext,
   dependencies: AuthorizeDependencies,
-  session: OperatorSession | undefined,
+  session: SessionState | undefined,
 ): readonly string[] {
-  const cookie = getCookie(context, bindingCookieName(dependencies.publicUrl));
+  const cookie = bindingCookie(context, dependencies);
   return [
-    ...(session === undefined ? [] : [hashCredential(session.sessionKey)]),
-    ...(cookie === undefined || cookie.length === 0 ? [] : [hashCredential(cookie)]),
+    ...(session === undefined ? [] : [hashCredential(session.idHash)]),
+    ...(cookie === undefined ? [] : [hashCredential(cookie)]),
   ];
 }
 
 export function isBoundToBrowser(
-  context: Context,
+  context: OAuthContext,
   dependencies: AuthorizeDependencies,
-  session: OperatorSession | undefined,
+  session: SessionState | undefined,
   pending: PendingAuthorizationRecord,
 ): boolean {
   return bindingHashes(context, dependencies, session).includes(pending.sessionBindingHash);
 }
 
 export function rateLimitKey(
-  context: Context,
+  context: OAuthContext,
   dependencies: AuthorizeDependencies,
-  session: OperatorSession | undefined,
+  session: SessionState | undefined,
 ): string {
-  const cookie = getCookie(context, bindingCookieName(dependencies.publicUrl));
   return (
-    session?.sessionKey ??
-    (cookie === undefined || cookie.length === 0 ? `ip:${dependencies.clientIp(context)}` : cookie)
+    session?.idHash ??
+    bindingCookie(context, dependencies) ??
+    `ip:${dependencies.clientIp(context)}`
   );
 }
 
-export function errorPage(context: Context, error: OAuthError, status: 400 | 403 | 429): Response {
-  return context.html(renderErrorPage(error), status, HTML_HEADERS);
+export function errorPage(
+  context: OAuthContext,
+  error: OAuthError,
+  status: 400 | 403 | 429,
+): Response {
+  return context.html(renderErrorPage(error), status);
 }
 
 export function livePending(
@@ -126,14 +143,13 @@ export function livePending(
   return pending === undefined || pending.expiresAt <= dependencies.now() ? undefined : pending;
 }
 
-export function loginRedirect(
-  context: Context,
-  dependencies: AuthorizeDependencies,
-  requestId: string,
-): Response {
-  const next = `/oauth/authorize/${encodeURIComponent(requestId)}`;
-  context.header('Cache-Control', 'no-store');
-  return context.redirect(`${dependencies.loginPath}?next=${encodeURIComponent(next)}`, 302);
+/**
+ * OAUTH-17: `/login?next=/oauth/authorize/<id>`; the parameters stay
+ * server-side and never ride along in `next`.
+ */
+export function loginRedirect(context: OAuthContext, requestId: string): Response {
+  const next = safeNextPath(`/oauth/authorize/${encodeURIComponent(requestId)}`);
+  return context.redirect(`/login?next=${encodeURIComponent(next)}`, 302);
 }
 
 /**
@@ -141,7 +157,7 @@ export function loginRedirect(
  * (RFC 9207) and `state` when one was given.
  */
 export function redirectToClient(
-  context: Context,
+  context: OAuthContext,
   dependencies: AuthorizeDependencies,
   redirectUri: string,
   parameters: Readonly<Record<string, string | undefined>>,
@@ -158,7 +174,7 @@ export function redirectToClient(
 }
 
 export function redirectWithError(
-  context: Context,
+  context: OAuthContext,
   dependencies: AuthorizeDependencies,
   target: { readonly redirectUri: string; readonly state: string | undefined },
   error: OAuthError,
@@ -167,8 +183,4 @@ export function redirectWithError(
     ...oauthErrorBody(error),
     state: target.state,
   });
-}
-
-export function requestIdOf(context: Context): string | undefined {
-  return context.req.header('x-request-id') ?? context.res.headers.get('x-request-id') ?? undefined;
 }

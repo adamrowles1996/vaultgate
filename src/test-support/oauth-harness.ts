@@ -1,41 +1,47 @@
-import { loadConfig, type Config } from '../config/index.ts';
+import { type Config, loadConfig } from '../config/index.ts';
 import { type App, createApp } from '../http/app.ts';
+import { EMPTY } from '../identity/pages/template.ts';
+import { createSessionManager } from '../identity/session-manager.ts';
 import { createOAuthRepos, type OAuthRepos } from '../oauth/repositories/index.ts';
-import { createAuthorizationServer, type AuthorizationServer } from '../oauth/server.ts';
-import { IN_MEMORY, openDatabase } from '../storage/database.ts';
-import { migrate } from '../storage/migrate.ts';
-import { MIGRATIONS } from '../storage/migrations/index.ts';
+import { type AuthorizationServer, createAuthorizationServer } from '../oauth/server.ts';
 import { run } from '../storage/query.ts';
 
+import { type Browser as CookieBrowser, createBrowser } from './browser.ts';
+import {
+  createHarness as createIdentityHarness,
+  type Harness as IdentityHarness,
+} from './identity-app.ts';
+import { sequentialRandom } from './identity.ts';
 import { InMemoryVaultClient } from './in-memory-vault-client.ts';
 import { captureLogger } from './logging.ts';
 import { unwrapOk } from './result.ts';
 
 import type { PreregisteredClient } from '../config/primitives.ts';
+import type { ConnectedClientsRenderer } from '../identity/index.ts';
+import type { SessionState } from '../identity/session-manager.ts';
 import type { AuditEvent as McpAuditEvent } from '../mcp/audit.ts';
 import type { AuditEvent } from '../oauth/audit.ts';
-import type { OperatorSession } from '../oauth/session.ts';
 
 export const PUBLIC_URL = 'https://vault.example.com';
 export const RESOURCE = `${PUBLIC_URL}/mcp`;
 export const OPERATOR_ID = 'operator-1';
 export const CLIENT_IP = '203.0.113.7';
 export const PUBLIC_ADDRESS = '93.184.216.34';
+const SESSION_TTL_MS = 12 * 3_600_000;
 
 export interface HarnessOptions {
   readonly publicUrl?: string;
   readonly enableWriteScope?: boolean;
   readonly oauthClients?: readonly PreregisteredClient[];
   readonly trustProxy?: boolean;
-  readonly loginPath?: string;
   /**
   DNS answers for CIMD hosts; every host resolves to one public address by default.
   */
   readonly lookup?: (hostname: string) => Promise<readonly string[]>;
 }
 
-export interface Browser {
-  readonly session: OperatorSession;
+export interface SignedIn {
+  readonly session: SessionState;
   /**
   Headers a signed-in, same-origin browser sends.
   */
@@ -51,6 +57,7 @@ export interface Exchange {
 export interface OAuthHarness {
   readonly app: App;
   readonly config: Config;
+  readonly identity: IdentityHarness;
   readonly server: AuthorizationServer;
   readonly repos: OAuthRepos;
   readonly audit: readonly AuditEvent[];
@@ -63,7 +70,18 @@ export interface OAuthHarness {
   readonly fetchedUrls: readonly string[];
   readonly now: () => number;
   readonly advance: (ms: number) => void;
-  readonly signIn: (operatorId?: string) => Browser;
+  /**
+  A real session minted through the identity session manager, without the login pages.
+  */
+  readonly signIn: (operatorId?: string) => SignedIn;
+  /**
+  Creates the operator row when absent, for tests that seed consents without signing in.
+  */
+  readonly ensureOperator: (operatorId?: string) => void;
+  /**
+  A cookie-jar browser over the full app; signed in when given a session.
+  */
+  readonly browser: (signedIn?: SignedIn) => CookieBrowser;
   readonly request: (path: string, init?: RequestInit) => Promise<Response>;
   /**
   A request whose body has been read, so tests never chain members off an await.
@@ -90,47 +108,53 @@ function harnessConfig(options: HarnessOptions): Config {
   return unwrapOk(loaded).config;
 }
 
+function ensureOperator(identity: IdentityHarness, operatorId: string): void {
+  if (identity.stores.operators.findById(operatorId) === undefined) {
+    run(
+      identity.database,
+      `INSERT INTO operators (id, display_name, password_hash, created_at, password_changed_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      operatorId,
+      'Operator',
+      'hash',
+      0,
+      0,
+    );
+  }
+}
+
 /**
- * The full application — probes, MCP resource server and the authorization
- * server — over an in-memory store with every external dependency faked:
- * sessions come from a `sid` cookie, the clock and random source are
- * deterministic, and fetch/lookup never touch the network (QG-2).
+ * The full application — probes, identity pages, MCP resource server and
+ * the authorization server — over one in-memory store, with the real
+ * identity module and every external dependency faked: the clock and random
+ * source are deterministic and fetch/lookup never touch the network (QG-2).
  */
 export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
   const config = harnessConfig(options);
-  let at = 1_700_000_000_000;
+  const accountSlot: { render: ConnectedClientsRenderer } = { render: () => EMPTY };
+  const identity = createIdentityHarness({
+    publicUrl: config.publicUrl,
+    trustProxy: config.trustProxy,
+    connectedClients: (session) => accountSlot.render(session),
+  });
   let counter = 0;
-  const sessions = new Map<string, OperatorSession>();
   const audit: AuditEvent[] = [];
   const mcpAudit: McpAuditEvent[] = [];
   const cimd = new Map<string, () => Response>();
   const fetchedUrls: string[] = [];
   const { logger, lines } = captureLogger();
-
-  const database = openDatabase({ path: IN_MEMORY, networkFs: false });
-  unwrapOk(migrate(database, MIGRATIONS, new Date(0)));
-  run(
-    database,
-    `INSERT INTO operators (id, display_name, password_hash, created_at, password_changed_at)
-     VALUES (?, ?, ?, ?, ?)`,
-    OPERATOR_ID,
-    'Operator',
-    'hash',
-    0,
-    0,
-  );
+  const sessions = createSessionManager({
+    sessions: identity.stores.sessions,
+    random: sequentialRandom(),
+    clock: identity.now,
+    absoluteTtlMs: SESSION_TTL_MS,
+  });
 
   const server = unwrapOk(
     createAuthorizationServer({
       config,
-      db: database,
-      sessions: {
-        resolve: (request) => {
-          const cookie = request.headers.get('cookie') ?? '';
-          const match = /(?:^|;\s*)sid=([^;]+)/.exec(cookie);
-          return Promise.resolve(match?.[1] === undefined ? undefined : sessions.get(match[1]));
-        },
-      },
+      db: identity.database,
+      guards: identity.identity.guards,
       audit: {
         record: (event) => {
           audit.push(event);
@@ -145,7 +169,7 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
         );
       },
       lookup: options.lookup ?? (() => Promise.resolve([PUBLIC_ADDRESS])),
-      now: () => at,
+      now: identity.now,
       random: (bytes) => {
         counter += 1;
         const buffer = Buffer.alloc(bytes);
@@ -153,14 +177,14 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
         return buffer;
       },
       newId: () => `id-${(counter += 1)}`,
-      socketAddress: () => CLIENT_IP,
-      loginPath: options.loginPath,
     }),
   );
+  accountSlot.render = server.renderConnectedClients;
   const app = createApp({
     config,
     logger,
     readiness: () => ({ ready: true, failing: [] }),
+    identity: identity.identity,
     vaultClient: new InMemoryVaultClient(),
     tokenVerifier: server.tokenVerifier,
     auditSink: {
@@ -168,38 +192,48 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
         mcpAudit.push(event);
       },
     },
-    now: () => at,
+    now: identity.now,
     oauth: server.routes,
   });
   const request = (path: string, init?: RequestInit): Promise<Response> =>
     Promise.resolve(app.request(`${config.publicUrl}${path}`, init));
+  const cookieName = identity.identity.cookiePolicy.sessionCookieName;
 
   return {
     app,
     config,
+    identity,
     server,
-    repos: createOAuthRepos(database),
+    repos: createOAuthRepos(identity.database),
     audit,
     mcpAudit,
     logLines: lines,
     cimd,
     fetchedUrls,
-    now: () => at,
-    advance: (ms) => {
-      at += ms;
+    now: identity.now,
+    advance: identity.advance,
+    ensureOperator: (operatorId = OPERATOR_ID) => {
+      ensureOperator(identity, operatorId);
     },
     signIn: (operatorId = OPERATOR_ID) => {
-      counter += 1;
-      const session: OperatorSession = {
-        operatorId,
-        sessionKey: `session-${counter}`,
-        csrfToken: `csrf-${counter}`,
-      };
-      sessions.set(session.sessionKey, session);
+      ensureOperator(identity, operatorId);
+      const started = sessions.start(operatorId, { ip: CLIENT_IP, userAgent: 'test' });
       return {
-        session,
-        headers: { cookie: `sid=${session.sessionKey}`, origin: new URL(config.publicUrl).origin },
+        session: started.state,
+        headers: {
+          cookie: `${cookieName}=${started.id}`,
+          origin: new URL(config.publicUrl).origin,
+        },
       };
+    },
+    browser: (signedIn) => {
+      const browser = createBrowser(app, config.publicUrl);
+      const cookie = signedIn?.headers['cookie'];
+      if (cookie !== undefined) {
+        const [name = '', value = ''] = cookie.split('=', 2);
+        browser.cookies.set(name, value);
+      }
+      return browser;
     },
     request,
     exchange: async (path, init) => {
@@ -231,6 +265,19 @@ export function jsonBody(
   };
 }
 
+/**
+ * Prettier lays `html` templates out over many lines; comparisons ignore the
+ * whitespace between tags and collapse the rest to one space.
+ */
+export function flattenHtml(markup: string): string {
+  return markup
+    .replaceAll(/\s+/g, ' ')
+    .replaceAll(/>\s+</g, '><')
+    .replaceAll(/\s+</g, '<')
+    .replaceAll(/>\s+/g, '>')
+    .trim();
+}
+
 export function parseJson(exchange: Exchange): Record<string, unknown> {
   return JSON.parse(exchange.text) as Record<string, unknown>;
 }
@@ -243,7 +290,7 @@ export interface ConsentForm {
 
 export function parseConsentForm(html: string): ConsentForm {
   const requestId = /name="request_id" value="([^"]+)"/.exec(html)?.[1] ?? '';
-  const csrfToken = /name="csrf_token" value="([^"]+)"/.exec(html)?.[1] ?? '';
+  const csrfToken = /name="csrf" value="([^"]+)"/.exec(html)?.[1] ?? '';
   return { requestId, csrfToken, html };
 }
 
@@ -264,14 +311,14 @@ export function cimdDocument(clientId: string, redirectUris: readonly string[]):
  */
 export async function openConsent(
   harness: OAuthHarness,
-  browser: Browser,
+  signedIn: SignedIn,
   parameters: Readonly<Record<string, string>>,
 ): Promise<ConsentForm> {
   const search = new URLSearchParams(parameters).toString();
   const started = await harness.exchange(`/oauth/authorize?${search}`, {
-    headers: browser.headers,
+    headers: signedIn.headers,
   });
   const path = started.headers.get('location') ?? '';
-  const page = await harness.exchange(path, { headers: browser.headers });
+  const page = await harness.exchange(path, { headers: signedIn.headers });
   return parseConsentForm(page.text);
 }

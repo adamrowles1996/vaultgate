@@ -15,12 +15,11 @@ import { enabledScopes, isScopeSubset, parseScopeParameter } from './scopes.ts';
 import { type IssuedPair, issueTokenPair, type TokenIssuerOptions } from './token-issuance.ts';
 
 import type { AuditSink, OAuthAuditAction } from './audit.ts';
-import type { ClientIpResolver } from './client-ip.ts';
 import type { RateLimiter } from './rate-limit.ts';
 import type { AuthorizationCodeRecord } from './repositories/authorization-codes.ts';
 import type { OAuthRepos } from './repositories/index.ts';
 import type { TokenRecord } from './repositories/tokens.ts';
-import type { Context } from 'hono';
+import type { ClientIpResolver, OAuthHandler } from './request-context.ts';
 
 const MAX_FORM_BYTES = 16 * 1024;
 
@@ -265,9 +264,7 @@ function grant(
 /**
  * `POST /oauth/token` (OAUTH-21…28).
  */
-export function createTokenHandler(
-  dependencies: TokenEndpointDependencies,
-): (context: Context) => Promise<Response> {
+export function createTokenHandler(dependencies: TokenEndpointDependencies): OAuthHandler {
   return async (context) => {
     const ip = dependencies.clientIp(context);
     const limit = dependencies.rateLimiter.take(ip);

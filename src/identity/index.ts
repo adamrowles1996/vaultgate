@@ -2,6 +2,7 @@ import { type Bootstrap, createBootstrap } from './bootstrap.ts';
 import { attachSession } from './browser.ts';
 import { createGuards, type Guards } from './guards.ts';
 import { createLoginThrottle } from './login-throttle.ts';
+import { EMPTY } from './pages/template.ts';
 import { createLocalProvider, type IdentityProvider } from './provider.ts';
 import { createIdentityStores } from './repositories/index.ts';
 import { createIdentityRoutes } from './routes.ts';
@@ -16,12 +17,13 @@ import type { AuditSink } from './audit.ts';
 import type { ClientAddressResolver, IdentityEnvironment } from './context.ts';
 import type { ScryptParameters } from './password.ts';
 import type { Clock, Delay, RandomSource } from './primitives.ts';
-import type { IdentityServices } from './services.ts';
+import type { ConnectedClientsRenderer, IdentityServices } from './services.ts';
 import type { Hono, MiddlewareHandler } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
 
 export type { IdentityAuditEvent } from './audit.ts';
 export type { IdentityVariables } from './context.ts';
+export type { ConnectedClientsRenderer } from './services.ts';
 export { CURRENT_PARAMETERS } from './password.ts';
 type IdentityConfig = Pick<Config, 'publicUrl' | 'trustProxy' | 'sessionTtlMs' | 'secrets'>;
 
@@ -35,6 +37,10 @@ export interface IdentityDependencies {
   readonly delay: Delay;
   readonly clientAddress: ClientAddressResolver;
   readonly passwordParameters: ScryptParameters;
+  /**
+  The account page's connected-clients section; empty until the OAuth layer supplies it.
+  */
+  readonly connectedClients?: ConnectedClientsRenderer | undefined;
 }
 
 export interface Identity {
@@ -104,6 +110,7 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     delay,
     passwordParameters: dependencies.passwordParameters,
     absoluteSessionTtlMs: config.sessionTtlMs,
+    connectedClients: dependencies.connectedClients ?? (() => EMPTY),
   };
   return {
     routes: createIdentityRoutes(services),

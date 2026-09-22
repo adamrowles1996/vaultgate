@@ -1,7 +1,6 @@
 import { fail, ok, type Result } from '../result.ts';
 
 import { createAuthorizeHandler, createConsentPageHandler } from './authorize.ts';
-import { createClientIpResolver } from './client-ip.ts';
 import { createCimdFetcher, type WarnLogger } from './clients/cimd.ts';
 import {
   type PreregisteredClientsError,
@@ -9,45 +8,46 @@ import {
 } from './clients/preregistered.ts';
 import { type ClientResolver, createClientResolver } from './clients/resolve.ts';
 import { type Clock, HOUR_MS, MINUTE_MS } from './clock.ts';
+import { renderConnectedClients } from './connected-clients.ts';
 import { createConsentDecisionHandler } from './consent.ts';
-import { createCsrfGuard } from './csrf.ts';
 import { createRateLimiter } from './rate-limit.ts';
 import { createRegisterHandler } from './register.ts';
 import { createOAuthRepos, type OAuthRepos } from './repositories/index.ts';
-import { createRevokeHandler, listConnectedClients, revokeConsent } from './revoke.ts';
-import { createOAuthRoutes } from './routes.ts';
+import { clientIpResolver } from './request-context.ts';
+import {
+  createConsentRevokeHandler,
+  createRevokeHandler,
+  listConnectedClients,
+  revokeConsent,
+} from './revoke.ts';
+import { createOAuthRoutes, type OAuthRoutes } from './routes.ts';
 import { StoreTokenVerifier } from './token-verifier.ts';
 import { createTokenHandler } from './token.ts';
 
 import type { AuditSink } from './audit.ts';
+import type { Config } from '../config/index.ts';
+import type { Guards } from '../identity/guards.ts';
+import type { Html } from '../identity/pages/template.ts';
+import type { SessionState } from '../identity/session-manager.ts';
 import type { FetchLike, Lookup } from './clients/ssrf-fetch.ts';
 import type { RandomSource } from './credentials.ts';
 import type { ClientRecord } from './repositories/clients.ts';
 import type { ConnectedClient } from './repositories/consents.ts';
-import type { CsrfGuard, OperatorSessionResolver } from './session.ts';
 import type { TokenVerifier } from './verified-token.ts';
-import type { Config } from '../config/index.ts';
-import type { Context, Hono } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
 
 export type AuthorizationServerConfig = Pick<
   Config,
-  | 'publicUrl'
-  | 'enableWriteScope'
-  | 'oauthClients'
-  | 'accessTokenTtlMs'
-  | 'refreshTokenTtlMs'
-  | 'trustProxy'
+  'publicUrl' | 'enableWriteScope' | 'oauthClients' | 'accessTokenTtlMs' | 'refreshTokenTtlMs'
 >;
 
 export interface AuthorizationServerDependencies {
   readonly config: AuthorizationServerConfig;
   readonly db: DatabaseSync;
-  readonly sessions: OperatorSessionResolver;
   /**
-  Defaults to the ID-18 guard in `csrf.ts`; the identity module may supply its own.
+  The identity module's ID-18 guards and proxy-aware client address.
   */
-  readonly csrf?: CsrfGuard | undefined;
+  readonly guards: Guards;
   readonly audit: AuditSink;
   readonly logger: WarnLogger;
   readonly fetch: FetchLike;
@@ -55,18 +55,17 @@ export interface AuthorizationServerDependencies {
   readonly now: Clock;
   readonly random: RandomSource;
   readonly newId: () => string;
-  readonly socketAddress: (context: Context) => string | undefined;
-  readonly loginPath?: string | undefined;
 }
 
 export interface AuthorizationServer {
-  readonly routes: Hono;
+  readonly routes: OAuthRoutes;
   readonly tokenVerifier: TokenVerifier;
   /**
   OAUTH-30, for the account page.
   */
   readonly revokeConsent: (operatorId: string, consentId: string) => number | undefined;
   readonly listConnectedClients: (operatorId: string) => readonly ConnectedClient[];
+  readonly renderConnectedClients: (session: SessionState) => Html;
 }
 
 /**
@@ -109,7 +108,7 @@ function buildResolver(
 export function createAuthorizationServer(
   dependencies: AuthorizationServerDependencies,
 ): Result<AuthorizationServer, PreregisteredClientsError> {
-  const { config, now } = dependencies;
+  const { config, now, guards } = dependencies;
   const preregistered = validatePreregisteredClients(config.oauthClients, {
     now: now(),
     newId: dependencies.newId,
@@ -121,19 +120,20 @@ export function createAuthorizationServer(
   for (const client of preregistered.value) {
     repos.clients.upsert(client);
   }
-  const clientIp = createClientIpResolver({
-    trustProxy: config.trustProxy,
-    socketAddress: dependencies.socketAddress,
-  });
-  const resolver = buildResolver(dependencies, repos, preregistered.value);
   const shared = {
     ...config,
     repos,
+    guards,
     audit: dependencies.audit,
     now,
     random: dependencies.random,
     newId: dependencies.newId,
-    clientIp,
+    clientIp: clientIpResolver(guards),
+  };
+  const authorize = {
+    ...shared,
+    resolver: buildResolver(dependencies, repos, preregistered.value),
+    rateLimiter: createRateLimiter({ ...LIMITS.authorize, now }),
   };
   const routes = createOAuthRoutes({
     metadata: config,
@@ -147,42 +147,17 @@ export function createAuthorizationServer(
       rateLimiter: createRateLimiter({ ...LIMITS.token, now }),
     }),
     revoke: createRevokeHandler(shared),
-    ...consentHandlers({
-      ...shared,
-      resolver,
-      sessions: dependencies.sessions,
-      csrf: dependencies.csrf,
-      loginPath: dependencies.loginPath,
-    }),
+    authorize: createAuthorizeHandler(authorize),
+    consentPage: createConsentPageHandler(authorize),
+    consentDecision: createConsentDecisionHandler(authorize),
+    consentRevoke: createConsentRevokeHandler(shared),
   });
   return ok({
     routes,
     tokenVerifier: new StoreTokenVerifier({ publicUrl: config.publicUrl, repos, now }),
     revokeConsent: (operatorId, consentId) => revokeConsent(shared, operatorId, consentId),
     listConnectedClients: (operatorId) => listConnectedClients(shared, operatorId),
+    renderConnectedClients: (session) =>
+      renderConnectedClients(listConnectedClients(shared, session.operatorId), session.csrfToken),
   });
-}
-
-type ConsentInput = Omit<
-  Parameters<typeof createAuthorizeHandler>[0],
-  'csrf' | 'rateLimiter' | 'loginPath'
-> & {
-  readonly csrf: CsrfGuard | undefined;
-  readonly loginPath: string | undefined;
-};
-
-function consentHandlers(
-  input: ConsentInput,
-): Pick<Parameters<typeof createOAuthRoutes>[0], 'authorize' | 'consentPage' | 'consentDecision'> {
-  const authorizeDependencies = {
-    ...input,
-    csrf: input.csrf ?? createCsrfGuard(input.publicUrl),
-    rateLimiter: createRateLimiter({ ...LIMITS.authorize, now: input.now }),
-    loginPath: input.loginPath ?? '/login',
-  };
-  return {
-    authorize: createAuthorizeHandler(authorizeDependencies),
-    consentPage: createConsentPageHandler(authorizeDependencies),
-    consentDecision: createConsentDecisionHandler(authorizeDependencies),
-  };
 }

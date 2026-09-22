@@ -1,14 +1,13 @@
 import { transaction } from '../storage/query.ts';
 
 import {
-  type AuthorizeDependencies as AuthorizeDependencies,
+  type AuthorizeDependencies,
   errorPage,
   isBoundToBrowser,
   livePending,
   rateLimitKey,
   redirectToClient,
   redirectWithError,
-  requestIdOf,
 } from './authorize-shared.ts';
 import { pendingScopes } from './authorize.ts';
 import { APPROVE, scopeFieldName } from './consent-page.ts';
@@ -16,10 +15,10 @@ import { auditPrefix, CREDENTIAL_PREFIX, hashCredential, mintCredential } from '
 import { OAuthError } from './errors.ts';
 import { type FormFields, readForm } from './form.ts';
 
+import type { SessionState } from '../identity/session-manager.ts';
 import type { PendingAuthorizationRecord } from './repositories/pending-authorizations.ts';
+import type { OAuthContext, OAuthHandler } from './request-context.ts';
 import type { Scope } from './scopes.ts';
-import type { OperatorSession } from './session.ts';
-import type { Context } from 'hono';
 
 const MAX_FORM_BYTES = 16 * 1024;
 
@@ -30,7 +29,7 @@ export const CODE_TTL_MS = 5 * 60 * 1000;
 
 interface Decision {
   readonly pending: PendingAuthorizationRecord;
-  readonly session: OperatorSession;
+  readonly session: SessionState;
   readonly form: FormFields;
 }
 
@@ -95,14 +94,18 @@ function issueCode(
   return code;
 }
 
-function deny(context: Context, dependencies: AuthorizeDependencies, decision: Decision): Response {
+function deny(
+  context: OAuthContext,
+  dependencies: AuthorizeDependencies,
+  decision: Decision,
+): Response {
   dependencies.audit.record({
     category: 'oauth',
     action: 'consent_denied',
     outcome: 'success',
     operatorId: decision.session.operatorId,
     clientId: decision.pending.parameters['client_id'] ?? '',
-    requestId: requestIdOf(context),
+    requestId: context.get('requestId'),
     ip: dependencies.clientIp(context),
   });
   return redirectWithError(
@@ -114,7 +117,7 @@ function deny(context: Context, dependencies: AuthorizeDependencies, decision: D
 }
 
 function approve(
-  context: Context,
+  context: OAuthContext,
   dependencies: AuthorizeDependencies,
   decision: Decision,
 ): Response {
@@ -130,7 +133,7 @@ function approve(
     operatorId: decision.session.operatorId,
     clientId: decision.pending.parameters['client_id'] ?? '',
     tokenPrefix: auditPrefix(code),
-    requestId: requestIdOf(context),
+    requestId: context.get('requestId'),
     ip: dependencies.clientIp(context),
     details: { scopes },
   });
@@ -138,50 +141,51 @@ function approve(
   return redirectToClient(context, dependencies, redirectUri, { code, state });
 }
 
+/**
+ * ID-18 through the identity guards, then the browser binding (OAUTH-17).
+ */
 async function readDecision(
-  context: Context,
+  context: OAuthContext,
   dependencies: AuthorizeDependencies,
-): Promise<Decision | { readonly error: OAuthError; readonly status: 400 | 403 }> {
+): Promise<Decision | Response> {
   const form = await readForm(context.req.raw, MAX_FORM_BYTES);
   if (!form.ok) {
-    return { error: form.error, status: 400 };
+    return errorPage(context, form.error, 400);
+  }
+  const session = context.get('session');
+  if (session === undefined) {
+    return dependencies.guards.deny(context, 'no session');
+  }
+  const denied = dependencies.guards.stateChange(context, form.value, session.csrfToken);
+  if (denied !== undefined) {
+    return denied;
   }
   const pending = livePending(dependencies, form.value.get('request_id') ?? '');
   if (pending === undefined) {
-    return {
-      error: new OAuthError('invalid_request', 'this authorization request has expired'),
-      status: 400,
-    };
+    return errorPage(
+      context,
+      new OAuthError('invalid_request', 'this authorization request has expired'),
+      400,
+    );
   }
-  const session = await dependencies.sessions.resolve(context.req.raw);
-  if (session === undefined) {
-    return { error: new OAuthError('access_denied', 'sign in to continue'), status: 403 };
-  }
-  const isTrusted =
-    dependencies.csrf.isTrusted({
-      request: context.req.raw,
-      session,
-      formToken: form.value.get('csrf_token'),
-    }) && isBoundToBrowser(context, dependencies, session, pending);
-  return isTrusted
+  return isBoundToBrowser(context, dependencies, session, pending)
     ? { pending, session, form: form.value }
-    : {
-        error: new OAuthError('access_denied', 'the consent form could not be verified'),
-        status: 403,
-      };
+    : errorPage(
+        context,
+        new OAuthError('access_denied', 'this authorization request belongs to another browser'),
+        403,
+      );
 }
 
 /**
  * `POST /oauth/authorize` (OAUTH-18…20): the consent decision, CSRF-guarded,
  * bound to the browser that started the request, single use.
  */
-export function createConsentDecisionHandler(
-  dependencies: AuthorizeDependencies,
-): (context: Context) => Promise<Response> {
+export function createConsentDecisionHandler(dependencies: AuthorizeDependencies): OAuthHandler {
   return async (context) => {
     const decision = await readDecision(context, dependencies);
-    if ('error' in decision) {
-      return errorPage(context, decision.error, decision.status);
+    if (decision instanceof Response) {
+      return decision;
     }
     const limit = dependencies.rateLimiter.take(
       rateLimitKey(context, dependencies, decision.session),

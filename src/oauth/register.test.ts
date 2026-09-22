@@ -13,7 +13,7 @@ describe('POST /oauth/register', () => {
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
     const body = parseJson(response);
     expect(body['client_id']).toMatch(/^vg_c_[\w-]{43}$/);
-    expect(body['client_id_issued_at']).toBe(1_700_000_000);
+    expect(body['client_id_issued_at']).toBe(Math.floor(harness.now() / 1000));
     expect(body['client_name']).toBe('Agent');
     expect(body['token_endpoint_auth_method']).toBe('none');
     expect(body).not.toHaveProperty('client_secret');
