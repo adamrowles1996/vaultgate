@@ -31,50 +31,54 @@ export interface MaintenanceCounts {
 interface Rule {
   readonly table: keyof MaintenanceCounts;
   readonly sql: string;
-  readonly cutoff: (now: number, retentionDays: number) => number;
+  readonly threshold: (now: number, retentionDays: number) => number;
 }
 
 /**
  * What STORE-6 lists, and nothing else. "Expired" means the expiry instant
  * has been reached (`<=`); "older than" is strict (`<`). `?1` binds the one
- * cutoff wherever it appears.
+ * threshold wherever it appears.
  */
 const RULES: readonly Rule[] = [
   {
     table: 'authorization_codes',
     sql: 'DELETE FROM authorization_codes WHERE expires_at <= ?1',
-    cutoff: (now) => now,
+    threshold: (now) => now,
   },
-  { table: 'sessions', sql: 'DELETE FROM sessions WHERE expires_at <= ?1', cutoff: (now) => now },
+  {
+    table: 'sessions',
+    sql: 'DELETE FROM sessions WHERE expires_at <= ?1',
+    threshold: (now) => now,
+  },
   {
     table: 'bootstrap_tokens',
     sql: 'DELETE FROM bootstrap_tokens WHERE expires_at <= ?1',
-    cutoff: (now) => now,
+    threshold: (now) => now,
   },
   {
     table: 'tokens',
     sql: 'DELETE FROM tokens WHERE revoked_at <= ?1 OR expires_at <= ?1',
-    cutoff: (now) => now - TOKEN_GRACE_DAYS * DAY_MS,
+    threshold: (now) => now - TOKEN_GRACE_DAYS * DAY_MS,
   },
   {
     table: 'login_attempts',
     sql: 'DELETE FROM login_attempts WHERE attempted_at < ?1',
-    cutoff: (now) => now - LOGIN_ATTEMPT_RETENTION_HOURS * HOUR_MS,
+    threshold: (now) => now - LOGIN_ATTEMPT_RETENTION_HOURS * HOUR_MS,
   },
   {
     table: 'cimd_cache',
     sql: 'DELETE FROM cimd_cache WHERE expires_at <= ?1',
-    cutoff: (now) => now,
+    threshold: (now) => now,
   },
   {
     table: 'pending_authorizations',
     sql: 'DELETE FROM pending_authorizations WHERE expires_at <= ?1',
-    cutoff: (now) => now,
+    threshold: (now) => now,
   },
   {
     table: 'audit_events',
     sql: 'DELETE FROM audit_events WHERE at < ?1',
-    cutoff: (now, retentionDays) => now - retentionDays * DAY_MS,
+    threshold: (now, retentionDays) => now - retentionDays * DAY_MS,
   },
 ];
 
@@ -98,7 +102,7 @@ export function runMaintenance(
   };
   transaction(database, () => {
     for (const rule of RULES) {
-      counts[rule.table] = run(database, rule.sql, rule.cutoff(now.getTime(), retentionDays));
+      counts[rule.table] = run(database, rule.sql, rule.threshold(now.getTime(), retentionDays));
     }
   });
   return counts;

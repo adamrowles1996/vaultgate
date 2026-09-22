@@ -49,8 +49,8 @@ const SEEDS: readonly Seed[] = [
   ['INSERT INTO consents VALUES (?, ?, ?, ?, ?, ?)', 'co', 'op', 'client', '[]', T, null],
   [CODE, 'code-keep', T + 1],
   [CODE, 'code-drop', T],
-  [SESSION, 'sess-keep', T + 1],
-  [SESSION, 'sess-drop', T],
+  [SESSION, 'session-keep', T + 1],
+  [SESSION, 'session-drop', T],
   ['INSERT INTO bootstrap_tokens VALUES (?, ?, ?)', 'boot-keep', T + 1, null],
   ['INSERT INTO bootstrap_tokens VALUES (?, ?, ?)', 'boot-drop', T - 1, T - 2],
   [TOKEN, 'tok-keep-live', 'h1', T + HOUR, null],
@@ -98,7 +98,7 @@ describe('runMaintenance', () => {
       audit_events: 1,
     });
     expect(remaining(database, 'authorization_codes', 'code_hash')).toStrictEqual(['code-keep']);
-    expect(remaining(database, 'sessions', 'id_hash')).toStrictEqual(['sess-keep']);
+    expect(remaining(database, 'sessions', 'id_hash')).toStrictEqual(['session-keep']);
     expect(remaining(database, 'bootstrap_tokens', 'token_hash')).toStrictEqual(['boot-keep']);
     expect(remaining(database, 'tokens')).toStrictEqual([
       'tok-keep-expired-recently',
@@ -177,6 +177,9 @@ describe('startMaintenance', () => {
     expect(messages).toStrictEqual(['store maintenance failed', 'store maintenance failed']);
     expect(lines()[0]).toMatchObject({ err: { message: 'no such table: audit_events' } });
     expect(database.isTransaction).toBe(false);
-    expect(remaining(database, 'sessions', 'id_hash')).toStrictEqual(['sess-drop', 'sess-keep']);
+    expect(remaining(database, 'sessions', 'id_hash')).toStrictEqual([
+      'session-drop',
+      'session-keep',
+    ]);
   });
 });

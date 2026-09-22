@@ -4,9 +4,14 @@ import { describe, expect, it } from 'vitest';
 
 import { createLogger } from '../logger.ts';
 
-import { createApp } from './app.ts';
+import { createApp, type Readiness } from './app.ts';
 
-function appWithLogSink(): { app: ReturnType<typeof createApp>; logged: () => string } {
+const READY: Readiness = { ready: true, failing: [] };
+
+function appWithLogSink(readiness: () => Readiness = () => READY): {
+  app: ReturnType<typeof createApp>;
+  logged: () => string;
+} {
   const chunks: string[] = [];
   const sink = new Writable({
     write(chunk: Buffer, _encoding, callback) {
@@ -14,7 +19,10 @@ function appWithLogSink(): { app: ReturnType<typeof createApp>; logged: () => st
       callback();
     },
   });
-  return { app: createApp({ logger: createLogger('error', sink) }), logged: () => chunks.join('') };
+  return {
+    app: createApp({ logger: createLogger('error', sink), readiness }),
+    logged: () => chunks.join(''),
+  };
 }
 
 describe('createApp', () => {
@@ -30,6 +38,13 @@ describe('createApp', () => {
     const response = await app.request('/readyz');
     expect(response.status).toBe(200);
     expect(await response.json()).toStrictEqual({ status: 'ok' });
+  });
+
+  it('OPS-4 answers 503 naming the failing components when not ready', async () => {
+    const { app } = appWithLogSink(() => ({ ready: false, failing: ['store'] }));
+    const response = await app.request('/readyz');
+    expect(response.status).toBe(503);
+    expect(await response.json()).toStrictEqual({ status: 'unavailable', failing: ['store'] });
   });
 
   it('sets a request id and hardening headers on every response', async () => {
