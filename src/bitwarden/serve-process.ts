@@ -54,6 +54,11 @@ const INHERITED_VARIABLES = ['PATH', 'HOME', 'TMPDIR'] as const;
 const COMMAND_TIMEOUT_MS = 60_000;
 const STOP_GRACE_MS = 5000;
 
+/**
+A CLI invocation always names its command or flag first.
+*/
+type CommandArguments = readonly [string, ...string[]];
+
 export interface CommandOutcome {
   readonly code: number | null;
   readonly stdout: string;
@@ -92,6 +97,7 @@ function collect(stream: Readable | null, into: string[]): void {
 export class BwCli {
   readonly #options: BwCliOptions;
   readonly #environment: Readonly<Record<string, string>>;
+  readonly #inFlight = new Set<ChildLike>();
 
   constructor(options: BwCliOptions) {
     this.#options = options;
@@ -113,7 +119,7 @@ export class BwCli {
   Runs one CLI command to completion; a spawn failure or timeout is an `Error`.
   */
   #run(
-    argv: readonly string[],
+    argv: CommandArguments,
     extraEnvironment: Readonly<Record<string, string>> = {},
   ): Promise<Result<CommandOutcome>> {
     const { promise, resolve } = Promise.withResolvers<Result<CommandOutcome>>();
@@ -125,13 +131,16 @@ export class BwCli {
     const stderr: string[] = [];
     collect(child.stdout, stdout);
     collect(child.stderr, stderr);
+    this.#inFlight.add(child);
     const timeout = sleep(this.#options.clock, COMMAND_TIMEOUT_MS);
     child.once('error', (error) => {
       timeout.cancel();
+      this.#inFlight.delete(child);
       resolve(fail(error));
     });
     child.once('close', (code) => {
       timeout.cancel();
+      this.#inFlight.delete(child);
       resolve(ok({ code, stdout: stdout.join(''), stderr: stderr.join('') }));
     });
     void timeout.done.then((outcome) => {
@@ -140,15 +149,13 @@ export class BwCli {
       }
 
       child.kill('SIGKILL');
-      resolve(
-        fail(new Error(`bw ${argv[0] ?? ''} did not finish within ${COMMAND_TIMEOUT_MS} ms`)),
-      );
+      resolve(fail(new Error(`bw ${argv[0]} did not finish within ${COMMAND_TIMEOUT_MS} ms`)));
     });
     return promise;
   }
 
   async #expectSuccess(
-    argv: readonly string[],
+    argv: CommandArguments,
     extraEnvironment?: Readonly<Record<string, string>>,
   ): Promise<Result<CommandOutcome>> {
     const outcome = await this.#run(argv, extraEnvironment);
@@ -157,7 +164,16 @@ export class BwCli {
     }
     return outcome.value.code === 0
       ? outcome
-      : fail(new Error(`bw ${argv[0] ?? ''} exited with status ${outcome.value.code ?? 'null'}`));
+      : fail(new Error(`bw ${argv[0]} exited with status ${outcome.value.code ?? 'null'}`));
+  }
+
+  /**
+  Kills every one-shot command still running, so a shutdown never waits on the CLI.
+  */
+  abort(): void {
+    for (const child of this.#inFlight) {
+      child.kill('SIGKILL');
+    }
   }
 
   /**

@@ -6,29 +6,22 @@
  */
 import { fail, ok, type Result } from '../result.ts';
 
-import { BwServeApi, type FetchFunction } from './api.ts';
-import { type Clock, sleep, type Sleep, systemClock } from './clock.ts';
+import { BwServeApi } from './api.ts';
+import { type Clock, sleep, type Sleep } from './clock.ts';
 import { Credentials } from './credentials.ts';
-import { allocateLoopbackPort } from './ports.ts';
-import { BwCli, type ServeHandle, spawnChild, type SpawnFunction } from './serve-process.ts';
+import { BwCli, type ServeHandle } from './serve-process.ts';
+import {
+  backoffMs,
+  resolveDependencies,
+  type VaultSupervisorDependencies,
+} from './supervisor-support.ts';
 import { messageDataSchema, statusDataSchema } from './types.ts';
 import { BwServeVaultClient } from './vault-client.ts';
 import { formatVersion } from './versions.ts';
 
-import type { Config, Environment } from '../config/index.ts';
+import type { Config } from '../config/index.ts';
 import type { Logger } from '../logger.ts';
 import type { VaultClient } from '../vault/client.ts';
-
-export interface VaultSupervisorDependencies {
-  /**
-  The parent environment; only `PATH`, `HOME` and `TMPDIR` reach the CLI.
-  */
-  readonly environment: Environment;
-  readonly spawn?: SpawnFunction;
-  readonly clock?: Clock;
-  readonly fetch?: FetchFunction;
-  readonly allocatePort?: () => Promise<number>;
-}
 
 export interface VaultSupervisor {
   readonly client: VaultClient;
@@ -36,15 +29,9 @@ export interface VaultSupervisor {
   stop(): Promise<void>;
 }
 
-const INITIAL_BACKOFF_MS = 1000;
-const MAX_BACKOFF_MS = 60_000;
 const ERROR_LEVEL_AFTER_FAILURES = 10;
 const SERVE_START_TIMEOUT_MS = 30_000;
 const SERVE_START_POLL_MS = 250;
-
-export function backoffMs(consecutiveFailures: number): number {
-  return Math.min(INITIAL_BACKOFF_MS * 2 ** Math.max(consecutiveFailures - 1, 0), MAX_BACKOFF_MS);
-}
 
 class Supervisor implements VaultSupervisor {
   readonly #config: Config;
@@ -66,8 +53,9 @@ class Supervisor implements VaultSupervisor {
   constructor(config: Config, logger: Logger, dependencies: VaultSupervisorDependencies) {
     this.#config = config;
     this.#logger = logger;
-    this.#clock = dependencies.clock ?? systemClock;
-    this.#allocatePort = dependencies.allocatePort ?? allocateLoopbackPort;
+    const resolved = resolveDependencies(dependencies);
+    this.#clock = resolved.clock;
+    this.#allocatePort = resolved.allocatePort;
     this.#credentials = new Credentials(
       config.bitwarden.clientId,
       config.secrets.masterPassword,
@@ -76,11 +64,11 @@ class Supervisor implements VaultSupervisor {
     this.#cli = new BwCli({
       bin: config.bitwarden.bin,
       dataDir: config.dataDir,
-      environment: dependencies.environment,
-      spawn: dependencies.spawn ?? spawnChild,
+      environment: resolved.environment,
+      spawn: resolved.spawn,
       clock: this.#clock,
     });
-    this.#api = new BwServeApi(() => this.#serve?.endpoint, dependencies.fetch ?? fetch);
+    this.#api = new BwServeApi(() => this.#serve?.endpoint, resolved.fetch);
     const options = { api: this.#api, clock: this.#clock };
     this.client = new BwServeVaultClient(
       config.bitwarden.server === undefined
@@ -149,7 +137,7 @@ class Supervisor implements VaultSupervisor {
   /**
   One start-up: version gate, login, spawn, unlock, initial sync.
   */
-  async #attempt(): Promise<Result<void>> {
+  async #attempt(): Promise<Result<ServeHandle>> {
     const version = await this.#cli.version();
     if (!version.ok) {
       return version;
@@ -159,7 +147,8 @@ class Supervisor implements VaultSupervisor {
     if (!loggedIn.ok) {
       return loggedIn;
     }
-    this.#serve = this.#cli.serve(await this.#allocatePort());
+    const serve = this.#cli.serve(await this.#allocatePort());
+    this.#serve = serve;
     const started = await this.#awaitServe();
     const unlocked = started.ok ? await this.#unlock() : started;
     if (!unlocked.ok) {
@@ -170,7 +159,7 @@ class Supervisor implements VaultSupervisor {
     if (!synced.ok) {
       this.#logger.warn({ err: synced.error }, 'initial vault sync failed');
     }
-    return ok(undefined);
+    return ok(serve);
   }
 
   async #stopServe(): Promise<void> {
@@ -209,11 +198,7 @@ class Supervisor implements VaultSupervisor {
   /**
   Serves until the child exits; `true` when that was our own shutdown.
   */
-  async #serveUntilExit(): Promise<boolean> {
-    const serve = this.#serve;
-    if (serve === undefined) {
-      return this.#stopping;
-    }
+  async #serveUntilExit(serve: ServeHandle): Promise<boolean> {
     this.#failures = 0;
     this.#ready = true;
     this.#logger.info('vault ready');
@@ -249,7 +234,7 @@ class Supervisor implements VaultSupervisor {
     while (!this.#stopping) {
       const attempt = await this.#attempt();
       if (attempt.ok) {
-        const isStopped = await this.#serveUntilExit();
+        const isStopped = await this.#serveUntilExit(attempt.value);
         if (isStopped) {
           return;
         }
@@ -277,6 +262,7 @@ class Supervisor implements VaultSupervisor {
   async stop(): Promise<void> {
     this.#stopping = true;
     this.#waiting?.cancel();
+    this.#cli.abort();
     this.#becomeUnready();
     if (this.#serve !== undefined) {
       await this.#api.call({ method: 'POST', path: '/lock', schema: messageDataSchema });

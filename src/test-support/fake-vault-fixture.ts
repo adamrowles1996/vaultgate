@@ -6,7 +6,7 @@
  */
 export const CANARY = {
   password: 'CANARY-PASSWORD-7f3a',
-  totpSeed: 'JBSWY3DPEHPK3PXP',
+  totpSeed: 'CANARY-TOTP-SEED-8b21',
   notes: 'CANARY-NOTES-1c9e',
   hiddenField: 'CANARY-HIDDEN-52b1',
   cardNumber: 'CANARY-CARD-4111',
@@ -29,7 +29,7 @@ export const FIXTURE_IDS = {
   organization: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
 } as const;
 
-export const FIXTURE_REVISION = '2026-09-01T09:00:00.000Z';
+const FIXTURE_REVISION = '2026-09-01T09:00:00.000Z';
 
 export type FixtureItem = Record<string, unknown>;
 

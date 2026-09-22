@@ -159,6 +159,20 @@ describe('startVaultSupervisor stop during start-up', () => {
     expect(harness.spawner.records).toHaveLength(1);
   });
 
+  it('VAULT-7 kills a CLI command still running and records nothing', async () => {
+    const harness = new SupervisorHarness();
+    harness.spawner.on('status', ({ child }) => {
+      child.stdout.write('{');
+    });
+    const supervisor = harness.start();
+    await harness.until(() => harness.spawner.spawned('status').length === 1);
+    await supervisor.stop();
+    expect(harness.spawner.spawned('status')[0]?.child.signals).toStrictEqual(['SIGKILL']);
+    expect(failures(harness)).toStrictEqual([]);
+    expect(harness.spawner.spawned('serve')).toStrictEqual([]);
+    expect(harness.clock.pending()).toBe(0);
+  });
+
   it('stops polling /status and records nothing when stopped while bw serve starts', async () => {
     const harness = new SupervisorHarness({
       fetch: () => Promise.reject(new Error('ECONNREFUSED')),

@@ -141,11 +141,13 @@ describe('BwServeVaultClient.searchItems', () => {
   it('propagates a failure from either listing', async () => {
     const fake = new FakeBwServe();
     const { client } = clientFor(fake);
-    fake.override('GET', '/list/object/items', 'not json');
-    expect(unwrapFail(await client.searchItems({ limit: 5 })).code).toBe('vault_protocol_error');
+    fake.override('GET', '/list/object/items?trash=true', 'not json');
+    expect(unwrapOk(await client.searchItems({ limit: 5 }))).toHaveLength(5);
     expect(unwrapFail(await client.searchItems({ includeTrash: true, limit: 5 })).code).toBe(
       'vault_protocol_error',
     );
+    fake.override('GET', '/list/object/items', 'not json');
+    expect(unwrapFail(await client.searchItems({ limit: 5 })).code).toBe('vault_protocol_error');
   });
 });
 
@@ -213,6 +215,12 @@ describe('BwServeVaultClient.getSecret', () => {
         'not_found',
       );
     }
+  });
+
+  it('reports not_found for an item-backed field of a missing item', async () => {
+    const { client } = clientFor(new FakeBwServe());
+    const error = unwrapFail(await client.getSecret('missing', { kind: 'card', field: 'number' }));
+    expect(error.code).toBe('not_found');
   });
 
   it('reports the vault as unavailable when locked', async () => {

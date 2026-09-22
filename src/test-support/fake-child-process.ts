@@ -11,7 +11,7 @@ type ErrorListener = (error: Error) => void;
  * has attached its listeners. A signal ends the child unless the test has
  * told it to `ignore` that signal.
  */
-export class FakeChild implements ChildLike {
+class FakeChild implements ChildLike {
   readonly #exitListeners: ExitListener[] = [];
   readonly #closeListeners: ExitListener[] = [];
   readonly #errorListeners: ErrorListener[] = [];

@@ -8,6 +8,17 @@
 import { Hono } from 'hono';
 
 import {
+  asString,
+  failure,
+  itemFilters,
+  message,
+  readBody,
+  REVISION_BASE,
+  secretField,
+  stringData,
+  success,
+} from './fake-bw-serve-support.ts';
+import {
   CANARY,
   fixtureCollections,
   fixtureFolders,
@@ -39,97 +50,6 @@ interface StaleRead {
   remaining: number;
 }
 
-type Body = Readonly<Record<string, unknown>>;
-
-const REVISION_BASE = Date.UTC(2026, 8, 22, 12, 0, 0);
-
-function success(data?: unknown): Body {
-  return data === undefined ? { success: true } : { success: true, data };
-}
-
-function failure(message: string): Body {
-  return { success: false, message };
-}
-
-function message(title: string, extra: Body = {}): Body {
-  return { object: 'message', title, message: null, ...extra };
-}
-
-function stringData(data: string): Body {
-  return { object: 'string', data };
-}
-
-function asString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function nested(item: FixtureItem, key: string): Body {
-  const value = item[key];
-  return typeof value === 'object' && value !== null ? (value as Body) : {};
-}
-
-function loginField(item: FixtureItem, field: string): string | undefined {
-  const login = nested(item, 'login');
-  if (field === 'uri') {
-    const uris = Array.isArray(login['uris']) ? (login['uris'] as Body[]) : [];
-    return asString(uris[0]?.['uri']);
-  }
-  return asString(login[field]);
-}
-
-/**
-What `GET /object/{field}/{id}` reveals; the TOTP code is fixed because the seed is not real.
-*/
-function secretField(item: FixtureItem, field: string): string | undefined {
-  switch (field) {
-    case 'notes': {
-      return asString(item['notes']);
-    }
-    case 'totp': {
-      return loginField(item, 'totp') === undefined ? undefined : '123456';
-    }
-    default: {
-      return loginField(item, field);
-    }
-  }
-}
-
-async function readBody(context: { req: { json(): Promise<unknown> } }): Promise<Body> {
-  const value = await context.req.json();
-  return typeof value === 'object' && value !== null ? (value as Body) : {};
-}
-
-type ItemFilter = (item: FixtureItem) => boolean;
-
-function itemFilters(query: Record<string, string | undefined>): ItemFilter[] {
-  const isWantTrash = query['trash'] === 'true';
-  const search = query['search']?.toLowerCase();
-  const { folderid, collectionid, organizationid, url } = query;
-  const filters: ItemFilter[] = [(item) => (item['deletedDate'] != null) === isWantTrash];
-  if (search !== undefined) {
-    filters.push((item) => String(item['name']).toLowerCase().includes(search));
-  }
-  if (folderid !== undefined) {
-    filters.push((item) => item['folderId'] === folderid);
-  }
-  if (collectionid !== undefined) {
-    filters.push((item) =>
-      ((item['collectionIds'] as string[] | undefined) ?? []).includes(collectionid),
-    );
-  }
-  if (organizationid !== undefined) {
-    filters.push((item) => item['organizationId'] === organizationid);
-  }
-  if (url !== undefined) {
-    filters.push((item) =>
-      ((nested(item, 'login')['uris'] as Body[] | undefined) ?? []).some(
-        (entry) => entry['uri'] === url,
-      ),
-    );
-  }
-  return filters;
-}
-
 export class FakeBwServe {
   readonly #masterPassword: string;
   readonly #revisionLag: number;
@@ -157,7 +77,9 @@ export class FakeBwServe {
       path: `${url.pathname}${url.search}`,
       body: text === undefined ? undefined : (JSON.parse(text) as unknown),
     });
-    const override = this.#overrides.get(`${method} ${url.pathname}`);
+    const override =
+      this.#overrides.get(`${method} ${url.pathname}${url.search}`) ??
+      this.#overrides.get(`${method} ${url.pathname}`);
     return override === undefined
       ? this.#app.request(input, init)
       : new Response(override, { headers: { 'content-type': 'application/json' } });
@@ -344,7 +266,7 @@ export class FakeBwServe {
   }
 
   /**
-  Makes `METHOD /path` answer with `body` verbatim (a string is sent as-is, anything else as JSON).
+  Makes `METHOD /path` (optionally with a query) answer with `body` verbatim (a string is sent as-is, anything else as JSON).
   */
   override(method: string, path: string, body: unknown): void {
     this.#overrides.set(

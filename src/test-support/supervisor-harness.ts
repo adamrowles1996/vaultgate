@@ -13,7 +13,7 @@ import { unwrapOk } from './result.ts';
 import type { FetchFunction } from '../bitwarden/api.ts';
 import type { Config } from '../config/index.ts';
 
-export const HARNESS_PORT = 43_210;
+const HARNESS_PORT = 43_210;
 export const CLIENT_ID = 'user.harness';
 export const CLIENT_SECRET = 'CANARY-CLIENT-SECRET';
 

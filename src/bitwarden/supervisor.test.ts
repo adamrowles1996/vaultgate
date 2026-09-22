@@ -10,7 +10,41 @@ import {
   SupervisorHarness,
 } from '../test-support/supervisor-harness.ts';
 
-import { backoffMs } from './supervisor.ts';
+import { systemClock } from './clock.ts';
+import { allocateLoopbackPort } from './ports.ts';
+import { spawnChild } from './serve-process.ts';
+import { backoffMs, resolveDependencies } from './supervisor-support.ts';
+
+import type { FetchFunction } from './api.ts';
+
+interface SyncGate {
+  readonly fetch: FetchFunction;
+  readonly syncsStarted: () => number;
+  readonly release: () => void;
+}
+
+/**
+A fetch that lets every request through except the second `/sync`, which waits for `release`.
+*/
+function holdingSecondSync(fake: FakeBwServe): SyncGate {
+  const held = Promise.withResolvers<undefined>();
+  let syncs = 0;
+  const fetchFunction: FetchFunction = async (input, init) => {
+    const isSync = new URL(input).pathname === '/sync';
+    syncs += isSync ? 1 : 0;
+    if (isSync && syncs === 2) {
+      await held.promise;
+    }
+    return fake.fetch(input, init);
+  };
+  return {
+    fetch: fetchFunction,
+    syncsStarted: () => syncs,
+    release: () => {
+      held.resolve(undefined);
+    },
+  };
+}
 
 describe('startVaultSupervisor start-up', () => {
   it('VAULT-4 logs in, spawns bw serve, unlocks, syncs and reports ready', async () => {
@@ -137,6 +171,33 @@ describe('startVaultSupervisor periodic sync', () => {
 
     await supervisor.stop();
     expect(harness.clock.pending()).toBe(0);
+  });
+
+  it('VAULT-9 does not reschedule a sync that finishes after shutdown', async () => {
+    const fake = new FakeBwServe({ state: 'locked' });
+    const gate = holdingSecondSync(fake);
+    const harness = new SupervisorHarness({ fake, fetch: gate.fetch });
+    const supervisor = harness.start();
+    await harness.until(() => supervisor.isReady());
+    await harness.clock.advance(60_000);
+    await harness.until(() => gate.syncsStarted() === 2);
+    await supervisor.stop();
+    gate.release();
+    await harness.until(() => harness.messages().includes('vault sync failed'));
+    expect(supervisor.isReady()).toBe(false);
+    expect(harness.clock.pending()).toBe(0);
+  });
+});
+
+describe('resolveDependencies', () => {
+  it('defaults to the real process, clock, network and port allocation', () => {
+    expect(resolveDependencies({ environment: { PATH: '/usr/bin' } })).toStrictEqual({
+      environment: { PATH: '/usr/bin' },
+      spawn: spawnChild,
+      clock: systemClock,
+      fetch,
+      allocatePort: allocateLoopbackPort,
+    });
   });
 });
 

@@ -13,7 +13,7 @@ import type { z } from 'zod';
 
 export type FetchFunction = (input: string, init?: RequestInit) => Promise<Response>;
 
-export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 export interface ApiRequest<T> {
   readonly method: HttpMethod;

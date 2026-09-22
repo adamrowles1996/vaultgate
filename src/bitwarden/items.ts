@@ -16,13 +16,20 @@ import type {
   SecretField,
 } from '../vault/client.ts';
 
-const ITEM_TYPE_NAMES: ReadonlyMap<number, ItemType> = new Map(
-  Object.entries(ITEM_TYPES).map(([name, code]) => [code, name as ItemType]),
-);
+const ITEM_TYPE_NAMES: Readonly<Record<RawItem['type'], ItemType>> = {
+  [ITEM_TYPES.login]: 'login',
+  [ITEM_TYPES.secureNote]: 'secureNote',
+  [ITEM_TYPES.card]: 'card',
+  [ITEM_TYPES.identity]: 'identity',
+  [ITEM_TYPES.sshKey]: 'sshKey',
+};
 
-const FIELD_KIND_NAMES: ReadonlyMap<number, CustomFieldKind> = new Map(
-  Object.entries(FIELD_TYPES).map(([name, code]) => [code, name as CustomFieldKind]),
-);
+const FIELD_KIND_NAMES: Readonly<Record<RawField['type'], CustomFieldKind>> = {
+  [FIELD_TYPES.text]: 'text',
+  [FIELD_TYPES.hidden]: 'hidden',
+  [FIELD_TYPES.boolean]: 'boolean',
+  [FIELD_TYPES.linked]: 'linked',
+};
 
 const SECURE_NOTE_GENERIC = 0;
 
@@ -31,7 +38,7 @@ function isPresent(value: string | null | undefined): value is string {
 }
 
 function summariseField(field: RawField): CustomFieldSummary {
-  const kind = FIELD_KIND_NAMES.get(field.type) ?? 'text';
+  const kind = FIELD_KIND_NAMES[field.type];
   const hasVisibleValue = kind === 'text' || kind === 'boolean';
   return {
     name: field.name ?? '',
@@ -41,7 +48,7 @@ function summariseField(field: RawField): CustomFieldSummary {
 }
 
 export function itemTypeOf(raw: RawItem): ItemType {
-  return ITEM_TYPE_NAMES.get(raw.type) ?? 'login';
+  return ITEM_TYPE_NAMES[raw.type];
 }
 
 function summariseLogin(login: NonNullable<RawItem['login']>): LoginSummary {

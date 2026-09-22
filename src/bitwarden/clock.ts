@@ -20,7 +20,7 @@ export const systemClock: Clock = {
   },
 };
 
-export type SleepOutcome = 'elapsed' | 'cancelled';
+type SleepOutcome = 'elapsed' | 'cancelled';
 
 export interface Sleep {
   readonly done: Promise<SleepOutcome>;

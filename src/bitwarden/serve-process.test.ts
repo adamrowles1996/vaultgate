@@ -81,7 +81,7 @@ describe('BwCli.version', () => {
     expect(error.message).toBe('bw 2024.1.0 is older than the minimum 2025.1.0');
   });
 
-  it('fails on unparsable output', async () => {
+  it('fails on output without a version', async () => {
     const spawner = new FakeSpawner({ '--version': finishing('who knows\n') });
     expect(unwrapFail(await cliWith(spawner).version()).message).toBe(
       'bw --version printed no recognisable version',
@@ -121,6 +121,19 @@ describe('BwCli.version', () => {
     const pending = cliWith(spawner, clock).version();
     await clock.advance(60_000);
     expect(unwrapFail(await pending).message).toBe('bw --version did not finish within 60000 ms');
+    expect(spawner.records[0]!.child.signals).toStrictEqual(['SIGKILL']);
+  });
+});
+
+describe('BwCli.abort', () => {
+  it('VAULT-7 kills commands still running so shutdown does not wait on them', async () => {
+    const spawner = new FakeSpawner();
+    const cli = cliWith(spawner);
+    const pending = cli.version();
+    cli.abort();
+    expect(unwrapFail(await pending).message).toBe('bw --version exited with status null');
+    expect(spawner.records[0]!.child.signals).toStrictEqual(['SIGKILL']);
+    cli.abort();
     expect(spawner.records[0]!.child.signals).toStrictEqual(['SIGKILL']);
   });
 });

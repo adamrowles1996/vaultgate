@@ -204,6 +204,28 @@ describe('patchedItemBody', () => {
     expect(body['favorite']).toBe(false);
   });
 
+  it('defaults notes, favourite, folder and login on a bare item', () => {
+    const bare: RawItem = {
+      id: 'x',
+      name: 'bare',
+      type: 2,
+      revisionDate: '2026-01-01T00:00:00.000Z',
+    };
+    expect(patchedItemBody(bare, {})).toStrictEqual({
+      ...bare,
+      name: 'bare',
+      folderId: null,
+      notes: null,
+      favorite: false,
+      login: null,
+    });
+    expect(patchedItemBody(bare, { login: { username: 'u' } })['login']).toStrictEqual({
+      username: 'u',
+      password: null,
+      uris: [],
+    });
+  });
+
   it('keeps existing uris when the patch does not mention them', () => {
     const original = raw(FIXTURE_IDS.login);
     const body = patchedItemBody(original, { login: { password: 'p' } });

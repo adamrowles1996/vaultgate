@@ -19,8 +19,6 @@ export const envelopeSchema = z.object({
   message: z.string().nullish(),
 });
 
-export type Envelope = z.output<typeof envelopeSchema>;
-
 export const messageDataSchema = z.object({
   object: z.literal('message'),
   title: nullableString,
@@ -79,18 +77,18 @@ const fieldTypeSchema = z.union([
   z.literal(FIELD_TYPES.linked),
 ]);
 
-export const uriSchema = z.looseObject({
+const uriSchema = z.looseObject({
   uri: nullableString,
 });
 
-export const loginSchema = z.looseObject({
+const loginSchema = z.looseObject({
   username: nullableString,
   password: nullableString,
   totp: nullableString,
   uris: z.array(uriSchema).nullish(),
 });
 
-export const fieldSchema = z.looseObject({
+const fieldSchema = z.looseObject({
   name: nullableString,
   value: nullableString,
   type: fieldTypeSchema,
@@ -137,7 +135,7 @@ export const itemListSchema = z.object({
 /**
 `bw` lists a pseudo folder `{ id: null, name: 'No Folder' }`; the client drops it.
 */
-export const folderSchema = z.object({
+const folderSchema = z.object({
   id: z.string().nullable(),
   name: z.string(),
 });
@@ -147,7 +145,7 @@ export const folderListSchema = z.object({
   data: z.array(folderSchema),
 });
 
-export const collectionSchema = z.object({
+const collectionSchema = z.object({
   id: z.string(),
   name: z.string(),
   organizationId: z.string(),
