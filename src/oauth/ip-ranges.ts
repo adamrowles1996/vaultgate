@@ -2,7 +2,7 @@ import { BlockList, isIP } from 'node:net';
 
 /**
  * Address ranges a CIMD fetch must never connect to (OAUTH-8, T6):
- * unspecified, loopback, private, link-local, CGNAT, documentation,
+ * unspecified, loopback, private, link-local, carrier-grade NAT, documentation,
  * benchmarking, multicast and reserved space, for both address families and
  * for IPv4 addresses embedded in IPv6.
  */

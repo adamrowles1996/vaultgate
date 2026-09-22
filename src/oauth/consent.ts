@@ -103,7 +103,7 @@ function deny(context: Context, dependencies: AuthorizeDependencies, decision: D
     operatorId: decision.session.operatorId,
     clientId: decision.pending.parameters['client_id'] ?? '',
     requestId: requestIdOf(context),
-    ip: dependencies.clientIp(context.req.raw),
+    ip: dependencies.clientIp(context),
   });
   return redirectWithError(
     context,
@@ -131,7 +131,7 @@ function approve(
     clientId: decision.pending.parameters['client_id'] ?? '',
     tokenPrefix: auditPrefix(code),
     requestId: requestIdOf(context),
-    ip: dependencies.clientIp(context.req.raw),
+    ip: dependencies.clientIp(context),
     details: { scopes },
   });
   const { redirectUri, state } = target(decision.pending);

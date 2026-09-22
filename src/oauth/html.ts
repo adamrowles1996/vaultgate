@@ -10,7 +10,7 @@ const ESCAPES: Readonly<Record<string, string>> = {
   '&': '&amp;',
   '<': '&lt;',
   '>': '&gt;',
-  '"': '&quot;',
+  '"': '&#34;',
   "'": '&#39;',
 };
 

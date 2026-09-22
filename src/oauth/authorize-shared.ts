@@ -110,9 +110,7 @@ export function rateLimitKey(
   const cookie = getCookie(context, bindingCookieName(dependencies.publicUrl));
   return (
     session?.sessionKey ??
-    (cookie === undefined || cookie.length === 0
-      ? `ip:${dependencies.clientIp(context.req.raw)}`
-      : cookie)
+    (cookie === undefined || cookie.length === 0 ? `ip:${dependencies.clientIp(context)}` : cookie)
   );
 }
 

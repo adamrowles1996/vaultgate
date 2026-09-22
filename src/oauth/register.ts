@@ -48,7 +48,7 @@ export function createRegisterHandler(
   dependencies: RegistrationDependencies,
 ): (context: Context) => Promise<Response> {
   return async (context) => {
-    const ip = dependencies.clientIp(context.req.raw);
+    const ip = dependencies.clientIp(context);
     const limit = dependencies.rateLimiter.take(ip);
     if (!limit.allowed) {
       return respondRateLimited(context, limit.retryAfterSeconds);

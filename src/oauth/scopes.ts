@@ -61,7 +61,7 @@ export function scopeDefinition(scope: Scope): ScopeDefinition {
 }
 
 /**
- * OAUTH-16: `vault:write` is only requestable when the operator enabled it.
+ * OAUTH-16: `vault:write` may be requested only when the operator enabled it.
  */
 export function enabledScopes(config: { readonly enableWriteScope: boolean }): readonly Scope[] {
   return SCOPES_SUPPORTED.filter((scope) => scope !== 'vault:write' || config.enableWriteScope);

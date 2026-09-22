@@ -23,7 +23,7 @@ const MODE_LABELS: Readonly<Record<ClientMode, string>> = {
 /**
  * The scope every client starts from; it cannot be unticked (OAUTH-16).
  */
-const UNTICKABLE: ReadonlySet<Scope> = new Set(['vault:read']);
+const FIXED_SCOPES: ReadonlySet<Scope> = new Set(['vault:read']);
 
 export const APPROVE = 'approve';
 export const DENY = 'deny';
@@ -34,7 +34,7 @@ export function scopeFieldName(scope: Scope): string {
 
 function scopeRow(scope: Scope): string {
   const definition = scopeDefinition(scope);
-  const isFixed = UNTICKABLE.has(scope);
+  const isFixed = FIXED_SCOPES.has(scope);
   const name = escapeHtml(scopeFieldName(scope));
   const risk = definition.risky ? ' <strong class="risk">Sensitive</strong>' : '';
   const control = isFixed
@@ -70,7 +70,7 @@ export function renderConsentPage(view: ConsentView): string {
     ...view.scopes.map((scope) => scopeRow(scope)),
     '</ul></fieldset>',
     `<button type="submit" name="decision" value="${APPROVE}">Allow</button>`,
-    `<button type="submit" name="decision" value="${DENY}" formnovalidate>Deny</button>`,
+    `<button type="submit" name="decision" value="${DENY}">Deny</button>`,
     '</form>',
   ].join('\n');
   return htmlDocument('Allow access to your vault?', body);

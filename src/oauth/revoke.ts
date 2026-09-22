@@ -68,7 +68,7 @@ export function createRevokeHandler(
     if (!token.ok) {
       return respondWithOAuthError(context, token.error);
     }
-    revokeToken(dependencies, token.value, dependencies.clientIp(context.req.raw));
+    revokeToken(dependencies, token.value, dependencies.clientIp(context));
     context.header('Cache-Control', 'no-store');
     return context.json({}, 200);
   };

@@ -27,7 +27,7 @@ import type { ConnectedClient } from './repositories/consents.ts';
 import type { CsrfGuard, OperatorSessionResolver } from './session.ts';
 import type { TokenVerifier } from './verified-token.ts';
 import type { Config } from '../config/index.ts';
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
 
 export type AuthorizationServerConfig = Pick<
@@ -55,7 +55,7 @@ export interface AuthorizationServerDependencies {
   readonly now: Clock;
   readonly random: RandomSource;
   readonly newId: () => string;
-  readonly socketAddress: (request: Request) => string | undefined;
+  readonly socketAddress: (context: Context) => string | undefined;
   readonly loginPath?: string | undefined;
 }
 

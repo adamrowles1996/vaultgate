@@ -30,6 +30,22 @@ export interface AuditEvent {
     Readonly<Record<string, string | number | boolean | readonly string[]>> | undefined;
 }
 
+export interface AuditLogger {
+  info(fields: Readonly<Record<string, unknown>>, message: string): void;
+}
+
 export interface AuditSink {
   record(event: AuditEvent): void;
+}
+
+/**
+ * Writes each event as one structured log line; the store-backed sink that
+ * satisfies MCP-15 retention replaces it at composition time when it lands.
+ */
+export function createLoggingAuditSink(logger: AuditLogger): AuditSink {
+  return {
+    record(event) {
+      logger.info({ audit: event }, 'authorization event');
+    },
+  };
 }

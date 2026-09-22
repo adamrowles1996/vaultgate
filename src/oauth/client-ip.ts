@@ -1,4 +1,6 @@
-export type ClientIpResolver = (request: Request) => string;
+import type { Context } from 'hono';
+
+export type ClientIpResolver = (context: Context) => string;
 
 export interface ClientIpOptions {
   /**
@@ -6,9 +8,9 @@ export interface ClientIpOptions {
   */
   readonly trustProxy: boolean;
   /**
-  The socket peer address; supplied by the listener, absent in tests.
+  The socket peer address; supplied by the listener, absent under `app.request()`.
   */
-  readonly socketAddress: (request: Request) => string | undefined;
+  readonly socketAddress: (context: Context) => string | undefined;
 }
 
 const UNKNOWN_ADDRESS = 'unknown';
@@ -18,14 +20,14 @@ const UNKNOWN_ADDRESS = 'unknown';
  * client cannot spread its requests over spoofed addresses.
  */
 export function createClientIpResolver(options: ClientIpOptions): ClientIpResolver {
-  return (request) => {
+  return (context) => {
     if (options.trustProxy) {
-      const forwarded = request.headers.get('x-forwarded-for');
+      const forwarded = context.req.header('x-forwarded-for');
       const first = forwarded?.split(',', 1)[0]?.trim();
       if (first !== undefined && first.length > 0) {
         return first;
       }
     }
-    return options.socketAddress(request) ?? UNKNOWN_ADDRESS;
+    return options.socketAddress(context) ?? UNKNOWN_ADDRESS;
   };
 }
