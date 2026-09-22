@@ -18,6 +18,11 @@ All notable changes to this project are documented here. The format follows
 - Full configuration schema (spec §08): every variable validated in one pass, `_FILE` variants
   for secrets with permission warnings, duration and URL rules, and a masked start-up summary.
 - Specification (`docs/spec/`), delivery plan, threat model and initial ADRs.
+- Vault backend (spec §05): a supervised loopback `bw serve` with version gate, API-key login,
+  unlock, scheduled sync, exponential-backoff restart and lock-then-stop shutdown; a
+  zod-validated `BwServeVaultClient` with read-after-write consistency and secret-free error
+  mapping; an in-process `bw serve` double and an opt-in integration suite
+  (`npm run test:integration`). `/readyz` now names the vault until it is unlocked.
 - Packaging (spec §09): a multi-stage container image on digest-pinned `node:26-bookworm-slim`
   with the Bitwarden CLI pinned by version and SHA-256 per architecture, a non-root user and a
   curl-free health check; `docker-compose.yml` with Caddy, file-mounted secrets and a read-only,
