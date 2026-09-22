@@ -1,0 +1,193 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "The vaultgate Container App: external HTTPS ingress on 8080, one replica (SQLite on SMB), /data from the Azure Files share, secrets as Key Vault references resolved by the user-assigned identity. Linked from ../mainTemplate.json."
+  },
+  "parameters": {
+    "appName": {
+      "type": "string",
+      "metadata": { "description": "Container App name." }
+    },
+    "location": {
+      "type": "string",
+      "metadata": { "description": "Azure region." }
+    },
+    "environmentId": {
+      "type": "string",
+      "metadata": { "description": "Resource id of the Container Apps managed environment." }
+    },
+    "environmentDefaultDomain": {
+      "type": "string",
+      "metadata": {
+        "description": "The environment's default domain, used for the generated public URL."
+      }
+    },
+    "storageName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the environment storage bound to the Azure Files share."
+      }
+    },
+    "identityId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource id of the user-assigned identity that reads Key Vault."
+      }
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "metadata": { "description": "Key Vault URI, for example https://name.vault.azure.net/." }
+    },
+    "image": {
+      "type": "string",
+      "metadata": { "description": "Fully qualified container image reference." }
+    },
+    "publicUrl": {
+      "type": "string",
+      "metadata": { "description": "Custom public origin, or empty for the generated host." }
+    },
+    "bitwardenServer": {
+      "type": "string",
+      "metadata": {
+        "description": "VAULTGATE_BW_SERVER, or empty for bitwarden.com (vaultgate drops empty values)."
+      }
+    },
+    "enableWriteScope": {
+      "type": "bool",
+      "metadata": { "description": "VAULTGATE_ENABLE_WRITE_SCOPE." }
+    },
+    "logLevel": {
+      "type": "string",
+      "metadata": { "description": "VAULTGATE_LOG_LEVEL." }
+    }
+  },
+  "variables": {
+    "publicOrigin": "[if(empty(parameters('publicUrl')), format('https://{0}.{1}', parameters('appName'), parameters('environmentDefaultDomain')), parameters('publicUrl'))]",
+    "mountOptions": "uid=10001,gid=10001,dir_mode=0770,file_mode=0660,nobrl",
+    "secretNames": ["bw-password", "bw-client-id", "bw-client-secret", "secret-key"]
+  },
+  "resources": [
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2026-01-01",
+      "name": "[parameters('appName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": { "[parameters('identityId')]": {} }
+      },
+      "properties": {
+        "managedEnvironmentId": "[parameters('environmentId')]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": true,
+            "targetPort": 8080,
+            "transport": "auto",
+            "allowInsecure": false,
+            "traffic": [{ "weight": 100, "latestRevision": true }]
+          },
+          "secrets": [
+            {
+              "name": "[variables('secretNames')[0]]",
+              "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[0]))]",
+              "identity": "[parameters('identityId')]"
+            },
+            {
+              "name": "[variables('secretNames')[1]]",
+              "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[1]))]",
+              "identity": "[parameters('identityId')]"
+            },
+            {
+              "name": "[variables('secretNames')[2]]",
+              "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[2]))]",
+              "identity": "[parameters('identityId')]"
+            },
+            {
+              "name": "[variables('secretNames')[3]]",
+              "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[3]))]",
+              "identity": "[parameters('identityId')]"
+            }
+          ]
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "vaultgate",
+              "image": "[parameters('image')]",
+              "resources": { "cpu": 0.5, "memory": "1Gi" },
+              "env": [
+                { "name": "VAULTGATE_PUBLIC_URL", "value": "[variables('publicOrigin')]" },
+                { "name": "VAULTGATE_HOST", "value": "0.0.0.0" },
+                { "name": "VAULTGATE_PORT", "value": "8080" },
+                { "name": "VAULTGATE_TRUST_PROXY", "value": "true" },
+                { "name": "VAULTGATE_DATA_DIR", "value": "/data" },
+                { "name": "VAULTGATE_SQLITE_NETWORK_FS", "value": "true" },
+                { "name": "VAULTGATE_BW_SERVER", "value": "[parameters('bitwardenServer')]" },
+                {
+                  "name": "VAULTGATE_ENABLE_WRITE_SCOPE",
+                  "value": "[string(parameters('enableWriteScope'))]"
+                },
+                { "name": "VAULTGATE_LOG_LEVEL", "value": "[parameters('logLevel')]" },
+                { "name": "VAULTGATE_BW_PASSWORD", "secretRef": "[variables('secretNames')[0]]" },
+                { "name": "VAULTGATE_BW_CLIENT_ID", "secretRef": "[variables('secretNames')[1]]" },
+                {
+                  "name": "VAULTGATE_BW_CLIENT_SECRET",
+                  "secretRef": "[variables('secretNames')[2]]"
+                },
+                { "name": "VAULTGATE_SECRET_KEY", "secretRef": "[variables('secretNames')[3]]" }
+              ],
+              "volumeMounts": [{ "volumeName": "data", "mountPath": "/data" }],
+              "probes": [
+                {
+                  "type": "Startup",
+                  "httpGet": { "path": "/healthz", "port": 8080, "scheme": "HTTP" },
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 10
+                },
+                {
+                  "type": "Liveness",
+                  "httpGet": { "path": "/healthz", "port": 8080, "scheme": "HTTP" },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 30,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": { "path": "/readyz", "port": 8080, "scheme": "HTTP" },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 15,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 10
+                }
+              ]
+            }
+          ],
+          "scale": { "minReplicas": 1, "maxReplicas": 1 },
+          "volumes": [
+            {
+              "name": "data",
+              "storageType": "AzureFile",
+              "storageName": "[parameters('storageName')]",
+              "mountOptions": "[variables('mountOptions')]"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "fqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('appName'))).configuration.ingress.fqdn]"
+    },
+    "publicOrigin": {
+      "type": "string",
+      "value": "[variables('publicOrigin')]"
+    }
+  }
+}

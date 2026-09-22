@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "name": { "value": "vaultgate" },
+    "imageTag": { "value": "latest" },
+    "publicUrl": { "value": "" },
+    "bitwardenServer": { "value": "" },
+    "enableWriteScope": { "value": false },
+    "logLevel": { "value": "info" },
+    "bwPassword": { "value": "REPLACE-WITH-YOUR-BITWARDEN-MASTER-PASSWORD" },
+    "bwClientId": { "value": "user.REPLACE-WITH-YOUR-API-KEY-CLIENT-ID" },
+    "bwClientSecret": { "value": "REPLACE-WITH-YOUR-API-KEY-CLIENT-SECRET" },
+    "secretKey": {
+      "value": "REPLACE-WITH-openssl-rand-base64-32-OR-REMOVE-THIS-LINE-TO-GENERATE-ONE"
+    }
+  }
+}
