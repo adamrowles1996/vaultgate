@@ -222,6 +222,9 @@ class Supervisor implements VaultSupervisor {
   Exponential backoff between attempts; error level once a minute after ten failures (VAULT-6).
   */
   async #recordFailure(error: Error): Promise<void> {
+    if (this.#stopping) {
+      return;
+    }
     this.#failures += 1;
     const delayMs = backoffMs(this.#failures);
     const fields = { err: error, attempt: this.#failures, nextRetryMs: delayMs };

@@ -32,9 +32,17 @@ function readItem(api: BwServeApi, id: string): RawResult {
   return api.call({ method: 'GET', path: itemPath(id), schema: itemSchema });
 }
 
+function isSettled(
+  current: Result<RawItem, VaultError>,
+  isVisible: (item: RawItem) => boolean,
+): boolean {
+  return current.ok ? isVisible(current.value) : current.error.code !== 'not_found';
+}
+
 /**
- * Polls the item until `isVisible` holds or the budget elapses. On timeout the
- * last observed item is returned rather than an error: the write succeeded.
+ * Polls the item until `isVisible` holds or the budget elapses. A `not_found`
+ * counts as "not visible yet" (a just-created item). On timeout the last
+ * observation is returned rather than an error: the write itself succeeded.
  */
 async function awaitRevision(
   { api, clock }: WriteContext,
@@ -44,7 +52,7 @@ async function awaitRevision(
   const deadline = clock.now() + READ_AFTER_WRITE_BUDGET_MS;
   for (;;) {
     const current = await readItem(api, id);
-    if (!current.ok || isVisible(current.value) || clock.now() >= deadline) {
+    if (isSettled(current, isVisible) || clock.now() >= deadline) {
       return current;
     }
     await sleep(clock, READ_AFTER_WRITE_POLL_MS).done;
