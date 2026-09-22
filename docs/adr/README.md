@@ -5,7 +5,7 @@ records get the next number; superseded records are kept and marked.
 
 | ADR                                          | Decision                                                           |
 | -------------------------------------------- | ------------------------------------------------------------------ |
-| [0001](0001-typescript-on-node-24.md)        | TypeScript on Node 24 with native type stripping and `node:sqlite` |
+| [0001](0001-typescript-on-node-26.md)        | TypeScript on Node 26 with native type stripping and `node:sqlite` |
 | [0002](0002-own-authorization-server.md)     | vaultgate is its own OAuth 2.1 authorization server                |
 | [0003](0003-bw-serve-backend.md)             | The vault is reached through a managed loopback `bw serve`         |
 | [0004](0004-no-remote-command-execution.md)  | No tool executes commands, reads files or fetches arbitrary URLs   |

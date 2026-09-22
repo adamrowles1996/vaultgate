@@ -27,7 +27,7 @@ private interface.
   (`DynamicUser=no`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`,
   `NoNewPrivileges=yes`, `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`,
   `SystemCallFilter=@system-service`, `ReadWritePaths=/var/lib/vaultgate`).
-- **DEP-5** The script requires Node 24 and the Bitwarden CLI and offers to install both from
+- **DEP-5** The script requires Node 26 and the Bitwarden CLI and offers to install both from
   official sources with checksum verification; it never uses a distribution package of unknown
   provenance silently.
 

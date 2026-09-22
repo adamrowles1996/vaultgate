@@ -19,7 +19,7 @@ tokens it issued` is the traceability.
 ### M0 Scaffold ✅ (this repository's first commit)
 
 - Repository, licence, governance files, CI with pinned actions, CodeQL, Scorecard, Dependabot.
-- Toolchain: Node 24, TypeScript 5.9 strict, ESLint 10 type-checked, Prettier, knip, vitest at
+- Toolchain: Node 26, TypeScript 5.9 strict, ESLint 10 type-checked, Prettier, knip, vitest at
   100%, file-size and commit-subject gates, git hooks.
 - Minimal runnable server: config, logger with redaction, Hono app with health probes, smoke test.
 - The specification, this plan, the threat model and the first ADRs.

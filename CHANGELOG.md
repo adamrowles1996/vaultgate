@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- Project scaffold: TypeScript on Node 24, strict lint and type gates, 100% coverage gate,
+- Project scaffold: TypeScript on Node 26, strict lint and type gates, 100% coverage gate,
   file-size and commit-subject gates, pinned CI with CodeQL, Scorecard and Dependabot.
 - Minimal server with validated configuration, redacting logger and health probes.
 - Specification (`docs/spec/`), delivery plan, threat model and initial ADRs.
