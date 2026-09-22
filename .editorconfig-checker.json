@@ -1,0 +1,10 @@
+{
+  "Exclude": [
+    "^LICENSE$",
+    "package-lock\\.json",
+    "^\\.git/",
+    "^node_modules/",
+    "^dist/",
+    "^coverage/"
+  ]
+}

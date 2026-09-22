@@ -3,14 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "description": "Remote MCP server for Bitwarden with OAuth 2.1, so AI agents can use your vault over HTTPS without ever holding your master password.",
-  "license": "Apache-2.0",
-  "author": "Adam Rowles",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/adamrowles1996/vaultgate.git"
-  },
-  "homepage": "https://github.com/adamrowles1996/vaultgate#readme",
-  "bugs": "https://github.com/adamrowles1996/vaultgate/issues",
   "keywords": [
     "mcp",
     "model-context-protocol",
@@ -20,30 +12,46 @@
     "secrets",
     "ai-agents"
   ],
-  "type": "module",
-  "engines": {
-    "node": ">=26.0.0"
+  "homepage": "https://github.com/adamrowles1996/vaultgate#readme",
+  "bugs": "https://github.com/adamrowles1996/vaultgate/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adamrowles1996/vaultgate.git"
   },
+  "license": "Apache-2.0",
+  "author": "Adam Rowles",
+  "type": "module",
   "scripts": {
-    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
-    "start": "node dist/main.js",
+    "audit:signatures": "npm audit signatures",
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json",
-    "lint": "eslint . --max-warnings=0",
-    "lint:fix": "eslint . --fix",
+    "check:commit-message": "node scripts/check-commit-message.mjs",
+    "check:file-sizes": "node scripts/check-file-sizes.mjs",
+    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "knip": "knip",
-    "check:file-sizes": "node scripts/check-file-sizes.mjs",
-    "check:commit-message": "node scripts/check-commit-message.mjs",
+    "lint": "npm run lint:code && npm run lint:workflows && npm run lint:shell && npm run lint:markdown && npm run lint:spelling && npm run lint:dependencies && npm run lint:lockfile && npm run lint:manifest && npm run lint:editorconfig && npm run lint:secrets",
+    "lint:code": "eslint . --max-warnings=0",
+    "lint:code:fix": "eslint . --fix",
+    "lint:dependencies": "depcruise src",
+    "lint:editorconfig": "editorconfig-checker",
+    "lint:lockfile": "lockfile-lint --path package-lock.json --type npm --allowed-hosts npm --validate-https --validate-integrity --validate-package-names",
+    "lint:manifest": "sort-package-json --check",
+    "lint:markdown": "markdownlint-cli2",
+    "lint:secrets": "gitleaks git --no-banner --redact",
+    "lint:shell": "shellcheck scripts/*.sh && shfmt --diff --indent 2 --case-indent scripts/*.sh",
+    "lint:spelling": "cspell --no-progress --gitignore .",
+    "lint:workflows": "actionlint",
+    "prepare": "simple-git-hooks",
+    "quality": "npm run format:check && npm run lint && npm run typecheck && npm run knip && npm run check:file-sizes && npm run audit:signatures && npm run test:coverage",
+    "start": "node dist/main.js",
     "test": "vitest run",
-    "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "quality": "npm run format:check && npm run lint && npm run typecheck && npm run knip && npm run check:file-sizes && npm run test:coverage",
-    "prepare": "simple-git-hooks"
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "simple-git-hooks": {
-    "pre-commit": "npx lint-staged",
+    "pre-commit": "npx lint-staged && gitleaks git --pre-commit --staged --no-banner --redact",
     "commit-msg": "node scripts/check-commit-message.mjs --file \"$1\""
   },
   "dependencies": {
@@ -57,20 +65,32 @@
     "@eslint/js": "10.0.1",
     "@types/node": "26.6.2",
     "@vitest/coverage-v8": "5.0.1",
+    "@vitest/eslint-plugin": "1.6.27",
+    "cspell": "10.3.3",
+    "dependency-cruiser": "18.4.0",
     "eslint": "10.11.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-import-resolver-typescript": "4.4.5",
     "eslint-plugin-import-x": "4.17.1",
+    "eslint-plugin-n": "18.3.0",
     "eslint-plugin-prettier": "5.5.6",
+    "eslint-plugin-regexp": "3.3.1",
     "eslint-plugin-sonarjs": "4.2.1",
+    "eslint-plugin-unicorn": "76.0.0",
     "eslint-plugin-unused-imports": "4.4.1",
     "globals": "17.12.0",
     "knip": "6.37.0",
     "lint-staged": "17.5.1",
+    "lockfile-lint": "5.0.1",
+    "markdownlint-cli2": "0.23.3",
     "prettier": "3.9.8",
     "simple-git-hooks": "2.14.0",
+    "sort-package-json": "4.0.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.70.1",
     "vitest": "5.0.1"
+  },
+  "engines": {
+    "node": ">=26.0.0"
   }
 }

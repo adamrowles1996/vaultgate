@@ -37,7 +37,7 @@ the authorization layer that makes remote access safe:
 
 ## How it works
 
-```
+```text
 Claude / Codex ──HTTPS + Bearer──▶ vaultgate ──loopback──▶ bw serve ──▶ Bitwarden
                  ▲                    │
                  └── OAuth 2.1 ◀──────┘  (consent page, operator login with TOTP)
@@ -66,12 +66,14 @@ Claude / Codex ──HTTPS + Bearer──▶ vaultgate ──loopback──▶ b
 
 ## Development
 
-Requires Node 26 (see `.nvmrc`).
+Requires Node 26 (see `.nvmrc`) and [mise](https://mise.jdx.dev) for the pinned external
+linters.
 
 ```bash
+mise install         # actionlint, shellcheck, shfmt, gitleaks, editorconfig-checker
 npm ci
 npm run dev          # runs src/main.ts directly with Node's type stripping
-npm run quality      # format, lint, types, dead code, file sizes, tests at 100%
+npm run quality      # format, every linter, types, dead code, file sizes, provenance, tests at 100%
 ```
 
 Every check that runs in CI runs locally with `npm run quality`. See

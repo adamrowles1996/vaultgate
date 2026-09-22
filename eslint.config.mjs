@@ -8,13 +8,19 @@
 //   - Dependency boundaries: process.env is read in exactly one module;
 //     child processes are spawned in exactly one module.
 //   - No console: structured logging only (pino).
+//   - Node (eslint-plugin-n), regex safety (eslint-plugin-regexp), unicorn's
+//     modern-JavaScript rules and vitest hygiene layered on top.
 //   - Prettier runs last and reports drift as lint errors.
 import js from '@eslint/js';
 import eslintComments from '@eslint-community/eslint-plugin-eslint-comments/configs';
+import vitest from '@vitest/eslint-plugin';
 import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript';
 import { createNodeResolver, importX } from 'eslint-plugin-import-x';
+import nodePlugin from 'eslint-plugin-n';
 import prettierRecommended from 'eslint-plugin-prettier/recommended';
+import * as regexp from 'eslint-plugin-regexp';
 import sonarjs from 'eslint-plugin-sonarjs';
+import unicorn from 'eslint-plugin-unicorn';
 import unusedImports from 'eslint-plugin-unused-imports';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -26,11 +32,20 @@ const MAX_COGNITIVE_COMPLEXITY = 15;
 const MAX_PARAMS = 4;
 const MAX_DEPTH = 3;
 
-/** The only module allowed to read process.env. Everything else takes a Config. */
+/**
+The only module allowed to read process.env. Everything else takes a Config.
+*/
 const CONFIG_BOUNDARY_FILES = ['src/config.ts', 'src/main.ts'];
 
-/** The only module allowed to spawn a child process (the managed `bw serve`). */
+/**
+The only module allowed to spawn a child process (the managed `bw serve`).
+*/
 const CHILD_PROCESS_BOUNDARY_FILES = ['src/bitwarden/serve-process.ts'];
+
+/**
+The only module allowed to end the process.
+*/
+const PROCESS_EXIT_BOUNDARY_FILES = ['src/main.ts'];
 
 const childProcessRestriction = {
   paths: [
@@ -106,6 +121,22 @@ const sharedRules = {
   // -- Disable directives must justify themselves ------------------------
   '@eslint-community/eslint-comments/require-description': ['error', { ignore: [] }],
   '@eslint-community/eslint-comments/no-unlimited-disable': 'error',
+
+  // -- Node ---------------------------------------------------------------
+  'n/prefer-node-protocol': 'error',
+  'n/no-process-exit': 'error',
+  'n/no-sync': 'off', // start-up and repo scripts read files synchronously on purpose
+  'n/no-unpublished-import': 'off', // private package; knip and dependency-cruiser cover dev deps
+  'n/no-missing-import': 'off', // TypeScript and import-x resolve .ts imports
+  'n/hashbang': 'off', // scripts are invoked through `node scripts/…`, never as executables
+
+  // -- Unicorn: keep the rules that catch bugs and naming drift -----------
+  'unicorn/filename-case': ['error', { case: 'kebabCase' }],
+  'unicorn/prevent-abbreviations': 'off',
+  'unicorn/no-null': 'off', // node:sqlite and Web APIs speak null
+  'unicorn/no-array-reduce': 'off',
+  'unicorn/no-process-exit': 'off', // eslint-plugin-n owns this with a boundary exemption
+  'unicorn/import-style': 'off',
 };
 
 const typeScriptRules = {
@@ -146,6 +177,9 @@ export default tseslint.config(
   },
   js.configs.recommended,
   eslintComments.recommended,
+  nodePlugin.configs['flat/recommended-module'],
+  regexp.configs['flat/recommended'],
+  unicorn.configs.recommended,
   {
     plugins: { 'unused-imports': unusedImports, sonarjs },
   },
@@ -181,11 +215,27 @@ export default tseslint.config(
     files: CHILD_PROCESS_BOUNDARY_FILES,
     rules: { 'no-restricted-imports': 'off' },
   },
+  {
+    files: PROCESS_EXIT_BOUNDARY_FILES,
+    rules: { 'n/no-process-exit': 'off' },
+  },
 
   // -- Tests: same type-aware rules, minus the ones tests legitimately break
   {
     files: ['src/**/*.test.ts', 'src/test-support/**/*.ts'],
+    extends: [vitest.configs.recommended],
+    settings: { vitest: { typecheck: true } },
     rules: {
+      'vitest/no-focused-tests': 'error',
+      'vitest/no-disabled-tests': 'error',
+      'vitest/expect-expect': 'error',
+      'vitest/no-conditional-expect': 'error',
+      'vitest/no-conditional-in-test': 'error',
+      'vitest/consistent-test-it': ['error', { fn: 'it', withinDescribe: 'it' }],
+      'vitest/valid-title': 'error',
+      'vitest/prefer-strict-equal': 'error',
+      'vitest/no-standalone-expect': 'error',
+      'vitest/require-top-level-describe': 'error',
       'max-lines': 'off',
       'max-lines-per-function': 'off',
       'sonarjs/cognitive-complexity': 'off',
@@ -210,6 +260,7 @@ export default tseslint.config(
       'no-restricted-syntax': 'off',
       'no-restricted-imports': 'off',
       'no-console': 'off',
+      'n/no-process-exit': 'off', // repo scripts are command-line gates; a non-zero exit is their output
     },
   },
 

@@ -2,6 +2,8 @@ import { type DestinationStream, type Logger, pino } from 'pino';
 
 import type { LogLevel } from './config.ts';
 
+export type { Logger } from 'pino';
+
 /**
  * Log fields that must never reach a log sink, whatever a caller passes.
  * Vault material is additionally kept out of log statements by construction;
@@ -19,8 +21,6 @@ const REDACTED_PATHS = [
   '*.clientSecret',
   '*.totp',
 ] as const;
-
-export type { Logger };
 
 export function createLogger(level: LogLevel, destination?: DestinationStream): Logger {
   return pino(

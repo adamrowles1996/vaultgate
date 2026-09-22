@@ -1,0 +1,12 @@
+# Pinned versions of the non-npm linters that `npm run lint` shells out to.
+# `mise install` gives a contributor exactly what CI runs. Node itself is
+# pinned in .nvmrc (read by nvm, fnm and actions/setup-node).
+[settings]
+idiomatic_version_file_enable_tools = []
+
+[tools]
+actionlint = "1.7.12"
+editorconfig-checker = "4.0.2"
+gitleaks = "8.30.1"
+shellcheck = "0.11.0"
+shfmt = "3.14.1"

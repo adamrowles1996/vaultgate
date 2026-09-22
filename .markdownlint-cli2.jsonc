@@ -1,0 +1,11 @@
+{
+  // Prettier owns wrapping (proseWrap: preserve), so line length is not a lint concern.
+  "config": {
+    "default": true,
+    "MD013": false,
+    // CHANGELOG sections legitimately repeat "Added" under different releases.
+    "MD024": { "siblings_only": true },
+  },
+  "globs": ["**/*.md"],
+  "ignores": ["node_modules/**", "dist/**", "coverage/**"],
+}

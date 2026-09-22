@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Conventional Commits gate (https://www.conventionalcommits.org/en/v1.0.0/).
 // Used by the commit-msg hook (--file <path>) and by CI on the pull request
 // title (--message <text>), because squash merges use the PR title as the
@@ -19,7 +18,9 @@ const TYPES = [
   'test',
 ];
 const MAX_SUBJECT_LENGTH = 100; // Dependabot subjects legitimately exceed 72.
-const SUBJECT_PATTERN = new RegExp(`^(${TYPES.join('|')})(\\([a-z0-9][a-z0-9-]*\\))?!?: \\S.*$`);
+const SUBJECT_PATTERN = new RegExp(
+  String.raw`^(?:${TYPES.join('|')})(?:\([a-z0-9][a-z0-9-]*\))?!?: \S.*$`,
+);
 
 function firstLine(text) {
   return text.split('\n').find((line) => !line.startsWith('#')) ?? '';
@@ -31,14 +32,13 @@ function readSubject(argv) {
     return firstLine(readFileSync(argv[fileIndex + 1], 'utf8'));
   }
   const messageIndex = argv.indexOf('--message');
-  if (messageIndex !== -1 && argv[messageIndex + 1] !== undefined) {
-    return firstLine(argv[messageIndex + 1]);
-  }
-  return null;
+  return messageIndex !== -1 && argv[messageIndex + 1] !== undefined
+    ? firstLine(argv[messageIndex + 1])
+    : null;
 }
 
 function validate(subject) {
-  if (/^(Merge |Revert "|fixup! |squash! )/.test(subject)) {
+  if (/^(?:Merge |Revert "|fixup! |squash! )/.test(subject)) {
     return [];
   }
   const problems = [];

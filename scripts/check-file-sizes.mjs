@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Repository-wide file size gate. ESLint caps TypeScript files; this script
 // caps everything git tracks, so a 3 MB fixture or a 2,000-line YAML file
 // cannot land unnoticed. Limits are deliberately small: a file that needs
@@ -10,7 +9,9 @@ const MAX_BYTES = 64 * 1024;
 const MAX_LINES_CODE = 300;
 const MAX_LINES_PROSE = 1200;
 
-/** Generated or externally-authored files that the limits do not apply to. */
+/**
+Generated or externally-authored files that the limits do not apply to.
+*/
 const EXEMPT = new Set(['package-lock.json', 'LICENSE']);
 
 const CODE_EXTENSIONS = new Set(['.ts', '.mjs', '.cjs', '.js', '.json', '.yml', '.yaml', '.sh']);
@@ -22,14 +23,11 @@ function extensionOf(path) {
 }
 
 function lineLimitFor(path) {
-  const ext = extensionOf(path);
-  if (CODE_EXTENSIONS.has(ext)) {
+  const extension = extensionOf(path);
+  if (CODE_EXTENSIONS.has(extension)) {
     return MAX_LINES_CODE;
   }
-  if (PROSE_EXTENSIONS.has(ext)) {
-    return MAX_LINES_PROSE;
-  }
-  return null;
+  return PROSE_EXTENSIONS.has(extension) ? MAX_LINES_PROSE : null;
 }
 
 function countLines(path) {
@@ -65,7 +63,7 @@ function check(path) {
   return problems;
 }
 
-const problems = trackedFiles().flatMap(check);
+const problems = trackedFiles().flatMap((path) => check(path));
 if (problems.length > 0) {
   console.error('File size gate failed:');
   for (const problem of problems) {
