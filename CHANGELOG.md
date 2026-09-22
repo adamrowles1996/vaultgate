@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.0-rc.1] - 2026-09-22
+
 ### Added
 
 - OAuth 2.1 authorization server (spec §03, milestone M3): RFC 8414 metadata, client resolution
@@ -67,4 +71,5 @@ All notable changes to this project are documented here. The format follows
   over a read-only store, with a CI smoke step (`scripts/cli-smoke.sh`) that exports an empty
   store from both the build and the source.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/commits/main
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.1...HEAD
+[0.1.0-rc.1]: https://github.com/adamrowles1996/vaultgate/releases/tag/v0.1.0-rc.1

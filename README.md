@@ -11,13 +11,10 @@ authorization server, so hosted AI agents such as Claude, Claude Cowork,
 Claude Code and Codex can use your vault over HTTPS without ever holding your
 master password.
 
-> **Status: pre-release.** The implementation milestones for configuration and
-> storage (M1), identity (M2), the MCP resource server (M4), the managed
-> `bw serve` backend (M5), packaging (M6) and Azure (M7) are merged on `main`;
-> the OAuth 2.1 authorization server (M3) is being completed on a branch, and
-> M8 (hardening, compatibility evidence, user documentation) is in progress.
-> Until M3 merges, `/mcp` challenges every request and no token can be issued.
-> Follow [`docs/PLAN.md`](docs/PLAN.md) for progress.
+> **Status: release candidate.** Milestones M1 to M7 are merged: configuration, SQLite store,
+> operator identity with TOTP, the OAuth 2.1 authorization server, the MCP tool surface, the
+> managed `bw serve` backend, the audit trail, packaging and the Azure template. M8 (hardening and
+> compatibility evidence) is in progress; see [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Why
 

@@ -26,7 +26,7 @@ tokens it issued` is the traceability.
 
 Exit: CI green on `main`; branch protection on; repository settings applied (see 11.4).
 
-### M1 Store and configuration (spec 07, 08)
+### M1 Store and configuration (spec 07, 08) ✅
 
 1. `feat(config)`: full environment schema with `_FILE` variants, durations, URL rules, secret
    masking for the start-up summary (CFG-1…4).
@@ -38,7 +38,7 @@ Exit: CI green on `main`; branch protection on; repository settings applied (see
 Exit: migrations apply on an empty directory and are idempotent; the maintenance task deletes
 exactly the expired rows; the server boots with a full configuration and reports it masked.
 
-### M2 Identity (spec 04)
+### M2 Identity (spec 04) ✅
 
 1. `feat(identity)`: scrypt password hashing with parameter upgrade, common-password list, TOTP
    with RFC vectors, recovery codes, encrypted secret storage under `VAULTGATE_SECRET_KEY`.
@@ -49,7 +49,7 @@ exactly the expired rows; the server boots with a full configuration and reports
 Exit: the in-process browser double (`app.request()` plus a cookie jar) completes setup → logout →
 login with TOTP → re-authentication; every negative path in 04 is covered (ID-22).
 
-### M3 Authorization server (spec 03)
+### M3 Authorization server (spec 03) ✅
 
 1. `feat(oauth)`: metadata documents, scope registry, CORS policy (OAUTH-1…4, 36, 37).
 2. `feat(oauth)`: client resolution: pre-registered, DCR endpoint, CIMD fetcher with SSRF guard
@@ -63,7 +63,7 @@ Exit: contract tests drive the complete handshake using `@modelcontextprotocol/c
 helpers against the in-process app for all three registration paths; a stub resource returns the
 verified `AuthInfo`.
 
-### M4 MCP resource server with a fake vault (spec 06)
+### M4 MCP resource server with a fake vault (spec 06) ✅
 
 1. `feat(mcp)`: bearer verifier, `WWW-Authenticate` challenges, scope gate, stateless
    `createMcpHandler` wiring, origin/host validation, body cap, per-token rate limit (OAUTH-31…35,
@@ -75,7 +75,7 @@ verified `AuthInfo`.
 Exit: an MCP Inspector CLI run in CI lists tools, calls `search_items` and receives a 403
 challenge for `get_secret` with a `vault:read`-only token.
 
-### M5 Real vault backend (spec 05)
+### M5 Real vault backend (spec 05) ✅
 
 1. `feat(bitwarden)`: `serve-process` spawn boundary, port selection, environment scrubbing,
    login/unlock, restart with backoff, shutdown (VAULT-1…8).
@@ -88,7 +88,7 @@ challenge for `get_secret` with a `vault:read`-only token.
 Exit: `/readyz` reflects the real unlock state; the compatibility suite passes against
 Vaultwarden.
 
-### M6 Packaging (spec 09.1, 09.2, 09.4)
+### M6 Packaging (spec 09.1, 09.2, 09.4) ✅
 
 1. `build(docker)`: multi-stage Dockerfile with pinned, checksummed `bw`, non-root, read-only
    rootfs, healthcheck; `docker-compose.yml` with Caddy; `deploy/proxy/` snippets.
@@ -99,7 +99,7 @@ Exit: `docker compose up` on a clean VM (the maintainer's Proxmox host is the re
 the setup page over HTTPS; `install.sh` completes on a clean Ubuntu LTS VM on the same host; the
 release workflow publishes `v0.1.0-rc.1`.
 
-### M7 Azure (spec 09.3)
+### M7 Azure (spec 09.3) ✅
 
 1. `feat(azure)`: `mainTemplate.json`, `createUiDefinition.json`, parameters file, README with
    the Deploy to Azure button; ARM-TTK in CI.
