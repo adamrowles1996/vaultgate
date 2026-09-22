@@ -26,7 +26,7 @@ import { cimdDocument, parseConsentForm } from './oauth-http.ts';
 import type { Browser as CookieBrowser } from './browser.ts';
 
 export const CIMD_ID = 'https://agent.example.com/.well-known/oauth-client.json';
-export const REDIRECT = 'https://agent.example.com/callback';
+const REDIRECT = 'https://agent.example.com/callback';
 export const DESK = { clientId: 'desk', clientName: 'Desk', redirectUris: [REDIRECT] };
 export const SCOPE = 'vault:read vault:reveal';
 const INITIALIZE = {
