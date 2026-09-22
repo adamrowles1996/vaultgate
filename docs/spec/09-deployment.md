@@ -10,10 +10,14 @@ private interface.
 - **DEP-1** `ghcr.io/adamrowles1996/vaultgate:<semver>` and `:latest`, built by the release
   workflow for `linux/amd64` and `linux/arm64`, signed with Sigstore cosign (keyless), with an SPDX
   SBOM attached and a provenance attestation.
-- **DEP-2** Base image `node:24-alpine`; the Bitwarden CLI is installed from the official GitHub
-  release zip pinned by version and SHA-256 in the Dockerfile. `npm ci --omit=dev`, then a
-  distroless-style final stage: non-root user `vaultgate` (uid 10001), read-only root filesystem,
-  `/data` volume, `HEALTHCHECK` on `/healthz`, `ENTRYPOINT ["node","dist/main.js"]`.
+- **DEP-2** Base image `node:26-bookworm-slim` pinned by digest (Debian rather than Alpine: the
+  Bitwarden CLI binary is linked against glibc); the CLI is installed from the official GitHub
+  release zip pinned by version and SHA-256 for each architecture in the Dockerfile. Multi-stage:
+  `npm ci`, `npm run build`, `npm prune --omit=dev`, then a runtime stage holding only `dist`,
+  production `node_modules`, `package.json` and the CLI, with a non-root user `vaultgate`
+  (uid and gid 10001), a `/data` volume, a curl-free `HEALTHCHECK` on `/healthz` and
+  `ENTRYPOINT ["node","dist/main.js"]`. The image writes only under `/data` and `/tmp`, so the
+  deployment runs it with a read-only root filesystem (`read_only: true` in Compose).
 - **DEP-3** `docker-compose.yml` runs vaultgate plus Caddy for automatic TLS, with an `.env`
   driven configuration and secrets mounted as files. `docker compose up -d` from a clone is a
   complete installation for a single VM.

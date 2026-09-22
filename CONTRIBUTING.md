@@ -10,7 +10,7 @@ the rules below are enforced by tooling, not by hoping.
    that contradicts it must change the spec in the same pull request.
 2. Branch from `main`. One logical change per pull request.
 3. Run `npm run quality` locally. It is exactly what CI runs. The non-npm linters it shells
-   out to (actionlint, shellcheck, shfmt, gitleaks, editorconfig-checker) are pinned in
+   out to (actionlint, shellcheck, shfmt, hadolint, gitleaks, editorconfig-checker) are pinned in
    `.mise.toml`; `mise install` puts the right versions on your PATH.
 4. Title the pull request as a Conventional Commit subject:
    `feat(oauth): rotate refresh tokens per family`. Squash merges use it as the

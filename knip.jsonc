@@ -3,6 +3,13 @@
   "entry": ["scripts/*.mjs"],
   "project": ["src/**/*.ts", "scripts/**/*.mjs"],
   // Non-npm linters installed by mise (.mise.toml), invoked from package.json scripts.
-  "ignoreBinaries": ["actionlint", "editorconfig-checker", "gitleaks", "shellcheck", "shfmt"],
+  "ignoreBinaries": [
+    "actionlint",
+    "editorconfig-checker",
+    "gitleaks",
+    "hadolint",
+    "shellcheck",
+    "shfmt",
+  ],
   "ignoreDependencies": [],
 }

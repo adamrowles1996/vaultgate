@@ -1,0 +1,12 @@
+# Allow-list: the image build needs the manifest, the compiler configuration
+# and the runtime sources. Everything else (tests, docs, tooling, local state,
+# secrets) stays out of the build context.
+*
+!package.json
+!package-lock.json
+!.npmrc
+!tsconfig.json
+!tsconfig.build.json
+!src/
+src/**/*.test.ts
+src/test-support/

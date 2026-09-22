@@ -8,5 +8,6 @@ idiomatic_version_file_enable_tools = []
 actionlint = "1.7.12"
 editorconfig-checker = "4.0.2"
 gitleaks = "8.30.1"
+hadolint = "2.15.1"
 shellcheck = "0.11.0"
 shfmt = "3.14.1"

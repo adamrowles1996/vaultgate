@@ -18,5 +18,13 @@ All notable changes to this project are documented here. The format follows
 - Full configuration schema (spec §08): every variable validated in one pass, `_FILE` variants
   for secrets with permission warnings, duration and URL rules, and a masked start-up summary.
 - Specification (`docs/spec/`), delivery plan, threat model and initial ADRs.
+- Packaging (spec §09): a multi-stage container image on digest-pinned `node:26-bookworm-slim`
+  with the Bitwarden CLI pinned by version and SHA-256 per architecture, a non-root user and a
+  curl-free health check; `docker-compose.yml` with Caddy, file-mounted secrets and a read-only,
+  capability-free container; Caddy and nginx snippets in `deploy/proxy/`; `install.sh` for
+  Debian and Ubuntu with checksum-verified Node, CLI and release tarball and a hardened systemd
+  unit; a tag-driven release workflow that publishes the signed multi-arch image with SBOM and
+  provenance and a GitHub release with `vaultgate-<version>.tgz` and its `.sha256`; a hadolint
+  gate and a pull-request image build.
 
 [Unreleased]: https://github.com/adamrowles1996/vaultgate/commits/main

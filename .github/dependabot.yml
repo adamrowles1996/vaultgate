@@ -18,6 +18,24 @@ updates:
       tooling-minor-and-patch:
         dependency-type: development
         update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/London
+    commit-message:
+      prefix: 'build(docker)'
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/London
+    commit-message:
+      prefix: 'build(compose)'
   - package-ecosystem: github-actions
     directory: /
     schedule:

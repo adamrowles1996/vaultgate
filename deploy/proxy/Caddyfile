@@ -1,0 +1,17 @@
+# Caddy in front of vaultgate (docs/spec/09-deployment.md, DEP-11 and DEP-12).
+#
+# docker-compose.yml mounts this file as is and sets VAULTGATE_DOMAIN. For a
+# bare Linux install, replace vaultgate:8080 with 127.0.0.1:8080 and the
+# placeholder with your hostname. Caddy obtains and renews the certificate.
+#
+# Caddy forwards Host, sets X-Forwarded-For and X-Forwarded-Proto, passes the
+# Authorization request header and the WWW-Authenticate response header
+# through untouched, and applies no read timeout of its own.
+{$VAULTGATE_DOMAIN} {
+  encode zstd gzip
+
+  reverse_proxy vaultgate:8080 {
+    # Never buffer: /mcp may stream server-sent events for a long time.
+    flush_interval -1
+  }
+}

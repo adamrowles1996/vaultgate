@@ -1,0 +1,82 @@
+# Single-VM installation: vaultgate behind Caddy with automatic TLS
+# (docs/spec/09-deployment.md, DEP-3). Guide: docs/guides/install-docker-compose.md
+#
+# Configuration comes from .env (copy .env.example and set VAULTGATE_DOMAIN,
+# VAULTGATE_PUBLIC_URL and VAULTGATE_BW_CLIENT_ID). Secrets are files under
+# ./secrets/, mounted at /run/secrets/<name> and referenced through the *_FILE
+# variables, so no secret value appears in an environment listing.
+
+services:
+  vaultgate:
+    image: ghcr.io/adamrowles1996/vaultgate:${VAULTGATE_VERSION:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Fixed inside the container; these take precedence over .env.
+      VAULTGATE_HOST: 0.0.0.0
+      VAULTGATE_PORT: '8080'
+      VAULTGATE_DATA_DIR: /data
+      VAULTGATE_TRUST_PROXY: 'true'
+      VAULTGATE_SECRET_KEY_FILE: /run/secrets/vaultgate_secret_key
+      VAULTGATE_BW_PASSWORD_FILE: /run/secrets/bw_password
+      VAULTGATE_BW_CLIENT_SECRET_FILE: /run/secrets/bw_client_secret
+    secrets:
+      - vaultgate_secret_key
+      - bw_password
+      - bw_client_secret
+    volumes:
+      - vaultgate-data:/data
+    expose:
+      - '8080'
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  caddy:
+    image: caddy:2.11.4-alpine@sha256:de23def33b17fb5d1290b0f6c2add1d70780e52341896c00a4c8a2a2fe9d355e
+    restart: unless-stopped
+    depends_on:
+      - vaultgate
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      VAULTGATE_DOMAIN: ${VAULTGATE_DOMAIN:?set VAULTGATE_DOMAIN in .env}
+    volumes:
+      - ./deploy/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+
+secrets:
+  vaultgate_secret_key:
+    file: ./secrets/vaultgate_secret_key
+  bw_password:
+    file: ./secrets/bw_password
+  bw_client_secret:
+    file: ./secrets/bw_client_secret
+
+volumes:
+  vaultgate-data:
+  caddy-data:
+  caddy-config:
