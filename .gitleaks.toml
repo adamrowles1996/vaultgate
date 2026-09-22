@@ -1,0 +1,15 @@
+title = "vaultgate"
+
+[extend]
+useDefault = true
+
+# vaultgate's own credentials are prefixed so that leak scanners can find them.
+[[rules]]
+id = "vaultgate-credential"
+description = "vaultgate access token, refresh token, authorization code or dynamic client id"
+regex = '''\bvg_(at|rt|ac|c)_[A-Za-z0-9_-]{43}\b'''
+keywords = ["vg_at_", "vg_rt_", "vg_ac_", "vg_c_"]
+
+[[allowlists]]
+description = "Generated lockfile"
+paths = ['''package-lock\.json''']

@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD041 -->
+
 ## Summary
 
 <!-- What changes and why. Link the spec section (docs/spec/…) or plan milestone (docs/PLAN.md) this implements. -->

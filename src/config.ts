@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { err, ok, type Result } from './result.ts';
+import { fail, ok, type Result } from './result.ts';
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -40,7 +40,7 @@ export type Environment = Readonly<Record<string, string | undefined>>;
 export function loadConfig(environment: Environment): Result<Config, ConfigError> {
   const parsed = environmentSchema.safeParse(environment);
   if (!parsed.success) {
-    return err(
+    return fail(
       new ConfigError(
         parsed.error.issues.map((issue) => `${issue.path.map(String).join('.')}: ${issue.message}`),
       ),

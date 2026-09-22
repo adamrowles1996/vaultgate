@@ -2,7 +2,7 @@
 
 ## 2.1 Components
 
-```
+```text
                  HTTPS (reverse proxy or Container Apps ingress)
                                    │
    ┌───────────────────────────────┼─────────────────────────────────────┐
@@ -92,7 +92,7 @@
 
 ## 2.4 Source layout
 
-```
+```text
 src/
   main.ts                 process entrypoint (excluded from unit coverage; covered by the CI smoke job)
   config.ts               environment schema → Config

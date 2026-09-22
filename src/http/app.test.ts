@@ -22,14 +22,14 @@ describe('createApp', () => {
     const { app } = appWithLogSink();
     const response = await app.request('/healthz');
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: 'ok' });
+    expect(await response.json()).toStrictEqual({ status: 'ok' });
   });
 
   it('answers the readiness probe', async () => {
     const { app } = appWithLogSink();
     const response = await app.request('/readyz');
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: 'ok' });
+    expect(await response.json()).toStrictEqual({ status: 'ok' });
   });
 
   it('sets a request id and hardening headers on every response', async () => {
@@ -45,7 +45,7 @@ describe('createApp', () => {
     const { app } = appWithLogSink();
     const response = await app.request('/nope');
     expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ error: 'not_found' });
+    expect(await response.json()).toStrictEqual({ error: 'not_found' });
   });
 
   it('logs and masks unhandled errors', async () => {
@@ -55,7 +55,7 @@ describe('createApp', () => {
     });
     const response = await app.request('/boom');
     expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ error: 'internal_error' });
+    expect(await response.json()).toStrictEqual({ error: 'internal_error' });
     expect(logged()).toContain('kaboom');
     expect(logged()).toContain('unhandled request error');
   });

@@ -37,7 +37,7 @@ describe('createLogger', () => {
     const logger = createLogger('warn', sink);
     logger.info('dropped');
     logger.warn('kept');
-    expect(lines().map((line) => line['msg'])).toEqual(['kept']);
+    expect(lines().map((line) => line['msg'])).toStrictEqual(['kept']);
   });
 
   it('redacts credentials wherever they appear in a log object', () => {
