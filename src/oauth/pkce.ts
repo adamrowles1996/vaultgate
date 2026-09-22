@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { constantTimeEqual } from './credentials.ts';
+import { isConstantTimeEqual } from './credentials.ts';
 
 /**
  * RFC 7636 §4.1: 43 to 128 unreserved characters.
@@ -30,9 +30,9 @@ export function computeCodeChallenge(codeVerifier: string): string {
  * OAUTH-23: `base64url(sha256(code_verifier)) === code_challenge`, compared
  * in constant time. A malformed verifier never matches.
  */
-export function verifyCodeVerifier(codeVerifier: string, codeChallenge: string): boolean {
+export function isCodeVerifierFor(codeVerifier: string, codeChallenge: string): boolean {
   return (
     isValidCodeVerifier(codeVerifier) &&
-    constantTimeEqual(computeCodeChallenge(codeVerifier), codeChallenge)
+    isConstantTimeEqual(computeCodeChallenge(codeVerifier), codeChallenge)
   );
 }

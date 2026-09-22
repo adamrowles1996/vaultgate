@@ -51,7 +51,7 @@ export function auditPrefix(value: string): string {
  * Length-independent equality for secrets (OAUTH-23). Different lengths are
  * compared against themselves so the timing does not reveal the length either.
  */
-export function constantTimeEqual(left: string, right: string): boolean {
+export function isConstantTimeEqual(left: string, right: string): boolean {
   const leftBytes = Buffer.from(left, 'utf8');
   const rightBytes = Buffer.from(right, 'utf8');
   if (leftBytes.length !== rightBytes.length) {

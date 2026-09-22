@@ -4,9 +4,13 @@ export type Scope = 'vault:read' | 'vault:reveal' | 'vault:write' | 'vault:gener
 
 export interface ScopeDefinition {
   readonly scope: Scope;
-  /** One-line explanation shown on the consent page (OAUTH-36). */
+  /**
+  One-line explanation shown on the consent page (OAUTH-36).
+  */
   readonly explanation: string;
-  /** Marked prominently on the consent page (OAUTH-36). */
+  /**
+  Marked prominently on the consent page (OAUTH-36).
+  */
   readonly risky: boolean;
 }
 
@@ -17,7 +21,8 @@ export interface ScopeDefinition {
 export const SCOPE_DEFINITIONS: readonly ScopeDefinition[] = [
   {
     scope: 'vault:read',
-    explanation: 'Search and list items, folders and collections; see item details without secrets.',
+    explanation:
+      'Search and list items, folders and collections; see item details without secrets.',
     risky: false,
   },
   {
