@@ -127,7 +127,7 @@
                 { "name": "VAULTGATE_BW_SERVER", "value": "[parameters('bitwardenServer')]" },
                 {
                   "name": "VAULTGATE_ENABLE_WRITE_SCOPE",
-                  "value": "[string(parameters('enableWriteScope'))]"
+                  "value": "[if(parameters('enableWriteScope'), 'true', 'false')]"
                 },
                 { "name": "VAULTGATE_LOG_LEVEL", "value": "[parameters('logLevel')]" },
                 { "name": "VAULTGATE_BW_PASSWORD", "secretRef": "[variables('secretNames')[0]]" },
