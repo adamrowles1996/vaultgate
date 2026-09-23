@@ -1,14 +1,31 @@
 import { describe, expect, it } from 'vitest';
 
+import { CONTENT_SECURITY_POLICY } from '../identity/browser.ts';
 import { SCOPES } from '../mcp/scopes.ts';
 import { createHarness, setUpOperator } from '../test-support/identity-app.ts';
 import { callTool, initializeRequest, postJsonRpc } from '../test-support/mcp-client.ts';
-import { createTestApp, READY, type TestApp, testConfig } from '../test-support/test-app.ts';
+import {
+  createTestApp,
+  READY,
+  TEST_METADATA_URL,
+  TEST_RESOURCE,
+  type TestApp,
+  testConfig,
+} from '../test-support/test-app.ts';
 
 import type { Readiness } from './app.ts';
 
+const BROWSER_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+
 function appWithLogSink(readiness: () => Readiness = () => READY): TestApp {
   return createTestApp({ readiness });
+}
+
+async function signedInCookie(): Promise<{ identity: TestApp['app']; cookie: string }> {
+  const harness = createHarness();
+  const { browser } = await setUpOperator(harness);
+  const cookie = [...browser.cookies].map(([name, value]) => `${name}=${value}`).join('; ');
+  return { identity: createTestApp({ identity: harness.identity }).app, cookie };
 }
 
 describe('createApp', () => {
@@ -55,6 +72,59 @@ describe('createApp', () => {
     const response = await app.request('/nope');
     expect(response.status).toBe(404);
     expect(await response.json()).toStrictEqual({ error: 'not_found' });
+  });
+
+  it('ID-24 keeps the JSON 404 for an API client that accepts JSON or sends no Accept', async () => {
+    const { app } = appWithLogSink();
+    const json = await app.request('/nope', { headers: { accept: 'application/json' } });
+    const any = await app.request('/nope', { headers: { accept: '*/*' } });
+    const bare = await app.request('/nope');
+    for (const response of [json, any, bare]) {
+      expect(response.status).toBe(404);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      expect(response.headers.get('content-security-policy')).toBeNull();
+      expect(await response.json()).toStrictEqual({ error: 'not_found' });
+    }
+  });
+
+  it('ID-24 answers a browser with an HTML 404 page under the ID-19 policy', async () => {
+    const { app } = appWithLogSink();
+    const response = await app.request('/nope', { headers: { accept: BROWSER_ACCEPT } });
+    const markup = await response.text();
+    expect(response.status).toBe(404);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(response.headers.get('content-security-policy')).toBe(CONTENT_SECURITY_POLICY);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(markup).toContain('<title>Not found · vaultgate</title>');
+    expect(markup).toContain('<link rel="stylesheet" href="/static/vaultgate.css" />');
+    expect(markup).toContain('Page not found');
+    expect(markup).not.toContain('<script');
+  });
+
+  it('ID-23 redirects the bare root to login without a session and to the account with one', async () => {
+    const { app } = appWithLogSink();
+    const anonymous = await app.request('/', { headers: { accept: BROWSER_ACCEPT } });
+    expect(anonymous.status).toBe(303);
+    expect(anonymous.headers.get('location')).toBe('/login');
+    const { identity, cookie } = await signedInCookie();
+    const signedIn = await identity.request('/', { headers: { accept: BROWSER_ACCEPT, cookie } });
+    expect(signedIn.status).toBe(303);
+    expect(signedIn.headers.get('location')).toBe('/account');
+  });
+
+  it('leaves /mcp and the metadata routes to their own answers whatever the Accept', async () => {
+    const { app } = appWithLogSink();
+    const plain = await app.request(TEST_RESOURCE);
+    const browser = await app.request(TEST_RESOURCE, { headers: { accept: BROWSER_ACCEPT } });
+    for (const response of [plain, browser]) {
+      expect(response.status).toBe(401);
+      expect(response.headers.get('www-authenticate')).toContain('resource_metadata=');
+      expect(response.headers.get('content-security-policy')).toBeNull();
+      expect(await response.json()).toMatchObject({ error: 'invalid_token' });
+    }
+    const metadata = await app.request(TEST_METADATA_URL, { headers: { accept: BROWSER_ACCEPT } });
+    expect(metadata.status).toBe(200);
+    expect(metadata.headers.get('content-type')).toContain('application/json');
   });
 
   it('ID-20 sends HSTS only when the public URL is https', async () => {

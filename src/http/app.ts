@@ -113,7 +113,9 @@ export function createApp(dependencies: AppDependencies): App {
   }
   // -- end oauth ------------------------------------------------------------
 
-  app.notFound((context) => context.json({ error: 'not_found' }, 404));
+  // -- identity: JSON for API clients, a page under ID-19 for a browser (ID-24) --
+  app.notFound(identity.notFound);
+  // -- end identity --
   app.onError((error, context) => {
     logger.error({ err: error, requestId: context.get('requestId') }, 'unhandled request error');
     return context.json({ error: 'internal_error' }, 500);

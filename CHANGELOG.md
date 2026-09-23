@@ -6,7 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- ID-23: opening the bare site root answered the JSON `{"error":"not_found"}`. `GET /` now
+  redirects (`303`) to `/account` when an operator session is present and to `/login` otherwise.
+- ID-24: an unknown path requested by a browser (an `Accept` header preferring `text/html`) is
+  answered with a short HTML page under the ID-19 policy; API clients (JSON accepted, `*/*`, or no
+  `Accept`) still receive the JSON body. `/mcp` and the well-known routes are unchanged.
 
 ## [0.1.0-rc.3] - 2026-09-23
 
