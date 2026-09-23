@@ -6,7 +6,7 @@ import { createIdentityStores, type OperatorRecord, type SessionRecord } from '.
 
 const OPERATOR: OperatorRecord = {
   id: 'op-1',
-  displayName: 'Ada',
+  email: 'ada@example.com',
   passwordHash: 'scrypt$16$8$1$AA==$AA==',
   totpSecretCiphertext: undefined,
   totpLastStep: undefined,
@@ -33,7 +33,7 @@ function repositories(): ReturnType<typeof createIdentityStores> {
 }
 
 describe('operators repository', () => {
-  it('ID-3 creates and finds the operator by id, name or as the only account', () => {
+  it('ID-3 creates and finds the operator by id, e-mail (case-insensitively) or as the only account', () => {
     const { operators } = repositories();
     expect(operators.count()).toBe(0);
     expect(operators.findAny()).toBeUndefined();
@@ -41,9 +41,24 @@ describe('operators repository', () => {
     expect(operators.count()).toBe(1);
     expect(operators.findAny()).toStrictEqual(OPERATOR);
     expect(operators.findById('op-1')).toStrictEqual(OPERATOR);
-    expect(operators.findByDisplayName('Ada')).toStrictEqual(OPERATOR);
+    expect(operators.findByEmail('ada@example.com')).toStrictEqual(OPERATOR);
+    expect(operators.findByEmail('ADA@Example.com')).toStrictEqual(OPERATOR);
     expect(operators.findById('nope')).toBeUndefined();
-    expect(operators.findByDisplayName('nope')).toBeUndefined();
+    expect(operators.findByEmail('nope@example.com')).toBeUndefined();
+  });
+
+  it('ID-3 ID-26 changes the e-mail, keeps it unique and tolerates a pre-migration row without one', () => {
+    const { operators } = repositories();
+    operators.create(OPERATOR);
+    operators.updateEmail('op-1', 'grace@example.com');
+    expect(operators.findById('op-1')?.email).toBe('grace@example.com');
+    expect(operators.findByEmail('ada@example.com')).toBeUndefined();
+    const legacy: OperatorRecord = { ...OPERATOR, id: 'op-2', email: undefined };
+    operators.create(legacy);
+    expect(operators.findById('op-2')).toStrictEqual(legacy);
+    expect(() => {
+      operators.updateEmail('op-2', 'Grace@example.com');
+    }).toThrow(/UNIQUE constraint failed/);
   });
 
   it('ID-6 ID-10 updates the password hash, the TOTP secret and the last accepted step', () => {

@@ -29,7 +29,7 @@ Inside a Claude Code session, run:
 /mcp
 ```
 
-Select `vaultgate` and follow the browser flow: vaultgate's login page (display name, password,
+Select `vaultgate` and follow the browser flow: vaultgate's login page (e-mail address, password,
 authenticator or recovery code), then the consent page. Or, from the shell:
 
 ```bash

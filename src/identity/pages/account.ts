@@ -1,4 +1,5 @@
 import { auditExportSection } from './audit-export.ts';
+import { changeEmailSection, renderSetEmail } from './email.ts';
 import { renderEnrolmentDetails } from './setup.ts';
 import {
   cell,
@@ -23,7 +24,10 @@ interface SessionView {
 }
 
 export interface AccountView {
-  readonly displayName: string;
+  /**
+  Lower-cased; `undefined` only for an account that predates e-mail identification (ID-26).
+  */
+  readonly email: string | undefined;
   readonly csrfToken: string;
   readonly isReauthenticated: boolean;
   readonly sessions: readonly SessionView[];
@@ -53,12 +57,13 @@ function actionForm(action: string, csrfToken: string, label: string, body: Html
   </form>`;
 }
 
-function sensitiveActions(view: AccountView): Html {
+function sensitiveActions(view: AccountView, email: string): Html {
   const passwordField = html`<label
     >New password
     <input name="password" type="password" required minlength="12" maxlength="256" />
   </label>`;
-  return html`<section>
+  return html`${changeEmailSection(email, view.csrfToken)}
+    <section>
       <h3>Change password</h3>
       ${actionForm('/account/password', view.csrfToken, 'Change password', passwordField)}
     </section>
@@ -72,7 +77,14 @@ function sensitiveActions(view: AccountView): Html {
     </section>`;
 }
 
+/**
+Legacy mode (ID-26) shows the set-your-e-mail page in place of the account page until one is set.
+*/
 export function renderAccount(view: AccountView): string {
+  const { email } = view;
+  if (email === undefined) {
+    return renderSetEmail(view);
+  }
   const rows = view.sessions.map((session) => sessionRow(session));
   const reauthenticateField = html`<label
     >Password
@@ -82,7 +94,7 @@ export function renderAccount(view: AccountView): string {
     'Account',
     html`<h2>Account</h2>
       ${errorBanner(view.error)} ${noticeBanner(view.notice)}
-      <p>Signed in as <strong>${view.displayName}</strong>.</p>
+      <p>Signed in as <strong>${email}</strong>.</p>
       ${actionForm('/logout', view.csrfToken, 'Sign out', html``)}
       <section>
         <h3>Connected clients</h3>
@@ -103,12 +115,12 @@ export function renderAccount(view: AccountView): string {
           !view.isReauthenticated,
           () =>
             html`<p>
-                Confirm your password to change it, rotate your authenticator or regenerate recovery
-                codes. The confirmation lasts five minutes.
+                Confirm your password to change it or your e-mail address, rotate your authenticator
+                or regenerate recovery codes. The confirmation lasts five minutes.
               </p>
               ${actionForm('/account/reauthenticate', view.csrfToken, 'Confirm', reauthenticateField)}`,
         )}
-        ${when(view.isReauthenticated, () => sensitiveActions(view))}
+        ${when(view.isReauthenticated, () => sensitiveActions(view, email))}
       </section>
       ${auditExportSection(view)}`,
   );

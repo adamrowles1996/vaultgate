@@ -13,6 +13,7 @@ import {
   setStateCookie,
 } from './browser.ts';
 import { generateCsrfToken } from './csrf.ts';
+import { normaliseEmail } from './email.ts';
 import { renderRecoveryCodes } from './pages/recovery-codes.ts';
 import { renderSetupForm, renderSetupUnavailable } from './pages/setup.ts';
 import { checkPasswordPolicy, hashPassword } from './password.ts';
@@ -23,10 +24,8 @@ import { describeEnrolment, generateTotpSecret, verifyTotp } from './totp.ts';
 import type { IdentityServices } from './services.ts';
 import type { Hono } from 'hono';
 
-const MAX_DISPLAY_NAME_LENGTH = 64;
-
 interface SetupInput {
-  readonly displayName: string;
+  readonly email: string;
   readonly password: string;
   readonly totpStep: number;
 }
@@ -37,9 +36,9 @@ interface SetupContext {
 }
 
 function validate(form: Form, secret: Buffer, now: number): Result<SetupInput> {
-  const displayName = field(form, 'display_name').trim();
-  if (displayName.length === 0 || displayName.length > MAX_DISPLAY_NAME_LENGTH) {
-    return fail(new Error(`enter a display name of up to ${MAX_DISPLAY_NAME_LENGTH} characters`));
+  const email = normaliseEmail(field(form, 'email'));
+  if (!email.ok) {
+    return email;
   }
   const password = checkPasswordPolicy(field(form, 'password'));
   if (!password.ok) {
@@ -49,7 +48,7 @@ function validate(form: Form, secret: Buffer, now: number): Result<SetupInput> {
   const totpStep = verifyTotp({ secret, code, nowMs: now, lastStep: undefined });
   return totpStep === undefined
     ? fail(new Error('the authenticator code was not accepted'))
-    : ok({ displayName, password: password.value, totpStep });
+    : ok({ email: email.value, password: password.value, totpStep });
 }
 
 function setupContext(
@@ -88,7 +87,7 @@ function createOperator(
     const now = clock();
     stores.operators.create({
       id,
-      displayName: input.displayName,
+      email: input.email,
       passwordHash: material.passwordHash,
       totpSecretCiphertext: material.totpCiphertext,
       totpLastStep: input.totpStep,
@@ -136,6 +135,7 @@ async function completeSetup(
     operatorId,
     ip: client.ip,
     requestId: context.get('requestId'),
+    details: { email: input.email },
   });
   return context.html(renderRecoveryCodes(recoveryCodes));
 }
@@ -157,9 +157,9 @@ export function registerSetupRoutes(
     const secret = generateTotpSecret(random);
     const csrfToken = generateCsrfToken(random);
     setStateCookie(context, services, { csrfToken, setupSecret: secret.toString('base64') });
-    const enrolment = describeEnrolment('operator', secret);
+    const enrolment = describeEnrolment(undefined, secret);
     return context.html(
-      renderSetupForm({ token, csrfToken, enrolment, displayName: '', error: undefined }),
+      renderSetupForm({ token, csrfToken, enrolment, email: '', error: undefined }),
     );
   });
 
@@ -175,9 +175,9 @@ export function registerSetupRoutes(
     const token = field(form, 'token');
     const input = validate(form, setup.secret, services.clock());
     if (!input.ok) {
-      const displayName = field(form, 'display_name').trim();
-      const enrolment = describeEnrolment(displayName || 'operator', setup.secret);
-      const view = { token, csrfToken: setup.csrfToken, enrolment, displayName };
+      const email = field(form, 'email').trim();
+      const enrolment = describeEnrolment(email === '' ? undefined : email, setup.secret);
+      const view = { token, csrfToken: setup.csrfToken, enrolment, email };
       return context.html(renderSetupForm({ ...view, error: input.error.message }), 400);
     }
     return completeSetup(context, services, { setup, input: input.value, token });

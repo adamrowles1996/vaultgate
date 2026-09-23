@@ -92,7 +92,7 @@ Start with the database and a new `VAULTGATE_SECRET_KEY` (at least 32 random byt
 hex). The store opens, OAuth tokens and clients are unaffected, but the TOTP secret cannot be
 decrypted:
 
-1. Sign in with your display name, password and a **recovery code** (they are hashes, not
+1. Sign in with your e-mail address, password and a **recovery code** (they are hashes, not
    ciphertext, so they still work).
 2. On the account page confirm your password, then **Set up a new authenticator**.
 3. **Generate new recovery codes** while you are there.

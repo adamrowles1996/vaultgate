@@ -23,6 +23,15 @@ No. Version 1 has exactly one operator account and one Bitwarden account per dep
 connected agent acts for that one operator against that one vault. For several people, run one
 deployment each. Multi-user and multi-vault are not planned for v1.
 
+## The login page stopped asking for a name. Where do I type it?
+
+Operators are identified by e-mail address since 0.1.0-rc.4; the display name is gone. An account
+created by an earlier release has no address yet, so its login page asks for the password alone,
+and after the authenticator step the account page asks you to confirm your password and set an
+address before it shows anything else. From then on, sign in with that address. It is a login
+identifier only: vaultgate never sends mail to it. You can change it from the account page after
+confirming your password.
+
 ## Does it work with organisations and collections?
 
 Reading, yes. `list_collections` shows the collections the account can see and `search_items`

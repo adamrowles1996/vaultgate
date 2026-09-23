@@ -118,10 +118,10 @@ function ensureOperator(identity: IdentityHarness, operatorId: string): void {
   if (identity.stores.operators.findById(operatorId) === undefined) {
     run(
       identity.database,
-      `INSERT INTO operators (id, display_name, password_hash, created_at, password_changed_at)
-        VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO operators (id, email, display_name, password_hash, created_at, password_changed_at)
+        VALUES (?, ?, '', ?, ?, ?)`,
       operatorId,
-      'Operator',
+      `${operatorId}@example.com`,
       'hash',
       0,
       0,

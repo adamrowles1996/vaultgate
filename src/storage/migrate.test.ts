@@ -113,11 +113,11 @@ describe('migrate', () => {
     expect(error.message).toBe('schema_migrations is not contiguous from 1: row 0 has version 5');
   });
 
-  it('STORE-5 creates the v1 schema with every table and hot-path index', () => {
+  it('STORE-5 creates the current schema with every table and hot-path index', () => {
     const database = new DatabaseSync(':memory:');
     expect(unwrapOk(migrate(database, MIGRATIONS, NOW))).toStrictEqual({
-      applied: [1],
-      version: 1,
+      applied: [1, 2],
+      version: 2,
     });
     expect(tables(database)).toStrictEqual([
       'audit_events',
@@ -142,6 +142,7 @@ describe('migrate', () => {
       'idx_cimd_cache_expires_at',
       'idx_consents_operator_id_client_id',
       'idx_login_attempts_subject_attempted_at',
+      'idx_operators_email',
       'idx_pending_authorizations_expires_at',
       'idx_recovery_codes_operator_id',
       'idx_sessions_expires_at',

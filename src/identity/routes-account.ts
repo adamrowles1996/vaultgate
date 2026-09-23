@@ -10,7 +10,7 @@ import {
   readState,
   setStateCookie,
 } from './browser.ts';
-import { ipSubject, operatorSubject } from './login-throttle.ts';
+import { accountSubject, ipSubject } from './login-throttle.ts';
 import { type AccountView, renderAccount, renderTotpRotation } from './pages/account.ts';
 import { renderRecoveryCodes } from './pages/recovery-codes.ts';
 import { checkPasswordPolicy, hashPassword, isCorrectPassword } from './password.ts';
@@ -28,7 +28,14 @@ const NOTICES: Readonly<Record<string, string>> = {
   reauthenticated: 'Password confirmed. Sensitive actions are available for five minutes.',
   'password-changed': 'Password changed. Every other session has been signed out.',
   'totp-rotated': 'Your authenticator has been replaced.',
+  'email-set': 'E-mail address saved. Sign in with it from now on.',
+  'email-changed': 'E-mail address changed. Sign in with the new one from now on.',
 };
+
+/**
+Legacy mode (ID-26): until an e-mail address exists, only setting one (and confirming) is allowed.
+*/
+const LEGACY_ALLOWED_PATHS = new Set(['/account/reauthenticate', '/account/email']);
 
 export interface Authenticated {
   readonly session: SessionState;
@@ -50,7 +57,7 @@ export function accountView(
     isCurrent: record.idHash === session.idHash,
   }));
   return {
-    displayName: operator.displayName,
+    email: operator.email,
     csrfToken: session.csrfToken,
     isReauthenticated: session.isReauthenticated,
     sessions,
@@ -77,8 +84,11 @@ function requireAuthenticated(
     return denied;
   }
   const operator = services.stores.operators.findById(session.operatorId);
-  return operator === undefined
-    ? services.guards.deny(context, 'operator no longer exists')
+  if (operator === undefined) {
+    return services.guards.deny(context, 'operator no longer exists');
+  }
+  return operator.email === undefined && !LEGACY_ALLOWED_PATHS.has(context.req.path)
+    ? services.guards.deny(context, 'e-mail address required')
     : { session, operator };
 }
 
@@ -122,10 +132,7 @@ async function reauthenticate(context: IdentityContext, services: IdentityServic
     return authenticated;
   }
   const { session, operator } = authenticated;
-  const subjects = [
-    ipSubject(services.guards.clientInfo(context).ip),
-    operatorSubject(operator.id),
-  ];
+  const subjects = [ipSubject(services.guards.clientInfo(context).ip), accountSubject(operator)];
   await services.delay(services.throttle.delayFor(subjects));
   const isCorrect = await isCorrectPassword(field(form, 'password'), operator.passwordHash);
   services.throttle.record(subjects, isCorrect);
@@ -180,7 +187,7 @@ async function rotateTotp(context: IdentityContext, services: IdentityServices) 
       csrfToken: session.csrfToken,
       pendingTotpSecret: secret.toString('base64'),
     });
-    const enrolment = describeEnrolment(operator.displayName, secret);
+    const enrolment = describeEnrolment(operator.email, secret);
     return context.html(
       renderTotpRotation({ csrfToken: session.csrfToken, enrolment, error: undefined }),
     );
@@ -197,7 +204,7 @@ async function rotateTotp(context: IdentityContext, services: IdentityServices) 
     lastStep: undefined,
   });
   if (step === undefined) {
-    const enrolment = describeEnrolment(operator.displayName, secret);
+    const enrolment = describeEnrolment(operator.email, secret);
     const view = { csrfToken: session.csrfToken, enrolment, error: 'the code was not accepted' };
     return context.html(renderTotpRotation(view), 400);
   }

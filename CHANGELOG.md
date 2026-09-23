@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- ID-3, ID-12: the operator is identified by e-mail address instead of a display name. Setup asks
+  for e-mail address, password and authenticator code; login asks for e-mail address and
+  password, then the second factor. The address is trimmed, lower-cased and shape-checked only
+  (no mail is sent), can be changed from the account page after confirming the password
+  (`POST /account/email`), and appears as `details.email` on the setup, login and address-change
+  audit events. Login throttling (ID-13) counts the account by the submitted address. The
+  `operator-email` migration adds `operators.email` with a case-insensitive unique index and
+  deprecates `display_name`.
+- ID-26: an account created before that migration keeps working. Its login page asks for the password
+  alone, and the account page is replaced by a "Set your e-mail address" page (re-authentication
+  first) until an address is set; every other account action is refused meanwhile.
+
+**Upgrading note for scripted setups and runbooks:** the `POST /setup` and `POST /login` form
+field `display_name` is gone; send `email` instead.
+
 ### Fixed
 
 - ID-23: opening the bare site root answered the JSON `{"error":"not_found"}`. `GET /` now

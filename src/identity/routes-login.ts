@@ -11,13 +11,20 @@ import {
   setStateCookie,
 } from './browser.ts';
 import { generateCsrfToken } from './csrf.ts';
-import { ipSubject, operatorSubject } from './login-throttle.ts';
-import { LOGIN_FAILURE_MESSAGE, renderPasswordStep, renderSecondStep } from './pages/login.ts';
+import { normaliseEmail } from './email.ts';
+import { accountSubject, emailSubject, ipSubject } from './login-throttle.ts';
+import {
+  LOGIN_FAILURE_MESSAGE,
+  type LoginMode,
+  renderPasswordStep,
+  renderSecondStep,
+} from './pages/login.ts';
 import { hashPassword, isCorrectPassword, requiresRehash } from './password.ts';
 import { safeNextPath } from './provider.ts';
 import { hashRecoveryCode } from './recovery-codes.ts';
 import { verifyTotp } from './totp.ts';
 
+import type { AuditDetails } from '../audit/event.ts';
 import type { OperatorRecord } from './repositories/operators.ts';
 import type { IdentityServices } from './services.ts';
 import type { BrowserState } from './state-cookie.ts';
@@ -42,7 +49,7 @@ function requireState(
 
 /**
  * A hash to verify against when the account does not exist, so an unknown
- * name costs the same scrypt work as a wrong password (ID-12, T9).
+ * address costs the same scrypt work as a wrong password (ID-12, T9).
  */
 function fallbackHashSource(services: IdentityServices): () => Promise<string> {
   const holder: { hash?: Promise<string> } = {};
@@ -56,25 +63,73 @@ function fallbackHashSource(services: IdentityServices): () => Promise<string> {
   };
 }
 
-function subjectsFor(services: IdentityServices, context: IdentityContext, operatorId?: string) {
-  const ip = services.guards.clientInfo(context).ip;
-  return operatorId === undefined ? [ipSubject(ip)] : [ipSubject(ip), operatorSubject(operatorId)];
+/**
+Legacy mode (ID-26): the one account predates the `operator-email` migration and has no address.
+*/
+function legacyOperator(services: IdentityServices): OperatorRecord | undefined {
+  const operator = services.stores.operators.findAny();
+  return operator?.email === undefined ? operator : undefined;
+}
+
+function loginMode(services: IdentityServices): LoginMode {
+  return legacyOperator(services) === undefined ? 'email' : 'legacy';
+}
+
+interface Claim {
+  readonly operator: OperatorRecord | undefined;
+  /**
+  The throttle subjects (ID-13): the address, the client address and, in legacy mode, the account.
+  */
+  readonly subjects: readonly string[];
+  readonly details: AuditDetails;
+}
+
+/**
+Who the password step is for: the submitted address, or in legacy mode the only account.
+*/
+function claimFrom(services: IdentityServices, context: IdentityContext, form: Form): Claim {
+  const ip = ipSubject(services.guards.clientInfo(context).ip);
+  const legacy = legacyOperator(services);
+  if (legacy !== undefined) {
+    return { operator: legacy, subjects: [ip, accountSubject(legacy)], details: {} };
+  }
+  const email = normaliseEmail(field(form, 'email'));
+  if (!email.ok) {
+    return { operator: undefined, subjects: [ip], details: {} };
+  }
+  return {
+    operator: services.stores.operators.findByEmail(email.value),
+    subjects: [ip, emailSubject(email.value)],
+    details: { email: email.value },
+  };
+}
+
+function subjectsFor(
+  services: IdentityServices,
+  context: IdentityContext,
+  operator: OperatorRecord,
+) {
+  return [ipSubject(services.guards.clientInfo(context).ip), accountSubject(operator)];
+}
+
+function emailDetail(operator: OperatorRecord): AuditDetails {
+  return operator.email === undefined ? {} : { email: operator.email };
 }
 
 function recordFailure(
   services: IdentityServices,
   context: IdentityContext,
-  subjects: readonly string[],
+  claim: Claim,
   step: 'password' | 'second-factor',
 ): void {
-  services.throttle.record(subjects, false);
+  services.throttle.record(claim.subjects, false);
   services.audit.record({
     category: 'identity',
     action: 'login.failed',
     outcome: 'failure',
     ip: services.guards.clientInfo(context).ip,
     requestId: context.get('requestId'),
-    details: { step },
+    details: { step, ...claim.details },
   });
 }
 
@@ -121,15 +176,15 @@ async function passwordStep(
   }
   const next = safeNextPath(form.get('next'));
   const password = field(form, 'password');
-  const operator = services.stores.operators.findByDisplayName(field(form, 'display_name'));
-  const subjects = subjectsFor(services, context, operator?.id);
-  await services.delay(services.throttle.delayFor(subjects));
+  const claim = claimFrom(services, context, form);
+  const { operator } = claim;
+  await services.delay(services.throttle.delayFor(claim.subjects));
   const storedHash = operator?.passwordHash ?? (await fallbackHash());
   const isCorrect = await isCorrectPassword(password, storedHash);
   if (operator === undefined || !isCorrect) {
-    recordFailure(services, context, subjects, 'password');
+    recordFailure(services, context, claim, 'password');
     const view = { csrfToken: state.csrfToken, next, error: LOGIN_FAILURE_MESSAGE };
-    return context.html(renderPasswordStep(view), 401);
+    return context.html(renderPasswordStep({ ...view, mode: loginMode(services) }), 401);
   }
   if (requiresRehash(operator.passwordHash, services.passwordParameters)) {
     const upgraded = await hashPassword(password, services.random, services.passwordParameters);
@@ -156,11 +211,12 @@ async function secondStep(context: IdentityContext, services: IdentityServices):
     return services.guards.deny(context, 'password step not completed');
   }
   const next = safeNextPath(form.get('next'));
-  const subjects = subjectsFor(services, context, operator.id);
+  const subjects = subjectsFor(services, context, operator);
   await services.delay(services.throttle.delayFor(subjects));
   const method = verifySecondFactor(services, operator, field(form, 'code'));
   if (method === undefined) {
-    recordFailure(services, context, subjects, 'second-factor');
+    const claim = { operator, subjects, details: emailDetail(operator) };
+    recordFailure(services, context, claim, 'second-factor');
     const view = { csrfToken: state.csrfToken, next, error: LOGIN_FAILURE_MESSAGE };
     return context.html(renderSecondStep(view), 401);
   }
@@ -180,7 +236,7 @@ async function secondStep(context: IdentityContext, services: IdentityServices):
     operatorId: operator.id,
     ip: client.ip,
     requestId: context.get('requestId'),
-    details: { method },
+    details: { method, ...emailDetail(operator) },
   });
   return context.redirect(next, 303);
 }
@@ -198,7 +254,8 @@ export function registerLoginRoutes(
     }
     const csrfToken = generateCsrfToken(services.random);
     setStateCookie(context, services, { csrfToken });
-    return context.html(renderPasswordStep({ csrfToken, next, error: undefined }));
+    const view = { csrfToken, next, error: undefined, mode: loginMode(services) };
+    return context.html(renderPasswordStep(view));
   });
 
   app.post('/login', (context) => passwordStep(context, services, fallbackHash));

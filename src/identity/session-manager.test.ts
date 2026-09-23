@@ -13,7 +13,7 @@ function manager(): { sessions: SessionManager; advance: (ms: number) => void } 
   const stores = createIdentityStores(openTestDatabase());
   stores.operators.create({
     id: 'op-1',
-    displayName: 'Ada',
+    email: 'ada@example.com',
     passwordHash: 'x',
     totpSecretCiphertext: undefined,
     totpLastStep: undefined,

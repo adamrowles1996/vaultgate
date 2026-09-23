@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createHarness,
   csrfOf,
-  DISPLAY_NAME,
+  EMAIL,
   enrolmentKeyOf,
   pageText,
   PASSWORD,
@@ -97,7 +97,7 @@ describe('POST /setup', () => {
     const done = await browser.submit('/setup', {
       token: harness.setupToken(),
       csrf: csrfOf(markup),
-      display_name: ` ${DISPLAY_NAME} `,
+      email: ` ${EMAIL.toUpperCase()} `,
       password: PASSWORD,
       code: totpFor(key, harness.now()),
     });
@@ -109,27 +109,29 @@ describe('POST /setup', () => {
       /^__Host-vg_session=[\w-]{43}; Path=\/; HttpOnly; SameSite=Lax; Secure; Max-Age=43200$/,
     );
     expect(browser.cookies.has('__Host-vg_state')).toBe(false);
-    expect(harness.stores.operators.findAny()?.displayName).toBe(DISPLAY_NAME);
+    expect(harness.stores.operators.findAny()?.email).toBe(EMAIL);
     expect(
       harness.stores.recoveryCodes.countUnused(harness.stores.operators.findAny()?.id ?? ''),
     ).toBe(8);
-    expect(harness.audits.map((event) => event.action)).toStrictEqual(['operator.created']);
+    expect(harness.audits.map((event) => [event.action, event.details])).toStrictEqual([
+      ['operator.created', { email: EMAIL }],
+    ]);
     const account = await browser.get('/account');
     expect(account.status).toBe(200);
   });
 
-  it('ID-3 ID-5 re-renders with the reason for a bad name, password or code', async () => {
+  it('ID-3 ID-5 re-renders with the reason for a bad e-mail, password or code', async () => {
     const harness = createHarness();
     harness.identity.bootstrap.ensureToken();
     const browser = harness.browser();
     const markup = await pageText(browser, `/setup?token=${harness.setupToken()}`);
     const key = enrolmentKeyOf(markup);
-    const base = { token: harness.setupToken(), csrf: csrfOf(markup), display_name: DISPLAY_NAME };
+    const base = { token: harness.setupToken(), csrf: csrfOf(markup), email: EMAIL };
     const good = totpFor(key, harness.now());
     const commonPassword = ['123', 'qwe', 'asd', 'zxc'].join('');
     const attempts = [
-      { ...base, display_name: ' '.repeat(3), password: PASSWORD, code: good },
-      { ...base, display_name: 'x'.repeat(65), password: PASSWORD, code: good },
+      { ...base, email: ' '.repeat(3), password: PASSWORD, code: good },
+      { ...base, email: 'ada.example.com', password: PASSWORD, code: good },
       { ...base, password: 'short', code: good },
       { ...base, password: commonPassword, code: good },
       { ...base, password: PASSWORD, code: '000000' },
@@ -141,13 +143,16 @@ describe('POST /setup', () => {
     }
     expect(responses.map((r) => r.status)).toStrictEqual([400, 400, 400, 400, 400]);
     expect(responses.map((r) => /role="alert">([^<]+)</.exec(r.text)?.[1])).toStrictEqual([
-      'enter a display name of up to 64 characters',
-      'enter a display name of up to 64 characters',
+      'enter a valid e-mail address',
+      'enter a valid e-mail address',
       'use at least 12 characters',
       'that password is on the list of most common passwords',
       'the authenticator code was not accepted',
     ]);
     expect(responses.every((r) => r.text.includes(key))).toBe(true);
+    expect(responses[0]?.text).toContain('otpauth://totp/vaultgate%3Aoperator?');
+    expect(responses[2]?.text).toContain('otpauth://totp/vaultgate%3Aada%40example.com?');
+    expect(responses[2]?.text).toContain('name="email"');
     expect(harness.stores.operators.count()).toBe(0);
   });
 
@@ -159,7 +164,7 @@ describe('POST /setup', () => {
     const fields = {
       token: harness.setupToken(),
       csrf: csrfOf(markup),
-      display_name: DISPLAY_NAME,
+      email: EMAIL,
       password: PASSWORD,
       code: '000000',
     };
@@ -203,18 +208,18 @@ describe('POST /setup', () => {
     const noPassword = await browser.submit('/setup', {
       csrf,
       token: harness.setupToken(),
-      display_name: DISPLAY_NAME,
+      email: EMAIL,
     });
     const noCode = await browser.submit('/setup', {
       csrf,
       token: harness.setupToken(),
-      display_name: DISPLAY_NAME,
+      email: EMAIL,
       password: PASSWORD,
     });
     expect([noToken.status, noName.status, noPassword.status, noCode.status]).toStrictEqual([
       400, 400, 400, 400,
     ]);
-    expect(await noToken.text()).toContain('enter a display name of up to 64 characters');
+    expect(await noToken.text()).toContain('enter a valid e-mail address');
     expect(await noCode.text()).toContain('the authenticator code was not accepted');
   });
 
@@ -227,7 +232,7 @@ describe('POST /setup', () => {
     const response = await browser.submit('/setup', {
       token: 'wrong',
       csrf: csrfOf(markup),
-      display_name: DISPLAY_NAME,
+      email: EMAIL,
       password: PASSWORD,
       code: totpFor(key, harness.now()),
     });
