@@ -163,22 +163,89 @@ Bitwarden. **There is no permanent delete tool.**
 
 `name` in; `folder` (`id`, `name`) out. Use `list_folders` first to avoid duplicates.
 
-## Actions (planned)
+## Actions
 
-A future, off-by-default layer lets an agent _use_ a credential without receiving it: the
-operator defines a target (an API, a database, a server, a Windows host or a website plus the
-vault item that signs in to it, an allowlist policy and the clients allowed to use it), and the
-agent calls `http_request`, `sql_query`, `sql_execute`, `ssh_run`, `winrm_run` or the
-`browser_*` tools by target name. Each connector has its own `actions:*` scope, marked risky at
-consent; write and shell calls carry MCP `destructiveHint` annotations and can require a per-call
-confirmation through MCP elicitation; every injected value is scrubbed from every result. The
-engine core (targets, grants, policy, confirmation, scrubbing, limits and audit, behind
-`VAULTGATE_ENABLE_ACTIONS`) landed with M9's first pull request, but no tool or page exists yet,
-so nothing changes for an agent or an operator until they do: see
-[13 Actions](../spec/13-actions.md),
+An off-by-default layer lets an agent _use_ a credential without receiving it: the operator
+defines a target (an API, a database, a server, a Windows host or a website, plus the vault item
+that signs in to it, an allowlist policy and the clients allowed to use it), and the agent calls
+a connector tool by target name. Specification: [13 Actions](../spec/13-actions.md),
 [14 Action connectors](../spec/14-actions-connectors.md) and
-[ADR 0007](../adr/0007-typed-actions-with-operator-policy.md); milestones M9 to M15 in
-[`PLAN.md`](../PLAN.md).
+[ADR 0007](../adr/0007-typed-actions-with-operator-policy.md). The engine, the scopes and the MCP
+tool surface below exist today; the account pages and the connector runtimes land with the
+remaining M9 to M15 milestones in [`PLAN.md`](../PLAN.md), and until a connector's runtime lands
+its tool is not listed on any deployment.
+
+### Actions scopes
+
+Every actions scope is marked risky on the consent page and none implies another. A scope is
+advertised and effective only when `VAULTGATE_ENABLE_ACTIONS=true` _and_ its connector's switch
+is on (`VAULTGATE_ACTIONS_ENABLE_HTTP`, `_SQL`, `_SSH`, `_WINRM`, `_BROWSER`); turning a switch
+off takes effect for every existing token at once, exactly as for `vault:write`.
+
+| Scope               | Grants                                                       | Tools                        |
+| ------------------- | ------------------------------------------------------------ | ---------------------------- |
+| `actions:http`      | HTTP requests to granted `http` targets, signed by vaultgate | `http_request` (M9, pending) |
+| `actions:sql.read`  | Read-only queries against granted `sql` targets              | `sql_query` (M11)            |
+| `actions:sql.write` | Data changes on granted `sql` targets whose policy allows it | `sql_execute` (M11)          |
+| `actions:ssh`       | One allowlisted command on a granted `ssh` target            | `ssh_run` (M12)              |
+| `actions:winrm`     | One allowlisted command on a granted `winrm` target          | `winrm_run` (M13)            |
+| `actions:browser`   | A signed-in browser session confined to allowed origins      | `browser_*` (M15)            |
+
+A token holding any of these also gets `actions_list_targets`. Calling it without one is
+answered `403` with a challenge that lists every enabled actions scope as an any-of set
+(`scope="actions:http actions:sql.read …"`, `error_description="actions_list_targets requires
+any of …"`); calling a connector tool without its scope names that one scope.
+
+### `actions_list_targets` (any `actions:*`)
+
+No input. Returns `targets`: for each target this client has been granted, its `name` (the
+`target` argument of every connector tool), the operator's `description` of what the destination
+is and what to use it for, its `connector`, the `operations` the target policy and the token's
+scopes allow (`read`, `write`, `shell`, `act`), `confirm_writes` (whether every non-read call
+will ask a human for confirmation first), `engine` (`mssql` or `postgres`, `sql` targets only)
+and `unrestricted: true` for a shell target that accepts any command. Disabled targets, targets
+of a switched-off connector and targets the client is not granted do not appear. There is no
+place in the result for a destination address, a credential field name or a policy pattern.
+
+### Connector tools
+
+Every connector tool takes `target` first and resolves it in a fixed order, stopping at the first
+failure: layer enabled, target exists, client granted, connector enabled, target enabled, stored
+target valid, scope held, arguments valid, policy, rate limits, confirmation, credential, pinned
+destination, run. An ungranted client learns nothing about a target beyond `not_granted`. The
+result never contains the credential: every injected value, in every encoding, is replaced by
+`[redacted:<field>]` in results, error details, audit rows and confirmation prompts. Write, shell
+and browser tools carry `destructiveHint: true` and `openWorldHint: true`, so a client may prompt
+its user before every call; the server never relies on that prompt.
+
+### Confirmation
+
+When a target's policy sets `confirm_writes`, every non-read call needs a human's approval
+through MCP form-mode elicitation. On protocol `2026-07-28` the call answers with an
+`input_required` result carrying one `elicitation/create` request (a single boolean, "Allow this
+call") and an opaque `requestState`; the client shows the prompt, then retries the same call with
+`inputResponses.confirm` and the state echoed verbatim, and vaultgate runs it. The state is
+signed, expires after two minutes, is single-use and is bound to the client, the token, the
+target's revision and the exact arguments; anything else is refused. A client that declares no
+form-mode elicitation is refused before anything else happens with the fixed message of
+`confirmation_unavailable`; a client on the 2025 wire counts as one until the in-band fallback of
+M14. A retry that echoes the state without a well-formed answer is treated as a fresh call: nothing
+runs and the prompt is issued again.
+
+### Actions error codes
+
+Failures are `{ "error": "<code>", "message": "…", "detail"?: { … } }` with `isError: true`;
+every code has one fixed message and `detail` is the only variable part.
+
+| Code                                                                                                                                                 | Meaning                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `unknown_target`, `not_granted`, `target_disabled`, `target_invalid`, `connector_disabled`, `actions_disabled`                                       | The target cannot be used by this client on this deployment; `actions_list_targets` shows what can.                           |
+| `invalid_arguments`                                                                                                                                  | The arguments do not match the tool schema; `detail.problems` says where.                                                     |
+| `policy_denied`                                                                                                                                      | The target policy refused the operation; `detail.reason` is `method`, `path`, `header`, `body_size`, `command` and so on.     |
+| `rate_limited`                                                                                                                                       | Per-target or per-client limit; `detail.retry_after_s`.                                                                       |
+| `confirmation_unavailable`, `confirmation_declined`, `confirmation_cancelled`, `confirmation_expired`, `confirmation_invalid`, `confirmation_reused` | The confirmation of the section above did not happen, was refused, or the retried state was stale, altered or replayed.       |
+| `credential_unavailable`                                                                                                                             | The vault is locked or the item or field is missing; the operator sees why on the account page.                               |
+| `destination_refused`, `connection_failed`, `tls_error`, `authentication_failed`, `timeout`, `upstream_error`                                        | The destination could not be reached or answered with an error; `detail` carries a scrubbed, capped message where one exists. |
 
 ## Secret-handling rules, in plain words
 
@@ -195,10 +262,10 @@ so nothing changes for an agent or an operator until they do: see
 - **Writes need not reveal.** `generate_password: true` lets an agent create or rotate a
   credential it never sees. Supplying a password explicitly means the agent is handling secret
   material, so that call needs `vault:reveal` too.
-- **Nothing is executed.** There is no tool that runs a command, reads a file or fetches a URL.
-  An agent that wants to use a secret in a command has to reveal it, which is audited, and run
-  the command itself. (The planned actions layer above will change this for operator-defined
-  targets only, behind its own switches and scopes.)
+- **Nothing is executed on the vaultgate host.** No vault tool runs a command, reads a file or
+  fetches a URL. An agent that wants to use a secret in a command has to reveal it, which is
+  audited, and run the command itself. The actions layer above changes this for operator-defined
+  targets only, behind its own switches and scopes, and executes only at the target.
 - **Audit, not content.** Each tool call is recorded with the client, the token id, the tool, the
   outcome, the item id and (for `get_secret`) the field name, the duration and the source address.
   Arguments and results are never recorded, and the `password` input of the write tools is

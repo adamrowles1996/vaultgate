@@ -7,7 +7,7 @@
  * additionally need `vault:reveal` because the agent is handling secret
  * material.
  */
-import type { Scope } from '../scopes/registry.ts';
+import { isActionScope, type Scope } from '../scopes/registry.ts';
 
 export const TOOL_NAMES = [
   'vault_status',
@@ -55,14 +55,48 @@ function hasExplicitPassword(input: unknown): boolean {
 }
 
 /**
- * Every scope one tool call needs, so an insufficient-scope challenge can
- * list them all at once (OAUTH-33).
+ * What one tool call needs of the token: every scope listed (`all`) or at
+ * least one of them (`any`). An OAUTH-33 challenge lists the whole set
+ * either way, so a client learns every scope that would satisfy the call
+ * in one challenge.
  */
-export function requiredScopes(tool: ToolName, input: unknown): readonly Scope[] {
+export interface ScopeRequirement {
+  readonly scopes: readonly Scope[];
+  readonly mode: 'all' | 'any';
+}
+
+/**
+ * Every scope one vault tool call needs, so an insufficient-scope challenge
+ * can list them all at once (OAUTH-33).
+ */
+export function requiredScopes(tool: ToolName, input: unknown): ScopeRequirement {
   const base = TOOL_SCOPES[tool];
   const requiresReveal =
     (tool === 'update_item' || tool === 'create_item') && hasExplicitPassword(input);
-  return requiresReveal ? [base, 'vault:reveal'] : [base];
+  return { scopes: requiresReveal ? [base, 'vault:reveal'] : [base], mode: 'all' };
+}
+
+/**
+The one tool of section 13 every connector shares (ACT-19).
+*/
+export const LIST_TARGETS_TOOL = 'actions_list_targets';
+
+/**
+ * ACT-12: `actions_list_targets` opens to any `actions:*` scope, so its
+ * challenge names every actions scope the deployment has enabled; with none
+ * enabled the tool does not exist and the requirement is `undefined`.
+ */
+export function listTargetsRequirement(enabled: readonly Scope[]): ScopeRequirement | undefined {
+  const scopes = enabled.filter((scope) => isActionScope(scope));
+  return scopes.length === 0 ? undefined : { scopes, mode: 'any' };
+}
+
+export function isRequirementMet(
+  requirement: ScopeRequirement,
+  effective: readonly Scope[],
+): boolean {
+  const held = requirement.scopes.filter((scope) => effective.includes(scope));
+  return requirement.mode === 'any' ? held.length > 0 : held.length === requirement.scopes.length;
 }
 
 /**
@@ -74,13 +108,6 @@ export function effectiveScopes(
   enabled: readonly Scope[],
 ): readonly Scope[] {
   return enabled.filter((scope) => held.includes(scope));
-}
-
-export function missingScopes(
-  required: readonly Scope[],
-  effective: readonly Scope[],
-): readonly Scope[] {
-  return required.filter((scope) => !effective.includes(scope));
 }
 
 /**

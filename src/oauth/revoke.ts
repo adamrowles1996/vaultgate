@@ -23,6 +23,10 @@ export interface RevocationDependencies {
   readonly now: Clock;
   readonly clientIp: ClientIpResolver;
   readonly guards: Guards;
+  /**
+  ACT-10: told the client id once its consent is revoked, so the actions layer can drop its grants and sessions; wired by composition, never imported.
+  */
+  readonly onConsentRevoked?: ((clientId: string) => void) | undefined;
 }
 
 export interface RevokeEndpointDependencies extends RevocationDependencies {
@@ -93,7 +97,7 @@ export function createRevokeHandler(dependencies: RevokeEndpointDependencies): O
  * already revoked or not the operator's.
  */
 export function revokeConsent(
-  dependencies: Pick<RevocationDependencies, 'repos' | 'audit' | 'now'>,
+  dependencies: Pick<RevocationDependencies, 'repos' | 'audit' | 'now' | 'onConsentRevoked'>,
   operatorId: string,
   consentId: string,
 ): number | undefined {
@@ -106,6 +110,7 @@ export function revokeConsent(
     return undefined;
   }
   const revoked = dependencies.repos.tokens.revokeByConsent(consentId, at);
+  dependencies.onConsentRevoked?.(consent.clientId);
   dependencies.audit.record({
     category: 'oauth',
     action: 'consent_revoked',

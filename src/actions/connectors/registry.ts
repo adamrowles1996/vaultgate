@@ -9,7 +9,7 @@ import { CONNECTOR_KINDS, type ActionsConfig, type ConnectorKind } from '../../c
 
 import { httpSchemas } from './http/schemas.ts';
 
-import type { AnyConnector, AnyConnectorSchemas } from './connector.ts';
+import type { AnyConnector, AnyConnectorSchemas, ConnectorTool } from './connector.ts';
 
 export type ConnectorLoader = () => Promise<AnyConnector>;
 
@@ -33,6 +33,10 @@ export function schemasFor(kind: ConnectorKind): AnyConnectorSchemas | undefined
 
 export interface ConnectorRegistry {
   readonly kinds: readonly ConnectorKind[];
+  /**
+  Every tool of every loaded connector, in connector order; the MCP layer registers these.
+  */
+  readonly tools: readonly ConnectorTool<unknown>[];
   get(kind: ConnectorKind): AnyConnector | undefined;
   /**
   The connector that owns a tool name (`sql_query` and `sql_execute` both belong to `sql`).
@@ -47,6 +51,7 @@ export function connectorRegistry(connectors: readonly AnyConnector[]): Connecto
   );
   return {
     kinds: connectors.map((connector) => connector.kind),
+    tools: connectors.flatMap((connector) => connector.tools),
     get: (kind) => byKind.get(kind),
     forTool: (tool) => byTool.get(tool),
   };

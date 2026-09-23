@@ -9,6 +9,7 @@ import { InMemoryTokenVerifier } from './in-memory-token-verifier.ts';
 import { InMemoryVaultClient } from './in-memory-vault-client.ts';
 import { unwrapOk } from './result.ts';
 
+import type { ActionsEngine } from '../actions/engine.ts';
 import type { AuditEvent, AuditSink } from '../audit/event.ts';
 import type { Config } from '../config/index.ts';
 import type { Identity } from '../identity/index.ts';
@@ -24,7 +25,11 @@ export const READY: Readiness = {
 };
 
 class RecordingAuditSink implements AuditSink {
-  readonly events: AuditEvent[] = [];
+  readonly events: AuditEvent[];
+
+  constructor(events: AuditEvent[] = []) {
+    this.events = events;
+  }
 
   record(event: AuditEvent): void {
     this.events.push(event);
@@ -98,6 +103,14 @@ export interface TestAppOptions {
   The identity module; defaults to one over a fresh in-memory store.
   */
   readonly identity?: Identity;
+  /**
+  The actions engine behind the actions tools (ACT-73); absent by default.
+  */
+  readonly engine?: ActionsEngine;
+  /**
+  A trail to share with the engine, so one array holds every event of a call.
+  */
+  readonly audit?: AuditEvent[];
 }
 
 export function createTestApp(options: TestAppOptions = {}): TestApp {
@@ -115,7 +128,7 @@ export function createTestApp(options: TestAppOptions = {}): TestApp {
     resource: `${config.publicUrl}/mcp`,
     now: () => clock.now(),
   });
-  const audit = new RecordingAuditSink();
+  const audit = new RecordingAuditSink(options.audit);
   const app = createApp({
     config,
     logger: createLogger('info', sink),
@@ -125,6 +138,7 @@ export function createTestApp(options: TestAppOptions = {}): TestApp {
     tokenVerifier: verifier,
     auditSink: audit,
     ...(options.withClock !== false && { now: () => clock.now() }),
+    ...(options.engine !== undefined && { engine: options.engine }),
   });
   return { app, config, vault, verifier, audit, clock, logged: () => chunks.join('') };
 }

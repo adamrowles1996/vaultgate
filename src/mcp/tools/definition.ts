@@ -7,14 +7,18 @@
 import type { Result } from '../../result.ts';
 import type { VaultClient, VaultError } from '../../vault/client.ts';
 import type { ToolName } from '../scopes.ts';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import type { z } from 'zod';
 
+/**
+The MCP `ToolAnnotations` fields, exactly (ACT-18); the vault tools are closed-world, the actions tools reach out.
+*/
 export interface ToolAnnotations {
   readonly title: string;
   readonly readOnlyHint: boolean;
   readonly destructiveHint: boolean;
   readonly idempotentHint: boolean;
-  readonly openWorldHint: false;
+  readonly openWorldHint: boolean;
 }
 
 /**
@@ -84,6 +88,24 @@ export function defineTool<Input extends z.ZodType, Output extends OutputSchema>
     ...rest,
     auditReference: (input) => auditReference?.(input as z.output<Input>) ?? {},
     run: (vault, input) => run(vault, input as z.output<Input>),
+  };
+}
+
+/**
+ * ACT-15, MCP-6: every failure is `{ error, message, detail? }` with
+ * `isError`, the same JSON as text; `detail` is the only variable part and
+ * the vault tools have none (ACT-74).
+ */
+export function failureResult(
+  code: string,
+  message: string,
+  detail?: Readonly<Record<string, string | number | boolean>>,
+): CallToolResult {
+  const body = { error: code, message, ...(detail !== undefined && { detail }) };
+  return {
+    content: [{ type: 'text', text: `${code}: ${message}` }],
+    structuredContent: body,
+    isError: true,
   };
 }
 

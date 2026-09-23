@@ -12,14 +12,24 @@ import { cors } from 'hono/cors';
 import { z } from 'zod';
 
 import { FixedWindowRateLimiter } from '../net/rate-limit.ts';
+import { enabledScopes } from '../scopes/registry.ts';
 
 import { authenticate, type BearerVerdict } from './bearer.ts';
 import { forbiddenResponse, insufficientScopeChallenge } from './challenges.ts';
 import { CORS_ALLOW_HEADERS, CORS_EXPOSE_HEADERS, resourceUrls } from './metadata.ts';
 import { checkHost, checkOrigin, hasQueryStringToken, resolveSourceIp } from './request-guards.ts';
-import { isToolName, missingScopes, requiredScopes, type ToolName } from './scopes.ts';
+import {
+  isRequirementMet,
+  isToolName,
+  LIST_TARGETS_TOOL,
+  listTargetsRequirement,
+  requiredScopes,
+  type ScopeRequirement,
+} from './scopes.ts';
 import { type CallContext, createVaultMcpServer } from './server.ts';
+import { elicitationCapability } from './tools/actions-call.ts';
 
+import type { ActionsEngine } from '../actions/engine.ts';
 import type { AuditSink } from '../audit/event.ts';
 import type { TokenVerifier } from '../auth/token-types.ts';
 import type { Config } from '../config/index.ts';
@@ -34,6 +44,10 @@ export interface McpRouteDependencies {
   readonly tokenVerifier: TokenVerifier;
   readonly auditSink: AuditSink;
   readonly now: () => number;
+  /**
+  The actions engine, present only when the layer is enabled (ACT-73).
+  */
+  readonly engine?: ActionsEngine | undefined;
 }
 
 interface McpEnvironment {
@@ -90,12 +104,7 @@ interface Gate {
   readonly metadataUrl: string;
 }
 
-function recordDenied(
-  gate: Gate,
-  context: McpContext,
-  verdict: BearerVerdict,
-  tool: ToolName,
-): void {
+function recordDenied(gate: Gate, context: McpContext, verdict: BearerVerdict, tool: string): void {
   const { config } = gate.dependencies;
   gate.dependencies.auditSink.record({
     category: 'mcp',
@@ -112,6 +121,27 @@ function recordDenied(
 }
 
 /**
+ * What a tool needs: the vault tools' scopes (§06.2), any enabled actions
+ * scope for `actions_list_targets` (ACT-12) or the connector's scope for a
+ * connector tool (ACT-11); `undefined` for a tool this deployment does not
+ * serve, which the SDK answers as unknown.
+ */
+function requirementFor(gate: Gate, tool: string, input: unknown): ScopeRequirement | undefined {
+  if (isToolName(tool)) {
+    return requiredScopes(tool, input);
+  }
+  const { engine, config } = gate.dependencies;
+  if (engine === undefined) {
+    return undefined;
+  }
+  if (tool === LIST_TARGETS_TOOL) {
+    return listTargetsRequirement(enabledScopes(config));
+  }
+  const declared = engine.tools.find((candidate) => candidate.name === tool);
+  return declared === undefined ? undefined : { scopes: [declared.scope], mode: 'all' };
+}
+
+/**
 OAUTH-33 then MCP-5, only for `tools/call` on a known tool; anything else goes straight to the SDK.
 */
 function toolCallGate(
@@ -121,16 +151,19 @@ function toolCallGate(
   body: unknown,
 ): Response | undefined {
   const call = toolCallSchema.safeParse(body);
-  if (!call.success || !isToolName(call.data.params.name)) {
+  const requirement = call.success
+    ? requirementFor(gate, call.data.params.name, call.data.params.arguments)
+    : undefined;
+  if (requirement === undefined || !call.success) {
     return undefined;
   }
   const tool = call.data.params.name;
-  const needed = requiredScopes(tool, call.data.params.arguments);
-  if (missingScopes(needed, verdict.scopes).length > 0) {
+  if (!isRequirementMet(requirement, verdict.scopes)) {
     recordDenied(gate, context, verdict, tool);
-    const description = `${tool} requires ${needed.join(' ')}`;
-    const challenge = insufficientScopeChallenge(gate.metadataUrl, needed, description);
-    return forbiddenResponse(challenge, needed, description);
+    const listed = requirement.scopes.join(' ');
+    const description = `${tool} requires ${requirement.mode === 'any' ? 'any of ' : ''}${listed}`;
+    const challenge = insufficientScopeChallenge(gate.metadataUrl, requirement.scopes, description);
+    return forbiddenResponse(challenge, requirement.scopes, description);
   }
   const decision = gate.limiter.hit(verdict.token.tokenId);
   return decision.allowed
@@ -153,8 +186,14 @@ function serve(gate: Gate, context: McpContext, exchange: Exchange): Promise<Res
     scopes: exchange.verdict.scopes,
     requestId: context.get('requestId'),
     sourceIp: resolveSourceIp(context.req.raw, context.env, config),
+    elicitation: elicitationCapability(exchange.body),
   };
-  const server = { vault: gate.dependencies.vaultClient, audit: gate.dependencies.auditSink, now };
+  const server = {
+    vault: gate.dependencies.vaultClient,
+    audit: gate.dependencies.auditSink,
+    now,
+    engine: gate.dependencies.engine,
+  };
   const handler = createMcpHandler(() => createVaultMcpServer(server, callContext), {
     onerror: (error) => {
       logger.warn({ err: error, requestId: callContext.requestId }, 'mcp handler error');

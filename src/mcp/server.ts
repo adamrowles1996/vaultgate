@@ -1,19 +1,23 @@
 /**
  * Builds the per-request `McpServer` (MCP-1): only the tools the token's
  * effective scopes allow are registered (MCP-7), every call is audited
- * (MCP-13), and no resources or prompts exist (MCP-8).
+ * (MCP-13), no resources or prompts exist (MCP-8), and the actions tools of
+ * section 13 exist only while an engine does (ACT-73).
  */
 import { type CallToolResult, McpServer } from '@modelcontextprotocol/server';
 
 import { toolsAllowedBy } from './scopes.ts';
+import { registerActionsTools } from './tools/actions.ts';
+import { failureResult, type Tool, type ToolFailure } from './tools/definition.ts';
 import { ALL_TOOLS } from './tools/index.ts';
 
+import type { Caller } from '../actions/caller.ts';
+import type { ActionsEngine } from '../actions/engine.ts';
 import type { AuditEvent, AuditSink } from '../audit/event.ts';
 import type { VerifiedToken } from '../auth/token-types.ts';
 import type { Result } from '../result.ts';
 import type { Scope } from '../scopes/registry.ts';
 import type { VaultClient } from '../vault/client.ts';
-import type { Tool, ToolFailure } from './tools/definition.ts';
 
 /**
 Reported to clients in `initialize`; bumped with the package.
@@ -32,12 +36,20 @@ export interface CallContext {
   readonly scopes: readonly Scope[];
   readonly requestId: string;
   readonly sourceIp: string;
+  /**
+  ACT-48: whether the request declared form-mode elicitation.
+  */
+  readonly elicitation: Caller['elicitation'];
 }
 
 export interface ServerDependencies {
   readonly vault: VaultClient;
   readonly audit: AuditSink;
   readonly now: () => number;
+  /**
+  Present only when the actions layer is enabled (ACT-73).
+  */
+  readonly engine?: ActionsEngine | undefined;
 }
 
 function toCallToolResult(result: Result<Record<string, unknown>, ToolFailure>): CallToolResult {
@@ -47,12 +59,7 @@ function toCallToolResult(result: Result<Record<string, unknown>, ToolFailure>):
       structuredContent: result.value,
     };
   }
-  const { code, message } = result.error;
-  return {
-    content: [{ type: 'text', text: `${code}: ${message}` }],
-    structuredContent: { error: code, message },
-    isError: true,
-  };
+  return failureResult(result.error.code, result.error.message);
 }
 
 function registerVaultTool(
@@ -107,6 +114,10 @@ export function createVaultMcpServer(
     if (allowed.includes(tool.name)) {
       registerVaultTool(server, tool, dependencies, context);
     }
+  }
+  if (dependencies.engine !== undefined) {
+    const { engine, audit, now } = dependencies;
+    registerActionsTools(server, { engine, audit, now }, context);
   }
   return server;
 }

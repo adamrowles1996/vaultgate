@@ -190,4 +190,20 @@ describe('POST /oauth/revoke', () => {
       details: { revoked: 4 },
     });
   });
+
+  it('OAUTH-30 ACT-10 tells the actions layer which client lost its consent, once per revocation and never for a consent that was not revoked', () => {
+    const revokedClients: string[] = [];
+    const harness = createOAuthHarness({
+      onConsentRevoked: (clientId) => {
+        revokedClients.push(clientId);
+      },
+    });
+    issueFamily(harness, 'fam-1', 50);
+    expect(harness.server.revokeConsent(OPERATOR_ID, 'consent-9')).toBeUndefined();
+    expect(harness.server.revokeConsent('someone-else', 'consent-1')).toBeUndefined();
+    expect(revokedClients).toStrictEqual([]);
+    expect(harness.server.revokeConsent(OPERATOR_ID, 'consent-1')).toBe(2);
+    expect(harness.server.revokeConsent(OPERATOR_ID, 'consent-1')).toBeUndefined();
+    expect(revokedClients).toStrictEqual([CLIENT_ID]);
+  });
 });

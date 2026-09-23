@@ -1,17 +1,22 @@
 # 13 Actions: typed, policy-gated use of vault credentials
 
-> **Status: M9 in progress — engine core landed; tools and pages follow.** This section
-> specifies the actions layer decided in
+> **Status: M9 in progress — engine core and MCP surface landed; pages and the `http`
+> runtime follow.** This section specifies the actions layer decided in
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as milestones
 > M9 to M15 in [`PLAN.md`](../PLAN.md). Landed with M9's first pull request: configuration
 > (13.14), scopes and consent (13.5), storage and maintenance (13.13), targets and grants
 > (13.3, 13.4), policy patterns (13.7.1), confirmation state (13.8), secret handling (13.9),
 > limits (13.11), the engine in `src/actions/` with the resolution order of ACT-16, the
 > `action_calls` trail and its export stream (13.12), the layering rules (13.15) and the
-> `http` connector's document schemas (14.2). Not yet: any MCP tool (13.6), the account
-> pages (13.3.2), the `http` runtime and every other connector; until the tools land, the
-> vault tools of section 06 are the whole MCP surface. The per-connector contracts are in
-> [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence continues there.
+> `http` connector's document schemas (14.2). Landed with the second: the tool registration,
+> scope gate and listing rules of 13.6.1 (ACT-15, 17, 18), `actions_list_targets` (13.6.2),
+> the elicitation transport of 13.8 on the 2026-07-28 wire (ACT-42, 45, 47 and ACT-48's
+> refusal) and the consent-revocation hook of ACT-10. Not yet: the account pages (13.3.2),
+> the `http` runtime and every other connector (so no connector tool is listed on a
+> deployment until its runtime lands), and ACT-48's in-band fallback for the 2025 wire (M14):
+> until then a client on that wire, whose capabilities the stateless handler never sees, is
+> refused a confirmed target with `confirmation_unavailable`. The per-connector contracts are
+> in [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence continues there.
 
 ## 13.1 Purpose
 
@@ -140,7 +145,11 @@ Design rules, in priority order:
 
 - **ACT-12** The six scopes join the registry in `src/scopes/registry.ts` (one registry). None
   implies another, and none implies or is implied by a `vault:*` scope. `actions_list_targets`
-  needs at least one `actions:*` scope and lists only the targets that scope set can call.
+  needs at least one `actions:*` scope and lists only the targets that scope set can call. Its
+  OAUTH-33 challenge names every enabled `actions:*` scope as one any-of set
+  (`scope="actions:http actions:sql.read …"`, `error_description="actions_list_targets requires
+any of …"`), so a client learns in one challenge every scope that would satisfy the call; a
+  connector tool's challenge names its one scope.
 - **ACT-13** Every `actions:*` scope is `risky: true` on the consent page (OAUTH-36) and the page
   adds one plain-language line above the group: "These let the agent act on other systems with
   your credentials. It never sees the credentials, but it can do what the targets allow."
@@ -158,7 +167,10 @@ Design rules, in priority order:
 - **ACT-15** Tools follow section 06: zod `inputSchema` and `outputSchema`, both strict, every
   result also as text (`content`), failures as `{ error, message, detail? }` with `isError: true`.
   Tool names are stable API. The registration lives in `src/mcp/tools/actions.ts` and dispatches
-  to the engine (13.15).
+  to the engine (13.15): a connector declares each of its tools (name, scope, description,
+  annotations, the operation arguments and the result schema) on its `Connector`, and the
+  registration puts `target` in front of the arguments and advertises only the tools of the
+  connectors whose runtime is loaded.
 - **ACT-16** Every tool takes `target` (the name, ACT-1) or `session_id` (browser tools, which
   resolve the session's target) as its first argument and resolves it in this order, stopping at
   the first failure: layer enabled → target exists → client granted → connector enabled →
@@ -523,6 +535,10 @@ args_sha256, issued_at, expires_at }` and `expires_at` is `issued_at + 120 000`.
 - **ACT-62** `action_calls` rows are append-only from the application's point of view, retained
   for `VAULTGATE_AUDIT_RETENTION_DAYS` like `audit_events` (MCP-15, STORE-6), and included in the
   audit export (OPS-5) as a second stream (`--stream actions`; the account page export offers both).
+  The one exception is a call's own row: it is reserved (outcome `error:interrupted`, the nonce
+  consumed) before the connector runs and completed with the outcome, output size and duration
+  when the call ends. That completion is the only update path, and nothing deletes a row before
+  retention.
 - **ACT-63** The account page shows, per target, the last 50 calls with their outcome and
   elicitation result, open sessions, and an "unexpected write" view listing every non-read call
   whose elicitation is not `accepted`, so a target with `confirm_writes: false` is reviewable.

@@ -23,6 +23,10 @@ export interface RpcOptions {
   Defaults to the 2025 wire format; `2026-07-28` adds the envelope and per-request headers.
   */
   readonly protocolVersion?: ProtocolVersion;
+  /**
+  What the 2026-07-28 envelope declares as client capabilities; empty by default.
+  */
+  readonly clientCapabilities?: Readonly<Record<string, unknown>>;
 }
 
 export interface RpcResponse {
@@ -73,11 +77,14 @@ function isJsonRpcRequest(value: unknown): value is JsonRpcRequest {
  * the client's capabilities on every request (the SDK rejects a modern
  * `Mcp-Protocol-Version` header without it).
  */
-function enveloped(message: JsonRpcRequest): JsonRpcRequest {
+function enveloped(
+  message: JsonRpcRequest,
+  clientCapabilities: Readonly<Record<string, unknown>> = {},
+): JsonRpcRequest {
   const parameters = isPlainObject(message.params) ? message.params : {};
   const meta = {
     [PROTOCOL_VERSION_META_KEY]: MODERN_PROTOCOL_VERSION,
-    [CLIENT_CAPABILITIES_META_KEY]: {},
+    [CLIENT_CAPABILITIES_META_KEY]: clientCapabilities,
   };
   return { ...message, params: { ...parameters, _meta: meta } };
 }
@@ -117,7 +124,9 @@ export async function postJsonRpc(
 ): Promise<RpcResponse> {
   const version = options.protocolVersion ?? LEGACY_PROTOCOL_VERSION;
   const modern =
-    version === MODERN_PROTOCOL_VERSION && isJsonRpcRequest(body) ? enveloped(body) : undefined;
+    version === MODERN_PROTOCOL_VERSION && isJsonRpcRequest(body)
+      ? enveloped(body, options.clientCapabilities)
+      : undefined;
   const message = modern ?? body;
   const extra = { ...(modern !== undefined && perRequestHeaders(modern)), ...options.headers };
   const response = await app.request(
