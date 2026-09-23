@@ -3,7 +3,7 @@
 //
 // Layers, from the bottom up:
 //   result, config, logger,     foundation: import nothing above themselves
-//   crypto
+//   net, crypto
 //   storage                     no feature knowledge
 //   audit                       the event shape and the store sink every
 //                               feature records through; knows no feature
@@ -42,7 +42,7 @@ export default {
     {
       name: 'foundation-imports-nothing-above-itself',
       severity: 'error',
-      from: { path: '^src/(result|config|logger)' },
+      from: { path: '^src/(result|config|logger|net)' },
       to: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|http)/' },
     },
     {

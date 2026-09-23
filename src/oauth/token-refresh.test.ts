@@ -125,6 +125,23 @@ describe('POST /oauth/token refresh_token', () => {
     expect(otherResource['error']).toBe('invalid_target');
   });
 
+  it('OAUTH-25 requires client_id on refresh and leaves the token untouched when it is missing', async () => {
+    const { harness, code } = seeded();
+    const first = await redeem(harness, code);
+    const refreshToken = first['refresh_token'] ?? '';
+    const reply = await post(harness, { grant_type: 'refresh_token', refresh_token: refreshToken });
+    expect(reply.status).toBe(400);
+    expect(reply.body).toStrictEqual({
+      error: 'invalid_request',
+      error_description: 'parameter "client_id" is required',
+    });
+    const blank = await errorOf(harness, refreshGrant(refreshToken, { client_id: '' }));
+    expect(blank['error_description']).toBe('parameter "client_id" is required');
+    expect(revokedAt(harness, refreshToken)).toBeUndefined();
+    const rotated = await post(harness, refreshGrant(refreshToken));
+    expect(rotated.status).toBe(200);
+  });
+
   it('OAUTH-25 rejects a refresh token under a revoked consent or past its absolute lifetime', async () => {
     const revoked = seeded();
     const tokens = await redeem(revoked.harness, revoked.code);

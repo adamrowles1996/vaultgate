@@ -135,6 +135,27 @@ describe('POST /oauth/revoke', () => {
     expect(harness.audit).toHaveLength(count + 1);
   });
 
+  it('§10.4 limits revocation to 60 requests per ip per minute with Retry-After', async () => {
+    const harness = createOAuthHarness();
+    const statuses: number[] = [];
+    for (let index = 0; index < 61; index += 1) {
+      const response = await revoke(harness, 'garbage');
+      statuses.push(response.status);
+    }
+    expect(statuses).toStrictEqual([...Array.from({ length: 60 }, () => 200), 429]);
+    const throttled = await revoke(harness, 'garbage');
+    expect(throttled.status).toBe(429);
+    expect(throttled.headers.get('retry-after')).toBe('1');
+    expect(throttled.headers.get('cache-control')).toBe('no-store');
+    expect(parseJson(throttled)).toStrictEqual({
+      error: 'temporarily_unavailable',
+      error_description: 'rate limit exceeded; retry later',
+    });
+    harness.advance(60_000);
+    const recovered = await revoke(harness, 'garbage');
+    expect(recovered.status).toBe(200);
+  });
+
   it('OAUTH-29 requires the token parameter and a form body', async () => {
     const harness = createOAuthHarness();
     const missing = await harness.exchange('/oauth/revoke', formBody({}));

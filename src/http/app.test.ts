@@ -36,14 +36,11 @@ describe('createApp', () => {
     expect(await response.json()).toStrictEqual({ status: 'ok' });
   });
 
-  it('answers the readiness probe', async () => {
+  it('OPS-4 answers the readiness probe without the vault detail', async () => {
     const { app } = appWithLogSink();
     const response = await app.request('/readyz');
     expect(response.status).toBe(200);
-    expect(await response.json()).toStrictEqual({
-      status: 'ok',
-      vault: { ready: true, configured: true, lastSyncAt: '2026-09-22T12:00:00.000Z' },
-    });
+    expect(await response.json()).toStrictEqual({ status: 'ok' });
   });
 
   it('OPS-4 answers 503 naming the failing components when not ready', async () => {
@@ -54,8 +51,19 @@ describe('createApp', () => {
     expect(await response.json()).toStrictEqual({
       status: 'unavailable',
       failing: ['store', 'vault'],
-      vault: { ready: false, configured: false, lastSyncAt: null },
     });
+  });
+
+  it('OPS-4 adds the vault detail to /readyz for a signed-in operator only', async () => {
+    const { identity, cookie } = await signedInCookie();
+    const signedIn = await identity.request('/readyz', { headers: { cookie } });
+    expect(signedIn.status).toBe(200);
+    expect(await signedIn.json()).toStrictEqual({
+      status: 'ok',
+      vault: { ready: true, configured: true, lastSyncAt: '2026-09-22T12:00:00.000Z' },
+    });
+    const stale = await identity.request('/readyz', { headers: { cookie: 'vg_session=nope' } });
+    expect(await stale.json()).toStrictEqual({ status: 'ok' });
   });
 
   it('sets a request id and hardening headers on every response', async () => {

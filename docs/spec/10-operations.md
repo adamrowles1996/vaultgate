@@ -13,14 +13,15 @@
 
 ## 10.2 Health
 
-| Probe      | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/healthz` | Process is up and the event loop responds. Always `200` once listening.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `/readyz`  | Store open and migrated, `bw serve` unlocked. `200` with `{"status":"ok","vault":{"ready":true,"configured":true,"lastSyncAt":…}}`; `503` otherwise, with `failing` naming each component that is not ready and the same `vault` object. `configured` is `false` while no credentials exist at all (VAULT-18), which tells an unconfigured deployment from a failing one. `lastSyncAt` is the ISO 8601 time of the last successful sync since start-up, or `null`; a failed sync leaves `ready` `true` (VAULT-9). |
+| Probe      | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/healthz` | Process is up and the event loop responds. Always `200` once listening.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `/readyz`  | Store open and migrated, `bw serve` unlocked. `200` with `{"status":"ok"}`; `503` otherwise, with `failing` naming each component that is not ready. When an operator session cookie accompanies the request the answer also carries `vault` (`{"ready":…,"configured":…,"lastSyncAt":…}`): `configured` is `false` while no credentials exist at all (VAULT-18), which tells an unconfigured deployment from a failing one, and `lastSyncAt` is the ISO 8601 time of the last successful sync since start-up, or `null`; a failed sync leaves `ready` `true` (VAULT-9). The account page shows the same detail. |
 
 - **OPS-4** Both probes are unauthenticated, cacheless and reveal no version or configuration;
-  the vault detail on `/readyz` is limited to readiness, whether any credentials are configured
-  and the time of the last sync.
+  to an anonymous caller `/readyz` says only which component is not ready. The vault detail
+  (whether any credentials are configured, the time of the last sync) is included only for a
+  signed-in operator, who can also read it on the account page.
 
 ## 10.3 Audit export
 
@@ -34,17 +35,24 @@
 
 ## 10.4 Rate limits (summary)
 
-| Surface            | Limit                        | Key             |
-| ------------------ | ---------------------------- | --------------- |
-| `/login` (POST)    | 5 failures / 15 min, backoff | ip and operator |
-| `/oauth/token`     | 60 / min                     | ip              |
-| `/oauth/register`  | 10 / hour                    | ip              |
-| `/oauth/authorize` | 30 / min                     | session         |
-| `/mcp` tool calls  | 120 / min                    | token           |
-| CIMD fetches       | 30 / min                     | process-wide    |
+| Surface            | Limit                        | Key                            |
+| ------------------ | ---------------------------- | ------------------------------ |
+| `/login` (POST)    | 5 failures / 15 min, backoff | ip and operator                |
+| `/oauth/token`     | 60 / min                     | ip                             |
+| `/oauth/revoke`    | 60 / min                     | ip                             |
+| `/oauth/register`  | 10 / hour                    | ip                             |
+| `/oauth/authorize` | 30 / min                     | session, or ip when signed out |
+| `/mcp` tool calls  | 120 / min                    | token                          |
+| CIMD fetches       | 30 / min                     | process-wide                   |
 
-- **OPS-6** Limits are in-memory token buckets (single replica). When `VAULTGATE_TRUST_PROXY` is
-  off, the socket address is the client ip; forwarded headers are ignored to prevent spoofing.
+- **OPS-6** Limits are in-memory token buckets (single replica), each holding at most 10 000
+  keys with the least recently used evicted first. When `VAULTGATE_TRUST_PROXY` is off, the socket
+  address is the client ip; forwarded headers are ignored to prevent spoofing. When it is on, the
+  client ip is the `X-Forwarded-For` entry `VAULTGATE_TRUSTED_PROXY_HOPS` from the right, the one
+  the trusted proxy wrote; anything to its left is client-supplied and ignored, and an entry that
+  is not an IP literal falls back to the socket address. The proxy should overwrite the inbound
+  header rather than append to it. Anonymous `/oauth/authorize` requests are keyed by this ip,
+  never by the client-chosen binding cookie.
 
 ## 10.5 Upgrades
 

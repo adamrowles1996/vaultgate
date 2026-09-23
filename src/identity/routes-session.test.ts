@@ -64,7 +64,7 @@ describe('sessions', () => {
     await browser.submit(
       '/logout',
       { csrf: 'wrong' },
-      { headers: { 'x-forwarded-for': '198.51.100.9, 10.0.0.1' } },
+      { headers: { 'x-forwarded-for': '10.0.0.1, 198.51.100.9' } },
     );
     await browser.submit('/logout', { csrf: 'wrong' }, { headers: { 'x-forwarded-for': '' } });
     const untrusted = createHarness();

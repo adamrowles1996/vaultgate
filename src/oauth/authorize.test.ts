@@ -1,73 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  createOAuthHarness,
-  type Exchange,
-  type OAuthHarness,
-  RESOURCE,
-  type SignedIn,
-} from '../test-support/oauth-harness.ts';
-import { cimdDocument, flattenHtml, parseConsentForm } from '../test-support/oauth-http.ts';
-
-/**
- * RFC 7636 Appendix B challenge.
- */
-const CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
-const CIMD_ID = 'https://agent.example.com/client.json';
-const CIMD_REDIRECT = 'https://agent.example.com/cb';
-const LOOPBACK_REDIRECT = 'http://127.0.0.1:4000/cb';
-const DESK = { clientId: 'desk', clientName: 'Desk', redirectUris: [LOOPBACK_REDIRECT] };
-const CONSENT_PATH = /^\/oauth\/authorize\/[\w-]{43}$/;
-
-type Overrides = Readonly<Record<string, string | undefined>>;
-
-function harnessWithClients(): OAuthHarness {
-  const harness = createOAuthHarness({ oauthClients: [DESK] });
-  harness.cimd.set(CIMD_ID, cimdDocument(CIMD_ID, [CIMD_REDIRECT]));
-  return harness;
-}
-
-function query(overrides: Overrides = {}, resource = RESOURCE): string {
-  const parameters: Overrides = {
-    response_type: 'code',
-    client_id: CIMD_ID,
-    redirect_uri: CIMD_REDIRECT,
-    code_challenge: CHALLENGE,
-    code_challenge_method: 'S256',
-    resource,
-    scope: 'vault:read vault:reveal',
-    state: 'xyz',
-    ...overrides,
-  };
-  const search = new URLSearchParams();
-  for (const [name, value] of Object.entries(parameters)) {
-    if (value !== undefined) {
-      search.set(name, value);
-    }
-  }
-  return `/oauth/authorize?${search.toString()}`;
-}
-
-function authorize(harness: OAuthHarness, path: string, browser?: SignedIn): Promise<Exchange> {
-  return harness.exchange(path, { headers: browser?.headers ?? {} });
-}
-
-async function parkedPath(
-  harness: OAuthHarness,
-  browser: SignedIn,
-  overrides: Overrides = {},
-): Promise<string> {
-  const response = await authorize(harness, query(overrides), browser);
-  return response.headers.get('location') ?? '';
-}
-
-function requestIdOf(path: string): string {
-  return path.slice('/oauth/authorize/'.length);
-}
-
-function firstCookie(response: Exchange): string {
-  return (response.headers.get('set-cookie') ?? '').split(';', 1)[0] ?? '';
-}
+  authorize,
+  CHALLENGE,
+  CIMD_ID,
+  CIMD_REDIRECT,
+  CONSENT_PATH,
+  DESK,
+  firstCookie,
+  harnessWithClients,
+  LOOPBACK_REDIRECT,
+  parkedPath,
+  query,
+  requestIdOf,
+} from '../test-support/authorize-fixtures.ts';
+import { createOAuthHarness, RESOURCE } from '../test-support/oauth-harness.ts';
+import { cimdDocument } from '../test-support/oauth-http.ts';
 
 describe('GET /oauth/authorize', () => {
   it('OAUTH-17 without a session parks the request, binds a cookie and redirects to login with next=', async () => {
@@ -224,74 +172,19 @@ describe('GET /oauth/authorize', () => {
     const anonymous = await authorize(harness, query());
     expect(anonymous.status).toBe(302);
   });
-});
 
-describe('GET /oauth/authorize/:id', () => {
-  it('OAUTH-13 / OAUTH-18 renders the consent page for the bound browser and never issues a code', async () => {
+  it('§10.4 limits an anonymous browser by address: rotating the binding cookie buys nothing', async () => {
     const harness = harnessWithClients();
-    const browser = harness.signIn();
-    const path = await parkedPath(harness, browser);
-    const response = await authorize(harness, path, browser);
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
-    expect(response.headers.get('cache-control')).toBe('no-store');
-    const form = parseConsentForm(response.text);
-    expect(form.requestId).toBe(requestIdOf(path));
-    expect(form.csrfToken).toBe(browser.session.csrfToken);
-    expect(form.html).toContain('<strong>CIMD Agent</strong>');
-    expect(form.html).toContain('<code>agent.example.com</code>');
-    expect(form.html).toContain('identified by its client metadata document');
-    expect(flattenHtml(form.html)).toContain(
-      '<code>vault:reveal</code><strong class="risk">Sensitive</strong>',
-    );
-    expect(form.html).not.toContain('class="warning"');
-    expect(harness.audit).toStrictEqual([]);
-  });
-
-  it('OAUTH-13 / T7 shows the loopback warning and the redirect host with port for a loopback-only client', async () => {
-    const harness = harnessWithClients();
-    const browser = harness.signIn();
-    const overrides = { client_id: 'desk', redirect_uri: 'http://127.0.0.1:61234/cb' };
-    const path = await parkedPath(harness, browser, overrides);
-    const page = await authorize(harness, path, browser);
-    const text = flattenHtml(page.text);
-    expect(text).toContain('<p class="warning"><strong>Warning:</strong>this client redirects');
-    expect(text).toContain('loopback address (<code>127.0.0.1:61234</code>)');
-    expect(text).toContain('<dt>Will redirect to</dt><dd><code>127.0.0.1:61234</code></dd>');
-    expect(text).toContain('pre-registered by the operator');
-  });
-
-  it('OAUTH-17 redirects to login when the session is gone, preserving the request id', async () => {
-    const harness = harnessWithClients();
-    const path = await parkedPath(harness, harness.signIn());
-    const response = await authorize(harness, path);
-    expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe(`/login?next=${encodeURIComponent(path)}`);
-  });
-
-  it('OAUTH-17 lets the browser that started without a session claim the request via its binding cookie after login', async () => {
-    const harness = harnessWithClients();
-    const started = await authorize(harness, query());
-    const next = (started.headers.get('location') ?? '').slice('/login?next='.length);
-    const path = decodeURIComponent(next);
-    const browser = harness.signIn();
-    const cookie = `${browser.headers['cookie'] ?? ''}; ${firstCookie(started)}`;
-    const response = await harness.exchange(path, { headers: { cookie } });
-    expect(response.status).toBe(200);
-    const stranger = await authorize(harness, path, harness.signIn());
-    expect(stranger.status).toBe(403);
-    expect(stranger.text).toContain('belongs to another browser');
-  });
-
-  it('OAUTH-17 rejects an unknown or expired request id', async () => {
-    const harness = harnessWithClients();
-    const browser = harness.signIn();
-    const unknown = await authorize(harness, '/oauth/authorize/nope', browser);
-    expect(unknown.status).toBe(400);
-    expect(unknown.text).toContain('has expired');
-    const path = await parkedPath(harness, browser);
-    harness.advance(600_000);
-    const expired = await authorize(harness, path, browser);
-    expect(expired.status).toBe(400);
+    const statuses: number[] = [];
+    for (let index = 0; index < 31; index += 1) {
+      const cookie = `__Host-vg_authz=rotated-${index}`;
+      const response = await harness.exchange(query(), { headers: { cookie } });
+      statuses.push(response.status);
+    }
+    expect(statuses).toStrictEqual([...Array.from({ length: 30 }, () => 302), 429]);
+    const bare = await authorize(harness, query());
+    expect(bare.status).toBe(429);
+    const signedIn = await authorize(harness, query(), harness.signIn());
+    expect(signedIn.status).toBe(302);
   });
 });

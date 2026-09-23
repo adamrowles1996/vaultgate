@@ -141,6 +141,7 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
   const identity = createIdentityHarness({
     publicUrl: config.publicUrl,
     trustProxy: config.trustProxy,
+    trustedProxyHops: config.trustedProxyHops,
     connectedClients: (session) => accountSlot.render(session),
   });
   let counter = 0;
@@ -167,7 +168,7 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
         },
       },
       logger,
-      fetch: (url) => {
+      fetch: ({ url }) => {
         fetchedUrls.push(url);
         const document = cimd.get(url);
         return Promise.resolve(

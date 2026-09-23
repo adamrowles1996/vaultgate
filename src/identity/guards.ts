@@ -1,3 +1,5 @@
+import { resolveClientIp } from '../net/client-ip.ts';
+
 import { isSameOriginRequest, isValidCsrfToken } from './csrf.ts';
 
 import type { ClientAddressResolver, Form, IdentityContext } from './context.ts';
@@ -7,6 +9,7 @@ import type { AuditSink } from '../audit/event.ts';
 export interface GuardDependencies {
   readonly publicUrl: string;
   readonly trustProxy: boolean;
+  readonly trustedProxyHops: number;
   readonly clientAddress: ClientAddressResolver;
   readonly audit: AuditSink;
 }
@@ -31,10 +34,15 @@ export interface Guards {
 }
 
 export function createGuards(dependencies: GuardDependencies): Guards {
-  const { publicUrl, trustProxy, clientAddress, audit } = dependencies;
+  const { publicUrl, trustProxy, trustedProxyHops, clientAddress, audit } = dependencies;
   const clientInfo = (context: IdentityContext): ClientInfo => {
-    const forwarded = trustProxy ? context.req.header('x-forwarded-for') : undefined;
-    const ip = forwarded?.split(',', 1)[0]?.trim() || clientAddress(context);
+    const ip = resolveClientIp(
+      {
+        forwardedFor: context.req.header('x-forwarded-for'),
+        socketAddress: clientAddress(context),
+      },
+      { trustProxy, trustedProxyHops },
+    );
     return { ip, userAgent: context.req.header('user-agent') };
   };
   const deny = (context: IdentityContext, reason: string): Response => {

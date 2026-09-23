@@ -28,6 +28,31 @@ describe('FixedWindowRateLimiter', () => {
     expect(subject.hit('a').allowed).toBe(false);
   });
 
+  it('OPS-6 evicts expired windows a few at a time and restarts a stale one on its next hit', () => {
+    const { limiter: subject, clock } = limiter(1);
+    for (const key of ['a', 'b', 'c', 'd', 'e', 'f']) {
+      subject.hit(key);
+    }
+    clock.advance(60_000);
+    expect(subject.hit('f')).toStrictEqual({ allowed: true });
+    expect(subject.hit('f').allowed).toBe(false);
+    expect(subject.hit('a')).toStrictEqual({ allowed: true });
+  });
+
+  it('T21 keeps at most 10 000 keys, evicting the least recently used', () => {
+    const { limiter: subject } = limiter(1);
+    expect(subject.hit('victim')).toStrictEqual({ allowed: true });
+    expect(subject.hit('victim').allowed).toBe(false);
+    subject.hit('kept');
+    for (let index = 0; index < 9998; index += 1) {
+      subject.hit(`key-${index}`);
+    }
+    expect(subject.hit('kept').allowed).toBe(false);
+    subject.hit('one-more');
+    expect(subject.hit('victim')).toStrictEqual({ allowed: true });
+    expect(subject.hit('kept').allowed).toBe(false);
+  });
+
   it('MCP-5 starts a fresh window once the previous one has elapsed', () => {
     const { limiter: subject, clock } = limiter(1);
     expect(subject.hit('a')).toStrictEqual({ allowed: true });

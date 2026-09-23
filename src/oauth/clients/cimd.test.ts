@@ -133,8 +133,8 @@ describe('createCimdFetcher', () => {
   it('OAUTH-10 uses the cached copy and warns when a refetch fails', async () => {
     let isHealthy = true;
     const healthyFetch = servingDocument();
-    const h = harness((url, init) =>
-      isHealthy ? healthyFetch(url, init) : Promise.reject(new TypeError('down')),
+    const h = harness((request) =>
+      isHealthy ? healthyFetch(request) : Promise.reject(new TypeError('down')),
     );
     await h.fetcher.fetch(CLIENT_ID);
     isHealthy = false;

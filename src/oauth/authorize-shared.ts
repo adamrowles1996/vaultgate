@@ -117,16 +117,17 @@ export function isBoundToBrowser(
   return bindingHashes(context, dependencies, session).includes(pending.sessionBindingHash);
 }
 
+/**
+ * §10.4: a signed-in browser is limited by its session, anything else by its
+ * address. The binding cookie is client-chosen and never a key: rotating it
+ * must not buy a fresh allowance.
+ */
 export function rateLimitKey(
   context: OAuthContext,
   dependencies: AuthorizeDependencies,
   session: SessionState | undefined,
 ): string {
-  return (
-    session?.idHash ??
-    bindingCookie(context, dependencies) ??
-    `ip:${dependencies.clientIp(context)}`
-  );
+  return session?.idHash ?? `ip:${dependencies.clientIp(context)}`;
 }
 
 export function errorPage(

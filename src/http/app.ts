@@ -35,7 +35,7 @@ interface VaultReadiness {
 /**
  * What `/readyz` reports (spec §10.2): `failing` names each component that is
  * not ready, so an operator can tell a locked vault from a broken store, and
- * `vault` carries the one detail worth polling, the time of the last sync.
+ * `vault` carries the detail a signed-in operator may poll for (OPS-4).
  */
 export interface Readiness {
   readonly ready: boolean;
@@ -79,17 +79,19 @@ export function createApp(dependencies: AppDependencies): App {
   // -- end identity --
 
   app.get('/healthz', (context) => context.json({ status: 'ok' }));
-  // -- storage: readiness reflects the store; later milestones add bw serve --
-  app.get('/readyz', (context) => {
-    const { ready, failing, vault } = readiness();
-    return ready
-      ? context.json({ status: 'ok', vault })
-      : context.json({ status: 'unavailable', failing: [...failing], vault }, 503);
-  });
-  // -- end storage --
 
   // -- identity: operator session, setup, login and account pages (spec §04) --
   app.use(identity.attachSession);
+  // -- storage / vault: readiness names what is not ready; the vault detail
+  // is for a signed-in operator only (OPS-4) ---------------------------------
+  app.get('/readyz', (context) => {
+    const { ready, failing, vault } = readiness();
+    const detail = context.get('session') === undefined ? {} : { vault };
+    return ready
+      ? context.json({ status: 'ok', ...detail })
+      : context.json({ status: 'unavailable', failing: [...failing], ...detail }, 503);
+  });
+  // -- end storage / vault -----------------------------------------------------
   app.route('/', identity.routes);
   // -- end identity --
 

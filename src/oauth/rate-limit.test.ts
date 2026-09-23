@@ -54,6 +54,36 @@ describe('createRateLimiter', () => {
     expect(limiter.take('a')).toStrictEqual({ allowed: false, retryAfterSeconds: 20 });
   });
 
+  it('OPS-6 prunes full buckets a few at a time without touching live ones', () => {
+    const limiter = limiterAt(0);
+    for (const key of ['a', 'b', 'c', 'd', 'e', 'f']) {
+      limiter.take(key);
+      limiter.take(key);
+      limiter.take(key);
+    }
+    limiter.tick(60_000);
+    limiter.take('g');
+    limiter.take('g');
+    limiter.take('g');
+    expect(limiter.take('g')).toStrictEqual({ allowed: false, retryAfterSeconds: 20 });
+    limiter.take('f');
+    expect(limiter.take('a')).toStrictEqual({ allowed: true });
+  });
+
+  it('T21 keeps at most 10 000 keys, evicting the least recently used', () => {
+    const limiter = createRateLimiter({ limit: 1, windowMs: 60_000, now: () => 0 });
+    expect(limiter.take('victim')).toStrictEqual({ allowed: true });
+    expect(limiter.take('victim').allowed).toBe(false);
+    limiter.take('kept');
+    for (let index = 0; index < 9998; index += 1) {
+      limiter.take(`key-${index}`);
+    }
+    expect(limiter.take('kept').allowed).toBe(false);
+    limiter.take('one-more');
+    expect(limiter.take('victim')).toStrictEqual({ allowed: true });
+    expect(limiter.take('kept').allowed).toBe(false);
+  });
+
   it('OPS-6 never reports less than one second to wait', () => {
     const limiter = createRateLimiter({ limit: 1000, windowMs: 1000, now: () => 0 });
     for (let index = 0; index < 1000; index += 1) {

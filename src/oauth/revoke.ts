@@ -4,11 +4,12 @@ import {
   hasCredentialPrefix,
   hashCredential,
 } from './credentials.ts';
-import { respondWithOAuthError } from './errors.ts';
+import { respondRateLimited, respondWithOAuthError } from './errors.ts';
 import { readForm, requireField } from './form.ts';
 
 import type { OAuthAuditSink } from './audit.ts';
 import type { Clock } from './clock.ts';
+import type { RateLimiter } from './rate-limit.ts';
 import type { ConnectedClient } from './repositories/consents.ts';
 import type { ClientIpResolver, OAuthContext, OAuthHandler } from './request-context.ts';
 import type { Guards } from '../identity/guards.ts';
@@ -22,6 +23,13 @@ export interface RevocationDependencies {
   readonly now: Clock;
   readonly clientIp: ClientIpResolver;
   readonly guards: Guards;
+}
+
+export interface RevokeEndpointDependencies extends RevocationDependencies {
+  /**
+  60 per minute per ip, as the token endpoint (spec §10.4).
+  */
+  readonly rateLimiter: RateLimiter;
 }
 
 /**
@@ -55,10 +63,16 @@ function revokeToken(dependencies: RevocationDependencies, token: string, ip: st
 }
 
 /**
- * `POST /oauth/revoke` (RFC 7009): `200 {}` whether or not the token existed.
+ * `POST /oauth/revoke` (RFC 7009): `200 {}` whether or not the token existed,
+ * behind the same per-ip limit as the token endpoint.
  */
-export function createRevokeHandler(dependencies: RevocationDependencies): OAuthHandler {
+export function createRevokeHandler(dependencies: RevokeEndpointDependencies): OAuthHandler {
   return async (context) => {
+    const ip = dependencies.clientIp(context);
+    const limit = dependencies.rateLimiter.take(ip);
+    if (!limit.allowed) {
+      return respondRateLimited(context, limit.retryAfterSeconds);
+    }
     const form = await readForm(context.req.raw, MAX_FORM_BYTES);
     if (!form.ok) {
       return respondWithOAuthError(context, form.error);
@@ -67,7 +81,7 @@ export function createRevokeHandler(dependencies: RevocationDependencies): OAuth
     if (!token.ok) {
       return respondWithOAuthError(context, token.error);
     }
-    revokeToken(dependencies, token.value, dependencies.clientIp(context));
+    revokeToken(dependencies, token.value, ip);
     context.header('Cache-Control', 'no-store');
     return context.json({}, 200);
   };
