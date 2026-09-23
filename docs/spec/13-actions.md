@@ -1,18 +1,18 @@
 # 13 Actions: typed, policy-gated use of vault credentials
 
-> **Status: M9 and M10 landed.** This section specifies the actions layer decided in
-> [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as milestones
-> M9 to M15 in [`PLAN.md`](../PLAN.md). Landed with M9: everything this section specifies
-> except what "not yet" names below — configuration, scopes and consent, storage, targets and
-> grants, policy patterns, confirmation and its elicitation transport on the 2026-07-28 wire,
-> secret handling, limits, the engine with the resolution order of ACT-16, the `action_calls`
-> trail and its export stream, the tool surface of 13.6, the account pages of 13.3.2 and the
-> `http` connector (14.2) with `http_request`. Landed with M10: the `graph` credential adapter
-> (14.3; ACT-81…83). Not yet: the other connectors (no tool is listed until its runtime lands),
-> ACT-63's "unexpected write" view (M14), and ACT-48's in-band fallback for the 2025 wire
-> (M14): until then a client on that wire, whose capabilities the stateless handler never sees,
-> is refused a confirmed target with `confirmation_unavailable`. The per-connector contracts are
-> in [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence continues there.
+> **Status: M9, M10 and M11's first pull request landed.** This section specifies the actions
+> layer decided in [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as
+> milestones M9 to M15 in [`PLAN.md`](../PLAN.md). Everything it specifies has landed except what
+> "not yet" names below: M9 brought the engine with the resolution order of ACT-16, the tool
+> surface of 13.6, the account pages of 13.3.2, the `action_calls` trail and the `http` connector
+> (14.2) with `http_request`; M10 the `graph` credential adapter (14.3; ACT-81…83); and M11's
+> first pull request the `sql` read half (14.4) with `sql_query` (13.6.4) and the classification
+> of 13.7.2 (ACT-36…38). Not yet: `sql_execute`, the other connectors (no tool is listed until
+> its runtime lands), ACT-63's "unexpected write" view (M14), and ACT-48's in-band fallback for
+> the 2025 wire (M14): until then a client on that wire, whose capabilities the stateless handler
+> never sees, is refused a confirmed target with `confirmation_unavailable`. The per-connector
+> contracts are in [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence
+> continues there.
 
 ## 13.1 Purpose
 
@@ -260,7 +260,8 @@ operations, confirm_writes, engine?, unrestricted? }` where `operations` is the 
   statement returns rows (`RETURNING`, `OUTPUT`), `duration_ms`. The statement runs in its own
   transaction that commits on success and rolls back on any error or on the timeout.
 - **ACT-26** Statement classification (13.7.2) runs before any connection is opened, on both
-  tools, and the classification result (`read`, `dml`, `ddl`, `other`) is audited.
+  tools, and the result (`read`, `dml`, `ddl`, `other`) is audited, on a refused call as well as
+  on one that ran.
 
 ### 13.6.5 `ssh_run` and `winrm_run`
 
@@ -332,15 +333,16 @@ before anything else (ACT-16) and a session opened by another client answers `un
 
 - **ACT-36** A statement is tokenised (strings, quoted identifiers, `--` and `/* */` comments,
   dollar-quoted strings on PostgreSQL) and MUST be exactly one statement: a `;` outside a string or
-  comment that is followed by anything other than whitespace fails `policy_denied`
-  (`reason: statement_count`). Comments are stripped before classification.
+  comment that is followed by anything other than whitespace, a trailing comment included, fails
+  `policy_denied` (`reason: statement_count`). Comments are stripped before classification.
+  Tokenisation is per engine, which is why `authorize` receives the destination (14.1).
 - **ACT-37** `read`: the first keyword is `SELECT`, `WITH` or `EXPLAIN`, and no keyword of the
   set `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `INTO`, `EXEC`, `EXECUTE`, `CALL`, `CREATE`, `ALTER`,
   `DROP`, `TRUNCATE`, `GRANT`, `REVOKE`, `DENY`, `COPY`, `LOCK`, `SET`, `USE`, `BACKUP`,
   `RESTORE`, `SHUTDOWN`, `RECONFIGURE`, `WAITFOR`, `OPENROWSET`, `OPENQUERY` appears outside a
   string, comment or quoted identifier, and no identifier begins with `xp_` or `sp_`. `sql_query`
   accepts only `read`. `INTO` is on the list because `SELECT … INTO` creates a table on both
-  engines.
+  engines, and PostgreSQL's `EXPLAIN ANALYZE DELETE …`, which executes, is `other`.
 - **ACT-38** `dml`: the first keyword is `INSERT`, `UPDATE`, `DELETE` or `MERGE` (or `WITH`
   leading to one of them). `ddl`: the first keyword is `CREATE`, `ALTER`, `DROP`, `TRUNCATE`,
   `GRANT`, `REVOKE` or `DENY`. Everything else is `other` and is refused by both tools.

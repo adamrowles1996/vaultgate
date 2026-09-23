@@ -7,6 +7,7 @@
  */
 import { isUtf8 } from 'node:buffer';
 
+import { isTlsErrorCode } from '../../../net/tls-error.ts';
 import { ActionError } from '../../errors.ts';
 
 import type { HttpPolicy } from './schemas.ts';
@@ -21,12 +22,6 @@ const TEXT_MEDIA_TYPES: ReadonlySet<string> = new Set([
   'application/javascript',
   'application/x-www-form-urlencoded',
 ]);
-
-/**
-OpenSSL verification failures and the TLS layer's own codes (ACT-57); everything else is the connection.
-*/
-const TLS_CODE =
-  /^(?:ERR_TLS_|ERR_SSL_|ERR_OSSL_|CERT_|UNABLE_TO_|SELF_SIGNED_|DEPTH_ZERO_SELF_SIGNED_CERT$|HOSTNAME_MISMATCH$|EPROTO$)/;
 
 /**
  * The rule for `body` (ACT-21): text when the media type is textual (`text/*`,
@@ -102,7 +97,7 @@ export function transportFailure(error: unknown, signal: AbortSignal): ActionErr
   if (code === 'AbortError' || signal.aborted) {
     return new ActionError('timeout');
   }
-  return new ActionError(TLS_CODE.test(code) ? 'tls_error' : 'connection_failed', {
+  return new ActionError(isTlsErrorCode(code) ? 'tls_error' : 'connection_failed', {
     reason: code,
   });
 }

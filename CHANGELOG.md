@@ -6,6 +6,63 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `sql` connector runtime and `sql_query` (spec 14 §14.4 and spec 13 §13.6.4, M11 first pull
+  request; ACT-23, ACT-24, ACT-26, ACT-36, ACT-37, ACT-38, ACT-77, ACT-84, ACT-85, ACT-86): the
+  tool is listed on a deployment with `VAULTGATE_ENABLE_ACTIONS=true` and
+  `VAULTGATE_ACTIONS_ENABLE_SQL=true` for tokens holding `actions:sql.read`. A `sql_query` names
+  a granted target and gives exactly one statement (at most 64 KiB) and up to 100 positional
+  parameters. The statement is tokenised in the target's own dialect — `'…'` with doubled
+  quotes, `N'…'` on SQL Server, `E'…'` and `$tag$…$tag$` on PostgreSQL, `"…"` and `[…]` quoted
+  identifiers, line comments and block comments that nest on PostgreSQL — and refused before any
+  connection is opened when it is more than one statement (`policy_denied`,
+  `statement_count`) or does not classify as a read (`policy_denied`, `statement_class`); the
+  class it was given is recorded on the refused call as well as on the call that ran. Parameters
+  bind to `$1…$n` (PostgreSQL) or `@p1…@pn` (SQL Server), counted in the tokenised statement, and
+  any mismatch is `invalid_arguments`; there is no interpolation path. One connection is opened
+  per call after the policy decision, to the address the engine resolved and validated once, with
+  the host name kept for TLS (SNI and certificate verification, `verify-full` against a
+  `ca_pem`; there is no way to skip verification), and closed in `finally` — no pool, so a
+  rotated password takes effect on the next call. PostgreSQL sessions are opened read-only
+  (`SET default_transaction_read_only = on` and `BEGIN READ ONLY`); on SQL Server the
+  classification and the least-privilege login are the controls, and the guide says so. The
+  result carries the columns with the engine's own type names, the rows as arrays of JSON
+  scalars (ISO 8601 dates, base64 binary, decimals and 64-bit integers as strings), the row
+  count, `truncated` and `duration_ms`; rows are dropped whole at `max_rows` and at
+  `max_output_bytes`, so no value is ever cut in half. Driver failures map to
+  `authentication_failed`, `connection_failed`, `tls_error`, `timeout` and `upstream_error` with
+  the server's message scrubbed and capped at 1 KiB. Contract tests run the connector against
+  fake sessions and both real session modules against fake drivers, with the ACT-77 corpus as
+  one named test per statement per engine, the ACT-53 canary suite through the engine and a
+  parameterised query through the MCP client SDK. A target whose policy asks for the `write`
+  operation is refused at save until `sql_execute` lands with M11's second pull request.
+  Operator guide: `docs/guides/actions.md` ("Creating a `sql` target", "Calling a `sql` target",
+  with the `CREATE ROLE`/`CREATE LOGIN` examples); tool reference:
+  `docs/guides/tools-and-scopes.md`.
+
+### Changed
+
+- `Connector.authorize` and `Connector.describe` receive the target's destination document as
+  well (spec 14 §14.1): a SQL statement cannot be tokenised without knowing which dialect it is
+  written in, and reading one with the other engine's rules would let a statement separator hide
+  inside what the other engine calls a string. `ConnectorOutput` gains an optional `bytes`, so a
+  connector whose result is not a byte stream (the `sql` rows) still reports `output_bytes` to
+  the `action_calls` row. The `http` connector's implementations are unchanged.
+- The `action_calls` classification is recorded for a call the policy refused, not only for a
+  call that ran (ACT-26, ACT-60), so an operator reading a target's history sees what a refused
+  statement was taken to be.
+- The certificate and TLS error codes are classified in one place (`src/net/tls-error.ts`) for
+  the pinned HTTPS transport and the database drivers alike, instead of once per connector.
+
+### Dependencies
+
+- Added `pg` 8.23.0 and `mssql` 12.7.2 (ACT-84, QG-9), each imported only from inside its own
+  session module through a dynamic import, so a deployment that never enables `sql` never loads
+  either. Both are pure JavaScript with no native addon and no install script; `pg-native` is an
+  optional peer dependency and is not installed. Added `@types/pg` 8.23.1 and `@types/mssql`
+  12.3.0 as development dependencies (type declarations only; neither ships).
+
 ## [0.1.0-rc.7] - 2026-09-23
 
 ### Added

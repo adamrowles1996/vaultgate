@@ -172,10 +172,10 @@ a connector tool by target name. Specification: [13 Actions](../spec/13-actions.
 [14 Action connectors](../spec/14-actions-connectors.md) and
 [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md). The engine, the scopes, the MCP
 tool surface below and the operator pages (the account page's Actions section, described in the
-[Actions guide](actions.md)) exist today, and so does the `http` connector with `http_request`
-(M9) and its Microsoft Graph credential adapter (M10); the other connector runtimes land with
-M11 to M15 in [`PLAN.md`](../PLAN.md), and until a connector's runtime lands its tool is not
-listed on any deployment.
+[Actions guide](actions.md)) exist today, and so do the `http` connector with `http_request`
+(M9) and its Microsoft Graph credential adapter (M10) and the `sql` connector with `sql_query`
+(M11); the other connector runtimes land with M12 to M15 in [`PLAN.md`](../PLAN.md), and until a
+connector's runtime lands its tool is not listed on any deployment.
 
 ### Actions scopes
 
@@ -187,7 +187,7 @@ off takes effect for every existing token at once, exactly as for `vault:write`.
 | Scope               | Grants                                                       | Tools               |
 | ------------------- | ------------------------------------------------------------ | ------------------- |
 | `actions:http`      | HTTP requests to granted `http` targets, signed by vaultgate | `http_request`      |
-| `actions:sql.read`  | Read-only queries against granted `sql` targets              | `sql_query` (M11)   |
+| `actions:sql.read`  | Read-only queries against granted `sql` targets              | `sql_query`         |
 | `actions:sql.write` | Data changes on granted `sql` targets whose policy allows it | `sql_execute` (M11) |
 | `actions:ssh`       | One allowlisted command on a granted `ssh` target            | `ssh_run` (M12)     |
 | `actions:winrm`     | One allowlisted command on a granted `winrm` target          | `winrm_run` (M13)   |
@@ -237,6 +237,35 @@ naming the error code only. A `graph` target adds two of its own before the requ
 vault. Every injected value, in every encoding, is replaced by
 `[redacted:<field>]` before the result leaves the engine. Every method but `GET`, `HEAD` and
 `OPTIONS` is a write: the operator may require a human confirmation for it (see below).
+
+### `sql_query` (`actions:sql.read`)
+
+`target` (a name from `actions_list_targets`), `statement` (exactly one SQL statement, at most
+64 KiB) and optional `params` (at most 100 strings, numbers, booleans or nulls) in. There is no
+interpolation path: every value goes in `params` and is referenced positionally, `$1…$n` on
+PostgreSQL and `@p1…@pn` on SQL Server, and a placeholder without a parameter or a parameter
+without a placeholder is `invalid_arguments`. The `engine` field `actions_list_targets` reports
+for the target says which dialect to write.
+
+Before anything connects, the statement is tokenised in the target's dialect and classified: a
+second statement (a `;` outside a string or comment followed by anything but whitespace) is
+`policy_denied` with `detail.reason: "statement_count"`, and anything that is not a read is
+`policy_denied` with `detail.reason: "statement_class"`. A read starts with `SELECT`, `WITH` or
+`EXPLAIN` and contains none of `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `INTO`, `EXEC`, `EXECUTE`,
+`CALL`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `GRANT`, `REVOKE`, `DENY`, `COPY`, `LOCK`, `SET`,
+`USE`, `BACKUP`, `RESTORE`, `SHUTDOWN`, `RECONFIGURE`, `WAITFOR`, `OPENROWSET` or `OPENQUERY`
+outside a string, a comment or a quoted identifier, and names no `xp_`/`sp_` identifier.
+
+Out: `columns` (each with the engine's own type name), `rows` (arrays of JSON scalars in column
+order, dates as ISO 8601, binary as base64, decimals and 64-bit integers as strings),
+`row_count`, `truncated` (rows were dropped at the target's row or output limit) and
+`duration_ms`. On PostgreSQL the session is opened read-only; on SQL Server the classification
+and the target's own login are the controls. A database error raised after sign-in is
+`upstream_error` with the server's message; a database that could not be reached is
+`connection_failed`, `tls_error`, `authentication_failed`, `destination_refused` or `timeout`.
+
+`sql_execute` (`actions:sql.write`) is the write half and arrives with M11's second pull
+request; until then a target whose policy asks for the `write` operation is refused at save.
 
 ### Connector tools
 

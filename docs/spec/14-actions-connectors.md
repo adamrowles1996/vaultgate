@@ -1,7 +1,8 @@
 # 14 Action connectors
 
-> **Status: the interface (14.1), the `http` connector (14.2) and the `graph` credential adapter
-> (14.3) have landed (M9, M10); `sql` is M11, `ssh` M12, `winrm` M13 and `browser` M15.** The
+> **Status: the interface (14.1), the `http` connector (14.2), the `graph` credential adapter
+> (14.3) and the `sql` connector's read half (14.4) have landed (M9, M10, M11); `sql_execute` is
+> M11's second pull request, `ssh` M12, `winrm` M13 and `browser` M15.** The
 > connector contracts of the actions layer ([13 Actions](13-actions.md),
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). A document whose runtime has
 > not landed validates, but a target that uses it is refused at save (and on read) until it does,
@@ -40,10 +41,15 @@ interface Connector<Destination, Credential, Policy, Operation> extends Connecto
   readonly tools: readonly ConnectorTool<Operation>[];
   /** What `actions_list_targets` may say about a target before the scope filter (ACT-19). */
   capabilities(destination: Destination, policy: Policy): TargetCapabilities;
-  /** Pure: classifies and checks the operation against the policy; no I/O. The credential document names the injection point the operation may not touch (ACT-22). */
-  authorize(policy: Policy, operation: Operation, credential: Credential): PolicyDecision;
-  /** The ACT-43 operation summary and the ACT-60 classification. */
-  describe(operation: Operation): OperationDescription;
+  /** Pure: classifies and checks the operation against the policy; no I/O. The credential document names the injection point the operation may not touch (ACT-22); the destination names the dialect or protocol the operation is written in, which `sql` needs to tokenise a statement at all (ACT-36). */
+  authorize(
+    policy: Policy,
+    operation: Operation,
+    credential: Credential,
+    destination: Destination,
+  ): PolicyDecision;
+  /** The ACT-43 operation summary and the ACT-60 classification, for the same reason. */
+  describe(operation: Operation, destination: Destination): OperationDescription;
   /** Runs one operation with the injected values; output is raw, the engine scrubs it. */
   run(
     context: RunContext<Destination, Credential, Policy>,
@@ -55,12 +61,20 @@ interface Connector<Destination, Credential, Policy, Operation> extends Connecto
 `RunContext` carries the parsed documents, the common policy fields, the `InjectedValues`
 holder (ACT-50), the pinned endpoints (ACT-55), the `AbortSignal` of the policy timeout
 (ACT-59), the output limit with its guard band (ACT-52) and a logger. `ConnectorOutput` is
-`{ result, captured }`: `result` is the tool result before scrubbing and `captured` the byte
+`{ result, captured, bytes? }`: `result` is the tool result before scrubbing, `captured` the byte
 streams (`body`, `stdout`, `stderr`, `snapshot`) taken up to `max_output_bytes` plus the guard
-band, which the engine scrubs, cuts and writes back into `result` under the same keys. The
+band, which the engine scrubs, cuts and writes back into `result` under the same keys, and
+`bytes` the size of a result that is not a byte stream (the `sql` rows, which are fitted to the
+limits row by row so no value is ever cut in half), which the engine records as `output_bytes`
+in place of the sum of `captured`. The
 ACT-35 rule for command patterns and the ACT-88 switch are applied by the targets service to
 any policy document that carries `allowed_commands`/`any_command`, so a connector does not
 repeat them.
+
+`authorize` and `describe` receive the destination document because an operation cannot always be
+read without it: a SQL statement has to be tokenised in its own dialect (ACT-36), and reading one
+with the other engine's rules about strings, quoted identifiers and comment nesting would let a
+statement separator hide.
 
 - **ACT-78** `authorize` is pure and fully unit-tested; `run` takes an injected transport (a
   `fetch`-like function, a database client factory, an SSH client factory, an HTTPS request
@@ -129,11 +143,11 @@ agent must never see the client secret, the refresh token or the access token.
 
 ## 14.4 `sql`
 
-| Document      | Fields                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `destination` | `engine` (`mssql` \| `postgres`); `host`; `port` (default 1433 / 5432); `database`; `tls` (`require` default, `verify-full` with `ca_pem`, or `disable` only when `internal: true`); for `mssql`, `encrypt: true` is implied by `tls` and `trust_server_certificate` defaults to `false`.                                                                                                                                             |
-| `credential`  | `username_from` (`login.username` or a field selector) and `password_field` (default `password`).                                                                                                                                                                                                                                                                                                                                     |
-| `policy`      | Common fields; `operations` (`["read"]` default, or `["read","write"]`); `max_rows` (default 500, max 10 000); `statement_timeout_ms` (default `timeout_ms`); `write_classes` (`["dml"]` default, or `["dml","ddl"]`); `statement_allowlist` (optional patterns, ACT-34, applied to `sql_execute` statements after classification); `schemas` (optional list; a statement naming a schema outside it fails, best-effort, see ACT-38). |
+| Document      | Fields                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `destination` | `engine` (`mssql` \| `postgres`); `host`; `port` (default 1433 / 5432); `database`; `tls` (`require` default, `verify-full` with `ca_pem`, or `disable` only when `internal: true`); for `mssql`, `encrypt: true` is implied by `tls` and `trust_server_certificate` is accepted but may only be `false`, because ACT-57 leaves no room for an "ignore certificate errors" option: a private certificate authority is `verify-full` with its `ca_pem`. |
+| `credential`  | `username_from` (`login.username` or a field selector) and `password_field` (default `password`).                                                                                                                                                                                                                                                                                                                                                      |
+| `policy`      | Common fields; `operations` (`["read"]` default, or `["read","write"]`); `max_rows` (default 500, max 10 000); `statement_timeout_ms` (default `timeout_ms`); `write_classes` (`["dml"]` default, or `["dml","ddl"]`); `statement_allowlist` (optional patterns, ACT-34, applied to `sql_execute` statements after classification); `schemas` (optional list; a statement naming a schema outside it fails, best-effort, see ACT-38).                  |
 
 - **ACT-84** Dependencies: `pg` for PostgreSQL and `mssql` (the Tedious-based driver) for SQL
   Server, justified per QG-9 in the M11 pull request (pure JavaScript, no native addon, parameter
@@ -146,7 +160,12 @@ agent must never see the client secret, the refresh token or the access token.
   classification of ACT-37 is the control, and the guide says so).
 - **ACT-86** One connection per call, opened after the policy decision, closed when the call ends;
   no pool, so an idle deployment holds no database sessions and a rotated password takes effect on
-  the next call.
+  the next call. `mssql` has no connection type outside its pool, so the SQL Server session is a
+  pool of exactly one (`min: 0`, `max: 1`) created and closed with the call, which is the same
+  thing from the database's point of view.
+- `policy.statement_allowlist` and `policy.schemas` are read by `sql_execute` only; `sql_query`
+  is governed by the classification of ACT-37 and by the login of ACT-85. Both validate on every
+  `sql` target so the document shape does not change when the write half lands.
 
 ## 14.5 `ssh`
 

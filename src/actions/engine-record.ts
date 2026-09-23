@@ -8,6 +8,7 @@ import { completeCall, type Elicitation, INTERRUPTED_OUTCOME, recordCall } from 
 import { ActionError, type ActionOutcome, outcomeOf } from './errors.ts';
 
 import type { Caller } from './caller.ts';
+import type { OperationDescription } from './connectors/connector.ts';
 import type { Invocation, ResolvedCall } from './engine-resolve.ts';
 import type { Scrubber } from './scrub.ts';
 import type { TargetRow } from './targets-schemas.ts';
@@ -30,6 +31,10 @@ export interface CallFacts {
   readonly startedAt: number;
   readonly row: TargetRow | undefined;
   readonly resolved: ResolvedCall | undefined;
+  /**
+  ACT-26, ACT-60: the operation's summary and classification, known even when the policy refused it.
+  */
+  readonly description: OperationDescription | undefined;
   /**
   Present once the credential was fetched; arguments are scrubbed with it (ACT-61).
   */
@@ -95,7 +100,7 @@ function insertRow(
     clientId: facts.caller.clientId,
     tokenPrefix: facts.caller.tokenPrefix,
     operation: facts.resolved?.decision.operation,
-    classification: facts.resolved?.description.classification,
+    classification: facts.description?.classification,
     arguments: scrubbedArguments(facts),
     outputBytes: ending.output.bytes,
     outputTruncated: ending.output.truncated,

@@ -75,11 +75,11 @@ describe('save-time checks', () => {
   it('14.1 refuses a connector whose schemas have not landed in this build', async () => {
     const harness = createActionsHarness();
     const result = await harness.engine.targets.create(
-      { ...targetInput(), connector: 'sql' },
+      { ...targetInput(), connector: 'ssh' },
       OPERATOR_ID,
     );
     expect(unwrapFail(result).problems).toStrictEqual([
-      'connector: sql is not available in this build',
+      'connector: ssh is not available in this build',
     ]);
   });
 
