@@ -11,6 +11,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh | sudo bash -s -- --version 0.1.0
 #
 # Re-running upgrades in place. An existing /etc/vaultgate/vaultgate.env is never overwritten.
+# scripts/test-install-sh.sh sources this file (the guard at the end keeps main
+# from running) to check the argument and operating-system logic.
 set -euo pipefail
 
 REPO="adamrowles1996/vaultgate"
@@ -20,6 +22,7 @@ DATA_DIR="/var/lib/vaultgate"
 SERVICE_USER="vaultgate"
 NODE_MAJOR=26
 VERSION="${VAULTGATE_VERSION:-}"
+OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
 
 # Bitwarden CLI pin. Keep equal to the Dockerfile and src/bitwarden/versions.ts (COMPAT-1).
 # The release publishes no checksum file; these digests were computed from the assets.
@@ -55,15 +58,23 @@ require_root() {
   [ "$(id -u)" -eq 0 ] || die "run as root (sudo); the installer writes to /opt, /etc and /var/lib"
 }
 
+# One field of os-release, unquoted. The file is never sourced: it defines
+# VERSION on every Debian and Ubuntu, which would silently replace ours.
+os_release_field() {
+  sed -n "/^$1=/{s/^$1=//;p;q;}" "$OS_RELEASE_FILE" | tr -d "\"'"
+}
+
 require_debian_family() {
   step "Checking the operating system"
-  [ -r /etc/os-release ] || die "cannot read /etc/os-release"
-  # shellcheck source=/dev/null
-  . /etc/os-release
-  case " ${ID:-} ${ID_LIKE:-} " in
-    *" debian "* | *" ubuntu "*) info "${PRETTY_NAME:-$ID} is supported" ;;
+  [ -r "$OS_RELEASE_FILE" ] || die "cannot read ${OS_RELEASE_FILE}"
+  local os_id os_like pretty
+  os_id=$(os_release_field ID)
+  os_like=$(os_release_field ID_LIKE)
+  pretty=$(os_release_field PRETTY_NAME)
+  case " ${os_id} ${os_like} " in
+    *" debian "* | *" ubuntu "*) info "${pretty:-$os_id} is supported" ;;
     *)
-      die "this installer supports Debian and Ubuntu only (found ${PRETTY_NAME:-${ID:-unknown}}). " \
+      die "this installer supports Debian and Ubuntu only (found ${pretty:-${os_id:-unknown}}). " \
         "On other systems, use the container image: docs/guides/install-docker-compose.md"
       ;;
   esac
@@ -75,13 +86,20 @@ require_debian_family() {
   esac
 }
 
+# True when the dynamic linker knows the named shared library.
+has_shared_library() {
+  ldconfig -p 2>/dev/null | grep -F "$1 (" >/dev/null
+}
+
 ensure_packages() {
-  step "Installing prerequisites (curl, ca-certificates, unzip, xz-utils)"
+  step "Installing prerequisites (curl, ca-certificates, unzip, xz-utils, libatomic1)"
   local missing=()
   command -v curl >/dev/null 2>&1 || missing+=(curl)
   [ -r /etc/ssl/certs/ca-certificates.crt ] || missing+=(ca-certificates)
   command -v unzip >/dev/null 2>&1 || missing+=(unzip)
   command -v xz >/dev/null 2>&1 || missing+=(xz-utils)
+  # Node 26 links against libatomic; Ubuntu 24.04 cloud images ship without it.
+  has_shared_library libatomic.so.1 || missing+=(libatomic1)
   if [ ${#missing[@]} -eq 0 ]; then
     info "already present"
     return
@@ -99,10 +117,10 @@ resolve_version() {
       sed -n 's/^ *"tag_name": *"v\([^"]*\)".*/\1/p' | head -n 1)
     [ -n "$VERSION" ] || die "could not determine the latest release; pass --version X.Y.Z"
   fi
-  case "$VERSION" in
-    [0-9]*.[0-9]*.[0-9]*) info "vaultgate ${VERSION}" ;;
-    *) die "version must look like X.Y.Z (got ${VERSION})" ;;
-  esac
+  # Strict: an os-release style "24.04.5 LTS" must never reach the download URL.
+  [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] ||
+    die "version must look like X.Y.Z or X.Y.Z-rc.N (got ${VERSION})"
+  info "vaultgate ${VERSION}"
 }
 
 fetch_release() {
@@ -140,9 +158,17 @@ install_release() {
   ln -sfn "${INSTALL_ROOT}/${VERSION}" "${INSTALL_ROOT}/current"
 }
 
+# /etc/vaultgate is root-owned but traversable by the service group, so the
+# service user can read its own secret files under secrets/ (DEP-4). The
+# environment file itself stays root-only: systemd reads it before dropping
+# privileges. A re-run corrects the modes of an earlier install.
 write_environment_file() {
-  step "Configuration ${CONFIG_DIR}/vaultgate.env"
-  install -d -m 0700 -o root -g root "$CONFIG_DIR"
+  step "Configuration ${CONFIG_DIR}/vaultgate.env and ${CONFIG_DIR}/secrets/"
+  install -d "$CONFIG_DIR" "${CONFIG_DIR}/secrets"
+  chown "root:${SERVICE_USER}" "$CONFIG_DIR"
+  chmod 0750 "$CONFIG_DIR"
+  chown "${SERVICE_USER}:${SERVICE_USER}" "${CONFIG_DIR}/secrets"
+  chmod 0700 "${CONFIG_DIR}/secrets"
   if [ -e "${CONFIG_DIR}/vaultgate.env" ]; then
     info "exists; left untouched"
     return
@@ -178,7 +204,9 @@ print_next_steps() {
   if [ "$STARTED" -eq 0 ]; then
     cat <<END
     1. Edit ${CONFIG_DIR}/vaultgate.env: set VAULTGATE_PUBLIC_URL and the three
-        VAULTGATE_BW_* values (master password and personal API key).
+        VAULTGATE_BW_* values (master password and personal API key). To keep the
+        secrets out of the file, write each one to ${CONFIG_DIR}/secrets/<name>
+        (owner ${SERVICE_USER}, mode 0600) and set the matching <NAME>_FILE instead.
     2. Put a TLS-terminating reverse proxy in front of 127.0.0.1:8080
         (docs/guides/reverse-proxy.md; snippets in ${INSTALL_ROOT}/current/deploy/proxy/).
     3. systemctl start vaultgate
@@ -215,4 +243,7 @@ main() {
   print_next_steps
 }
 
-main "$@"
+# Run when executed or piped into bash (BASH_SOURCE is empty on a pipe), not when sourced.
+if [ -z "${BASH_SOURCE[0]:-}" ] || [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

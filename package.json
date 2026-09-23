@@ -45,10 +45,11 @@
     "lint:spelling": "cspell --no-progress --gitignore .",
     "lint:workflows": "actionlint",
     "prepare": "simple-git-hooks",
-    "quality": "npm run format:check && npm run lint && npm run typecheck && npm run knip && npm run check:file-sizes && npm run audit:signatures && npm run test:coverage",
+    "quality": "npm run format:check && npm run lint && npm run typecheck && npm run knip && npm run check:file-sizes && npm run audit:signatures && npm run test:coverage && npm run test:install-sh",
     "start": "node dist/main.js",
     "test": "vitest run --project unit",
     "test:coverage": "vitest run --project unit --coverage",
+    "test:install-sh": "bash scripts/test-install-sh.sh",
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest --project unit",
     "typecheck": "tsc -p tsconfig.json"

@@ -95,6 +95,8 @@ jobs:
         run: scripts/cli-smoke.sh node dist/cli.js
       - name: Export an empty audit log through the CLI from source
         run: scripts/cli-smoke.sh node src/cli.ts
+      - name: Check install.sh against a fake os-release
+        run: npm run test:install-sh
 
   docker-build:
     name: Container image builds (no push)

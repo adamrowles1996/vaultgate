@@ -12,7 +12,9 @@ import { Credentials } from './credentials.ts';
 import { BwCli, type ServeHandle } from './serve-process.ts';
 import {
   backoffMs,
+  isServeSettling,
   resolveDependencies,
+  SERVE_SETTLE_POLL_MS,
   type VaultSupervisorDependencies,
 } from './supervisor-support.ts';
 import { messageDataSchema, statusDataSchema } from './types.ts';
@@ -32,6 +34,7 @@ export interface VaultSupervisor {
 const ERROR_LEVEL_AFTER_FAILURES = 10;
 const SERVE_START_TIMEOUT_MS = 30_000;
 const SERVE_START_POLL_MS = 250;
+const STATUS_REQUEST = { method: 'GET', path: '/status', schema: statusDataSchema } as const;
 
 class Supervisor implements VaultSupervisor {
   readonly #config: Config;
@@ -68,7 +71,7 @@ class Supervisor implements VaultSupervisor {
       spawn: resolved.spawn,
       clock: this.#clock,
     });
-    this.#api = new BwServeApi(() => this.#serve?.endpoint, resolved.fetch);
+    this.#api = new BwServeApi(() => this.#serve?.endpoint, resolved.fetch, this.#clock);
     const options = { api: this.#api, clock: this.#clock };
     this.client = new BwServeVaultClient(
       config.bitwarden.server === undefined
@@ -111,11 +114,7 @@ class Supervisor implements VaultSupervisor {
   async #awaitServe(): Promise<Result<void>> {
     const deadline = this.#clock.now() + SERVE_START_TIMEOUT_MS;
     while (this.#clock.now() < deadline && !this.#stopping) {
-      const status = await this.#api.call({
-        method: 'GET',
-        path: '/status',
-        schema: statusDataSchema,
-      });
+      const status = await this.#api.call(STATUS_REQUEST);
       if (status.ok) {
         return ok(undefined);
       }
@@ -124,14 +123,20 @@ class Supervisor implements VaultSupervisor {
     return fail(new Error('bw serve did not answer /status in time'));
   }
 
-  async #unlock(): Promise<Result<void>> {
+  // `POST /unlock`; a protocol error inside the settle window after `spawnedAt` is retried (VAULT-6).
+  async #unlock(spawnedAt: number): Promise<Result<void>> {
     const unlocked = await this.#api.call({
       method: 'POST',
       path: '/unlock',
       body: { password: this.#credentials.masterPassword() },
       schema: messageDataSchema,
     });
-    return unlocked.ok ? ok(undefined) : fail(unlocked.error);
+    if (unlocked.ok || !isServeSettling(unlocked.error, spawnedAt, this.#clock.now())) {
+      return unlocked.ok ? ok(undefined) : fail(unlocked.error);
+    }
+    this.#logger.debug({ err: unlocked.error }, 'bw serve is still settling; retrying unlock');
+    await this.#pause(SERVE_SETTLE_POLL_MS);
+    return this.#stopping ? fail(new Error('stopped while unlocking')) : this.#unlock(spawnedAt);
   }
 
   /**
@@ -147,10 +152,11 @@ class Supervisor implements VaultSupervisor {
     if (!loggedIn.ok) {
       return loggedIn;
     }
+    const spawnedAt = this.#clock.now();
     const serve = this.#cli.serve(await this.#allocatePort());
     this.#serve = serve;
     const started = await this.#awaitServe();
-    const unlocked = started.ok ? await this.#unlock() : started;
+    const unlocked = started.ok ? await this.#unlock(spawnedAt) : started;
     if (!unlocked.ok) {
       await this.#stopServe();
       return unlocked;

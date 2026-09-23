@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { ManualClock } from '../test-support/manual-clock.ts';
 import { unwrapFail, unwrapOk } from '../test-support/result.ts';
 import { VaultError } from '../vault/client.ts';
 
-import { BwServeApi, type FetchFunction, vaultError } from './api.ts';
+import { BwServeApi, CALL_TIMEOUT_MS, type FetchFunction, vaultError } from './api.ts';
 
 const ENDPOINT = 'http://127.0.0.1:4242';
 const schema = z.object({ value: z.number() });
@@ -31,7 +32,11 @@ describe('BwServeApi', () => {
     expect(calls).toStrictEqual([
       {
         url: `${ENDPOINT}/thing?x=1`,
-        init: { method: 'GET', headers: { accept: 'application/json' } },
+        init: {
+          method: 'GET',
+          headers: { accept: 'application/json' },
+          signal: expect.any(AbortSignal) as AbortSignal,
+        },
       },
     ]);
   });
@@ -43,6 +48,7 @@ describe('BwServeApi', () => {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json' },
       body: '{"password":"pw"}',
+      signal: expect.any(AbortSignal) as AbortSignal,
     });
   });
 
@@ -55,6 +61,46 @@ describe('BwServeApi', () => {
     const error = unwrapFail(await api.call({ method: 'GET', path: '/status', schema }));
     expect(error).toBeInstanceOf(VaultError);
     expect(error.code).toBe('vault_unavailable');
+  });
+
+  it('VAULT-16 aborts a call that bw serve never answers and reports vault_unavailable', async () => {
+    const clock = new ManualClock();
+    const signals: AbortSignal[] = [];
+    const api = new BwServeApi(
+      () => ENDPOINT,
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          const signal = init?.signal;
+          if (!(signal instanceof AbortSignal)) {
+            return;
+          }
+          signals.push(signal);
+          signal.addEventListener('abort', () => {
+            reject(new Error('aborted'));
+          });
+        }),
+      clock,
+    );
+    const pending = api.call({ method: 'POST', path: '/sync', schema });
+    await clock.advance(CALL_TIMEOUT_MS - 1);
+    expect(signals[0]?.aborted).toBe(false);
+    await clock.advance(1);
+    expect(signals[0]?.aborted).toBe(true);
+    expect(unwrapFail(await pending).code).toBe('vault_unavailable');
+    expect(clock.pending()).toBe(0);
+  });
+
+  it('VAULT-16 releases the deadline timer once the call answers', async () => {
+    const clock = new ManualClock();
+    const api = new BwServeApi(
+      () => ENDPOINT,
+      () => Promise.resolve(new Response('{"success":true,"data":{"value":1}}')),
+      clock,
+    );
+    expect(unwrapOk(await api.call({ method: 'GET', path: '/status', schema }))).toStrictEqual({
+      value: 1,
+    });
+    expect(clock.pending()).toBe(0);
   });
 
   it('VAULT-5 reports vault_unavailable when the loopback connection fails', async () => {
