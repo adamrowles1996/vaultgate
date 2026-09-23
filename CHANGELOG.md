@@ -66,6 +66,8 @@ All notable changes to this project are documented here. The format follows
   not, the bundled `bw` CLI, stored connections surviving restarts) and a root `llms.txt`.
 - `install.sh` guide shows the download-then-inspect path before the piped one-liner; the nginx
   snippet explains the `/mcp` read timeout.
+- `VAULTGATE_TRUSTED_PROXY_HOPS` appears in `.env.example` and the systemd `vaultgate.env.example`
+  with its meaning on one line.
 - `src/config.ts` is `src/config/` in the specification, `CONTRIBUTING.md` and the ESLint
   message; ADR 0006 records `src/cli.ts` as the second coverage exclusion; COMPAT-1 describes
   where the CLI version is pinned; the source layout lists `scopes/`, `auth/`, `crypto/` and
