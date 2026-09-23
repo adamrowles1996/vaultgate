@@ -22,7 +22,8 @@ export default defineConfig({
           name: 'integration',
           include: ['src/**/*.integration.test.ts'],
           testTimeout: 120_000,
-          hookTimeout: 120_000,
+          // Above the suite's readiness deadline (one failed start plus a clean restart).
+          hookTimeout: 180_000,
         },
       },
     ],

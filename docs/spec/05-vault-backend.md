@@ -36,8 +36,12 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
   can fix it. A fresh `bw serve` accepts connections a moment before its command handlers are
   ready, so for the first 10 s after it is spawned a `POST /unlock` answered with something other
   than the JSON envelope (a protocol error) is retried every 250 ms rather than counted as a
-  failed attempt; after that window it is a failed attempt like any other. An exit after the
-  vault was ready is one more consecutive failure unless the child had been ready for at least
+  failed attempt; after that window it is a failed attempt like any other. A `POST /unlock`
+  whose connection is refused or reset, or that reaches the VAULT-16 bound, is a failed attempt
+  at once: the child is stopped and, after the backoff, the same generation is started again
+  without a second login, since its app-data directory already holds the session (VAULT-8). Each
+  attempt is logged at `warn` with the error's message, which says which of those it was. An exit
+  after the vault was ready is one more consecutive failure unless the child had been ready for at least
   5 minutes, in which case the count starts afresh at 1; so a child that dies on every scheduled
   sync reaches the backoff and the `error`-level escalation like any other failure. The
   `bw serve exited` log line carries the exit code, signal, uptime and the last 40 lines
@@ -129,11 +133,14 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 
 - **VAULT-14** Error messages returned to agents never contain vault content, the master
   password, session keys or file paths. The client therefore never forwards the text of a
-  `bw serve` rejection; each error code carries one fixed message.
+  `bw serve` rejection; every message is a fixed phrase of vaultgate's own, one per error code
+  plus, under `vault_unavailable`, one for a rejected master password and one for the VAULT-16
+  timeout.
 - **VAULT-16** Every `bw serve` call is bounded to 60 s (the same bound as a one-shot CLI
-  command). A call that has not answered by then is aborted and reported as `vault_unavailable`,
-  so a `bw serve` that stops answering can never leave an MCP request hanging with nothing logged
-  or hold up shutdown.
+  command). A call that has not answered by then is aborted and reported as `vault_unavailable`
+  with the message `the vault did not answer within 60 s`, distinct from the message for a refused
+  or reset connection, so a `bw serve` that stops answering can never leave an MCP request hanging
+  with nothing logged or hold up shutdown, and the log tells a stalled child from one that is gone.
 
 ## 5.5 Secret material in memory
 

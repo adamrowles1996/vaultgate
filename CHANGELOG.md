@@ -6,7 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- VAULT-16: a `bw serve` call that vaultgate aborted at the 60 s bound carried the same message
+  as a refused or reset connection (`the vault is locked or not reachable`), so a `vault backend
+  start failed` line could not say whether the child had stalled or was gone. The abort now reads
+  `the vault did not answer within 60 s`; the code is still `vault_unavailable`. Spec VAULT-6
+  states that a `/unlock` which is refused, reset or times out is a failed attempt, restarted on
+  the same generation without a second login.
+- Integration suite: the readiness wait gave up silently at 90 s, so a first `/unlock` that hit the
+  VAULT-16 bound (the restart a second later was ready) failed `VAULT-4 VAULT-5` with
+  `expected false to be true` while the rest of the suite passed. The wait now covers one failed
+  attempt and a clean restart (150 s, `hookTimeout` 180 s), fails the hook with the reason, and the
+  supervisor logs at `info` so a run shows when the CLI logged in, synced and became ready.
 
 ## [0.1.0-rc.5] - 2026-09-23
 
