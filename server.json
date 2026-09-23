@@ -13,9 +13,9 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://{host}/mcp",
+      "url": "https://{vaultgate_host}/mcp",
       "variables": {
-        "host": {
+        "vaultgate_host": {
           "description": "Hostname of your own vaultgate deployment, for example vaultgate.example.com. vaultgate is self-hosted: there is no shared public endpoint, and every operator's URL is different.",
           "isRequired": true
         }
