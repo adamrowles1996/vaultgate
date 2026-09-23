@@ -197,6 +197,11 @@ export interface ConnectorOutput {
   engine scrubs and cuts each and writes the text into `result` under the same key.
   */
   readonly captured: Readonly<Record<string, Buffer>>;
+  /**
+  ACT-60: the size of a result that is not a byte stream (the `sql` rows), for `output_bytes`;
+  without it the engine adds up what `captured` holds.
+  */
+  readonly bytes?: number;
 }
 
 export interface Connector<Destination, Credential, Policy, Operation> extends ConnectorSchemas<
@@ -209,10 +214,17 @@ export interface Connector<Destination, Credential, Policy, Operation> extends C
   /**
    * Pure: classifies and checks the operation against the policy; no I/O
    * (ACT-78). The credential document says which injection point the
-   * mapping owns, so an operation that would set it is refused (ACT-22).
+   * mapping owns, so an operation that would set it is refused (ACT-22);
+   * the destination says which dialect an operation is written in, which
+   * `sql` needs to tokenise a statement at all (ACT-36).
    */
-  authorize(policy: Policy, operation: Operation, credential: Credential): PolicyDecision;
-  describe(operation: Operation): OperationDescription;
+  authorize(
+    policy: Policy,
+    operation: Operation,
+    credential: Credential,
+    destination: Destination,
+  ): PolicyDecision;
+  describe(operation: Operation, destination: Destination): OperationDescription;
   /**
   Runs one operation with the injected values; output is raw, the engine scrubs it.
   */

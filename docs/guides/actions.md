@@ -9,9 +9,9 @@ and describes an operation; vaultgate fetches the credential, performs the opera
 policy, scrubs the result of every injected value and returns it.
 
 This guide is for the operator. It covers what exists today: the layer's switches, the account
-page that manages targets, the `http` connector's target form, and what an agent does with an
-`http` target through `http_request`. The other connectors (`sql`, `ssh`, `winrm`, `browser`)
-land with their milestones; until then their targets cannot be created.
+page that manages targets, the `http` and `sql` connectors' target forms, and what an agent does
+with those targets through `http_request` and `sql_query`. The other connectors (`ssh`, `winrm`,
+`browser`) land with their milestones; until then their targets cannot be created.
 
 ## Enabling the layer
 
@@ -20,6 +20,7 @@ The layer is off unless the deployment says otherwise, and each connector has it
 ```bash
 VAULTGATE_ENABLE_ACTIONS=true
 VAULTGATE_ACTIONS_ENABLE_HTTP=true
+VAULTGATE_ACTIONS_ENABLE_SQL=true
 ```
 
 Restart after changing them. With the master switch off nothing changes: no `actions:*` scope
@@ -220,6 +221,122 @@ the query string** only on the target that needs it.
 API). It is the only way to use an `http://` base URL, and it never allows loopback or
 link-local: `bw serve` listens on loopback, and an `http` target reaching it would turn a token
 into the whole vault.
+
+## Creating a `sql` target
+
+Follow **Create a sql target**. The four parts are the same shape as an `http` target's.
+
+**Destination.** The `engine` (`postgres` or `mssql`), the `host`, the `port` (5432 and 1433 by
+default), the `database`, and **Transport security**:
+
+| `tls`         | What happens                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------- |
+| `require`     | The connection is encrypted and the certificate is verified against the system store. The default.      |
+| `verify-full` | The same, but verified against the PEM you paste into **Certificate authority**, for a private CA.      |
+| `disable`     | Plain, unencrypted transport. Allowed only on an **internal** target, and never a good idea over a WAN. |
+
+There is no "trust the server certificate" option: a self-signed or private-CA certificate is
+handled by `verify-full` with its PEM, not by turning verification off. Saving resolves the host
+and checks every address against the private-range rule; it does not connect.
+
+**Credential mapping.** The vault item id, the field holding the **login name**
+(`login.username` by default) and the field holding the **password** (`password` by default).
+Both are `get_secret` selectors, so a hidden custom field (`custom.<name>`) works for either.
+
+**Policy.** `operations` (`read` today; `write` needs `sql_execute`, which arrives with M11's
+second pull request, and a target that asks for it is refused at save until then), **maximum
+rows** (default 500, at most 10 000), the **statement timeout** (the server cancels a statement
+that runs longer; defaults to the call timeout), and the common timeout, output and rate limits.
+`write_classes`, `statement_allowlist` and `schemas` are read by `sql_execute` only and have no
+effect on `sql_query`.
+
+### The dedicated login
+
+Every `sql` target should have its own login with the least privilege the work needs. The
+classification below is a control in depth; **the login is the control**.
+
+PostgreSQL, a read-only role over one schema:
+
+```sql
+CREATE ROLE vaultgate_reader LOGIN PASSWORD 'put-a-generated-password-here';
+GRANT CONNECT ON DATABASE reporting TO vaultgate_reader;
+GRANT USAGE ON SCHEMA public TO vaultgate_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO vaultgate_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO vaultgate_reader;
+ALTER ROLE vaultgate_reader SET default_transaction_read_only = on;
+```
+
+SQL Server, a read-only login and user:
+
+```sql
+CREATE LOGIN vaultgate_reader WITH PASSWORD = 'put-a-generated-password-here';
+USE reporting;
+CREATE USER vaultgate_reader FOR LOGIN vaultgate_reader;
+ALTER ROLE db_datareader ADD MEMBER vaultgate_reader;
+DENY EXECUTE TO vaultgate_reader;
+```
+
+Store the password in a vault item and point the target's credential mapping at it. Rotating it
+in the vault is enough: vaultgate opens one connection per call and holds no pool, so the next
+call uses the new password.
+
+## Calling a `sql` target
+
+An agent whose token holds `actions:sql.read` and whose client you granted the target calls
+`sql_query`:
+
+```json
+{
+  "target": "warehouse",
+  "statement": "SELECT id, total FROM orders WHERE placed_at > $1 ORDER BY placed_at LIMIT 50",
+  "params": ["2026-09-01"]
+}
+```
+
+What vaultgate does with it, in order:
+
+1. **Classification first, no connection.** The statement is tokenised in the target's dialect —
+   string literals (`'…'` with doubled quotes, `N'…'` on SQL Server, `E'…'` and `$tag$…$tag$` on
+   PostgreSQL), quoted identifiers (`"…"`, and `[…]` on SQL Server), line comments and block
+   comments (which nest on PostgreSQL) — and must be **exactly one statement**: a `;` outside a
+   string or comment followed by anything but whitespace, a trailing comment included, is
+   `policy_denied` with `detail.reason: "statement_count"`. It must then classify as `read`:
+   the first keyword is `SELECT`, `WITH` or `EXPLAIN`, no writing, executing or session-changing
+   keyword appears outside a string, comment or quoted identifier, and no identifier begins with
+   `xp_` or `sp_`. Anything else is `policy_denied` with `detail.reason: "statement_class"`, and
+   the class it was given (`dml`, `ddl`, `other`) is recorded in the call history.
+2. **What classification is and is not.** It is a cheap, conservative filter that stops the
+   obvious: a second statement smuggled past a comment, a `DELETE` hidden in a CTE, `xp_cmdshell`.
+   It is **not** a SQL parser and does not promise to understand every dialect: `SELECT … INTO`,
+   `EXPLAIN ANALYZE DELETE …` and anything it cannot read confidently are refused rather than
+   allowed, and a statement it does allow can still do whatever the login may do. Give the target
+   a read-only login.
+3. **Parameters.** Placeholders are counted in the tokenised statement, outside strings and
+   comments: `$1…$n` on PostgreSQL, `@p1…@pn` on SQL Server. A placeholder with no parameter, a
+   parameter with no placeholder, or a gap in the sequence is `invalid_arguments`. There is no
+   other way to get a value into a statement.
+4. **The credential and one pinned connection.** The login name and password are fetched from
+   the vault after the policy decision, the host is resolved once and every address checked
+   against the private-range rule, and one connection is opened to that address with the host
+   name kept for TLS (SNI and certificate verification). There is no pool: the connection is
+   closed when the call ends. On PostgreSQL the session sets `default_transaction_read_only` and
+   the statement runs inside `BEGIN READ ONLY`; SQL Server has no equivalent, so there the
+   classification and the login are the whole of it.
+5. **The result.** `columns` (name and the engine's own type name), `rows` (arrays of JSON
+   scalars in column order: dates as ISO 8601, binary as base64, decimals and 64-bit integers as
+   strings), `row_count`, `truncated` and `duration_ms`. Rows are dropped whole at **maximum
+   rows** and at **maximum output**, never cut in half, and every injected value in every
+   encoding is replaced by `[redacted:<field>]` before the result leaves the engine. Note that
+   SQL Server's driver parses `decimal`, `numeric` and `money` as JavaScript numbers before
+   vaultgate can see them, so a value with more than about fifteen significant digits is already
+   rounded when it is rendered as a string; cast such a column to `varchar` in the statement if
+   you need every digit.
+
+A SQL error raised after sign-in — a bad column name, a permission denied — is `upstream_error`
+with the server's message (scrubbed, capped at 1 KiB). A login the server rejects is
+`authentication_failed`, an unreachable or refused server is `connection_failed`, a certificate
+that does not verify is `tls_error`, and a statement the server cancels at the statement timeout
+is `timeout`.
 
 ## Grants
 

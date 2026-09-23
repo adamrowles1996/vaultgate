@@ -51,7 +51,18 @@ export interface Resolution {
   The row when the name matched, whatever came of the rest; the audit trail names it.
   */
   readonly row: TargetRow | undefined;
+  /**
+  ACT-26, ACT-60: known as soon as the arguments parse, so a call the policy refuses is
+  audited with its classification too, not only the call that ran.
+  */
+  readonly description: OperationDescription | undefined;
   readonly call: Result<ResolvedCall, ActionError>;
+}
+
+type Attempt = Omit<Resolution, 'row'>;
+
+function refused(error: ActionError): Attempt {
+  return { description: undefined, call: fail(error) };
 }
 
 function resolveOperation(
@@ -59,15 +70,15 @@ function resolveOperation(
   invocation: Invocation,
   target: ResolvedCall['target'],
   connector: AnyConnector,
-): Result<ResolvedCall, ActionError> {
+): Attempt {
   const tool = connector.tools.find((candidate) => candidate.name === invocation.tool);
   if (tool === undefined) {
-    return fail(
+    return refused(
       new ActionError('invalid_arguments', { problem: 'the tool does not apply to this target' }),
     );
   }
   if (!scopes.includes(tool.scope)) {
-    return fail(new ActionError('insufficient_scope', { scope: tool.scope }));
+    return refused(new ActionError('insufficient_scope', { scope: tool.scope }));
   }
   const { target: _name, ...rest } = invocation.arguments;
   const parsed = tool.inputSchema.safeParse(rest);
@@ -75,24 +86,21 @@ function resolveOperation(
     const problems = parsed.error.issues.map(
       (issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`,
     );
-    return fail(new ActionError('invalid_arguments', { problems: problems.join('; ') }));
+    return refused(new ActionError('invalid_arguments', { problems: problems.join('; ') }));
   }
+  const description = connector.describe(parsed.data, target.documents.destination);
   const decision = connector.authorize(
     target.documents.policy,
     parsed.data,
     target.documents.credential,
+    target.documents.destination,
   );
-  if (!decision.allowed) {
-    return fail(new ActionError('policy_denied', { reason: decision.reason }));
-  }
-  return ok({
-    target,
-    connector,
-    tool,
-    operation: parsed.data,
-    decision,
-    description: connector.describe(parsed.data),
-  });
+  return {
+    description,
+    call: decision.allowed
+      ? ok({ target, connector, tool, operation: parsed.data, decision, description })
+      : fail(new ActionError('policy_denied', { reason: decision.reason })),
+  };
 }
 
 function resolveGranted(
@@ -100,19 +108,19 @@ function resolveGranted(
   scopes: readonly string[],
   invocation: Invocation,
   row: TargetRow,
-): Result<ResolvedCall, ActionError> {
+): Attempt {
   const connector = dependencies.config.connectors[row.connector]
     ? dependencies.connectors.get(row.connector)
     : undefined;
   if (connector === undefined) {
-    return fail(new ActionError('connector_disabled'));
+    return refused(new ActionError('connector_disabled'));
   }
   if (!row.enabled) {
-    return fail(new ActionError('target_disabled'));
+    return refused(new ActionError('target_disabled'));
   }
   const target = validateTarget(row);
   return target.state === 'invalid'
-    ? fail(new ActionError('target_invalid'))
+    ? refused(new ActionError('target_invalid'))
     : resolveOperation(scopes, invocation, target, connector);
 }
 
@@ -122,16 +130,16 @@ export function resolveCall(
   invocation: Invocation,
 ): Resolution {
   if (!dependencies.config.enabled) {
-    return { row: undefined, call: fail(new ActionError('actions_disabled')) };
+    return { row: undefined, ...refused(new ActionError('actions_disabled')) };
   }
   const row = dependencies.targets.findByName(invocation.target);
   if (row === undefined) {
-    return { row: undefined, call: fail(new ActionError('unknown_target')) };
+    return { row: undefined, ...refused(new ActionError('unknown_target')) };
   }
   return {
     row,
-    call: dependencies.targets.isGranted(row.id, caller.clientId)
+    ...(dependencies.targets.isGranted(row.id, caller.clientId)
       ? resolveGranted(dependencies, caller.scopes, invocation, row)
-      : fail(new ActionError('not_granted')),
+      : refused(new ActionError('not_granted'))),
   };
 }

@@ -134,6 +134,7 @@ async function call(
     startedAt: context.now(),
     row: resolution.row,
     resolved: resolution.call.ok ? resolution.call.value : undefined,
+    description: resolution.description,
     scrub: undefined,
     elicitation: 'not_required',
     nonce: undefined,

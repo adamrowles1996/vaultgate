@@ -8,6 +8,7 @@
 import { CONNECTOR_KINDS, type ActionsConfig, type ConnectorKind } from '../../config/actions.ts';
 
 import { httpSchemas } from './http/schemas.ts';
+import { sqlSchemas } from './sql/schemas.ts';
 
 import type { AnyConnector, AnyConnectorSchemas, ConnectorTool } from './connector.ts';
 
@@ -23,10 +24,15 @@ export const CONNECTOR_LOADERS: Partial<Readonly<Record<ConnectorKind, Connector
     const { httpConnector } = await import('./http/index.ts');
     return httpConnector;
   },
+  sql: async () => {
+    const { sqlConnector } = await import('./sql/index.ts');
+    return sqlConnector;
+  },
 };
 
 const CONNECTOR_SCHEMAS: Partial<Readonly<Record<ConnectorKind, AnyConnectorSchemas>>> = {
   http: httpSchemas,
+  sql: sqlSchemas,
 };
 
 /**

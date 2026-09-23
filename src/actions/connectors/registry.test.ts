@@ -31,20 +31,22 @@ describe('connector registry', () => {
     expect(loaded).toStrictEqual(['http']);
   });
 
-  it('ACT-73 ACT-72 loads the http runtime in production when its switch is on, and no other connector before its milestone', async () => {
-    expect(Object.keys(CONNECTOR_LOADERS)).toStrictEqual(['http']);
+  it('ACT-73 ACT-72 loads the http and sql runtimes in production when their switches are on, and no other connector before its milestone', async () => {
+    expect(Object.keys(CONNECTOR_LOADERS)).toStrictEqual(['http', 'sql']);
     const everything = actionsEnabled(['http', 'sql', 'ssh', 'winrm', 'browser']);
     const production = await loadConnectors(everything);
-    expect(production.kinds).toStrictEqual(['http']);
-    expect(production.tools.map((tool) => tool.name)).toStrictEqual(['http_request']);
+    expect(production.kinds).toStrictEqual(['http', 'sql']);
+    expect(production.tools.map((tool) => tool.name)).toStrictEqual(['http_request', 'sql_query']);
     expect(production.forTool('http_request')?.kind).toBe('http');
-    const withoutHttp = await loadConnectors(actionsEnabled(['sql', 'ssh']));
+    expect(production.forTool('sql_query')?.kind).toBe('sql');
+    const withoutHttp = await loadConnectors(actionsEnabled(['winrm', 'ssh']));
     expect(withoutHttp.kinds).toStrictEqual([]);
   });
 
-  it('14.1 knows the http schemas in every build and no other connector before its milestone', () => {
+  it('14.1 knows the http and sql schemas in every build and no other connector before its milestone', () => {
     expect(schemasFor('http')?.kind).toBe('http');
-    expect(schemasFor('sql')).toBeUndefined();
+    expect(schemasFor('sql')?.kind).toBe('sql');
+    expect(schemasFor('ssh')).toBeUndefined();
     expect(connectorRegistry([]).kinds).toStrictEqual([]);
   });
 });

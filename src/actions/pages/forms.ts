@@ -8,8 +8,12 @@ import { CONNECTOR_KINDS, type ConnectorKind } from '../../config/actions.ts';
 
 import { COMMON_POLICY_FIELDS, type ConnectorForm } from './descriptors.ts';
 import { httpForm } from './http-form.ts';
+import { sqlForm } from './sql-form.ts';
 
-const FORMS: Partial<Readonly<Record<ConnectorKind, ConnectorForm>>> = { http: httpForm };
+const FORMS: Partial<Readonly<Record<ConnectorKind, ConnectorForm>>> = {
+  http: httpForm,
+  sql: sqlForm,
+};
 
 /**
 The form of a connector this build can edit targets for, with the common policy fields appended.

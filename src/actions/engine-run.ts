@@ -150,7 +150,7 @@ function assemble(
   });
   return {
     result,
-    outputBytes: captured.reduce((total, [, capped]) => total + capped.bytes, 0),
+    outputBytes: output.bytes ?? captured.reduce((total, [, capped]) => total + capped.bytes, 0),
     outputTruncated: isOutputTruncated,
   };
 }
