@@ -1,6 +1,16 @@
 import { auditExportSection } from './audit-export.ts';
 import { renderEnrolmentDetails } from './setup.ts';
-import { document, errorBanner, hidden, type Html, html, noticeBanner, when } from './template.ts';
+import {
+  cell,
+  document,
+  errorBanner,
+  hidden,
+  type Html,
+  html,
+  noticeBanner,
+  tableHead,
+  when,
+} from './template.ts';
 
 import type { Enrolment } from '../totp.ts';
 
@@ -25,12 +35,14 @@ export interface AccountView {
   readonly connectedClients: Html;
 }
 
+const SESSION_COLUMNS = ['Started', 'Last seen', 'Address', 'Browser'] as const;
+
 function sessionRow(session: SessionView): Html {
+  const marker = when(session.isCurrent, () => html` <em>(this one)</em>`);
+  const started = html`<span>${session.createdAt}${marker}</span>`;
   return html`<tr>
-    <td>${session.createdAt}${when(session.isCurrent, () => html` <em>(this one)</em>`)}</td>
-    <td>${session.lastSeenAt}</td>
-    <td>${session.ip}</td>
-    <td>${session.userAgent}</td>
+    ${cell(SESSION_COLUMNS[0], started)} ${cell(SESSION_COLUMNS[1], session.lastSeenAt)}
+    ${cell(SESSION_COLUMNS[2], session.ip)} ${cell(SESSION_COLUMNS[3], session.userAgent)}
   </tr>`;
 }
 
@@ -79,14 +91,7 @@ export function renderAccount(view: AccountView): string {
       <section>
         <h3>Sessions</h3>
         <table>
-          <thead>
-            <tr>
-              <th>Started</th>
-              <th>Last seen</th>
-              <th>Address</th>
-              <th>Browser</th>
-            </tr>
-          </thead>
+          ${tableHead(SESSION_COLUMNS)}
           <tbody>
             ${rows}
           </tbody>

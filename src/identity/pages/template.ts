@@ -75,3 +75,24 @@ export function noticeBanner(message: string | undefined): Html {
 export function hidden(name: string, value: string): Html {
   return html`<input type="hidden" name="${name}" value="${value}" />`;
 }
+
+/**
+ * A table's heading row. The stylesheet hides it on narrow screens and shows
+ * each cell's `data-label` instead, so rows render as cards there; keep the
+ * labels passed to `cell` identical to these headings.
+ */
+export function tableHead(columns: readonly string[]): Html {
+  const headings = columns.map((column) => html`<th>${column}</th>`);
+  return html`<thead>
+    <tr>
+      ${headings}
+    </tr>
+  </thead>`;
+}
+
+/**
+A body cell labelled with its column heading (empty for an unlabelled column).
+*/
+export function cell(label: string, content: string | Html): Html {
+  return html`<td data-label="${label}">${content}</td>`;
+}

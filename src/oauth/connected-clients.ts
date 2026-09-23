@@ -1,4 +1,4 @@
-import { hidden, type Html, html, when } from '../identity/pages/template.ts';
+import { cell, hidden, type Html, html, tableHead, when } from '../identity/pages/template.ts';
 
 import type { ConnectedClient } from './repositories/consents.ts';
 
@@ -8,6 +8,11 @@ export const CONSENT_REVOKE_PATH = '/oauth/consents/:id/revoke' as const;
 The anchor of the account page's re-authentication form (ID-15).
 */
 const REAUTHENTICATION_ANCHOR = '/account#sensitive-actions';
+
+/**
+The last column holds the Disconnect form and has no heading.
+*/
+const COLUMNS = ['Client', 'Permissions', 'Connected', 'Last used', ''] as const;
 
 /**
 What the section needs from the session (a `SessionState` satisfies it).
@@ -35,11 +40,13 @@ function row(client: ConnectedClient, view: ConnectedClientsView): Html {
   const lastUsed =
     client.lastUsedAt === undefined ? 'never' : new Date(client.lastUsedAt).toISOString();
   return html`<tr>
-    <td>${client.clientName ?? client.clientId}</td>
-    <td>${client.scopes.join(' ')}</td>
-    <td>${new Date(client.grantedAt).toISOString()}</td>
-    <td>${lastUsed}</td>
-    <td>${when(view.isReauthenticated, () => revokeForm(client, view.csrfToken))}</td>
+    ${cell(COLUMNS[0], client.clientName ?? client.clientId)}
+    ${cell(COLUMNS[1], client.scopes.join(' '))}
+    ${cell(COLUMNS[2], new Date(client.grantedAt).toISOString())} ${cell(COLUMNS[3], lastUsed)}
+    ${cell(
+      COLUMNS[4],
+      when(view.isReauthenticated, () => revokeForm(client, view.csrfToken)),
+    )}
   </tr>`;
 }
 
@@ -65,15 +72,7 @@ export function renderConnectedClients(
     clients.length > 0,
     () =>
       html`<table>
-        <thead>
-          <tr>
-            <th>Client</th>
-            <th>Permissions</th>
-            <th>Connected</th>
-            <th>Last used</th>
-            <th></th>
-          </tr>
-        </thead>
+        ${tableHead(COLUMNS)}
         <tbody>
           ${clients.map((client) => row(client, view))}
         </tbody>

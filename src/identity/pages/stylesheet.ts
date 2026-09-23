@@ -72,4 +72,100 @@ section {
   margin-top: 1.5rem;
   padding-top: 0.5rem;
 }
+
+/* ---- Narrow screens ------------------------------------------------------ */
+/* Everything below keeps the pages usable on a phone without changing the */
+/* desktop layout: overflow causes are fixed at every width, tables turn into */
+/* stacked cards (each cell labelled from its data-label) at 640px and below, */
+/* and touch targets grow on small or coarse-pointer screens. */
+:root {
+  font-size: 100%;
+}
+main {
+  min-width: 0;
+}
+input,
+select,
+pre {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+select {
+  font: inherit;
+  padding: 0.5rem 0.75rem;
+}
+pre {
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+@media (max-width: 640px), (pointer: coarse) {
+  input,
+  select,
+  button {
+    min-height: 44px;
+  }
+  form a,
+  p > a:only-child {
+    display: inline-block;
+    padding-block: 0.625rem;
+  }
+}
+@media (max-width: 640px) {
+  body {
+    padding: 1rem 0.75rem;
+  }
+  form > button {
+    justify-self: stretch;
+    width: 100%;
+  }
+  table,
+  tbody,
+  tr {
+    display: block;
+  }
+  thead {
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+  tr {
+    border: 1px solid #8884;
+    border-radius: 0.375rem;
+    margin-block: 0.75rem;
+    padding: 0.5rem 0.75rem;
+  }
+  td {
+    border-bottom: 0;
+    display: flex;
+    gap: 0.75rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 0.3rem 0;
+  }
+  td::before {
+    content: attr(data-label);
+    flex: 0 0 7rem;
+    font-weight: 600;
+  }
+  td > * {
+    min-width: 0;
+  }
+  td[data-label='']::before {
+    content: none;
+  }
+  td:empty {
+    display: none;
+  }
+  td form {
+    margin-block: 0.25rem 0;
+    width: 100%;
+  }
+  td button {
+    width: 100%;
+  }
+}
 `;
