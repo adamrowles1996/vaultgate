@@ -20,6 +20,7 @@ import { type ActionLimits, createActionLimits } from './limits.ts';
 import { createTargetsService, type TargetsService } from './targets.ts';
 
 import type { Caller } from './caller.ts';
+import type { ConnectorTool } from './connectors/connector.ts';
 import type { ConnectorRegistry } from './connectors/registry.ts';
 import type { AuditSink } from '../audit/event.ts';
 import type { ActionsConfig, ConnectorKind } from '../config/actions.ts';
@@ -57,6 +58,10 @@ export interface ActionsEngine {
   The connectors whose runtime is loaded (ACT-73).
   */
   readonly connectors: readonly ConnectorKind[];
+  /**
+  The tools those connectors serve, for the MCP layer to register (ACT-15).
+  */
+  readonly tools: readonly ConnectorTool<unknown>[];
   readonly targets: TargetsService;
   listTargets(caller: Pick<Caller, 'clientId' | 'scopes'>): readonly TargetListing[];
   call(caller: Caller, invocation: Invocation): Promise<CallOutcome>;
@@ -185,6 +190,7 @@ export function createActionsEngine(dependencies: EngineDependencies): ActionsEn
   };
   return {
     connectors: connectors.kinds,
+    tools: connectors.tools,
     targets,
     listTargets: (caller) => listTargets(context.resolve, caller),
     call: (caller, invocation) => call(context, caller, invocation),

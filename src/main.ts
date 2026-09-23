@@ -74,6 +74,34 @@ async function resolveAddresses(hostname: string): Promise<readonly string[]> {
   return entries.map((entry) => entry.address);
 }
 
+// The actions engine exists only when the layer is enabled (ACT-73); without
+// it the MCP surface registers no actions tool and the OAuth layer has no
+// consent-revocation callback to call (ACT-10).
+const engine = config.actions.enabled
+  ? createActionsEngine({
+      config: config.actions,
+      database: store.db,
+      vault: vault.client,
+      connectors: await loadConnectors(config.actions),
+      lookup: resolveAddresses,
+      audit: auditSink,
+      logger,
+      secretKey: config.secrets.secretKey,
+      now: Date.now,
+      schedule: (callback, delayMs) => {
+        const timer = setTimeout(callback, delayMs);
+        return () => {
+          clearTimeout(timer);
+        };
+      },
+      random: randomBytes,
+      newId: randomUUID,
+    })
+  : undefined;
+if (engine !== undefined) {
+  logger.info({ connectors: engine.connectors }, 'actions engine ready');
+}
+
 // The ID-18 guards are shared by the operator pages and the authorization
 // server, so they are built first; the server follows, and identity last with
 // the server's connected-clients renderer for the account page.
@@ -95,6 +123,9 @@ const oauth = createAuthorizationServer({
   now: Date.now,
   random: randomBytes,
   newId: randomUUID,
+  onConsentRevoked: (clientId) => {
+    engine?.targets.onConsentRevoked(clientId);
+  },
 });
 if (!oauth.ok) {
   logger.fatal({ err: oauth.error }, 'invalid pre-registered OAuth clients');
@@ -115,31 +146,6 @@ const identity = createIdentity({
   vaultConnection,
 });
 identity.bootstrap.ensureToken();
-
-// The actions engine exists only when the layer is enabled (ACT-73); its
-// tools and pages follow in M9's next pull requests, so nothing serves it yet.
-if (config.actions.enabled) {
-  const engine = createActionsEngine({
-    config: config.actions,
-    database: store.db,
-    vault: vault.client,
-    connectors: await loadConnectors(config.actions),
-    lookup: resolveAddresses,
-    audit: auditSink,
-    logger,
-    secretKey: config.secrets.secretKey,
-    now: Date.now,
-    schedule: (callback, delayMs) => {
-      const timer = setTimeout(callback, delayMs);
-      return () => {
-        clearTimeout(timer);
-      };
-    },
-    random: randomBytes,
-    newId: randomUUID,
-  });
-  logger.info({ connectors: engine.connectors }, 'actions engine ready');
-}
 
 const app = createApp({
   config,
@@ -166,6 +172,7 @@ const app = createApp({
   auditSink,
   tokenVerifier: oauth.value.tokenVerifier,
   oauth: oauth.value.routes,
+  engine,
 });
 
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (address) => {

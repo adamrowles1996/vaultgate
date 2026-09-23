@@ -21,6 +21,7 @@ import { fail, ok, type Result } from '../result.ts';
 import type {
   Connector,
   ConnectorOutput,
+  ConnectorTool,
   RunContext,
   TargetCapabilities,
 } from '../actions/connectors/connector.ts';
@@ -35,6 +36,42 @@ export const echoOperationSchema = z.strictObject({
 });
 
 export type EchoOperation = z.output<typeof echoOperationSchema>;
+
+/**
+The ACT-21 result as the engine assembles it: the connector's fields, the captured body, `truncated` and `duration_ms`.
+*/
+const echoOutputSchema = z.strictObject({
+  status: z.number().int(),
+  headers: z.record(z.string(), z.string()),
+  body: z.string(),
+  bytes: z.number().int(),
+  truncated: z.boolean(),
+  duration_ms: z.number().int(),
+});
+
+/**
+The `http_request` surface of 13.6.1 and ACT-17, as the real connector will declare it.
+*/
+export const echoTool: ConnectorTool<EchoOperation> = {
+  name: 'http_request',
+  scope: 'actions:http',
+  description:
+    'Sends one HTTP request to a target the operator configured, signed with a credential from the ' +
+    'vault that you never see. `target` must be a name returned by actions_list_targets; `path` is ' +
+    'appended to the target base URL. Returns the status, the allowed response headers, the body ' +
+    '(capped, `truncated` when cut), its size and the duration; never returns the credential. A ' +
+    'non-2xx status is a normal result. The operator may require a human confirmation for every ' +
+    'non-GET call, which you cannot supply yourself.',
+  annotations: {
+    title: 'HTTP request',
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+  inputSchema: echoOperationSchema,
+  outputSchema: echoOutputSchema,
+};
 
 export interface EchoBehaviour {
   /**
@@ -210,7 +247,7 @@ export function createEchoConnector(overrides: Partial<EchoBehaviour> = {}): Ech
     ...httpSchemas,
     behaviour,
     contexts,
-    tools: [{ name: 'http_request', scope: 'actions:http', inputSchema: echoOperationSchema }],
+    tools: [echoTool],
     capabilities: (_destination, policy) => capabilities(policy, behaviour.advertise),
     authorize,
     describe: (operation) => ({

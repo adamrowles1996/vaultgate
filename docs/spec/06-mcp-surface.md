@@ -34,6 +34,9 @@ human-readable `content` text. Names are stable API.
 | `trash_item`          | `vault:write`    | Soft delete (moves to trash). There is no permanent delete tool.                                                                                                                                      |
 | `create_folder`       | `vault:write`    | Create a folder.                                                                                                                                                                                      |
 
+The actions tools (`actions_list_targets` and the connector tools) live in section 13 (13.6) and
+join this surface only on a deployment that enables the layer, for tokens with an `actions:*` scope.
+
 - **MCP-6** Tool descriptions are written for an LLM audience: they state what the tool returns,
   what it never returns, and when to prefer another tool (for example, "use `search_items` first;
   `get_secret` requires an item id").

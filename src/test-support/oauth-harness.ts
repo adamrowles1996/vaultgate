@@ -39,6 +39,10 @@ export interface HarnessOptions {
   DNS answers for CIMD hosts; every host resolves to one public address by default.
   */
   readonly lookup?: (hostname: string) => Promise<readonly string[]>;
+  /**
+  ACT-10: what the composition layer wires to the actions layer; absent by default.
+  */
+  readonly onConsentRevoked?: (clientId: string) => void;
 }
 
 export interface SignedIn {
@@ -185,6 +189,7 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
         return buffer;
       },
       newId: () => `id-${(counter += 1)}`,
+      onConsentRevoked: options.onConsentRevoked,
     }),
   );
   const identity = createIdentityHarness({

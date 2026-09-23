@@ -5,6 +5,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import { createMetadataApp } from '../mcp/metadata.ts';
 import { createMcpRoutes } from '../mcp/routes.ts';
 
+import type { ActionsEngine } from '../actions/engine.ts';
 import type { AuditSink } from '../audit/event.ts';
 import type { TokenVerifier } from '../auth/token-types.ts';
 import type { Config } from '../config/index.ts';
@@ -59,6 +60,10 @@ export interface AppDependencies {
   The authorization server's routes (spec §03), mounted at the root when supplied.
   */
   readonly oauth?: Hono<AppEnvironment> | undefined;
+  /**
+  The actions engine (spec §13), present only when the layer is enabled (ACT-73).
+  */
+  readonly engine?: ActionsEngine | undefined;
 }
 
 /**
@@ -104,6 +109,7 @@ export function createApp(dependencies: AppDependencies): App {
       tokenVerifier: dependencies.tokenVerifier,
       auditSink: dependencies.auditSink,
       now: dependencies.now ?? Date.now,
+      engine: dependencies.engine,
     }),
   );
 

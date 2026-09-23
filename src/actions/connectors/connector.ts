@@ -9,6 +9,7 @@
  */
 import type { ConnectorKind } from '../../config/actions.ts';
 import type { Logger } from '../../logger.ts';
+import type { OutputSchema, ToolAnnotations } from '../../mcp/tools/definition.ts';
 import type { Result } from '../../result.ts';
 import type { ActionScope } from '../../scopes/registry.ts';
 import type { ActionError } from '../errors.ts';
@@ -71,13 +72,35 @@ export interface ConnectorSchemas<Destination, Credential, Policy> {
   summariseDestination(destination: Destination): string;
 }
 
+/**
+ * The operation half of a tool's arguments: a strict object, so the MCP layer
+ * can put `target` in front of its shape when it advertises the tool (ACT-16)
+ * and the engine can parse the arguments minus `target` with it.
+ */
+export type OperationSchema<Operation> = z.ZodObject<z.ZodRawShape, z.core.$strict> &
+  z.ZodType<Operation>;
+
+/**
+ * One MCP tool a connector serves (spec §13.6): the name and scope the gate
+ * checks, the LLM-facing description of ACT-17, the annotations of the
+ * 13.6.1 table (ACT-18), the operation arguments and the strict result shape
+ * (ACT-15). `src/mcp/tools/actions.ts` registers every tool of every loaded
+ * connector and dispatches its calls to the engine; a connector adds a tool
+ * by declaring one of these.
+ */
 export interface ConnectorTool<Operation> {
   readonly name: string;
   readonly scope: ActionScope;
+  readonly description: string;
+  readonly annotations: ToolAnnotations;
   /**
   The tool's arguments minus `target` (and `session_id`), strict.
   */
-  readonly inputSchema: z.ZodType<Operation>;
+  readonly inputSchema: OperationSchema<Operation>;
+  /**
+  What the engine returns for the tool, strict; never a place for a credential.
+  */
+  readonly outputSchema: OutputSchema;
 }
 
 export interface OperationGrant {

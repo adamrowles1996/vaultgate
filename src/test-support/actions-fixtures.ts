@@ -56,6 +56,10 @@ export interface HarnessOptions {
   Answers per host name; anything else resolves to one public address.
   */
   readonly addresses?: Readonly<Record<string, readonly string[]>>;
+  /**
+  Where the engine's audit events go; an app test shares the app's trail.
+  */
+  readonly audit?: AuditEvent[];
 }
 
 /**
@@ -78,7 +82,7 @@ export function createActionsHarness(options: HarnessOptions = {}): ActionsHarne
   const vault = options.vault ?? new InMemoryVaultClient();
   const connector = options.connector ?? createEchoConnector();
   const clock = new ManualClock();
-  const audit: AuditEvent[] = [];
+  const audit = options.audit ?? [];
   const { logger, lines } = captureLogger();
   const lookups: string[] = [];
   const lookup: Lookup = (hostname) => {

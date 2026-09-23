@@ -61,6 +61,10 @@ export interface AuthorizationServerDependencies {
   readonly now: Clock;
   readonly random: RandomSource;
   readonly newId: () => string;
+  /**
+  ACT-10: called with the client id on every consent revocation (OAUTH-30); the composition layer points it at the actions layer.
+  */
+  readonly onConsentRevoked?: ((clientId: string) => void) | undefined;
 }
 
 export interface AuthorizationServer {
@@ -136,6 +140,7 @@ export function createAuthorizationServer(
     random: dependencies.random,
     newId: dependencies.newId,
     clientIp: clientIpResolver(guards),
+    onConsentRevoked: dependencies.onConsentRevoked,
   };
   const authorize = {
     ...shared,

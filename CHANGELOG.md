@@ -29,6 +29,23 @@ All notable changes to this project are documented here. The format follows
   requests. Test support gains an echo connector whose fake destination returns its request, so
   the canary suite proves end to end that no injected value, in any encoding, reaches a result,
   an audit row, a log line or an elicitation message.
+- Actions MCP surface (spec 13 §13.6 and §13.8, M9 second pull request): `actions_list_targets`
+  (ACT-19) and the generic registration every connector tool uses. A connector declares each of
+  its tools (name, scope, LLM-facing description, the 13.6.1 annotations, operation schema and
+  strict result schema) on its `Connector`; `src/mcp/tools/actions.ts` advertises the tools of
+  the loaded connectors with `target` first and dispatches every call to the engine, which
+  records the one MCP-13 event itself. `tools/list` shows an actions tool only to a token whose
+  effective scopes reach it, so a `vault:read`-only token sees none; `actions_list_targets`
+  opens to any enabled `actions:*` scope and its OAUTH-33 challenge lists them all as one
+  any-of set. `ToolAnnotations.openWorldHint` is a boolean (ACT-18). On the 2026-07-28 wire a
+  confirmed target answers a form-capable client with the ACT-42 elicitation document as the
+  SDK's `input_required` result and honours the retried answer (ACT-45…47); a client that
+  declares no form-mode elicitation is refused with the fixed ACT-48 message before anything
+  else happens, and a 2025-wire client counts as one until M14's in-band fallback. Revoking a
+  client's consent on the account page now revokes its grants and closes its sessions (ACT-10)
+  through a callback the composition layer wires into the authorization server. No connector
+  runtime yet: `http_request` is declared by the `http` connector when it lands, so no
+  connector tool is listed on any deployment until then.
 
 ### Changed
 
