@@ -9,10 +9,14 @@
  * through a dynamic import, so a deployment that never enables `sql` never
  * loads it (ACT-73).
  */
+import { isIP } from 'node:net';
+
+import { driverModule } from '../drivers.ts';
 import { actionErrorOf, type FaultCodes } from '../failures.ts';
 import { toSqlScalar, type SqlRow } from '../values.ts';
 
 import type { SqlColumn, SqlConnection, SqlRows, SqlSession } from '../session.ts';
+import type * as Pg from 'pg';
 import type { ClientConfig } from 'pg';
 
 interface PostgresField {
@@ -70,12 +74,24 @@ const BEGIN: Readonly<Record<SqlConnection['mode'], string>> = {
   write: 'BEGIN',
 };
 
+/**
+ * ACT-55, ACT-57: the host name is the TLS server name, and only a name can
+ * be one — Node refuses an IP literal as SNI, because SNI has no syntax for
+ * an address. A destination named by address is verified against the
+ * certificate's IP subject-alternative names instead, which is the correct
+ * verification for an address: `servername` is left off and `host` carries
+ * the address `checkServerIdentity` is given. The socket still goes to the
+ * pinned address either way; `host` here feeds the certificate check only,
+ * because `pg` hands `tls.connect` a socket it has already opened.
+ */
 function sslOf(connection: SqlConnection): ClientConfig['ssl'] {
   if (connection.tls === 'disable') {
     return false;
   }
+  const verifyAgainst =
+    isIP(connection.host) === 0 ? { servername: connection.host } : { host: connection.address };
   return {
-    servername: connection.host,
+    ...verifyAgainst,
     rejectUnauthorized: true,
     ...(connection.caPem !== undefined && { ca: connection.caPem }),
   };
@@ -184,11 +200,21 @@ export async function openPostgresSession(
 }
 
 /**
+ * ACT-84: `pg` is CommonJS too. It does assign `Client` where
+ * `cjs-module-lexer` can see it, so the named export is real, but the class
+ * is taken through the same checked lookup as `mssql`'s (`drivers.ts`) so a
+ * dependency bump that changes the shape fails by name.
+ */
+export function postgresDriverFrom(module: typeof Pg): PostgresDriver {
+  const { Client } = driverModule(module, 'Client');
+  return (config) => new Client(config);
+}
+
+/**
 ACT-73: `pg` is reached only from here, and only when a `sql` call actually runs.
 */
 export async function loadPostgresDriver(): Promise<PostgresDriver> {
-  const { Client } = await import('pg');
-  return (config) => new Client(config);
+  return postgresDriverFrom(await import('pg'));
 }
 
 export async function postgresSession(

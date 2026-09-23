@@ -158,6 +158,27 @@ describe('running a sql_query', () => {
     expect(error.detail).toStrictEqual({ message: 'x'.repeat(1024) });
   });
 
+  /**
+   * The regression test for the shipped defect: a `TypeError` raised inside
+   * the connector — the driver that would not load was one — came back as
+   * `upstream_error`, telling the agent a destination had reported an error
+   * when none had been contacted.
+   */
+  it('ACT-74 a JavaScript fault inside the connector is connector_fault, not the destination', async () => {
+    const ran = await run(
+      {},
+      {},
+      { answers: [new TypeError('ConnectionPool is not a constructor')] },
+    );
+    const error = unwrapFail(ran.outcome);
+    expect(error.code).toBe('connector_fault');
+    expect(error.message).not.toContain('destination reported');
+    expect(error.detail).toStrictEqual({
+      reason: 'internal',
+      message: 'ConnectionPool is not a constructor',
+    });
+  });
+
   it('ACT-86 a session that fails to open is the error, and nothing is left to close', async () => {
     const ran = await run({}, {}, { openError: new ActionError('connection_failed') });
     expect(unwrapFail(ran.outcome).code).toBe('connection_failed');

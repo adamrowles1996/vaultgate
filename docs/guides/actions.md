@@ -244,9 +244,26 @@ default), the `database`, and **Transport security**:
 | `verify-full` | The same, but verified against the PEM you paste into **Certificate authority**, for a private CA.      |
 | `disable`     | Plain, unencrypted transport. Allowed only on an **internal** target, and never a good idea over a WAN. |
 
-There is no "trust the server certificate" option: a self-signed or private-CA certificate is
-handled by `verify-full` with its PEM, not by turning verification off. Saving resolves the host
-and checks every address against the private-range rule; it does not connect.
+**`require` here is not PostgreSQL's `sslmode=require`.** In `psql` and in most PostgreSQL
+tooling, `require` means "encrypt, and do not check who is on the other end"; vaultgate's
+`require` verifies the certificate fully against the system trust store, so it is closer to
+PostgreSQL's `verify-full`. If you carry PostgreSQL habits across, expect vaultgate's `require`
+to refuse a server whose certificate `psql` accepted without complaint: a self-signed
+certificate, a private CA the host does not trust, or a name that does not match. The answer is
+`verify-full` with the issuing CA's PEM, not a weaker mode — there is no "trust the server
+certificate" option, because ACT-57 leaves no room for one.
+
+**A destination named by address.** A `host` that is an IP literal has no name to put in the TLS
+server-name extension, so the certificate is verified against its IP subject-alternative names
+instead, which is the correct verification for an address. PostgreSQL targets do this and work.
+SQL Server targets cannot: its driver puts the server name straight into the TLS handshake,
+which refuses an address, and its in-band TLS path leaves nothing else to verify against. Such a
+target is refused when you save it, with a message saying so; give the host the name the
+certificate carries, or — on a private network where that is impossible — make it an **internal**
+target with `tls: "disable"` and accept plain transport knowingly.
+
+Saving resolves the host and checks every address against the private-range rule; it does not
+connect.
 
 **Credential mapping.** The vault item id, the field holding the **login name**
 (`login.username` by default) and the field holding the **password** (`password` by default).
@@ -297,6 +314,13 @@ CREATE USER vaultgate_reader FOR LOGIN vaultgate_reader;
 ALTER ROLE db_datareader ADD MEMBER vaultgate_reader;
 DENY EXECUTE TO vaultgate_reader;
 ```
+
+`DENY EXECUTE` covers the procedures in _this_ database, and nothing else. It does **not** stop
+`EXEC sp_who` or its siblings: those live in `master`, where `public` may execute them, and a
+login that can connect at all can reach them. What refuses them is vaultgate's classifier, which
+rejects any statement naming an `sp_`/`xp_` identifier — before a connection exists, so the
+server is never asked. Treat the `DENY` as tidying up your own procedures; treat the classifier
+plus the least-privilege login as the controls.
 
 For a target that also allows `write`, grant the least the work needs and nothing more — on the
 tables it is meant to change, in the schemas it is meant to see. PostgreSQL:
@@ -376,17 +400,28 @@ What vaultgate does with it, in order:
    scalars in column order: dates as ISO 8601, binary as base64, decimals and 64-bit integers as
    strings), `row_count`, `truncated` and `duration_ms`. Rows are dropped whole at **maximum
    rows** and at **maximum output**, never cut in half, and every injected value in every
-   encoding is replaced by `[redacted:<field>]` before the result leaves the engine. Note that
-   SQL Server's driver parses `decimal`, `numeric` and `money` as JavaScript numbers before
-   vaultgate can see them, so a value with more than about fifteen significant digits is already
-   rounded when it is rendered as a string; cast such a column to `varchar` in the statement if
-   you need every digit.
+   encoding is replaced by `[redacted:<field>]` before the result leaves the engine. A decimal
+   string carries the scale its column declares, so a `decimal(10,2)` holding 3.50 comes back as
+   `"3.50"`.
+
+   SQL Server has one limit vaultgate cannot lift. Its driver parses `decimal`, `numeric`,
+   `money` and `smallmoney` into a JavaScript number inside Tedious's own value parser, before
+   `mssql`'s `valueHandler` registry — the only hook the driver offers — is consulted, so the
+   digits are gone before anything vaultgate controls runs. The declared scale recovers every
+   value whose unscaled integer still fits a JavaScript safe integer, which is all ordinary
+   money. A larger one has genuinely been rounded, and rather than hand an agent a plausible
+   wrong number the call fails with `connector_fault` and
+   `detail.reason: "exact_numeric_precision"`, naming the column. Cast that column to `varchar`
+   in the statement — `CAST(total AS varchar(50))` — and every digit comes through. PostgreSQL
+   has no such limit: its driver hands decimals over as strings already.
 
 A SQL error raised after sign-in — a bad column name, a permission denied — is `upstream_error`
 with the server's message (scrubbed, capped at 1 KiB). A login the server rejects is
 `authentication_failed`, an unreachable or refused server is `connection_failed`, a certificate
 that does not verify is `tls_error`, and a statement the server cancels at the statement timeout
-is `timeout`.
+is `timeout`. `connector_fault` is the one code that is not the destination's doing: it means the
+call failed inside vaultgate, possibly without the destination ever being contacted, and
+`detail.reason` says which — please report one whose reason is `internal`.
 
 ## Changing data through a `sql` target
 

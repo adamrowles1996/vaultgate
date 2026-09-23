@@ -2,7 +2,9 @@
  * The SQL Server session over `mssql` (ACT-84), the Tedious-based driver:
  * one connection per call (a pool of exactly one, created and closed with
  * the call, ACT-86), opened to the pinned address with the host name kept
- * for TLS through Tedious's `serverName` (ACT-55), bounded by the driver's
+ * for TLS through Tedious's `serverName` (ACT-55, and only a name: this
+ * engine cannot verify a certificate against an address, so `saveProblems`
+ * refuses such a destination), bounded by the driver's
  * request timeout and the engine's abort signal, and cancelled on abort.
  * SQL Server has no read-only session, so for a read the classification of
  * ACT-37 and the least-privilege login of ACT-85 are the controls, as the
@@ -10,14 +12,24 @@
  * succeeds and rolled back on any error (ACT-25). The driver is loaded
  * through a dynamic import (ACT-73).
  */
-import { actionErrorOf, type FaultCodes } from '../failures.ts';
-import { toSqlScalar, toSqlString, type SqlRow, type SqlScalar } from '../values.ts';
+import { isIP } from 'node:net';
 
-import type { SqlColumn, SqlConnection, SqlRequest, SqlRows, SqlSession } from '../session.ts';
+import { driverModule } from '../drivers.ts';
+import { actionErrorOf, type FaultCodes } from '../failures.ts';
+import { toSqlScalar, type SqlRow, type SqlScalar } from '../values.ts';
+
+import { EXACT_TYPES, exactScalar } from './exact.ts';
+
+import type { SqlConnection, SqlRequest, SqlRows, SqlSession } from '../session.ts';
+import type * as Mssql from 'mssql';
 
 interface MssqlColumnMeta {
   readonly name: string;
   readonly type: { readonly declaration: string };
+  /**
+  ACT-24: the declared number of decimal places, present on the exact numerics.
+  */
+  readonly scale?: number;
 }
 
 interface MssqlResult {
@@ -60,7 +72,7 @@ export interface MssqlConfig {
   readonly requestTimeout: number;
   readonly pool: { readonly max: number; readonly min: number };
   readonly options: {
-    readonly serverName: string;
+    readonly serverName?: string;
     readonly encrypt: boolean;
     readonly trustServerCertificate: boolean;
     readonly cryptoCredentialsDetails?: { readonly ca: string };
@@ -92,13 +104,18 @@ const MSSQL_FAULTS: FaultCodes = {
   ETIMEOUT: 'timeout',
 };
 
-/**
-ACT-24: Tedious parses these as JavaScript numbers, which cannot hold them; they leave as strings.
-*/
-const EXACT_TYPES: ReadonlySet<string> = new Set(['decimal', 'money', 'numeric', 'smallmoney']);
-
 export function configOf(connection: SqlConnection): MssqlConfig {
   const ca = connection.caPem;
+  /**
+   * ACT-55, ACT-57: the host name is the TLS server name, but Tedious puts it
+   * straight into `tls.connect`, which refuses an IP literal as SNI, and its
+   * in-band TLS path gives the socket no host to verify an address against
+   * instead. A destination named by address therefore cannot be verified on
+   * this engine at all, which is why `saveProblems` refuses one before an
+   * operator can save it; nothing is sent here, so an SNI extension never
+   * carries an address.
+   */
+  const isNamedHost = isIP(connection.host) === 0;
   return {
     server: connection.address,
     port: connection.port,
@@ -109,7 +126,7 @@ export function configOf(connection: SqlConnection): MssqlConfig {
     requestTimeout: connection.statementTimeoutMs,
     pool: { max: 1, min: 0 },
     options: {
-      serverName: connection.host,
+      ...(isNamedHost && { serverName: connection.host }),
       encrypt: connection.tls !== 'disable',
       trustServerCertificate: false,
       ...(ca !== undefined && { cryptoCredentialsDetails: { ca } }),
@@ -117,23 +134,27 @@ export function configOf(connection: SqlConnection): MssqlConfig {
   };
 }
 
-function scalarOf(value: unknown, type: string | undefined): SqlScalar {
-  return type !== undefined && EXACT_TYPES.has(type) ? toSqlString(value) : toSqlScalar(value);
+function scalarOf(value: unknown, column: MssqlColumnMeta | undefined): SqlScalar {
+  if (column === undefined || !EXACT_TYPES.has(column.type.declaration)) {
+    return toSqlScalar(value);
+  }
+  const { name, scale } = column;
+  return exactScalar(value, { name, type: column.type.declaration, scale });
 }
 
-function columnsOf(result: MssqlResult): readonly SqlColumn[] {
+function declaredColumns(result: MssqlResult): readonly MssqlColumnMeta[] {
   const [first = []] = result.columns ?? [];
-  return first.map((column) => ({ name: column.name, type: column.type.declaration }));
+  return first;
 }
 
 function rowsOf(
   result: MssqlResult,
-  columns: readonly SqlColumn[],
+  columns: readonly MssqlColumnMeta[],
   maxRows: number,
 ): readonly SqlRow[] {
   return (result.recordset ?? [])
     .slice(0, maxRows)
-    .map((row) => row.map((value, index) => scalarOf(value, columns[index]?.type)));
+    .map((row) => row.map((value, index) => scalarOf(value, columns[index])));
 }
 
 async function quietly(work: Promise<unknown>): Promise<void> {
@@ -157,10 +178,10 @@ function prepared(open: () => MssqlRequest, request: SqlRequest): MssqlRequest {
 }
 
 function toRows(result: MssqlResult, maxRows: number): SqlRows {
-  const columns = columnsOf(result);
+  const declared = declaredColumns(result);
   return {
-    columns,
-    rows: rowsOf(result, columns, maxRows),
+    columns: declared.map((column) => ({ name: column.name, type: column.type.declaration })),
+    rows: rowsOf(result, declared, maxRows),
     rowsAffected: result.rowsAffected.reduce((total, count) => total + count, 0),
   };
 }
@@ -246,11 +267,19 @@ export async function openMssqlSession(
 }
 
 /**
+ * ACT-84: `mssql` is CommonJS and `ConnectionPool` is not a named export Node
+ * can see, so the class comes off the module's `default` (`drivers.ts`).
+ */
+export function mssqlDriverFrom(module: typeof Mssql): MssqlDriver {
+  const { ConnectionPool } = driverModule(module, 'ConnectionPool');
+  return (config) => new ConnectionPool(config);
+}
+
+/**
 ACT-73: `mssql` is reached only from here, and only when a `sql` call actually runs.
 */
 export async function loadMssqlDriver(): Promise<MssqlDriver> {
-  const { ConnectionPool } = await import('mssql');
-  return (config) => new ConnectionPool(config);
+  return mssqlDriverFrom(await import('mssql'));
 }
 
 export async function mssqlSession(

@@ -261,7 +261,10 @@ outside a string, a comment or a quoted identifier, and names no `xp_`/`sp_` ide
 Out: `columns` (each with the engine's own type name), `rows` (arrays of JSON scalars in column
 order, dates as ISO 8601, binary as base64, decimals and 64-bit integers as strings),
 `row_count`, `truncated` (rows were dropped at the target's row or output limit) and
-`duration_ms`. On PostgreSQL the session is opened read-only; on SQL Server the classification
+`duration_ms`. A decimal string carries the scale its column declares (`"3.50"`, not `"3.5"`); on
+SQL Server a value the driver has already rounded past a safe integer is refused with
+`connector_fault` and `detail.reason: "exact_numeric_precision"` instead, so cast that column to
+`varchar`. On PostgreSQL the session is opened read-only; on SQL Server the classification
 and the target's own login are the controls. A database error raised after sign-in is
 `upstream_error` with the server's message; a database that could not be reached is
 `connection_failed`, `tls_error`, `authentication_failed`, `destination_refused` or `timeout`.
@@ -349,6 +352,7 @@ every code has one fixed message and `detail` is the only variable part.
 | `confirmation_unavailable`, `confirmation_declined`, `confirmation_cancelled`, `confirmation_expired`, `confirmation_invalid`, `confirmation_reused` | The confirmation of the section above did not happen, was refused, or the retried state was stale, altered or replayed.                                                             |
 | `credential_unavailable`                                                                                                                             | The vault is locked or the item or field is missing; the operator sees why on the account page.                                                                                     |
 | `destination_refused`, `connection_failed`, `tls_error`, `host_key_mismatch`, `authentication_failed`, `timeout`, `upstream_error`                   | The destination could not be reached, presented an SSH host key other than the pinned one, or answered with an error; `detail` carries a scrubbed, capped message where one exists. |
+| `connector_fault`                                                                                                                                    | The call failed inside vaultgate rather than at the destination, which may never have been contacted; `detail.reason` says which.                                                   |
 
 ## Secret-handling rules, in plain words
 

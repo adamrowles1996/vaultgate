@@ -162,6 +162,14 @@ agent must never see the client secret, the refresh token or the access token.
   the registry imports the connector dynamically (ACT-73) and each session module imports its
   own driver dynamically inside the call. Each is imported only inside its sub-module, so a
   deployment that never enables `sql` still ships the packages but never loads them.
+- A TLS destination whose `host` is an IP literal is verified against the certificate's IP
+  subject-alternative names, which is what verification by address means: no server name is sent,
+  because SNI has no syntax for an address and Node refuses one. PostgreSQL's driver allows it and
+  SQL Server's does not — Tedious puts the server name straight into `tls.connect` and its in-band
+  TLS path gives the socket no host to verify an address against instead — so an `mssql`
+  destination named by address with `tls` other than `disable` is a save-time problem on the
+  target, not a failure at the first call. The pinning of ACT-55 is unchanged either way: the
+  socket still goes only to the address the engine validated.
 - **ACT-85** The documented setup for every `sql` target is a dedicated login: for read targets
   `db_datareader` / a role with `SELECT` only; for write targets the least role that covers the
   intended DML. vaultgate additionally opens read sessions read-only where the engine allows it

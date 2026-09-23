@@ -36,6 +36,9 @@ export const ACTION_ERROR_MESSAGES = {
   authentication_failed: 'the destination rejected the credential',
   timeout: "the target's timeout elapsed and the operation was cancelled",
   upstream_error: 'the destination reported an error; see detail.message',
+  connector_fault:
+    'the call could not be completed inside vaultgate; the destination did not report this ' +
+    'and may never have been contacted; see detail.reason',
   browser_unavailable: 'the browser sidecar did not answer',
   login_failed: 'the browser sign-in did not complete; see detail.stage',
   unknown_session: 'no open browser session of that id exists for this client',

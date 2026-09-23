@@ -31,6 +31,7 @@ const CODES = [
   'authentication_failed',
   'timeout',
   'upstream_error',
+  'connector_fault',
   'browser_unavailable',
   'login_failed',
   'unknown_session',
