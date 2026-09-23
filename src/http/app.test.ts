@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { SCOPES } from '../mcp/scopes.ts';
+import { createHarness, setUpOperator } from '../test-support/identity-app.ts';
+import { callTool, initializeRequest, postJsonRpc } from '../test-support/mcp-client.ts';
 import { createTestApp, type TestApp, testConfig } from '../test-support/test-app.ts';
 
 import type { Readiness } from './app.ts';
@@ -67,6 +70,28 @@ describe('createApp', () => {
     expect(account.status).toBe(303);
     expect(account.headers.get('location')).toBe('/login?next=%2Faccount');
   });
+
+  it(
+    'answers POST /mcp normally when an operator session cookie accompanies the bearer',
+    { timeout: 2000 },
+    async () => {
+      // Reported from a fresh-VM install as a stall with nothing logged; the
+      // session middleware runs before /mcp, so both headers travel together here.
+      const harness = createHarness();
+      const { browser } = await setUpOperator(harness);
+      const cookie = [...browser.cookies].map(([name, value]) => `${name}=${value}`).join('; ');
+      expect(cookie).toContain('__Host-vg_session=');
+      const { app, verifier, audit } = createTestApp({ identity: harness.identity });
+      const token = verifier.issue({ scopes: [...SCOPES] });
+      const handshake = await postJsonRpc(app, initializeRequest(), { token, headers: { cookie } });
+      expect(handshake.status).toBe(200);
+      expect(handshake.message).toMatchObject({ result: { serverInfo: { name: 'vaultgate' } } });
+      const call = await callTool(app, 'vault_status', {}, { token, headers: { cookie } });
+      expect(call.status).toBe(200);
+      expect(call.isError).toBe(false);
+      expect(audit.events.map((event) => event.outcome)).toStrictEqual(['ok']);
+    },
+  );
 
   it('logs and masks unhandled errors', async () => {
     const { app, logged } = appWithLogSink();

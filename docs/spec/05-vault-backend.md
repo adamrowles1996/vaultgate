@@ -29,7 +29,10 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
   the failure is logged at `error` level once per minute. A start-up failure (missing binary,
   rejected login or master password, `bw serve` not answering within 30 s) follows the same
   backoff; only a CLI below the minimum version (VAULT-2) stops the retry loop, since no retry
-  can fix it.
+  can fix it. A fresh `bw serve` accepts connections a moment before its command handlers are
+  ready, so for the first 10 s after it is spawned a `POST /unlock` answered with something other
+  than the JSON envelope (a protocol error) is retried every 250 ms rather than counted as a
+  failed attempt; after that window it is a failed attempt like any other.
 - **VAULT-7** On `SIGTERM`/`SIGINT` vaultgate calls `POST /lock`, then sends `SIGTERM` to the
   child and waits up to 5 s before `SIGKILL`, logging `vault locked` and `bw serve stopped` as each
   step completes.
@@ -84,6 +87,10 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 - **VAULT-14** Error messages returned to agents never contain vault content, the master
   password, session keys or file paths. The client therefore never forwards the text of a
   `bw serve` rejection; each error code carries one fixed message.
+- **VAULT-16** Every `bw serve` call is bounded to 60 s (the same bound as a one-shot CLI
+  command). A call that has not answered by then is aborted and reported as `vault_unavailable`,
+  so a `bw serve` that stops answering can never leave an MCP request hanging with nothing logged
+  or hold up shutdown.
 
 ## 5.5 Secret material in memory
 

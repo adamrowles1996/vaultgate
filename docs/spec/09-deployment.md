@@ -27,13 +27,20 @@ private interface.
 - **DEP-4** `curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh | sudo bash`
   is supported but the script is written to be read first: it prints every step, verifies the
   release tarball checksum, creates a system user, installs to `/opt/vaultgate`, writes
-  `/etc/vaultgate/vaultgate.env` (mode 0600), and installs a hardened systemd unit
+  `/etc/vaultgate/vaultgate.env` (root, mode 0600, inside `/etc/vaultgate` at 0750
+  `root:vaultgate`), creates `/etc/vaultgate/secrets` (0700 `vaultgate:vaultgate`) for the
+  `<NAME>_FILE` secrets the service reads as its own user, and installs a hardened systemd unit
   (`DynamicUser=no`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`,
   `NoNewPrivileges=yes`, `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`,
   `SystemCallFilter=@system-service`, `ReadWritePaths=/var/lib/vaultgate`).
 - **DEP-5** The script requires Node 26 and the Bitwarden CLI and offers to install both from
   official sources with checksum verification; it never uses a distribution package of unknown
-  provenance silently.
+  provenance silently. From apt it installs only `curl`, `ca-certificates`, `unzip`, `xz-utils`
+  and `libatomic1` (Node 26 links against it and Ubuntu 24.04 cloud images omit it), and it runs
+  each installed binary once (`node --version`, `bw --version` with the CLI's app data pointed at
+  the scratch directory) and stops if either fails. It reads `/etc/os-release` field by field
+  rather than sourcing it, so the file's own `VERSION` cannot replace the release being installed;
+  `scripts/test-install-sh.sh` checks this against a fake os-release in CI.
 
 ## 9.3 Azure Container App (ARM)
 

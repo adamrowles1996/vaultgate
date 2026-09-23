@@ -10,6 +10,26 @@ All notable changes to this project are documented here. The format follows
 
 - Azure template: `VAULTGATE_ENABLE_WRITE_SCOPE` is rendered as `true`/`false` (ARM `string()` produced
   `True`, which the configuration schema rejects, so the container crash-looped).
+- DEP-4: `install.sh` no longer sources `/etc/os-release`, whose `VERSION` field replaced the
+  release chosen with `--version` and produced a download URL such as `vaultgate 24.04.5 LTS`; the
+  version check is now strict (`X.Y.Z` or `X.Y.Z-rc.N`) and `scripts/test-install-sh.sh` drives the
+  installer's argument, operating-system and package logic against a fake os-release in CI.
+- DEP-5: the installer adds `libatomic1` to the apt list (Node 26 needs it and Ubuntu 24.04 cloud
+  images omit it) and runs `node --version` and `bw --version` once after installing each binary,
+  stopping on failure instead of hiding it inside an info line. The `bw --version` probe points the
+  CLI's app data at the scratch directory, so nothing is written under `/root/.config`.
+- DEP-4: `_FILE` secrets are read by the service user, not root. The installer now creates
+  `/etc/vaultgate` as 0750 `root:vaultgate` and `/etc/vaultgate/secrets` as 0700
+  `vaultgate:vaultgate`, and the environment example and guides show writing each secret with
+  `install -m 0600 -o vaultgate`. `VAULTGATE_BW_CLIENT_ID` is documented as having no `_FILE` form.
+- VAULT-6: right after a cold start, `bw serve` can accept connections before its handlers are
+  ready and answer `/unlock` with something other than its JSON envelope, which was logged as a
+  failed start and retried after the backoff. The supervisor now retries the unlock every 250 ms for
+  up to 10 s after spawning the child before counting a protocol error as a failure.
+- VAULT-16: every `bw serve` call is bounded to 60 s and aborted with `vault_unavailable` when it
+  outlives that, so a `bw serve` that stops answering can no longer leave an MCP request hanging
+  with nothing logged. A regression test drives `POST /mcp` with an operator session cookie beside
+  the bearer token, which was reported as a stall and is answered normally.
 - ID-15: revoking a connected client from the account page now needs a password confirmation
   within the last five minutes, like every other sensitive action; the Disconnect buttons appear
   only inside that window and the page points at the re-authentication form until then.

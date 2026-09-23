@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Checks install.sh without installing anything: the file is sourced (its main
+# guard keeps it from running) and the argument, operating-system and package
+# logic is driven against a fake os-release with stubbed host commands.
+# Regression for the sourced /etc/os-release that clobbered VERSION.
+# Usage: scripts/test-install-sh.sh   (npm run test:install-sh)
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+failures=0
+
+pass() { printf 'ok   %s\n' "$1"; }
+fail() {
+  printf 'FAIL %s\n' "$1" >&2
+  failures=$((failures + 1))
+}
+expect_equal() {
+  if [ "$2" = "$3" ]; then pass "$1"; else fail "$1: expected '$3', got '$2'"; fi
+}
+expect_contains() {
+  case "$2" in
+    *"$3"*) pass "$1" ;;
+    *) fail "$1: '$3' not found in '$2'" ;;
+  esac
+}
+
+cat >"$work/ubuntu" <<'END'
+PRETTY_NAME="Ubuntu 24.04.5 LTS"
+NAME="Ubuntu"
+VERSION_ID="24.04"
+VERSION="24.04.5 LTS (Noble Numbat)"
+ID=ubuntu
+ID_LIKE=debian
+END
+cat >"$work/fedora" <<'END'
+PRETTY_NAME='Fedora Linux 42'
+ID=fedora
+VERSION='42 (Workstation)'
+END
+
+bash -n "$root/install.sh" && pass "install.sh parses"
+
+export OS_RELEASE_FILE="$work/ubuntu"
+# shellcheck source=/dev/null
+. "$root/install.sh"
+pass "sourcing install.sh does not run main"
+
+# Stubs for the host commands the checked functions reach.
+systemctl() { :; }
+dpkg() { echo amd64; }
+apt-get() { printf 'apt-get %s\n' "$*"; }
+ldconfig() { :; }
+curl() { printf '{\n  "tag_name": "v9.9.9",\n  "name": "v9.9.9"\n}\n'; }
+export -f systemctl dpkg apt-get ldconfig curl
+
+parse_arguments --version 1.2.3
+expect_equal "--version sets VERSION" "$VERSION" "1.2.3"
+os_check=$(require_debian_family)
+expect_equal "reading os-release leaves VERSION alone" "$VERSION" "1.2.3"
+expect_contains "os-release PRETTY_NAME is reported" "$os_check" "Ubuntu 24.04.5 LTS is supported"
+expect_contains "architecture is reported" "$os_check" "architecture amd64"
+expect_equal "single-quoted os-release values are unquoted" \
+  "$(OS_RELEASE_FILE="$work/fedora" os_release_field PRETTY_NAME)" "Fedora Linux 42"
+if (OS_RELEASE_FILE="$work/fedora" require_debian_family >/dev/null 2>&1); then
+  fail "a non-Debian os-release is refused"
+else
+  pass "a non-Debian os-release is refused"
+fi
+
+expect_contains "resolve_version keeps an explicit version" "$(resolve_version)" "vaultgate 1.2.3"
+if (VERSION="24.04.5 LTS (Noble Numbat)" resolve_version >/dev/null 2>&1); then
+  fail "an os-release VERSION is rejected as a vaultgate version"
+else
+  pass "an os-release VERSION is rejected as a vaultgate version"
+fi
+expect_contains "resolve_version asks GitHub when no version is given" \
+  "$(VERSION="" resolve_version)" "vaultgate 9.9.9"
+expect_contains "a release candidate is a valid version" \
+  "$(VERSION="0.1.0-rc.1" resolve_version)" "vaultgate 0.1.0-rc.1"
+expect_contains "--help prints the usage" "$(parse_arguments --help)" "usage: install.sh"
+if (parse_arguments --bogus >/dev/null 2>&1); then
+  fail "an unknown argument is refused"
+else
+  pass "an unknown argument is refused"
+fi
+
+expect_contains "libatomic1 is installed when the library is absent" \
+  "$(ensure_packages)" "apt-get install -y -q --no-install-recommends"
+expect_contains "libatomic1 is in the apt list" "$(ensure_packages)" "libatomic1"
+
+if [ "$failures" -gt 0 ]; then
+  printf '%s check(s) failed\n' "$failures" >&2
+  exit 1
+fi
+printf 'install.sh checks passed\n'

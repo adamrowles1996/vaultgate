@@ -112,7 +112,8 @@ of inactivity. `/account` shows:
 
 Two things, together:
 
-- **`VAULTGATE_SECRET_KEY`** (or the file it points at). It encrypts the stored TOTP secret. Without
+- **`VAULTGATE_SECRET_KEY`** (or the file it points at; on a Debian or Ubuntu install the `_FILE`
+  secrets live in `/etc/vaultgate/secrets/`, owned by the `vaultgate` user). It encrypts the stored TOTP secret. Without
   it the database still opens and every token and session still works, but the authenticator
   cannot be verified: you would sign in with a recovery code and enrol a new one.
 - **The database**, `vaultgate.sqlite` in `VAULTGATE_DATA_DIR` (`/data` in the container,
@@ -145,16 +146,17 @@ result. The vault does not need to be ready for the setup, login and account pag
 The supervisor retries with exponential backoff (1 s doubling to 60 s), so the log shows what it
 is retrying. Look for these lines:
 
-| Log message                                | Meaning                                                                                                                                                                                          |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bitwarden cli version`                    | `bw --version` worked; the version is logged.                                                                                                                                                    |
-| `bitwarden cli refused`                    | The CLI is older than the minimum (2025.1.0). Retrying cannot help, so the loop stops: install a newer CLI and restart.                                                                          |
-| `vault backend start failed`               | One attempt failed; `err` says why: the binary was not found (`VAULTGATE_BW_BIN`), login was rejected (API key), unlock was rejected (master password) or `bw serve` did not answer within 30 s. |
-| `vault backend unavailable`                | The same, at `error` level after ten consecutive failures.                                                                                                                                       |
-| `logging in to bitwarden with the api key` | The CLI reported `unauthenticated`, so `bw login --apikey` runs (after `bw config server` when `VAULTGATE_BW_SERVER` is set).                                                                    |
-| `initial vault sync failed`                | Login and unlock worked but the first sync did not. Readiness is unaffected; reads serve from the cached vault and the sync is retried on the schedule.                                          |
-| `vault ready`                              | Unlocked. `/readyz` turns `200`.                                                                                                                                                                 |
-| `bw serve exited`                          | The child died; it is restarted with backoff.                                                                                                                                                    |
+| Log message                                   | Meaning                                                                                                                                                                                          |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bitwarden cli version`                       | `bw --version` worked; the version is logged.                                                                                                                                                    |
+| `bitwarden cli refused`                       | The CLI is older than the minimum (2025.1.0). Retrying cannot help, so the loop stops: install a newer CLI and restart.                                                                          |
+| `vault backend start failed`                  | One attempt failed; `err` says why: the binary was not found (`VAULTGATE_BW_BIN`), login was rejected (API key), unlock was rejected (master password) or `bw serve` did not answer within 30 s. |
+| `bw serve is still settling; retrying unlock` | Debug level. A freshly started `bw serve` answered `/unlock` with something other than its JSON envelope; the unlock is retried every 250 ms for up to 10 s before it counts as a failure.       |
+| `vault backend unavailable`                   | The same, at `error` level after ten consecutive failures.                                                                                                                                       |
+| `logging in to bitwarden with the api key`    | The CLI reported `unauthenticated`, so `bw login --apikey` runs (after `bw config server` when `VAULTGATE_BW_SERVER` is set).                                                                    |
+| `initial vault sync failed`                   | Login and unlock worked but the first sync did not. Readiness is unaffected; reads serve from the cached vault and the sync is retried on the schedule.                                          |
+| `vault ready`                                 | Unlocked. `/readyz` turns `200`.                                                                                                                                                                 |
+| `bw serve exited`                             | The child died; it is restarted with backoff.                                                                                                                                                    |
 
 Typical causes: a wrong `VAULTGATE_BW_SERVER` for an EU or self-hosted account, a client secret
 that was pasted with a trailing space, a master password that has since been changed, or a
