@@ -1,7 +1,7 @@
 # 08 Configuration
 
 All configuration is environment variables, validated once at start-up by a
-zod schema in `src/config.ts`. Any `*_FILE` variant reads the value from a
+zod schema in `src/config/`. Any `*_FILE` variant reads the value from a
 file (Docker/Kubernetes secrets convention) and takes precedence over the
 plain variable. Invalid configuration exits with status 1 and a list of every
 problem, not just the first.
