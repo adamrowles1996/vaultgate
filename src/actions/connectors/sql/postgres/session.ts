@@ -1,12 +1,13 @@
 /**
  * The PostgreSQL session over `pg` (ACT-84): one `Client` per call, opened
- * to the pinned address with the host name kept for TLS (ACT-55), made
- * read-only where the engine can enforce it (ACT-85: `SET
- * default_transaction_read_only = on` at open and `BEGIN READ ONLY` around
- * the statement), bounded by the server's own `statement_timeout` as well as
- * the engine's abort signal, and closed when the call ends (ACT-86). The
- * driver is loaded through a dynamic import, so a deployment that never
- * enables `sql` never loads it (ACT-73).
+ * to the pinned address with the host name kept for TLS (ACT-55), bounded by
+ * the server's own `statement_timeout` as well as the engine's abort signal,
+ * and closed when the call ends (ACT-86). The statement always runs inside a
+ * transaction of its own, committed when it succeeds and rolled back on any
+ * error (ACT-25); a read session opens it `READ ONLY` and sets
+ * `default_transaction_read_only` besides (ACT-85). The driver is loaded
+ * through a dynamic import, so a deployment that never enables `sql` never
+ * loads it (ACT-73).
  */
 import { actionErrorOf, type FaultCodes } from '../failures.ts';
 import { toSqlScalar, type SqlRow } from '../values.ts';
@@ -60,6 +61,14 @@ const POSTGRES_FAULTS: FaultCodes = {
 };
 
 const TYPE_NAMES = 'SELECT oid, typname FROM pg_catalog.pg_type WHERE oid = ANY($1::oid[])';
+
+/**
+ACT-25, ACT-85: a read statement runs in a read-only transaction, a write in an ordinary one.
+*/
+const BEGIN: Readonly<Record<SqlConnection['mode'], string>> = {
+  read: 'BEGIN READ ONLY',
+  write: 'BEGIN',
+};
 
 function sslOf(connection: SqlConnection): ClientConfig['ssl'] {
   if (connection.tls === 'disable') {
@@ -126,15 +135,10 @@ function createSession(client: PostgresClient, connection: SqlConnection): SqlSe
     void quietly(client.end());
   };
   connection.signal.addEventListener('abort', cancel, { once: true });
-  const transaction = async (text: string): Promise<void> => {
-    if (connection.readOnly) {
-      await client.query({ text });
-    }
-  };
   return {
     async query(request) {
       try {
-        await transaction('BEGIN READ ONLY');
+        await client.query({ text: BEGIN[connection.mode] });
         const result = await client.query({
           text: request.text,
           values: [...request.params],
@@ -145,7 +149,7 @@ function createSession(client: PostgresClient, connection: SqlConnection): SqlSe
           rows: rowsOf(result, request.maxRows),
           rowsAffected: result.rowCount ?? 0,
         };
-        await transaction('COMMIT');
+        await client.query({ text: 'COMMIT' });
         return rows;
       } catch (error) {
         await quietly(client.query({ text: 'ROLLBACK' }));
@@ -169,7 +173,7 @@ export async function openPostgresSession(
   const client = create(configOf(connection));
   try {
     await client.connect();
-    if (connection.readOnly) {
+    if (connection.mode === 'read') {
       await client.query({ text: 'SET default_transaction_read_only = on' });
     }
   } catch (error) {

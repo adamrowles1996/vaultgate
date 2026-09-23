@@ -1,17 +1,19 @@
 /**
- * One `sql_query` against a database (§14.4): the statement classified and
- * its placeholders checked before anything connects (ACT-26, ACT-23), the
- * credential placed in the login, one session opened to the pinned address
- * with the host name kept for TLS (ACT-55) and closed in `finally` (ACT-86),
- * and the rows fitted to the target's row and output limits. No pool, so an
- * idle deployment holds no database sessions and a rotated password takes
- * effect on the next call.
+ * One `sql_query` or `sql_execute` against a database (§14.4): the statement
+ * classified and its placeholders checked before anything connects (ACT-26,
+ * ACT-23), the credential placed in the login, one session opened to the
+ * pinned address with the host name kept for TLS (ACT-55) and closed in
+ * `finally` (ACT-86), and the rows fitted to the target's row and output
+ * limits. The tool decides the session's mode and the shape of the result
+ * (ACT-24, ACT-25). No pool, so an idle deployment holds no database sessions
+ * and a rotated password takes effect on the next call.
  */
 import { fail, ok, type Result } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
 
 import { bindingProblem, classifyStatement } from './classify.ts';
 import { faultOf } from './failures.ts';
+import { SQL_QUERY_TOOL } from './operation.ts';
 import { portOf, statementTimeoutOf } from './schemas.ts';
 import { fitRows } from './values.ts';
 
@@ -58,7 +60,7 @@ function connectionOf(context: SqlRunContext, address: string, login: Login): Sq
     password: login.password,
     tls: destination.tls,
     caPem: destination.ca_pem,
-    readOnly: true,
+    mode: context.tool === SQL_QUERY_TOOL ? 'read' : 'write',
     connectTimeoutMs: policy.timeout_ms,
     statementTimeoutMs: statementTimeoutOf(policy),
     signal: context.signal,
@@ -92,15 +94,17 @@ function prepare(
   return login.ok ? ok(connectionOf(context, endpoint.address, login.value)) : login;
 }
 
-function toOutput(rows: SqlRows, policy: SqlPolicy, maxBytes: number): ConnectorOutput {
-  const fitted = fitRows(rows.rows, policy.max_rows, maxBytes);
+/**
+ACT-24 for `sql_query`, ACT-25 for `sql_execute`; both cap the rows at the target's limits.
+*/
+function toOutput(context: SqlRunContext, rows: SqlRows): ConnectorOutput {
+  const fitted = fitRows(rows.rows, context.policy.max_rows, context.outputLimit.maxBytes);
+  const shared = { columns: rows.columns, rows: fitted.rows, truncated: fitted.truncated };
   return {
-    result: {
-      columns: rows.columns,
-      rows: fitted.rows,
-      row_count: fitted.rows.length,
-      truncated: fitted.truncated,
-    },
+    result:
+      context.tool === SQL_QUERY_TOOL
+        ? { ...shared, row_count: fitted.rows.length }
+        : { ...shared, rows_affected: rows.rowsAffected },
     captured: {},
     bytes: fitted.bytes,
   };
@@ -142,7 +146,7 @@ export function createRun(sessions: SqlSessions): SqlRun {
         params: operation.params,
         maxRows: context.policy.max_rows + 1,
       });
-      return ok(toOutput(rows, context.policy, context.outputLimit.maxBytes));
+      return ok(toOutput(context, rows));
     } catch (error) {
       return fail(failureOf(error));
     } finally {

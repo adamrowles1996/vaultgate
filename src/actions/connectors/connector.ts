@@ -51,6 +51,21 @@ export interface TargetDocuments<Destination, Credential, Policy> {
 }
 
 /**
+ * What a connector judges an operation against: the target's three documents
+ * and the tool the agent called. A connector that serves more than one tool
+ * (`sql`) needs the name — `sql_query` may only ever read, whatever the
+ * statement classifies as — and the destination says which dialect or
+ * protocol the operation is written in (ACT-36).
+ */
+export interface OperationRequest<Destination, Credential, Policy> extends TargetDocuments<
+  Destination,
+  Credential,
+  Policy
+> {
+  readonly tool: string;
+}
+
+/**
  * The static half of a connector: what the targets service needs to validate
  * and describe a target of this kind, present in every build so the account
  * page can edit targets of a connector whose runtime is not loaded.
@@ -162,6 +177,10 @@ export interface RunContext<Destination, Credential, Policy> extends TargetDocum
   Policy
 > {
   readonly common: CommonPolicy;
+  /**
+  The tool the agent called; `sql` serves two and runs them differently (ACT-24, ACT-25).
+  */
+  readonly tool: string;
   readonly injected: InjectedValues;
   readonly support: RunSupport;
   /**
@@ -214,17 +233,16 @@ export interface Connector<Destination, Credential, Policy, Operation> extends C
   /**
    * Pure: classifies and checks the operation against the policy; no I/O
    * (ACT-78). The credential document says which injection point the
-   * mapping owns, so an operation that would set it is refused (ACT-22);
-   * the destination says which dialect an operation is written in, which
-   * `sql` needs to tokenise a statement at all (ACT-36).
+   * mapping owns, so an operation that would set it is refused (ACT-22).
    */
   authorize(
-    policy: Policy,
+    request: OperationRequest<Destination, Credential, Policy>,
     operation: Operation,
-    credential: Credential,
-    destination: Destination,
   ): PolicyDecision;
-  describe(operation: Operation, destination: Destination): OperationDescription;
+  describe(
+    request: OperationRequest<Destination, Credential, Policy>,
+    operation: Operation,
+  ): OperationDescription;
   /**
   Runs one operation with the injected values; output is raw, the engine scrubs it.
   */

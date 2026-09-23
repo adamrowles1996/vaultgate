@@ -1,103 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
+import {
+  codedError as coded,
+  fakePostgresClient as fakeClient,
+  postgresDriverOf as driverOf,
+  sqlConnection as connection,
+} from '../../../../test-support/fake-sql-drivers.ts';
 import { rejection } from '../../../../test-support/fake-sql-session.ts';
 
 import { configOf, loadPostgresDriver, openPostgresSession, postgresSession } from './session.ts';
-
-import type { PostgresClient, PostgresDriver } from './session.ts';
-import type { SqlConnection } from '../session.ts';
-
-interface Recorded {
-  readonly text: string;
-  readonly values: readonly unknown[] | undefined;
-}
-
-interface FakeClient extends PostgresClient {
-  readonly queries: Recorded[];
-  readonly ended: number[];
-}
-
-interface FakeOptions {
-  readonly answers?: Readonly<Record<string, unknown>>;
-  readonly connectError?: Error;
-  readonly queryError?: Error;
-  readonly failOn?: readonly string[];
-}
-
-const TYPE_ROWS = {
-  rows: [
-    [23, 'int4'],
-    [25, 'text'],
-  ],
-  fields: [],
-  rowCount: 2,
-};
-
-const RESULT = {
-  fields: [
-    { name: 'id', dataTypeID: 23 },
-    { name: 'note', dataTypeID: 9999 },
-  ],
-  rows: [
-    [1, 'a'],
-    [2, 'b'],
-    [3, 'c'],
-  ],
-  rowCount: 3,
-};
-
-function fakeClient(options: FakeOptions = {}): FakeClient {
-  const queries: Recorded[] = [];
-  const ended: number[] = [];
-  return {
-    queries,
-    ended,
-    connect: () =>
-      options.connectError === undefined
-        ? Promise.resolve(undefined)
-        : Promise.reject(options.connectError),
-    query(query) {
-      queries.push({ text: query.text, values: query.values });
-      const failing = options.failOn ?? ['SELECT'];
-      if (options.queryError !== undefined && failing.some((on) => query.text.startsWith(on))) {
-        return Promise.reject(options.queryError);
-      }
-      return query.text.startsWith('SELECT oid')
-        ? Promise.resolve(TYPE_ROWS)
-        : Promise.resolve({ ...RESULT, ...options.answers });
-    },
-    end() {
-      ended.push(queries.length);
-      return Promise.resolve();
-    },
-  };
-}
-
-function connection(overrides: Partial<SqlConnection> = {}): SqlConnection {
-  return {
-    host: 'db.example.com',
-    address: '93.184.216.34',
-    port: 5432,
-    database: 'reporting',
-    username: 'reader',
-    password: 'canary-secret',
-    tls: 'require',
-    caPem: undefined,
-    readOnly: true,
-    connectTimeoutMs: 30_000,
-    statementTimeoutMs: 15_000,
-    signal: new AbortController().signal,
-    ...overrides,
-  };
-}
-
-function coded(message: string, code: string): Error {
-  return Object.assign(new Error(message), { code });
-}
-
-function driverOf(client: PostgresClient): PostgresDriver {
-  return () => client;
-}
 
 describe('the postgres client configuration', () => {
   it('ACT-55 connects to the pinned address and keeps the host name for TLS only', () => {
@@ -173,12 +84,17 @@ describe('the postgres session', () => {
     );
   });
 
-  it('ACT-85 a session that is not read-only opens no transaction of its own', async () => {
+  it('ACT-25 a write session opens an ordinary transaction and commits, never setting the session read-only', async () => {
     const client = fakeClient();
-    const session = await openPostgresSession(driverOf(client), connection({ readOnly: false }));
-    await session.query({ text: 'SELECT 1', params: [], maxRows: 1 });
+    const session = await openPostgresSession(driverOf(client), connection({ mode: 'write' }));
+    await session.query({ text: 'DELETE FROM t WHERE id = $1', params: [1], maxRows: 1 });
     await session.close();
-    expect(client.queries.map((query) => query.text)).not.toContain('BEGIN READ ONLY');
+    expect(client.queries.map((query) => query.text)).toStrictEqual([
+      'BEGIN',
+      'DELETE FROM t WHERE id = $1',
+      'SELECT oid, typname FROM pg_catalog.pg_type WHERE oid = ANY($1::oid[])',
+      'COMMIT',
+    ]);
   });
 
   it('ACT-74 a statement that fails rolls back and answers the mapped code', async () => {

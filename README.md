@@ -44,7 +44,8 @@ What the design gives you beyond the table:
   behind its own scope, with every call audited. Every other tool returns metadata.
 - **No remote code execution.** There is no "run this command" tool. An off-by-default
   actions layer ([ADR 0007](docs/adr/0007-typed-actions-with-operator-policy.md),
-  [spec 13](docs/spec/13-actions.md), [guide](docs/guides/actions.md)) lets an agent use a
+  [spec 13](docs/spec/13-actions.md) and [13a](docs/spec/13a-actions-operations.md),
+  [guide](docs/guides/actions.md)) lets an agent use a
   credential against an `http` target you define, under your allowlist, without ever seeing it
   (further connectors follow); nothing runs on the vaultgate host.
 - **Standards as written.** OAuth 2.1, PKCE, RFC 9728 / 8414 / 8707 / 7591 /

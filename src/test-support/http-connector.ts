@@ -174,6 +174,7 @@ export function httpRunContext(options: ContextOptions = {}): BuiltContext {
     credential,
     policy,
     common: policy,
+    tool: 'http_request',
     injected: support.secrets.injected,
     support: support.support,
     pinned: options.pinned ?? [

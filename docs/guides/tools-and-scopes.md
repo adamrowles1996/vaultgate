@@ -169,13 +169,15 @@ An off-by-default layer lets an agent _use_ a credential without receiving it: t
 defines a target (an API, a database, a server, a Windows host or a website, plus the vault item
 that signs in to it, an allowlist policy and the clients allowed to use it), and the agent calls
 a connector tool by target name. Specification: [13 Actions](../spec/13-actions.md),
+[13a Actions in operation](../spec/13a-actions-operations.md),
 [14 Action connectors](../spec/14-actions-connectors.md) and
 [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md). The engine, the scopes, the MCP
 tool surface below and the operator pages (the account page's Actions section, described in the
 [Actions guide](actions.md)) exist today, and so do the `http` connector with `http_request`
 (M9) and its Microsoft Graph credential adapter (M10) and the `sql` connector with `sql_query`
-(M11); the other connector runtimes land with M12 to M15 in [`PLAN.md`](../PLAN.md), and until a
-connector's runtime lands its tool is not listed on any deployment.
+and `sql_execute` (M11); the other connector runtimes land with M12 to M15 in
+[`PLAN.md`](../PLAN.md), and until a connector's runtime lands its tool is not listed on any
+deployment.
 
 ### Actions scopes
 
@@ -184,14 +186,14 @@ advertised and effective only when `VAULTGATE_ENABLE_ACTIONS=true` _and_ its con
 is on (`VAULTGATE_ACTIONS_ENABLE_HTTP`, `_SQL`, `_SSH`, `_WINRM`, `_BROWSER`); turning a switch
 off takes effect for every existing token at once, exactly as for `vault:write`.
 
-| Scope               | Grants                                                       | Tools               |
-| ------------------- | ------------------------------------------------------------ | ------------------- |
-| `actions:http`      | HTTP requests to granted `http` targets, signed by vaultgate | `http_request`      |
-| `actions:sql.read`  | Read-only queries against granted `sql` targets              | `sql_query`         |
-| `actions:sql.write` | Data changes on granted `sql` targets whose policy allows it | `sql_execute` (M11) |
-| `actions:ssh`       | One allowlisted command on a granted `ssh` target            | `ssh_run` (M12)     |
-| `actions:winrm`     | One allowlisted command on a granted `winrm` target          | `winrm_run` (M13)   |
-| `actions:browser`   | A signed-in browser session confined to allowed origins      | `browser_*` (M15)   |
+| Scope               | Grants                                                       | Tools             |
+| ------------------- | ------------------------------------------------------------ | ----------------- |
+| `actions:http`      | HTTP requests to granted `http` targets, signed by vaultgate | `http_request`    |
+| `actions:sql.read`  | Read-only queries against granted `sql` targets              | `sql_query`       |
+| `actions:sql.write` | Data changes on granted `sql` targets whose policy allows it | `sql_execute`     |
+| `actions:ssh`       | One allowlisted command on a granted `ssh` target            | `ssh_run` (M12)   |
+| `actions:winrm`     | One allowlisted command on a granted `winrm` target          | `winrm_run` (M13) |
+| `actions:browser`   | A signed-in browser session confined to allowed origins      | `browser_*` (M15) |
 
 A token holding any of these also gets `actions_list_targets`. Calling it without one is
 answered `403` with a challenge that lists every enabled actions scope as an any-of set
@@ -264,8 +266,22 @@ and the target's own login are the controls. A database error raised after sign-
 `upstream_error` with the server's message; a database that could not be reached is
 `connection_failed`, `tls_error`, `authentication_failed`, `destination_refused` or `timeout`.
 
-`sql_execute` (`actions:sql.write`) is the write half and arrives with M11's second pull
-request; until then a target whose policy asks for the `write` operation is refused at save.
+### `sql_execute` (`actions:sql.write`)
+
+The same arguments as `sql_query`, and the same tokenisation and placeholder rules. The
+statement must classify as `dml` (`INSERT`, `UPDATE`, `DELETE`, `MERGE`) or, when the target
+policy's write classes include it, `ddl` (`CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `GRANT`,
+`REVOKE`, `DENY`); anything else, a `SELECT` included, is `policy_denied` with
+`detail.reason: "statement_class"`. A target whose policy does not allow the `write` operation
+refuses with `detail.reason: "operation"`, and a target carrying a statement allowlist refuses a
+statement outside it with `detail.reason: "statement_pattern"`.
+
+Every call is a write, so a target with `confirm_writes` asks a human first (see Confirmation
+below) and the call runs only once that human ticks the box. The statement runs in its own
+transaction, committed when it succeeds and rolled back on any error or timeout.
+
+Out: `rows_affected`; `columns` and `rows` for the rows the statement returned through
+`RETURNING` or `OUTPUT`, both empty when it returned none; `truncated`; `duration_ms`.
 
 ### Connector tools
 

@@ -1,102 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
+import {
+  codedError as coded,
+  fakeMssqlPool as fakePool,
+  mssqlDriverOf as driverOf,
+  sqlConnection,
+} from '../../../../test-support/fake-sql-drivers.ts';
 import { rejection } from '../../../../test-support/fake-sql-session.ts';
 
 import { configOf, loadMssqlDriver, mssqlSession, openMssqlSession } from './session.ts';
 
-import type { MssqlDriver, MssqlPool } from './session.ts';
 import type { SqlConnection } from '../session.ts';
 
-interface FakePool extends MssqlPool {
-  readonly commands: string[];
-  readonly inputs: [string, unknown][];
-  readonly closed: number[];
-  readonly cancelled: number[];
-}
-
-interface FakeOptions {
-  readonly result?: Readonly<Record<string, unknown>>;
-  readonly connectError?: Error;
-  readonly queryError?: Error;
-}
-
-const COLUMNS = [
-  [
-    { name: 'id', type: { declaration: 'int' } },
-    { name: 'total', type: { declaration: 'decimal' } },
-  ],
-];
-
-const RESULT = {
-  columns: COLUMNS,
-  recordset: [
-    [1, 12.5],
-    [2, null],
-    [3, 9],
-  ],
-  rowsAffected: [3],
-};
-
-function fakePool(options: FakeOptions = {}): FakePool {
-  const commands: string[] = [];
-  const inputs: [string, unknown][] = [];
-  const closed: number[] = [];
-  const cancelled: number[] = [];
-  return {
-    commands,
-    inputs,
-    closed,
-    cancelled,
-    connect: () =>
-      options.connectError === undefined
-        ? Promise.resolve(undefined)
-        : Promise.reject(options.connectError),
-    request: () => ({
-      arrayRowMode: false,
-      input(name, value) {
-        inputs.push([name, value]);
-      },
-      query(command) {
-        commands.push(command);
-        return options.queryError === undefined
-          ? Promise.resolve({ ...RESULT, ...options.result })
-          : Promise.reject(options.queryError);
-      },
-      cancel() {
-        cancelled.push(commands.length);
-      },
-    }),
-    close() {
-      closed.push(commands.length);
-      return Promise.resolve();
-    },
-  };
-}
-
 function connection(overrides: Partial<SqlConnection> = {}): SqlConnection {
-  return {
-    host: 'db.example.com',
-    address: '93.184.216.34',
-    port: 1433,
-    database: 'reporting',
-    username: 'reader',
-    password: 'canary-secret',
-    tls: 'require',
-    caPem: undefined,
-    readOnly: true,
-    connectTimeoutMs: 30_000,
-    statementTimeoutMs: 15_000,
-    signal: new AbortController().signal,
-    ...overrides,
-  };
-}
-
-function coded(message: string, code: string): Error {
-  return Object.assign(new Error(message), { code });
-}
-
-function driverOf(pool: MssqlPool): MssqlDriver {
-  return () => pool;
+  return sqlConnection({ port: 1433, ...overrides });
 }
 
 describe('the SQL Server connection configuration', () => {
@@ -157,7 +74,7 @@ describe('the SQL Server session', () => {
 
   it('ACT-24 a statement that returns nothing has no columns and no rows', async () => {
     const pool = fakePool({
-      result: { columns: undefined, recordset: undefined, rowsAffected: [] },
+      answers: { columns: undefined, recordset: undefined, rowsAffected: [] },
     });
     const session = await openMssqlSession(driverOf(pool), connection());
     const rows = await session.query({ text: 'SELECT 1', params: [], maxRows: 1 });
@@ -166,7 +83,7 @@ describe('the SQL Server session', () => {
   });
 
   it('ACT-24 a value in a column the metadata does not name is still a scalar', async () => {
-    const pool = fakePool({ result: { columns: [[]], recordset: [[7]], rowsAffected: [1] } });
+    const pool = fakePool({ answers: { columns: [[]], recordset: [[7]], rowsAffected: [1] } });
     const session = await openMssqlSession(driverOf(pool), connection());
     const rows = await session.query({ text: 'SELECT 1', params: [], maxRows: 1 });
     await session.close();
@@ -222,6 +139,60 @@ describe('the SQL Server session', () => {
     await openMssqlSession(driverOf(pool), connection({ signal: controller.signal }));
     controller.abort();
     expect(pool.cancelled).toStrictEqual([]);
+    expect(pool.closed).toStrictEqual([0]);
+  });
+
+  it('ACT-25 a write runs inside the driver transaction and commits when the statement succeeds', async () => {
+    const pool = fakePool();
+    const session = await openMssqlSession(driverOf(pool), connection({ mode: 'write' }));
+    const rows = await session.query({
+      text: 'UPDATE t SET a = @p1 OUTPUT inserted.id',
+      params: [1],
+      maxRows: 10,
+    });
+    await session.close();
+    expect(pool.steps).toStrictEqual(['begin', 'commit']);
+    expect(pool.inputs).toStrictEqual([['p1', 1]]);
+    expect(rows.rowsAffected).toBe(3);
+  });
+
+  it('ACT-25 a write that fails rolls back and answers the mapped code', async () => {
+    const pool = fakePool({ queryError: coded('constraint', 'EREQUEST') });
+    const session = await openMssqlSession(driverOf(pool), connection({ mode: 'write' }));
+    const failure = await rejection(
+      session.query({ text: 'DELETE FROM t', params: [], maxRows: 1 }),
+    );
+    await session.close();
+    expect(pool.steps).toStrictEqual(['begin', 'rollback']);
+    expect(failure.code).toBe('upstream_error');
+  });
+
+  it('ACT-25 a rollback that also fails never replaces the original code', async () => {
+    const pool = fakePool({
+      queryError: coded('constraint', 'EREQUEST'),
+      rollbackError: new Error('connection gone'),
+    });
+    const session = await openMssqlSession(driverOf(pool), connection({ mode: 'write' }));
+    const failure = await rejection(
+      session.query({ text: 'DELETE FROM t', params: [], maxRows: 1 }),
+    );
+    await session.close();
+    expect(failure.code).toBe('upstream_error');
+  });
+
+  it('ACT-59 an abort cancels the statement of a write as well', async () => {
+    const controller = new AbortController();
+    const pool = fakePool();
+    const session = await openMssqlSession(
+      driverOf(pool),
+      connection({ mode: 'write', signal: controller.signal }),
+    );
+    const pending = session.query({ text: 'DELETE FROM t', params: [], maxRows: 1 });
+    controller.abort();
+    await pending;
+    // The abort arrives while BEGIN is still in flight, so the statement is cancelled the
+    // moment the transaction hands it over, before it has issued anything.
+    expect(pool.cancelled).toStrictEqual([0]);
     expect(pool.closed).toStrictEqual([0]);
   });
 

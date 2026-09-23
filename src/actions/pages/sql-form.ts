@@ -1,10 +1,8 @@
 /**
  * The `sql` connector's form (spec §14.4): one descriptor per field of its
  * three documents, in the order the operator reads them. The fields only
- * `sql_execute` consults (`write_classes`, `statement_allowlist`, `schemas`)
- * are shown with help that says so, because the tool arrives with the second
- * M11 pull request and a target that asks for the `write` operation is
- * refused at save until it does.
+ * `sql_execute` consults (`write_classes`, `statement_allowlist`) are shown
+ * with help that says so.
  */
 import { SQL_ENGINES } from '../connectors/sql/schemas.ts';
 
@@ -103,7 +101,9 @@ const policy: readonly FieldDescriptor[] = [
     kind: 'set',
     options: ['read', 'write'],
     fallback: ['read'],
-    help: 'write needs sql_execute, which arrives with the second M11 pull request.',
+    help:
+      'read runs sql_query; write also runs sql_execute, and a target that allows write must ' +
+      'allow read as well.',
   },
   {
     document: 'policy',
@@ -132,7 +132,7 @@ const policy: readonly FieldDescriptor[] = [
     kind: 'set',
     options: ['dml', 'ddl'],
     fallback: ['dml'],
-    help: 'Read by sql_execute only.',
+    help: 'dml is INSERT, UPDATE, DELETE and MERGE; ddl is CREATE, ALTER, DROP, TRUNCATE, GRANT, REVOKE and DENY. Read by sql_execute only.',
   },
   {
     document: 'policy',
@@ -140,15 +140,10 @@ const policy: readonly FieldDescriptor[] = [
     label: 'Allowed statements',
     kind: 'lines',
     fallback: [],
-    help: 'One pattern per line, matched against the whole statement. Read by sql_execute only.',
-  },
-  {
-    document: 'policy',
-    name: 'schemas',
-    label: 'Allowed schemas',
-    kind: 'lines',
-    fallback: [],
-    help: 'One name per line. Read by sql_execute only.',
+    help:
+      'One pattern per line, matched against the whole statement as the agent wrote it: * ' +
+      'matches within one line, and matching is anchored at both ends. Empty means no ' +
+      'statement restriction. Read by sql_execute only.',
   },
 ];
 

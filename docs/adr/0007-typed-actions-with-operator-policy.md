@@ -25,6 +25,7 @@ credential lives with the connector service, not the model.
 ## Decision
 
 vaultgate gains an **actions layer** ([spec 13](../spec/13-actions.md),
+[13a](../spec/13a-actions-operations.md),
 [spec 14](../spec/14-actions-connectors.md)), off by default, in which an agent names an
 operator-defined **target** and describes an operation, and vaultgate performs it with a
 credential the agent never receives.

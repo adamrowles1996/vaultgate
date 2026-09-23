@@ -8,7 +8,8 @@
 
 - Version 0.1.0-rc.5, a release candidate: milestones M1 to M7 are merged; M8 (hardening and
   compatibility evidence) is in progress; M9, the off-by-default actions layer with its `http`
-  connector (docs/spec/13-actions.md, docs/guides/actions.md), has landed (docs/PLAN.md).
+  connector (docs/spec/13-actions.md, docs/spec/13a-actions-operations.md,
+docs/guides/actions.md), has landed (docs/PLAN.md).
   Single maintainer.
 - Apache-2.0 (LICENSE, NOTICE). Source: https://github.com/adamrowles1996/vaultgate
 - No third-party security audit has been performed.
