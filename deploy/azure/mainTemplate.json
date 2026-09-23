@@ -52,15 +52,24 @@
     },
     "bwPassword": {
       "type": "securestring",
-      "metadata": { "description": "Bitwarden master password (stored only in Key Vault)." }
+      "defaultValue": "",
+      "metadata": {
+        "description": "Bitwarden master password (stored only in Key Vault). Optional: leave all three Bitwarden values empty to connect the vault from the account page after the first sign-in."
+      }
     },
     "bwClientId": {
       "type": "securestring",
-      "metadata": { "description": "Bitwarden personal API key client id (user.…)." }
+      "defaultValue": "",
+      "metadata": {
+        "description": "Bitwarden personal API key client id (user.…). Optional; set all three Bitwarden values or none."
+      }
     },
     "bwClientSecret": {
       "type": "securestring",
-      "metadata": { "description": "Bitwarden personal API key client secret." }
+      "defaultValue": "",
+      "metadata": {
+        "description": "Bitwarden personal API key client secret. Optional; set all three Bitwarden values or none."
+      }
     },
     "secretKey": {
       "type": "securestring",
@@ -81,7 +90,8 @@
     "image": "[format('ghcr.io/adamrowles1996/vaultgate:{0}', parameters('imageTag'))]",
     "platformDeployment": "[format('{0}-platform', parameters('name'))]",
     "secretsDeployment": "[format('{0}-secrets', parameters('name'))]",
-    "appDeployment": "[format('{0}-app', parameters('name'))]"
+    "appDeployment": "[format('{0}-app', parameters('name'))]",
+    "hasBitwardenCredentials": "[and(not(empty(parameters('bwPassword'))), not(empty(parameters('bwClientId'))), not(empty(parameters('bwClientSecret'))))]"
   },
   "resources": [
     {
@@ -114,7 +124,8 @@
           "bwPassword": { "value": "[parameters('bwPassword')]" },
           "bwClientId": { "value": "[parameters('bwClientId')]" },
           "bwClientSecret": { "value": "[parameters('bwClientSecret')]" },
-          "secretKey": { "value": "[parameters('secretKey')]" }
+          "secretKey": { "value": "[parameters('secretKey')]" },
+          "hasBitwardenCredentials": { "value": "[variables('hasBitwardenCredentials')]" }
         }
       }
     },
@@ -149,7 +160,8 @@
           "publicUrl": { "value": "[parameters('publicUrl')]" },
           "bitwardenServer": { "value": "[parameters('bitwardenServer')]" },
           "enableWriteScope": { "value": "[parameters('enableWriteScope')]" },
-          "logLevel": { "value": "[parameters('logLevel')]" }
+          "logLevel": { "value": "[parameters('logLevel')]" },
+          "hasBitwardenCredentials": { "value": "[variables('hasBitwardenCredentials')]" }
         }
       }
     }

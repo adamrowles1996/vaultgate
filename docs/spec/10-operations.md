@@ -13,13 +13,14 @@
 
 ## 10.2 Health
 
-| Probe      | Meaning                                                                                                                                                                                                                                                                                                                                                        |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/healthz` | Process is up and the event loop responds. Always `200` once listening.                                                                                                                                                                                                                                                                                        |
-| `/readyz`  | Store open and migrated, `bw serve` unlocked. `200` with `{"status":"ok","vault":{"ready":true,"lastSyncAt":…}}`; `503` otherwise, with `failing` naming each component that is not ready and the same `vault` object. `lastSyncAt` is the ISO 8601 time of the last successful sync since start-up, or `null`; a failed sync leaves `ready` `true` (VAULT-9). |
+| Probe      | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/healthz` | Process is up and the event loop responds. Always `200` once listening.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `/readyz`  | Store open and migrated, `bw serve` unlocked. `200` with `{"status":"ok","vault":{"ready":true,"configured":true,"lastSyncAt":…}}`; `503` otherwise, with `failing` naming each component that is not ready and the same `vault` object. `configured` is `false` while no credentials exist at all (VAULT-18), which tells an unconfigured deployment from a failing one. `lastSyncAt` is the ISO 8601 time of the last successful sync since start-up, or `null`; a failed sync leaves `ready` `true` (VAULT-9). |
 
 - **OPS-4** Both probes are unauthenticated, cacheless and reveal no version or configuration;
-  the vault detail on `/readyz` is limited to readiness and the time of the last sync.
+  the vault detail on `/readyz` is limited to readiness, whether any credentials are configured
+  and the time of the last sync.
 
 ## 10.3 Audit export
 
@@ -54,10 +55,11 @@
 
 ## 10.6 Incident actions
 
-| Situation                             | Action                                                                                         |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| A token may have leaked               | Account page → revoke the client, or `POST /oauth/revoke`. Family revocation cuts refresh too. |
-| The operator password may have leaked | Account page → change password (invalidates all sessions).                                     |
-| `VAULTGATE_SECRET_KEY` leaked         | Rotate the key, restart; TOTP re-enrolment is required (STORE-8), tokens are unaffected.       |
-| Master password rotated in Bitwarden  | Update `VAULTGATE_BW_PASSWORD(_FILE)`, restart. Nothing else changes.                          |
-| Compromise suspected                  | Stop the service (locks the vault), rotate the API key in Bitwarden, review the audit export.  |
+| Situation                             | Action                                                                                                                                                                                                   |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A token may have leaked               | Account page → revoke the client, or `POST /oauth/revoke`. Family revocation cuts refresh too.                                                                                                           |
+| The operator password may have leaked | Account page → change password (invalidates all sessions).                                                                                                                                               |
+| `VAULTGATE_SECRET_KEY` leaked         | Rotate the key, restart; TOTP re-enrolment and re-entering the vault connection are required (STORE-8), tokens are unaffected. Rotate the Bitwarden API key too if the database may have leaked with it. |
+| Master password rotated in Bitwarden  | Account page → Vault connection → enter the new master password, leave the client secret blank, save (ID-25). No restart.                                                                                |
+| API key rotated in Bitwarden          | Account page → Vault connection → enter the new client id and secret, leave the master password blank, save. The CLI session is replaced (VAULT-8).                                                      |
+| Compromise suspected                  | Stop the service (locks the vault), rotate the API key in Bitwarden, review the audit export.                                                                                                            |

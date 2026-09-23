@@ -8,11 +8,11 @@ vaultgate's state is one SQLite file plus one key. Specification:
 | Item                   | Where                                                                                                              | Why                                                                                                                    |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
 | `vaultgate.sqlite`     | `VAULTGATE_DATA_DIR`: `/data` in the container, `/var/lib/vaultgate` on Linux, the `vaultgate-data` share on Azure | The operator account, the enrolled authenticator, recovery codes, OAuth clients, consents, tokens and the audit trail. |
-| `VAULTGATE_SECRET_KEY` | `secrets/vaultgate_secret_key` (Compose), `/etc/vaultgate/vaultgate.env` (Linux), Key Vault `secret-key` (Azure)   | Encrypts the stored TOTP secret and keys session binding. Without it the authenticator cannot be verified.             |
+| `VAULTGATE_SECRET_KEY` | `secrets/vaultgate_secret_key` (Compose), `/etc/vaultgate/vaultgate.env` (Linux), Key Vault `secret-key` (Azure)   | Encrypts the stored TOTP secret and the vault connection, and keys session binding. Without it neither can be read.    |
 
 Back them up together and keep the key outside the backup of the database if you can, since the
-two together are what an attacker would need to impersonate the operator (they still would not
-have the vault: that needs the master password, which is not stored anywhere).
+two together are what an attacker would need to impersonate the operator and, once the vault
+connection has been saved on the account page, to read the master password and API key as well.
 
 What you do **not** need:
 
@@ -24,8 +24,9 @@ What you do **not** need:
   it up costs nothing.
 
 The database contains no raw secret: passwords are scrypt hashes, tokens, codes and session ids
-are SHA-256 hashes, the TOTP secret is AES-256-GCM ciphertext under the key. A backup is still
-sensitive, because a token hash plus the ability to write the database is enough to mint access.
+are SHA-256 hashes, the TOTP secret and the saved vault connection are AES-256-GCM ciphertext
+under the key. A backup is still sensitive, because a token hash plus the ability to write the
+database is enough to mint access.
 
 ## Taking a backup
 

@@ -3,7 +3,9 @@
  * `node:crypto` and `Date.now`; tests wire deterministic doubles so no test
  * depends on entropy or the wall clock (QG-2).
  */
-export type RandomSource = (bytes: number) => Buffer;
+import type { RandomSource } from '../crypto/secret-box.ts';
+
+export type { RandomSource } from '../crypto/secret-box.ts';
 
 export type Clock = () => number;
 

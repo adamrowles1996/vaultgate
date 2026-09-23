@@ -59,7 +59,7 @@ describe('GET /account', () => {
     const markup = await response.text();
     expect(response.status).toBe(200);
     expect(markup).toContain('Signed in as <strong>ada@example.com</strong>');
-    expect(markup.match(/<tr>/g)).toHaveLength(3);
+    expect(markup.match(/data-label="Started"/g)).toHaveLength(2);
     expect(markup.match(/\(this one\)/g)).toHaveLength(1);
     expect(markup).toContain('action="/account/reauthenticate"');
     expect(markup).not.toContain('action="/account/password"');

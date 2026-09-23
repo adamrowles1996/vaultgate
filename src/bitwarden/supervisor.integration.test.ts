@@ -100,7 +100,7 @@ describe('bw serve backend against a real vault', () => {
     expect(unwrapOk(await supervisor.client.status()).state).toBe('unavailable');
     const cli = new BwCli({
       bin: integration.bin,
-      dataDir: dataDirectory,
+      appDataDirectory: join(dataDirectory, 'bw', '1'),
       environment,
       spawn: spawnChild,
       clock: systemClock,

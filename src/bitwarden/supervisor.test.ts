@@ -1,3 +1,7 @@
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { FakeBwServe } from '../test-support/fake-bw-serve.ts';
@@ -12,8 +16,13 @@ import {
 
 import { systemClock } from './clock.ts';
 import { allocateLoopbackPort } from './ports.ts';
-import { spawnChild } from './serve-process.ts';
-import { backoffMs, resolveDependencies } from './supervisor-support.ts';
+import { spawnChild, VersionRefusedError } from './serve-process.ts';
+import {
+  backoffMs,
+  describeStartFailure,
+  removeDirectoryFromDisk,
+  resolveDependencies,
+} from './supervisor-support.ts';
 
 describe('startVaultSupervisor start-up', () => {
   it('VAULT-4 logs in, spawns bw serve, unlocks, syncs and reports ready', async () => {
@@ -62,7 +71,7 @@ describe('startVaultSupervisor start-up', () => {
     expect(harness.spawner.spawned('serve')[0]?.environment).toStrictEqual({
       PATH: '/usr/bin',
       HOME: '/home/vaultgate',
-      BITWARDENCLI_APPDATA_DIR: '/data/bw',
+      BITWARDENCLI_APPDATA_DIR: '/data/bw/1',
       BW_NOINTERACTION: 'true',
     });
     await supervisor.stop();
@@ -80,6 +89,23 @@ describe('startVaultSupervisor start-up', () => {
       ['config', 'server', 'https://vault.example.test'],
       ['login', '--apikey'],
       ['serve', '--hostname', '127.0.0.1', '--port', '43210'],
+    ]);
+    await supervisor.stop();
+  });
+
+  it('VAULT-3 resets a reused app-data directory to the default server before login', async () => {
+    const harness = new SupervisorHarness();
+    harness.spawner.on('status', ({ child }) => {
+      child.finish(
+        '{"serverUrl":"https://old.example","lastSync":null,"status":"unauthenticated"}',
+      );
+    });
+    const supervisor = harness.start();
+    await harness.until(() => supervisor.isReady());
+    expect(harness.spawner.records.map((record) => record.argv).slice(1, 4)).toStrictEqual([
+      ['status'],
+      ['config', 'server', 'bitwarden.com'],
+      ['login', '--apikey'],
     ]);
     await supervisor.stop();
   });
@@ -114,13 +140,15 @@ describe('startVaultSupervisor start-up', () => {
 });
 
 describe('resolveDependencies', () => {
-  it('defaults to the real process, clock, network and port allocation', () => {
+  it('defaults to the real process, clock, network, port allocation and filesystem', () => {
     expect(resolveDependencies({ environment: { PATH: '/usr/bin' } })).toStrictEqual({
       environment: { PATH: '/usr/bin' },
+      stored: { kind: 'none' },
       spawn: spawnChild,
       clock: systemClock,
       fetch,
       allocatePort: allocateLoopbackPort,
+      removeDirectory: removeDirectoryFromDisk,
     });
   });
 });
@@ -176,6 +204,51 @@ describe('startVaultSupervisor stop', () => {
     await harness.clock.advance(5000);
     await stopping;
     expect(harness.serveChild().signals).toStrictEqual(['SIGTERM', 'SIGKILL']);
+  });
+});
+
+describe('removeDirectoryFromDisk', () => {
+  it('VAULT-8 deletes a retired app-data generation and tolerates one that is already gone', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'vaultgate-appdata-'));
+    const generation = join(root, '1');
+    mkdirSync(generation);
+    writeFileSync(join(generation, 'data.json'), '{}');
+    await removeDirectoryFromDisk(generation);
+    await removeDirectoryFromDisk(generation);
+    expect(existsSync(generation)).toBe(false);
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe('describeStartFailure', () => {
+  it('VAULT-18 VAULT-14 names the cause without repeating what the CLI said', () => {
+    const cases: [Error, string][] = [
+      [
+        new VersionRefusedError('bw 1.0.0 is older than the minimum 2025.1.0'),
+        'bw 1.0.0 is older than the minimum 2025.1.0',
+      ],
+      [
+        new Error('bw login exited with status 1'),
+        'Bitwarden rejected the API key; check the client id and the client secret',
+      ],
+      [new Error('bw config exited with status 1'), 'the Bitwarden CLI rejected the server URL'],
+      [
+        new Error('bw status exited with status 1'),
+        'the Bitwarden CLI could not report its status',
+      ],
+      [
+        new Error('the vault rejected the master password'),
+        'the vault rejected the master password',
+      ],
+      [new Error('bw serve did not answer /status in time'), 'bw serve did not start in time'],
+      [
+        new Error('spawn /opt/bw ENOENT'),
+        'the vault backend could not start; the server log has the reason',
+      ],
+    ];
+    expect(cases.map(([error]) => describeStartFailure(error))).toStrictEqual(
+      cases.map(([, text]) => text),
+    );
   });
 });
 

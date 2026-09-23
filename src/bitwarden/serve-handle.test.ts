@@ -8,7 +8,7 @@ import { BwCli, spawnChild } from './serve-process.ts';
 function cliWith(spawner: FakeSpawner, clock = new ManualClock()): BwCli {
   return new BwCli({
     bin: '/opt/bw/bw',
-    dataDir: '/data',
+    appDataDirectory: '/data/bw/1',
     environment: { PATH: '/usr/bin', HOME: '/home/vaultgate' },
     spawn: spawner.spawn,
     clock,

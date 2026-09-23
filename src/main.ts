@@ -6,7 +6,11 @@ import { serve } from '@hono/node-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 
 import { StoreAuditSink } from './audit/store-sink.ts'; // -- audit --
-import { startVaultSupervisor } from './bitwarden/index.ts';
+import {
+  createVaultConnection,
+  createVaultSettings,
+  startVaultSupervisor,
+} from './bitwarden/index.ts';
 import { describeConfig, loadConfig } from './config/index.ts';
 import { createApp } from './http/app.ts';
 import {
@@ -50,9 +54,23 @@ const auditSink = new StoreAuditSink({
 });
 // -- end audit ---------------------------------------------------------------
 
-// -- vault: bw serve starts in the background; the listener comes up regardless
-// and /readyz names the vault until it is unlocked (VAULT-5) -----------------
-const vault = startVaultSupervisor(config, logger, { environment: process.env });
+// -- vault: bw serve starts in the background with the stored connection or the
+// environment seed (VAULT-18); the listener comes up regardless and /readyz
+// names the vault until it is unlocked (VAULT-5) -----------------------------
+const vaultSettings = createVaultSettings({
+  database: store.db,
+  secretKey: config.secrets.secretKey,
+  random: (bytes) => randomBytes(bytes),
+});
+const vault = startVaultSupervisor(config, logger, {
+  environment: process.env,
+  stored: vaultSettings.load(),
+});
+const vaultConnection = createVaultConnection({
+  supervisor: vault,
+  settings: vaultSettings,
+  clock: Date.now,
+});
 // -- end vault ---------------------------------------------------------------
 
 // -- oauth: the account page's connected-clients section is bound once the
@@ -73,6 +91,7 @@ const identity = createIdentity({
   clientAddress: (context) => getConnInfo(context).remote.address,
   passwordParameters: CURRENT_PARAMETERS,
   connectedClients: (session) => accountSlot.render(session), // -- oauth --
+  vaultConnection, // -- vault --
 });
 identity.bootstrap.ensureToken();
 // -- end identity --
@@ -113,7 +132,13 @@ const app = createApp({
     return {
       ready: failing.length === 0,
       failing,
-      vault: { ready: vault.isReady(), lastSyncAt: vault.syncState().lastSyncAt }, // -- vault --
+      // -- vault --
+      vault: {
+        ready: vault.isReady(),
+        configured: vault.source().origin !== 'none',
+        lastSyncAt: vault.syncState().lastSyncAt,
+      },
+      // -- end vault --
     };
   },
   vaultClient: vault.client, // -- vault --

@@ -21,7 +21,7 @@ async function changeEmail(context: IdentityContext, services: IdentityServices)
   const { operator } = authenticated;
   const email = normaliseEmail(field(form, 'email'));
   if (!email.ok) {
-    const view = accountView(services, authenticated, undefined, email.error.message);
+    const view = await accountView(services, authenticated, { error: email.error.message });
     return context.html(renderAccount(view), 400);
   }
   services.stores.operators.updateEmail(operator.id, email.value);

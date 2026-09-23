@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- ID-25, VAULT-18, STORE-9: the Bitwarden connection (server, API key client id and secret,
+  master password) is set and changed from the account page's new **Vault connection** section,
+  behind re-authentication, without editing environment variables or restarting. Saving stores
+  the connection encrypted under `VAULTGATE_SECRET_KEY` (schema v3, `vault_settings`; distinct
+  HKDF purposes for the two secrets) and switches the running backend to it: the old `bw serve`
+  is locked and stopped, the new credentials log in inside a fresh CLI app-data generation
+  (`${DATA_DIR}/bw/<n>`, so no session is ever reused and `bw logout` is still never called),
+  and the retired generation is deleted once the new one is unlocked. A failure restores the
+  previous connection (or the unconfigured state) and the previous stored row, and shows one
+  fixed reason; secrets are never echoed, logged or audited. Blank secret fields keep the values
+  in use, so a rotated master password or API key is a single save. The section shows the
+  configured state, its source, the server, the masked account e-mail, readiness and the last
+  sync; the first-run recovery-codes page links to it while nothing is connected; every attempt is
+  the audit event `vault.settings_updated`.
+- `/readyz` reports `vault.configured`, so an unconfigured deployment reads differently from a
+  failing one.
+
 ### Changed
 
 - ID-3, ID-12: the operator is identified by e-mail address instead of a display name. Setup asks
@@ -22,6 +41,21 @@ All notable changes to this project are documented here. The format follows
 
 **Upgrading note for scripted setups and runbooks:** the `POST /setup` and `POST /login` form
 field `display_name` is gone; send `email` instead.
+
+- CFG-5: `VAULTGATE_BW_PASSWORD`, `VAULTGATE_BW_CLIENT_ID` and `VAULTGATE_BW_CLIENT_SECRET` are
+  optional. They seed the first boot when all three are set and are ignored once a connection has
+  been saved on the account page; a partial set is logged and ignored. The backend starts
+  unconfigured without them (no process is spawned; tool calls answer `vault_unavailable`).
+  `install.sh` no longer waits for them, the Compose secret files may be empty (an empty `_FILE`
+  now means unset, CFG-1), the Azure template's three Bitwarden parameters default to empty and
+  create their Key Vault secrets only when supplied, and the smoke scripts boot without them.
+- VAULT-3: before a login, a reused CLI directory that still names a server is reset with
+  `bw config server bitwarden.com` when the connection names none.
+- VAULT-1: the CLI app-data directory is `${DATA_DIR}/bw/<n>` per credential generation instead
+  of `${DATA_DIR}/bw`. An existing `${DATA_DIR}/bw` directory is left untouched and unused; the
+  first start after upgrading logs in afresh under `bw/1`.
+- The secret box moved to `src/crypto/secret-box.ts` (a foundation module) so the vault backend
+  can seal its settings without depending on the identity module.
 
 ### Fixed
 

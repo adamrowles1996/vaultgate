@@ -90,14 +90,14 @@ Only what its token's scopes allow, and the operator picks those on the consent 
 
 ## If something leaks
 
-| Leaked                        | Do this                                                                                                                                                                         |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| An access or refresh token    | Account page → **Disconnect** the client. That revokes the consent and every token in it. Reconnect the client afterwards if it is legitimate.                                  |
-| Your operator password        | Account page → confirm password → **Change password**. Every other session is signed out. Then regenerate recovery codes.                                                       |
-| `VAULTGATE_SECRET_KEY`        | Set a new key and restart. Tokens are unaffected; sign in with a recovery code and set up a new authenticator ([Backup and restore](backup-and-restore.md#if-the-key-is-lost)). |
-| The Bitwarden master password | Change it in Bitwarden, update `VAULTGATE_BW_PASSWORD` (or its file), restart.                                                                                                  |
-| The Bitwarden API key         | Rotate it in the web vault (Settings → Security → Keys), update the configuration, delete the CLI app data under `VAULTGATE_DATA_DIR/bw`, restart.                              |
-| The host itself               | Stop the service (which locks the vault), rotate the API key and master password in Bitwarden, export and review the audit trail, rebuild the host.                             |
+| Leaked                        | Do this                                                                                                                                                                                       |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An access or refresh token    | Account page → **Disconnect** the client. That revokes the consent and every token in it. Reconnect the client afterwards if it is legitimate.                                                |
+| Your operator password        | Account page → confirm password → **Change password**. Every other session is signed out. Then regenerate recovery codes.                                                                     |
+| `VAULTGATE_SECRET_KEY`        | Set a new key and restart. Tokens are unaffected; sign in with a recovery code and set up a new authenticator ([Backup and restore](backup-and-restore.md#if-the-key-is-lost)).               |
+| The Bitwarden master password | Change it in Bitwarden, then on the account page enter the new one under **Vault connection** (leave the client secret blank) and save. No restart.                                           |
+| The Bitwarden API key         | Rotate it in the web vault (Settings → Security → Keys), then enter the new client id and secret on the account page (leave the master password blank) and save. The CLI session is replaced. |
+| The host itself               | Stop the service (which locks the vault), rotate the API key and master password in Bitwarden, export and review the audit trail, rebuild the host.                                           |
 
 Every tool call, login, consent, token issue, refresh and revocation is an audit event in the
 database, exported from the account page or with `node dist/cli.js audit export` (see the

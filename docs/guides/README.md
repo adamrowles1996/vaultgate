@@ -13,7 +13,7 @@ relies on.
 | [Azure Container Apps](../../deploy/azure/README.md)              | The ARM template, the Deploy to Azure button and its operating notes.       |
 | [Reverse proxy](reverse-proxy.md)                                 | What the proxy in front of vaultgate must forward, with Caddy and nginx.    |
 | [First run](first-run.md)                                         | From a fresh install to a working operator account and a ready vault.       |
-| [Self-hosted Bitwarden and Vaultwarden](self-hosted-bitwarden.md) | `VAULTGATE_BW_SERVER`, the personal API key, Vaultwarden notes.             |
+| [Self-hosted Bitwarden and Vaultwarden](self-hosted-bitwarden.md) | The server field, the personal API key, Vaultwarden notes.                  |
 
 ## Connect an agent
 

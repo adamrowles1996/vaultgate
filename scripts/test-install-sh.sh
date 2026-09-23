@@ -86,6 +86,15 @@ else
   pass "an unknown argument is refused"
 fi
 
+printf 'VAULTGATE_PUBLIC_URL=https://replace-with-your-domain\nVAULTGATE_SECRET_KEY=abc\n' >"$work/env-url"
+printf 'VAULTGATE_PUBLIC_URL=https://vault.example\nVAULTGATE_SECRET_KEY=@SECRET_KEY@\n' >"$work/env-key"
+printf 'VAULTGATE_PUBLIC_URL=https://vault.example\nVAULTGATE_SECRET_KEY=abc\n#VAULTGATE_BW_PASSWORD=\n' >"$work/env-ready"
+printf 'VAULTGATE_PUBLIC_URL=https://vault.example\nVAULTGATE_SECRET_KEY=abc\nVAULTGATE_BW_PASSWORD=replace-with-x\n' >"$work/env-bw"
+if has_placeholders "$work/env-url"; then pass "a placeholder public URL holds the start"; else fail "a placeholder public URL holds the start"; fi
+if has_placeholders "$work/env-key"; then pass "an unrendered secret key holds the start"; else fail "an unrendered secret key holds the start"; fi
+if has_placeholders "$work/env-ready"; then fail "a complete file starts the service"; else pass "a complete file starts the service"; fi
+if has_placeholders "$work/env-bw"; then fail "Bitwarden placeholders do not hold the start"; else pass "Bitwarden placeholders do not hold the start"; fi
+
 expect_contains "libatomic1 is installed when the library is absent" \
   "$(ensure_packages)" "apt-get install -y -q --no-install-recommends"
 expect_contains "libatomic1 is in the apt list" "$(ensure_packages)" "libatomic1"

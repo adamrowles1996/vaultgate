@@ -2,7 +2,8 @@
 // builtin; this stops a layer importing the wrong layer.
 //
 // Layers, from the bottom up:
-//   result, config, logger      foundation: import nothing above themselves
+//   result, config, logger,     foundation: import nothing above themselves
+//   crypto
 //   storage                     no feature knowledge
 //   audit                       the event shape and the store sink every
 //                               feature records through; knows no feature

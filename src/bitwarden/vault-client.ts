@@ -51,20 +51,28 @@ export interface BwServeVaultClientOptions {
   readonly api: BwServeApi;
   readonly clock: Clock;
   /**
-  Reported when `bw serve` names no server (the bitwarden.com default).
+  The configured server, reported when `bw serve` names none; it can change with a reconfiguration (VAULT-18).
   */
-  readonly serverUrl?: string;
+  readonly serverUrl?: () => string | undefined;
+}
+
+function noServer(): string | undefined {
+  return undefined;
 }
 
 export class BwServeVaultClient implements VaultClient {
   readonly #api: BwServeApi;
   readonly #clock: Clock;
-  readonly #serverUrl: string;
+  readonly #serverUrl: () => string | undefined;
 
   constructor(options: BwServeVaultClientOptions) {
     this.#api = options.api;
     this.#clock = options.clock;
-    this.#serverUrl = options.serverUrl ?? DEFAULT_SERVER_URL;
+    this.#serverUrl = options.serverUrl ?? noServer;
+  }
+
+  #fallbackServerUrl(): string {
+    return this.#serverUrl() ?? DEFAULT_SERVER_URL;
   }
 
   async #string(path: string): VaultResult<string> {
@@ -106,10 +114,10 @@ export class BwServeVaultClient implements VaultClient {
       schema: statusDataSchema,
     });
     if (result.ok) {
-      return ok(toVaultStatus(result.value.template, this.#serverUrl));
+      return ok(toVaultStatus(result.value.template, this.#fallbackServerUrl()));
     }
     return result.error.code === 'vault_unavailable'
-      ? ok(unavailableStatus(this.#serverUrl))
+      ? ok(unavailableStatus(this.#fallbackServerUrl()))
       : result;
   }
 

@@ -5,11 +5,12 @@ import type { Html } from './pages/template.ts';
 import type { ScryptParameters } from './password.ts';
 import type { Clock, Delay, RandomSource } from './primitives.ts';
 import type { IdentityStores } from './repositories/index.ts';
-import type { SecretBox } from './secret-box.ts';
 import type { SessionManager, SessionState } from './session-manager.ts';
 import type { CookiePolicy } from './sessions.ts';
 import type { StateCodec } from './state-cookie.ts';
 import type { AuditSink } from '../audit/event.ts';
+import type { SecretBox } from '../crypto/secret-box.ts';
+import type { VaultConnection } from '../vault/connection.ts';
 import type { DatabaseSync } from 'node:sqlite';
 
 /**
@@ -39,4 +40,8 @@ export interface IdentityServices {
   readonly passwordParameters: ScryptParameters;
   readonly absoluteSessionTtlMs: number;
   readonly connectedClients: ConnectedClientsRenderer;
+  /**
+  The vault backend as the account page sees it (ID-25); supplied by the composition layer.
+  */
+  readonly vaultConnection: VaultConnection;
 }

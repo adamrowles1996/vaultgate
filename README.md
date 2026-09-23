@@ -36,6 +36,9 @@ links, and when the official stdio server is the better choice: [`docs/compariso
 
 What the design gives you beyond the table:
 
+- **The master password stays with vaultgate.** It lives only in the process, and encrypted under
+  your secret key once you connect the vault from the account page; agents hold short-lived,
+  scoped, revocable tokens.
 - **One door for secrets.** A single tool returns secret values, one field of one item per call,
   behind its own scope, with every call audited. Every other tool returns metadata.
 - **No remote code execution.** There is no "run this command" tool. Ever.

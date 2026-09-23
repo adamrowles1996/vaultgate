@@ -60,12 +60,62 @@
     "logLevel": {
       "type": "string",
       "metadata": { "description": "VAULTGATE_LOG_LEVEL." }
+    },
+    "hasBitwardenCredentials": {
+      "type": "bool",
+      "metadata": {
+        "description": "Whether the Bitwarden Key Vault secrets exist. Their references and environment variables are added only then, so the app can start unconfigured and be connected from the account page."
+      }
     }
   },
   "variables": {
     "publicOrigin": "[if(empty(parameters('publicUrl')), format('https://{0}.{1}', parameters('appName'), parameters('environmentDefaultDomain')), parameters('publicUrl'))]",
     "mountOptions": "uid=10001,gid=10001,dir_mode=0770,file_mode=0660,nobrl",
-    "secretNames": ["bw-password", "bw-client-id", "bw-client-secret", "secret-key"]
+    "secretNames": ["bw-password", "bw-client-id", "bw-client-secret", "secret-key"],
+    "coreSecrets": [
+      {
+        "name": "[variables('secretNames')[3]]",
+        "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[3]))]",
+        "identity": "[parameters('identityId')]"
+      }
+    ],
+    "bitwardenSecrets": [
+      {
+        "name": "[variables('secretNames')[0]]",
+        "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[0]))]",
+        "identity": "[parameters('identityId')]"
+      },
+      {
+        "name": "[variables('secretNames')[1]]",
+        "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[1]))]",
+        "identity": "[parameters('identityId')]"
+      },
+      {
+        "name": "[variables('secretNames')[2]]",
+        "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[2]))]",
+        "identity": "[parameters('identityId')]"
+      }
+    ],
+    "coreEnvironment": [
+      { "name": "VAULTGATE_PUBLIC_URL", "value": "[variables('publicOrigin')]" },
+      { "name": "VAULTGATE_HOST", "value": "0.0.0.0" },
+      { "name": "VAULTGATE_PORT", "value": "8080" },
+      { "name": "VAULTGATE_TRUST_PROXY", "value": "true" },
+      { "name": "VAULTGATE_DATA_DIR", "value": "/data" },
+      { "name": "VAULTGATE_SQLITE_NETWORK_FS", "value": "true" },
+      { "name": "VAULTGATE_BW_SERVER", "value": "[parameters('bitwardenServer')]" },
+      {
+        "name": "VAULTGATE_ENABLE_WRITE_SCOPE",
+        "value": "[if(parameters('enableWriteScope'), 'true', 'false')]"
+      },
+      { "name": "VAULTGATE_LOG_LEVEL", "value": "[parameters('logLevel')]" },
+      { "name": "VAULTGATE_SECRET_KEY", "secretRef": "[variables('secretNames')[3]]" }
+    ],
+    "bitwardenEnvironment": [
+      { "name": "VAULTGATE_BW_PASSWORD", "secretRef": "[variables('secretNames')[0]]" },
+      { "name": "VAULTGATE_BW_CLIENT_ID", "secretRef": "[variables('secretNames')[1]]" },
+      { "name": "VAULTGATE_BW_CLIENT_SECRET", "secretRef": "[variables('secretNames')[2]]" }
+    ]
   },
   "resources": [
     {
@@ -88,28 +138,7 @@
             "allowInsecure": false,
             "traffic": [{ "weight": 100, "latestRevision": true }]
           },
-          "secrets": [
-            {
-              "name": "[variables('secretNames')[0]]",
-              "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[0]))]",
-              "identity": "[parameters('identityId')]"
-            },
-            {
-              "name": "[variables('secretNames')[1]]",
-              "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[1]))]",
-              "identity": "[parameters('identityId')]"
-            },
-            {
-              "name": "[variables('secretNames')[2]]",
-              "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[2]))]",
-              "identity": "[parameters('identityId')]"
-            },
-            {
-              "name": "[variables('secretNames')[3]]",
-              "keyVaultUrl": "[uri(parameters('keyVaultUri'), concat('secrets/', variables('secretNames')[3]))]",
-              "identity": "[parameters('identityId')]"
-            }
-          ]
+          "secrets": "[concat(variables('coreSecrets'), if(parameters('hasBitwardenCredentials'), variables('bitwardenSecrets'), createArray()))]"
         },
         "template": {
           "containers": [
@@ -117,27 +146,7 @@
               "name": "vaultgate",
               "image": "[parameters('image')]",
               "resources": { "cpu": 0.5, "memory": "1Gi" },
-              "env": [
-                { "name": "VAULTGATE_PUBLIC_URL", "value": "[variables('publicOrigin')]" },
-                { "name": "VAULTGATE_HOST", "value": "0.0.0.0" },
-                { "name": "VAULTGATE_PORT", "value": "8080" },
-                { "name": "VAULTGATE_TRUST_PROXY", "value": "true" },
-                { "name": "VAULTGATE_DATA_DIR", "value": "/data" },
-                { "name": "VAULTGATE_SQLITE_NETWORK_FS", "value": "true" },
-                { "name": "VAULTGATE_BW_SERVER", "value": "[parameters('bitwardenServer')]" },
-                {
-                  "name": "VAULTGATE_ENABLE_WRITE_SCOPE",
-                  "value": "[if(parameters('enableWriteScope'), 'true', 'false')]"
-                },
-                { "name": "VAULTGATE_LOG_LEVEL", "value": "[parameters('logLevel')]" },
-                { "name": "VAULTGATE_BW_PASSWORD", "secretRef": "[variables('secretNames')[0]]" },
-                { "name": "VAULTGATE_BW_CLIENT_ID", "secretRef": "[variables('secretNames')[1]]" },
-                {
-                  "name": "VAULTGATE_BW_CLIENT_SECRET",
-                  "secretRef": "[variables('secretNames')[2]]"
-                },
-                { "name": "VAULTGATE_SECRET_KEY", "secretRef": "[variables('secretNames')[3]]" }
-              ],
+              "env": "[concat(variables('coreEnvironment'), if(parameters('hasBitwardenCredentials'), variables('bitwardenEnvironment'), createArray()))]",
               "volumeMounts": [{ "volumeName": "data", "mountPath": "/data" }],
               "probes": [
                 {

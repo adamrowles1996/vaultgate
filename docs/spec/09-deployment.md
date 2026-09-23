@@ -55,7 +55,10 @@ private interface.
   secret references, never as plain environment values.
 - **DEP-7** The template parameters are: `name`, `location`, `imageTag`, `publicUrl` (optional
   custom domain), `bitwardenServer` (optional), and the secret values (`bwPassword`, `bwClientId`,
-  `bwClientSecret`, `secretKey`) marked `securestring`. A `createUiDefinition.json` powers the
+  `bwClientSecret`, `secretKey`) marked `securestring`. The three Bitwarden values are optional
+  and default to empty: their Key Vault secrets, secret references and environment variables
+  exist only when all three are supplied, so a deployment without them starts unconfigured and is
+  connected from the account page (CFG-5). A `createUiDefinition.json` powers the
   "Deploy to Azure" button.
 - **DEP-8** `maxReplicas` is `1` and `VAULTGATE_SQLITE_NETWORK_FS=true` is set, because SQLite
   on an SMB share is safe only with one writer and rollback-journal mode (STORE-2).

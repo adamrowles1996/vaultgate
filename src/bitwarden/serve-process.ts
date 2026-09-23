@@ -6,7 +6,6 @@
  * fake child.
  */
 import { spawn } from 'node:child_process';
-import { join } from 'node:path';
 
 import { fail, ok, type Result } from '../result.ts';
 
@@ -84,7 +83,10 @@ export interface ServeHandle {
 
 export interface BwCliOptions {
   readonly bin: string;
-  readonly dataDir: string;
+  /**
+  `BITWARDENCLI_APPDATA_DIR`: one directory per credential generation (VAULT-8).
+  */
+  readonly appDataDirectory: string;
   /**
   The parent process environment; only `PATH`, `HOME` and `TMPDIR` are passed on.
   */
@@ -115,7 +117,7 @@ export class BwCli {
     }
     this.#environment = {
       ...inherited,
-      BITWARDENCLI_APPDATA_DIR: join(options.dataDir, 'bw'),
+      BITWARDENCLI_APPDATA_DIR: options.appDataDirectory,
       BW_NOINTERACTION: 'true',
     };
   }

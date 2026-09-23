@@ -6,7 +6,7 @@
     "config": {
       "isWizard": false,
       "basics": {
-        "description": "Deploys vaultgate, a remote MCP server for Bitwarden with its own OAuth 2.1 authorization server, as an Azure Container App. Your Bitwarden credentials go straight into a Key Vault; the app reads them through a managed identity.",
+        "description": "Deploys vaultgate, a remote MCP server for Bitwarden with its own OAuth 2.1 authorization server, as an Azure Container App. Your Bitwarden credentials can go straight into a Key Vault now (the app reads them through a managed identity) or be entered on the account page after the first sign-in.",
         "location": {
           "visible": true,
           "resourceTypes": ["Microsoft.App/managedEnvironments", "Microsoft.KeyVault/vaults"]
@@ -31,17 +31,17 @@
     "steps": [
       {
         "name": "secrets",
-        "label": "Bitwarden credentials",
+        "label": "Bitwarden credentials (optional)",
         "elements": [
           {
             "name": "bwClientId",
             "type": "Microsoft.Common.TextBox",
             "label": "API key client id",
-            "toolTip": "Personal API key client id from Bitwarden Settings > Security > Keys; it starts with user.",
+            "toolTip": "Optional. Personal API key client id from Bitwarden Settings > Security > Keys; it starts with user. Leave all three Bitwarden fields empty to connect the vault from the account page after the first sign-in.",
             "constraints": {
-              "required": true,
-              "regex": "^user\\.[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
-              "validationMessage": "Expected user. followed by a UUID."
+              "required": false,
+              "regex": "^$|^user\\.[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Empty, or user. followed by a UUID."
             },
             "visible": true
           },
@@ -52,11 +52,11 @@
               "password": "API key client secret",
               "confirmPassword": "Confirm client secret"
             },
-            "toolTip": "Personal API key client secret from the same Bitwarden page.",
+            "toolTip": "Optional. Personal API key client secret from the same Bitwarden page.",
             "constraints": {
-              "required": true,
-              "regex": "^\\S{16,}$",
-              "validationMessage": "At least 16 characters without whitespace."
+              "required": false,
+              "regex": "^$|^\\S{16,}$",
+              "validationMessage": "Empty, or at least 16 characters without whitespace."
             },
             "options": { "hideConfirmation": false },
             "visible": true
@@ -68,11 +68,11 @@
               "password": "Master password",
               "confirmPassword": "Confirm master password"
             },
-            "toolTip": "Your Bitwarden master password. It is written to Key Vault only; the Container App receives it through a secret reference.",
+            "toolTip": "Optional. Your Bitwarden master password. It is written to Key Vault only; the Container App receives it through a secret reference.",
             "constraints": {
-              "required": true,
-              "regex": "^.{12,}$",
-              "validationMessage": "Bitwarden master passwords are at least 12 characters."
+              "required": false,
+              "regex": "^$|^.{12,}$",
+              "validationMessage": "Empty, or at least 12 characters (Bitwarden's minimum)."
             },
             "options": { "hideConfirmation": false },
             "visible": true

@@ -42,11 +42,18 @@ sudo install -m 0600 -o vaultgate -g vaultgate /dev/stdin /etc/vaultgate/secrets
 sudo install -m 0600 -o vaultgate -g vaultgate /dev/stdin /etc/vaultgate/secrets/bw_client_secret
 ```
 
-Type the value, press Enter, then Ctrl-D. In `vaultgate.env` replace the two secret lines with
-`VAULTGATE_BW_PASSWORD_FILE=/etc/vaultgate/secrets/bw_password` and
-`VAULTGATE_BW_CLIENT_SECRET_FILE=/etc/vaultgate/secrets/bw_client_secret`. A `_FILE` variable
-always wins over the plain one, and a world-readable secret file is reported as a warning at
-start-up. `VAULTGATE_BW_CLIENT_ID` is not a secret and has no `_FILE` form.
+Type the value, press Enter, then Ctrl-D. In `vaultgate.env` add
+`VAULTGATE_BW_PASSWORD_FILE=/etc/vaultgate/secrets/bw_password`,
+`VAULTGATE_BW_CLIENT_SECRET_FILE=/etc/vaultgate/secrets/bw_client_secret` and
+`VAULTGATE_BW_CLIENT_ID=user.…`. A `_FILE` variable always wins over the plain one, and a
+world-readable secret file is reported as a warning at start-up. `VAULTGATE_BW_CLIENT_ID` is not
+a secret and has no `_FILE` form.
+
+This seeding is optional. The usual way is to leave the three Bitwarden lines commented out,
+start the service, create the operator account, and connect the vault from the account page
+([First run, section 6](first-run.md#6-connect-the-vault)); the connection is stored encrypted
+in the database and takes effect without a restart. Once saved there, the environment values are
+ignored.
 
 ## 3. Put a reverse proxy in front
 

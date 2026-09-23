@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import { fixedRandom, sequentialRandom } from '../test-support/identity.ts';
 
-import { createSecretBox, STATE_COOKIE_INFO, TOTP_SECRET_INFO } from './secret-box.ts';
+import {
+  createSecretBox,
+  STATE_COOKIE_INFO,
+  TOTP_SECRET_INFO,
+  VAULT_CLIENT_SECRET_INFO,
+  VAULT_MASTER_PASSWORD_INFO,
+} from './secret-box.ts';
 
 const ROOT_KEY = Buffer.alloc(32, 9);
 
@@ -27,11 +33,21 @@ describe('createSecretBox', () => {
     expect(first).not.toBe(second);
   });
 
-  it('ID-9 separates purposes through the HKDF info', () => {
-    const totpBox = createSecretBox(ROOT_KEY, TOTP_SECRET_INFO, fixedRandom());
-    const stateBox = createSecretBox(ROOT_KEY, STATE_COOKIE_INFO, fixedRandom());
-    const sealed = totpBox.seal(Buffer.from('x'));
-    expect(stateBox.open(sealed)).toBeUndefined();
+  it('ID-9 STORE-9 separates purposes through the HKDF info', () => {
+    const infos = [
+      TOTP_SECRET_INFO,
+      STATE_COOKIE_INFO,
+      VAULT_CLIENT_SECRET_INFO,
+      VAULT_MASTER_PASSWORD_INFO,
+    ];
+    expect(new Set(infos).size).toBe(infos.length);
+    const boxes = infos.map((info) => createSecretBox(ROOT_KEY, info, fixedRandom()));
+    const sealed = boxes[0]!.seal(Buffer.from('x'));
+    expect(boxes.slice(1).map((box) => box.open(sealed))).toStrictEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 
   it('ID-9 refuses tampered, truncated or foreign input', () => {

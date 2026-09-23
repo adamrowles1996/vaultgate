@@ -181,12 +181,19 @@ write_environment_file() {
   info "written (mode 0600) with a generated VAULTGATE_SECRET_KEY"
 }
 
+# True while the two settings the service cannot start without still hold their
+# placeholders. The Bitwarden connection is not checked: it is made from the
+# account page after the first sign-in (or seeded through VAULTGATE_BW_*).
+has_placeholders() {
+  grep -Eq '^VAULTGATE_(PUBLIC_URL|SECRET_KEY)=.*(replace-with|@SECRET_KEY@)' "$1"
+}
+
 install_service() {
   step "Installing the systemd unit"
   install -m 0644 -o root -g root "${RELEASE_DIR}/deploy/systemd/vaultgate.service" \
     /etc/systemd/system/vaultgate.service
   systemctl daemon-reload
-  if grep -q 'replace-with' "${CONFIG_DIR}/vaultgate.env"; then
+  if has_placeholders "${CONFIG_DIR}/vaultgate.env"; then
     systemctl enable vaultgate
     STARTED=0
     info "enabled but not started: placeholders remain in ${CONFIG_DIR}/vaultgate.env"
@@ -203,20 +210,23 @@ print_next_steps() {
   step "Done: vaultgate ${VERSION} is installed"
   if [ "$STARTED" -eq 0 ]; then
     cat <<END
-    1. Edit ${CONFIG_DIR}/vaultgate.env: set VAULTGATE_PUBLIC_URL and the three
-        VAULTGATE_BW_* values (master password and personal API key). To keep the
-        secrets out of the file, write each one to ${CONFIG_DIR}/secrets/<name>
-        (owner ${SERVICE_USER}, mode 0600) and set the matching <NAME>_FILE instead.
+    1. Edit ${CONFIG_DIR}/vaultgate.env: set VAULTGATE_PUBLIC_URL to the https
+        origin your reverse proxy will serve.
     2. Put a TLS-terminating reverse proxy in front of 127.0.0.1:8080
         (docs/guides/reverse-proxy.md; snippets in ${INSTALL_ROOT}/current/deploy/proxy/).
     3. systemctl start vaultgate
     4. journalctl -u vaultgate -n 50
         The first-run bootstrap URL is in that log; open it to create the operator account.
+    5. On the account page, under "Vault connection", enter the Bitwarden personal
+        API key and master password. They are stored encrypted; no restart is needed.
+        (To seed them from the file instead, set the three VAULTGATE_BW_* values,
+        or the matching <NAME>_FILE paths under ${CONFIG_DIR}/secrets/, before step 3.)
 END
   else
     cat <<END
     The service is running. If this is a first install, the bootstrap URL is in:
       journalctl -u vaultgate -n 50
+    Connect the vault from the account page (Vault connection) once signed in.
     Reverse proxy snippets: ${INSTALL_ROOT}/current/deploy/proxy/ (docs/guides/reverse-proxy.md).
 END
   fi

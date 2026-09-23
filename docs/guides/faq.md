@@ -57,10 +57,14 @@ client's metadata document when a client identifies itself with a URL.
 
 ## Does vaultgate see my master password?
 
-Yes. The process reads it at start-up, hands it to `bw serve` over loopback to unlock the vault,
-keeps it in memory for the life of the process and zero-fills it on shutdown. It is never written
-to the database or the log. Agents never receive it and cannot obtain it from a token. Anyone
-with root on the host could read process memory, which is why the host should run nothing else.
+Yes. The process hands it to `bw serve` over loopback to unlock the vault, keeps it in memory
+for as long as that connection is in use and zero-fills it when the connection is replaced or on
+shutdown. It is never logged. When you save the connection on the account page it is also stored
+in the database, as AES-256-GCM ciphertext under a key derived from `VAULTGATE_SECRET_KEY`; the
+database and that key together would reveal it, which is why the key is backed up separately.
+Seeding the credentials through the environment and never saving the form keeps them out of the
+database entirely. Agents never receive it and cannot obtain it from a token. Anyone with root on
+the host could read process memory, which is why the host should run nothing else.
 
 ## Can I run it on Alpine?
 
@@ -77,8 +81,9 @@ decrypts your vault. Neither alone is enough. See
 
 ## Does it work with Vaultwarden or bitwarden.eu?
 
-Yes, both, through `VAULTGATE_BW_SERVER`. Vaultwarden needs a personal API key like Bitwarden
-does, and the account must exist before vaultgate starts. See
+Yes, both, through the server field of the vault connection (or `VAULTGATE_BW_SERVER` as a
+first-boot seed). Vaultwarden needs a personal API key like Bitwarden does, and the account must
+exist before vaultgate connects. See
 [Self-hosted Bitwarden](self-hosted-bitwarden.md).
 
 ## Why must the server be on the public internet?

@@ -1,3 +1,5 @@
+import { createSecretBox, STATE_COOKIE_INFO, TOTP_SECRET_INFO } from '../crypto/secret-box.ts';
+
 import { type Bootstrap, createBootstrap } from './bootstrap.ts';
 import { attachSession } from './browser.ts';
 import { createGuards, type Guards } from './guards.ts';
@@ -7,7 +9,6 @@ import { EMPTY } from './pages/template.ts';
 import { createLocalProvider, type IdentityProvider } from './provider.ts';
 import { createIdentityStores } from './repositories/index.ts';
 import { createIdentityRoutes } from './routes.ts';
-import { createSecretBox, STATE_COOKIE_INFO, TOTP_SECRET_INFO } from './secret-box.ts';
 import { createSessionManager } from './session-manager.ts';
 import { cookiePolicyFor, type CookiePolicy } from './sessions.ts';
 import { createStateCodec } from './state-cookie.ts';
@@ -15,10 +16,11 @@ import { createStateCodec } from './state-cookie.ts';
 import type { ClientAddressResolver, IdentityEnvironment } from './context.ts';
 import type { ScryptParameters } from './password.ts';
 import type { Clock, Delay, RandomSource } from './primitives.ts';
+import type { ConnectedClientsRenderer, IdentityServices } from './services.ts';
 import type { AuditSink } from '../audit/event.ts';
 import type { Config } from '../config/index.ts';
 import type { Logger } from '../logger.ts';
-import type { ConnectedClientsRenderer, IdentityServices } from './services.ts';
+import type { VaultConnection } from '../vault/connection.ts';
 import type { Hono, MiddlewareHandler, NotFoundHandler } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -41,6 +43,10 @@ export interface IdentityDependencies {
   The account page's connected-clients section; empty until the OAuth layer supplies it.
   */
   readonly connectedClients?: ConnectedClientsRenderer | undefined;
+  /**
+  Status and changes of the vault connection for the account page (ID-25).
+  */
+  readonly vaultConnection: VaultConnection;
 }
 
 export interface Identity {
@@ -115,6 +121,7 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     passwordParameters: dependencies.passwordParameters,
     absoluteSessionTtlMs: config.sessionTtlMs,
     connectedClients: dependencies.connectedClients ?? (() => EMPTY),
+    vaultConnection: dependencies.vaultConnection,
   };
   return {
     routes: createIdentityRoutes(services),

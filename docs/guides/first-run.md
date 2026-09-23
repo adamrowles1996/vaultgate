@@ -13,9 +13,12 @@ Every start follows the same order (spec §2.3.3):
    problem, not just the first.
 2. Open the SQLite database in `VAULTGATE_DATA_DIR` and apply pending migrations.
 3. If no operator account exists, mint a bootstrap token and log the setup URL once.
-4. Start the Bitwarden backend in the background: check `bw --version`, log in with the API key
-   if the CLI is not yet logged in, start `bw serve` on a loopback port, unlock it with the master
-   password and run a first sync. This takes a few seconds to a minute.
+4. Start the Bitwarden backend in the background, if it has credentials: the connection saved on
+   the account page wins, otherwise the three `VAULTGATE_BW_*` seed variables when all are set.
+   With credentials it checks `bw --version`, logs in with the API key if the CLI is not yet
+   logged in, starts `bw serve` on a loopback port, unlocks it with the master password and runs a
+   first sync; this takes a few seconds to a minute. Without any, it waits for the account page
+   (step 6 below) and `/readyz` says `configured: false`.
 5. Listen on `VAULTGATE_HOST:VAULTGATE_PORT`. The listener comes up before the vault is ready;
    `/readyz` reports the difference.
 
@@ -114,37 +117,73 @@ of inactivity. `/account` shows:
 - your browser sessions with start time, last activity, address and browser;
 - the **sensitive actions**: change e-mail address, change password (signs out every other
   session), set up a new authenticator, generate new recovery codes. Each first asks you to
-  confirm your password; the confirmation lasts five minutes.
+  confirm your password; the confirmation lasts five minutes;
+- the **vault connection** (next section).
 
-## 6. What to back up
+## 6. Connect the vault
+
+The recovery-codes page ends with a **Connect the vault** link when nothing is connected yet;
+it is the **Vault connection** section of the account page. It always shows the state: whether
+credentials are configured and where they came from, the server, the masked account e-mail once
+`bw serve` is up, whether the vault is ready, and the last sync. To change anything, confirm your
+password first (the same five-minute confirmation as the other sensitive actions), then fill in:
+
+| Field                 | What to enter                                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Server                | Leave empty for bitwarden.com. `bitwarden.eu` for the EU cloud, or the `https://` address of a self-hosted server or Vaultwarden. |
+| API key client id     | `user.` followed by a UUID, from Bitwarden **Settings → Security → Keys → View API key**.                                         |
+| API key client secret | From the same page. A trailing space is trimmed.                                                                                  |
+| Master password       | Your Bitwarden master password, exactly as typed in Bitwarden.                                                                    |
+
+**Save and connect** is also the test: vaultgate stores the connection (encrypted under
+`VAULTGATE_SECRET_KEY`), locks and stops the running `bw serve` if there is one, logs in with the
+new key in a fresh CLI app-data directory, unlocks and syncs, and only then retires the old
+session. Success returns you to the section with the new status. A failure puts the previous
+connection back (or leaves the vault unconfigured if there was none), shows one plain reason, and
+never echoes what you typed: a rejected API key, a rejected master password, a refused server, or
+`bw serve` not starting in time; the log has the detail. Secret fields are never filled in for you;
+once a connection exists, leaving one blank keeps the value in use, which is how you rotate the
+master password or the API key on its own without a restart.
+
+The second way is to seed the first boot from the environment: set all three of
+`VAULTGATE_BW_CLIENT_ID`, `VAULTGATE_BW_CLIENT_SECRET` and `VAULTGATE_BW_PASSWORD` (and
+`VAULTGATE_BW_SERVER` if needed) before the first start, as the install guides describe. The
+account page shows such a connection as _seeded from the environment_. It keeps working until you
+save the form, after which the stored connection is the one that counts and the variables are
+ignored; a partial set of the three is logged and ignored.
+
+## 7. What to back up
 
 Two things, together:
 
 - **`VAULTGATE_SECRET_KEY`** (or the file it points at; on a Debian or Ubuntu install the `_FILE`
-  secrets live in `/etc/vaultgate/secrets/`, owned by the `vaultgate` user). It encrypts the stored TOTP secret. Without
-  it the database still opens and every token and session still works, but the authenticator
-  cannot be verified: you would sign in with a recovery code and enrol a new one.
+  secrets live in `/etc/vaultgate/secrets/`, owned by the `vaultgate` user). It encrypts the stored TOTP secret and the
+  vault connection saved on the account page. Without it the database still opens and every token
+  and session still works, but the authenticator cannot be verified (you would sign in with a
+  recovery code and enrol a new one) and the vault connection has to be entered again.
 - **The database**, `vaultgate.sqlite` in `VAULTGATE_DATA_DIR` (`/data` in the container,
   `/var/lib/vaultgate` on Linux, the Azure Files share on Azure).
 
-The `bw/` directory next to the database is the Bitwarden CLI's cache. It is rebuilt by login
-and sync and needs no backup. See [Backup and restore](backup-and-restore.md).
+The `bw/` directory next to the database is the Bitwarden CLI's cache, one numbered
+subdirectory per credential generation. It is rebuilt by login and sync and needs no backup. See
+[Backup and restore](backup-and-restore.md).
 
-## 7. Read `/readyz`
+## 8. Read `/readyz`
 
 Two unauthenticated probes, neither revealing a version or configuration:
 
-| Probe      | Answer                                                                                                                                                         |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/healthz` | `{"status":"ok"}` as soon as the process listens. Container health checks use it.                                                                              |
-| `/readyz`  | `{"status":"ok","vault":{"ready":true,"lastSyncAt":"…"}}` when everything is ready; otherwise `503` with `{"status":"unavailable","failing":[…],"vault":{…}}`. |
+| Probe      | Answer                                                                                                                                                                           |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/healthz` | `{"status":"ok"}` as soon as the process listens. Container health checks use it.                                                                                                |
+| `/readyz`  | `{"status":"ok","vault":{"ready":true,"configured":true,"lastSyncAt":"…"}}` when everything is ready; otherwise `503` with `{"status":"unavailable","failing":[…],"vault":{…}}`. |
 
 `failing` names the components that are not ready:
 
 - `store`: the database is not open. This does not happen after a successful start; if you see
   it, read the log for a migration or filesystem error.
 - `vault`: `bw serve` is not running and unlocked. Normal for the first seconds after start;
-  persistent when something is wrong.
+  persistent when something is wrong, or, with `vault.configured` `false`, simply not connected
+  yet (section 6).
 
 `vault.lastSyncAt` is the time of the last successful sync since start-up, or `null` before the
 first one; a failed sync does not change `ready`.
@@ -157,25 +196,27 @@ result. The vault does not need to be ready for the setup, login and account pag
 The supervisor retries with exponential backoff (1 s doubling to 60 s), so the log shows what it
 is retrying. Look for these lines:
 
-| Log message                                          | Meaning                                                                                                                                                                                          |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bitwarden cli version`                              | `bw --version` worked; the version is logged.                                                                                                                                                    |
-| `bitwarden cli refused`                              | The CLI is older than the minimum (2025.1.0). Retrying cannot help, so the loop stops: install a newer CLI and restart.                                                                          |
-| `vault backend start failed`                         | One attempt failed; `err` says why: the binary was not found (`VAULTGATE_BW_BIN`), login was rejected (API key), unlock was rejected (master password) or `bw serve` did not answer within 30 s. |
-| `bw serve is still settling; retrying unlock`        | Debug level. A freshly started `bw serve` answered `/unlock` with something other than its JSON envelope; the unlock is retried every 250 ms for up to 10 s before it counts as a failure.       |
-| `vault backend unavailable`                          | The same, at `error` level after ten consecutive failures.                                                                                                                                       |
-| `logging in to bitwarden with the api key`           | The CLI reported `unauthenticated`, so `bw login --apikey` runs (after `bw config server` when `VAULTGATE_BW_SERVER` is set).                                                                    |
-| `initial vault sync failed`                          | Login and unlock worked but the first sync did not. Readiness is unaffected; reads serve from the cached vault and the sync is retried on the schedule.                                          |
-| `vault synced`                                       | A sync succeeded; `kind` says whether it was the `initial` or a `scheduled` one and `durationMs` how long it took.                                                                               |
-| `vault sync failed`                                  | A scheduled sync failed; `err` says why. Readiness is unaffected and the next sync runs on schedule.                                                                                             |
-| `vault sync answered without its envelope; retrying` | Debug level. `/sync` answered with something other than its JSON envelope while `bw serve` was still running; it is retried once after 2 s before being reported.                                |
-| `vault ready`                                        | Unlocked. `/readyz` turns `200`.                                                                                                                                                                 |
-| `bw serve exited`                                    | The child died; it is restarted with backoff. `code`, `signal` and `uptimeMs` say how and after how long, and `output` holds the last lines it wrote (session keys and passwords redacted).      |
+| Log message                                           | Meaning                                                                                                                                                                                          |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bitwarden cli version`                               | `bw --version` worked; the version is logged.                                                                                                                                                    |
+| `bitwarden cli refused`                               | The CLI is older than the minimum (2025.1.0). Retrying cannot help, so the loop stops: install a newer CLI and restart.                                                                          |
+| `vault backend start failed`                          | One attempt failed; `err` says why: the binary was not found (`VAULTGATE_BW_BIN`), login was rejected (API key), unlock was rejected (master password) or `bw serve` did not answer within 30 s. |
+| `bw serve is still settling; retrying unlock`         | Debug level. A freshly started `bw serve` answered `/unlock` with something other than its JSON envelope; the unlock is retried every 250 ms for up to 10 s before it counts as a failure.       |
+| `vault backend unavailable`                           | The same, at `error` level after ten consecutive failures.                                                                                                                                       |
+| `logging in to bitwarden with the api key`            | The CLI reported `unauthenticated`, so `bw login --apikey` runs (after `bw config server` when the connection names a server, or to reset a reused directory to the default).                    |
+| `vault reconfigured` / `vault reconfiguration failed` | The account page changed the connection: the new generation is ready, or it failed (`err` says why) and the previous connection is back.                                                         |
+| `initial vault sync failed`                           | Login and unlock worked but the first sync did not. Readiness is unaffected; reads serve from the cached vault and the sync is retried on the schedule.                                          |
+| `vault synced`                                        | A sync succeeded; `kind` says whether it was the `initial` or a `scheduled` one and `durationMs` how long it took.                                                                               |
+| `vault sync failed`                                   | A scheduled sync failed; `err` says why. Readiness is unaffected and the next sync runs on schedule.                                                                                             |
+| `vault sync answered without its envelope; retrying`  | Debug level. `/sync` answered with something other than its JSON envelope while `bw serve` was still running; it is retried once after 2 s before being reported.                                |
+| `vault ready`                                         | Unlocked. `/readyz` turns `200`.                                                                                                                                                                 |
+| `bw serve exited`                                     | The child died; it is restarted with backoff. `code`, `signal` and `uptimeMs` say how and after how long, and `output` holds the last lines it wrote (session keys and passwords redacted).      |
 
-Typical causes: a wrong `VAULTGATE_BW_SERVER` for an EU or self-hosted account, a client secret
-that was pasted with a trailing space, a master password that has since been changed, or a
-Vaultwarden account that does not yet exist. Rotating the master password in Bitwarden means
-updating `VAULTGATE_BW_PASSWORD` (or its file) and restarting; nothing else changes.
+Typical causes: the wrong server for an EU or self-hosted account, a client secret that was
+pasted with a trailing space, a master password that has since been changed, or a Vaultwarden
+account that does not yet exist. All of them are fixed from the account page's vault connection
+(section 6) without a restart; rotating the master password in Bitwarden means entering the new
+one there and leaving the client secret blank.
 
 After the vault is ready it is synced every `VAULTGATE_BW_SYNC_INTERVAL` (default 15 minutes,
 1 minute to 24 hours). A failed sync is logged as a warning and does not affect readiness. A

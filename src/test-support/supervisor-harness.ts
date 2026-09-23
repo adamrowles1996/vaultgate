@@ -11,6 +11,7 @@ import { ManualClock } from './manual-clock.ts';
 import { unwrapOk } from './result.ts';
 
 import type { FetchFunction } from '../bitwarden/api.ts';
+import type { StoredVaultSettings } from '../bitwarden/settings.ts';
 import type { Config } from '../config/index.ts';
 
 const HARNESS_PORT = 43_210;
@@ -20,7 +21,10 @@ export const CLIENT_SECRET = 'CANARY-CLIENT-SECRET';
 const UNAUTHENTICATED = '{"serverUrl":null,"lastSync":null,"status":"unauthenticated"}';
 const MAX_TURNS = 200;
 
-export function harnessConfig(environment: Record<string, string> = {}): Config {
+/**
+The environment-seeded configuration; an override of `undefined` removes a variable.
+*/
+export function harnessConfig(environment: Record<string, string | undefined> = {}): Config {
   const loaded = loadConfig({
     VAULTGATE_PUBLIC_URL: 'https://vault.example.com',
     VAULTGATE_SECRET_KEY: Buffer.alloc(32, 7).toString('base64'),
@@ -44,6 +48,10 @@ export interface HarnessOptions {
   readonly config?: Config;
   readonly fake?: FakeBwServe;
   readonly fetch?: FetchFunction;
+  /**
+  The account-page connection as the store holds it; none by default.
+  */
+  readonly stored?: StoredVaultSettings;
 }
 
 /**
@@ -63,20 +71,31 @@ export class SupervisorHarness {
   readonly config: Config;
   readonly fake: FakeBwServe;
   readonly fetch: FetchFunction;
+  readonly stored: StoredVaultSettings;
+  /**
+  Every app-data directory the supervisor asked to remove, in order (VAULT-8).
+  */
+  readonly removed: string[] = [];
 
   constructor(options: HarnessOptions = {}) {
     this.config = options.config ?? harnessConfig();
     this.fake = options.fake ?? new FakeBwServe({ state: 'locked' });
     this.fetch = options.fetch ?? this.fake.fetch;
+    this.stored = options.stored ?? { kind: 'none' };
   }
 
   start(): VaultSupervisor {
     return startVaultSupervisor(this.config, this.logs.logger, {
       environment: { PATH: '/usr/bin', HOME: '/home/vaultgate', SECRET_THING: 'leak' },
+      stored: this.stored,
       spawn: this.spawner.spawn,
       clock: this.clock,
       fetch: this.fetch,
       allocatePort: () => Promise.resolve(HARNESS_PORT),
+      removeDirectory: (path) => {
+        this.removed.push(path);
+        return Promise.resolve();
+      },
     });
   }
 

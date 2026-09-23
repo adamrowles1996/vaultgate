@@ -25,12 +25,12 @@ recorded evidence in the release PR):
 
 ## 12.3 Bitwarden servers
 
-| Server                | Supported | Notes                                                      |
-| --------------------- | --------- | ---------------------------------------------------------- |
-| bitwarden.com (US)    | yes       | default                                                    |
-| bitwarden.eu          | yes       | `VAULTGATE_BW_SERVER=bitwarden.eu`                         |
-| Self-hosted Bitwarden | yes       | `VAULTGATE_BW_SERVER=https://…`                            |
-| Vaultwarden           | yes       | `VAULTGATE_BW_SERVER=https://…`; personal API key required |
+| Server                | Supported | Notes                                                                |
+| --------------------- | --------- | -------------------------------------------------------------------- |
+| bitwarden.com (US)    | yes       | default                                                              |
+| bitwarden.eu          | yes       | server `bitwarden.eu` (account page or `VAULTGATE_BW_SERVER`)        |
+| Self-hosted Bitwarden | yes       | server `https://…` (account page or `VAULTGATE_BW_SERVER`)           |
+| Vaultwarden           | yes       | server `https://…` (account page or seed); personal API key required |
 
 - **COMPAT-1** The minimum Bitwarden CLI version is recorded in `src/bitwarden/versions.ts` and
   in the Dockerfile; the two are kept equal by a test.
