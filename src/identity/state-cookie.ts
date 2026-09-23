@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { MS_PER_MINUTE } from './primitives.ts';
 
-import type { SecretBox } from './secret-box.ts';
+import type { SecretBox } from '../crypto/secret-box.ts';
 
 export const STATE_TTL_MS = 10 * MS_PER_MINUTE;
 

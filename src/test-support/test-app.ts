@@ -20,7 +20,7 @@ const TEST_EPOCH_MS = Date.parse('2026-09-22T12:00:00.000Z');
 export const READY: Readiness = {
   ready: true,
   failing: [],
-  vault: { ready: true, lastSyncAt: '2026-09-22T12:00:00.000Z' },
+  vault: { ready: true, configured: true, lastSyncAt: '2026-09-22T12:00:00.000Z' },
 };
 
 class RecordingAuditSink implements AuditSink {

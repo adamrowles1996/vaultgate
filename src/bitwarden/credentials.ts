@@ -1,20 +1,32 @@
 /**
- * The vault secrets held for the life of the process (VAULT-15). The master
- * password and API client secret live in Buffers so shutdown can overwrite
- * them; strings are immutable and would linger until collected. The object
- * has no enumerable secret properties and no `toJSON`, so an accidental
- * serialisation yields nothing.
+ * One generation of vault secrets (VAULT-15). The master password and API
+ * client secret live in Buffers so the supervisor can overwrite them when the
+ * generation is retired; strings are immutable and would linger until
+ * collected. The object has no enumerable secret properties and no `toJSON`,
+ * so an accidental serialisation yields nothing.
  */
+export interface CredentialValues {
+  readonly clientId: string;
+  readonly clientSecret: string;
+  readonly masterPassword: string;
+  /**
+  `bitwarden.eu` or an `https://` URL; `undefined` is the bitwarden.com default.
+  */
+  readonly server: string | undefined;
+}
+
 export class Credentials {
   readonly #masterPassword: Buffer;
   readonly #clientSecret: Buffer;
   #disposed = false;
   readonly clientId: string;
+  readonly server: string | undefined;
 
-  constructor(clientId: string, masterPassword: string, clientSecret: string) {
-    this.clientId = clientId;
-    this.#masterPassword = Buffer.from(masterPassword, 'utf8');
-    this.#clientSecret = Buffer.from(clientSecret, 'utf8');
+  constructor(values: CredentialValues) {
+    this.clientId = values.clientId;
+    this.server = values.server;
+    this.#masterPassword = Buffer.from(values.masterPassword, 'utf8');
+    this.#clientSecret = Buffer.from(values.clientSecret, 'utf8');
   }
 
   #read(buffer: Buffer): string {

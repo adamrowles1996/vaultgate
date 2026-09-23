@@ -12,7 +12,9 @@ import {
   tableHead,
   when,
 } from './template.ts';
+import { vaultConnectionSection, type VaultFormValues } from './vault-connection.ts';
 
+import type { VaultConnectionStatus } from '../../vault/connection.ts';
 import type { Enrolment } from '../totp.ts';
 
 interface SessionView {
@@ -37,6 +39,11 @@ export interface AccountView {
   Filled by the OAuth layer with the connected clients; empty until then.
   */
   readonly connectedClients: Html;
+  readonly vault: VaultConnectionStatus;
+  /**
+  The non-secret vault fields to show again after a failed submission.
+  */
+  readonly vaultForm: VaultFormValues;
 }
 
 const SESSION_COLUMNS = ['Started', 'Last seen', 'Address', 'Browser'] as const;
@@ -122,7 +129,7 @@ export function renderAccount(view: AccountView): string {
         )}
         ${when(view.isReauthenticated, () => sensitiveActions(view, email))}
       </section>
-      ${auditExportSection(view)}`,
+      ${vaultConnectionSection(view)} ${auditExportSection(view)}`,
   );
 }
 

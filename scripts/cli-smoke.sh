@@ -8,13 +8,10 @@ set -euo pipefail
 data_dir="$(mktemp -d)"
 trap 'rm -rf "$data_dir"' EXIT
 export VAULTGATE_DATA_DIR="$data_dir"
-# Placeholders satisfy the configuration schema; no vault or server is contacted.
+# Only the two required settings; no vault or server is contacted.
 export VAULTGATE_PUBLIC_URL=http://127.0.0.1:18080
 VAULTGATE_SECRET_KEY="$(head -c 32 /dev/urandom | base64)"
 export VAULTGATE_SECRET_KEY
-export VAULTGATE_BW_PASSWORD=smoke-test-placeholder
-export VAULTGATE_BW_CLIENT_ID=user.smoke-test
-export VAULTGATE_BW_CLIENT_SECRET=smoke-test-placeholder
 
 from=2026-01-01T00:00:00Z
 to=2026-12-31T00:00:00Z

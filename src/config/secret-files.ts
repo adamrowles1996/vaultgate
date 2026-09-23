@@ -42,7 +42,9 @@ function describeError(error: unknown): string {
 
 /**
  * Applies every `<NAME>_FILE` variable: the file's contents replace `<NAME>`.
- * Unreadable files are reported as issues; world-readable ones as warnings.
+ * An empty file means unset, as an empty variable does (CFG-1), so a mounted
+ * but blank secret file leaves the variable to its default. Unreadable files
+ * are reported as issues; world-readable ones as warnings.
  */
 export function resolveSecretFiles(
   environment: Environment,
@@ -59,7 +61,7 @@ export function resolveSecretFiles(
     }
     try {
       const file = readSecretFile(path);
-      merged[name] = file.value;
+      merged[name] = file.value === '' ? undefined : file.value;
       if (file.worldReadable) {
         warnings.push(
           `${fileVariable}: ${path} is world-readable; restrict it to the service user`,

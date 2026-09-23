@@ -5,13 +5,10 @@ set -euo pipefail
 
 port="${VAULTGATE_PORT:-18080}"
 export VAULTGATE_HOST=127.0.0.1 VAULTGATE_PORT="$port"
-# Placeholders satisfy the configuration schema; no vault is contacted by the smoke boot.
+# Only the two required settings; the vault backend starts unconfigured (no credentials).
 VAULTGATE_PUBLIC_URL="http://127.0.0.1:${port}"
 VAULTGATE_SECRET_KEY="$(head -c 32 /dev/urandom | base64)"
 export VAULTGATE_PUBLIC_URL VAULTGATE_SECRET_KEY
-export VAULTGATE_BW_PASSWORD=smoke-test-placeholder
-export VAULTGATE_BW_CLIENT_ID=user.smoke-test
-export VAULTGATE_BW_CLIENT_SECRET=smoke-test-placeholder
 
 "$@" &
 pid=$!

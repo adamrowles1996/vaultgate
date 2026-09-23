@@ -38,6 +38,7 @@
 | `tokens`                 | `id`, `token_hash`, `kind` (`access`\|`refresh`), `family_id`, `parent_id`, `replaced_by_id`, `client_id`, `consent_id`, `scopes` (JSON), `resource`, `issued_at`, `expires_at`, `revoked_at`, `last_used_at` |
 | `pending_authorizations` | `id`, `session_binding_hash`, `parameters` (JSON), `expires_at`                                                                                                                                               |
 | `audit_events`           | `id`, `at`, `category`, `action`, `outcome`, `operator_id`, `client_id`, `token_prefix`, `item_id`, `field`, `request_id`, `ip`, `duration_ms`, `details` (JSON, secret-free)                                 |
+| `vault_settings`         | `id` (always `1`), `server_url`, `client_id`, `client_secret_ciphertext`, `master_password_ciphertext`, `updated_at`, `updated_by` (operator id); schema v3 (STORE-9)                                         |
 | `schema_migrations`      | `version`, `applied_at`, `checksum`                                                                                                                                                                           |
 
 - `operators.email` (migration `operator-email`) is the login identifier: stored lower-cased,
@@ -47,6 +48,14 @@
   reads it.
 - **STORE-4** No table stores a raw token, code, session id, password or TOTP secret; hashes or
   ciphertext only.
+- **STORE-9** The vault connection saved on the account page (ID-25) is the single
+  `vault_settings` row. The API key client secret and the master password are sealed by the
+  same AES-256-GCM secret box as the TOTP secret (ID-9) under two further HKDF purposes of
+  `VAULTGATE_SECRET_KEY`, `vaultgate/vault-client-secret/v1` and
+  `vaultgate/vault-master-password/v1`; the client id and server are plain. A row that does not
+  open under the current key is reported as undecryptable and ignored at start-up (VAULT-18),
+  never mistaken for a value. The row is written before the backend switches to it and put back
+  (or removed) if the switch fails, so what is stored is always what runs.
 - **STORE-5** Indexes exist for every lookup on the request hot path: `tokens(token_hash)`,
   `sessions(id_hash)`, `authorization_codes(code_hash)`, `audit_events(at)`.
 
@@ -60,8 +69,10 @@
 ## 7.4 Backup and restore
 
 - **STORE-7** The documented backup is `sqlite3 vaultgate.sqlite ".backup '<dest>'"` (or copying
-  the file while the process is stopped). `bw` app-data under `${DATA_DIR}/bw` is a cache and
+  the file while the process is stopped). `bw` app-data under `${DATA_DIR}/bw/<n>` is a cache and
   needs no backup; it is rebuilt by login + sync.
-- **STORE-8** `VAULTGATE_SECRET_KEY` (used for TOTP-secret encryption and session-binding HMACs)
-  MUST be backed up with the database; without it stored TOTP secrets are unrecoverable and the
-  operator must use a recovery code and re-enrol.
+- **STORE-8** `VAULTGATE_SECRET_KEY` (used for TOTP-secret encryption, the stored vault
+  connection, STORE-9, and session-binding HMACs) MUST be backed up with the database; without it
+  stored TOTP secrets are unrecoverable, the operator must use a recovery code and re-enrol, and
+  the vault connection must be entered again on the account page. The database together with the
+  key yields the vault credentials, which is why the key is backed up separately.

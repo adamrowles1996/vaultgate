@@ -137,7 +137,8 @@ async function completeSetup(
     requestId: context.get('requestId'),
     details: { email: input.email },
   });
-  return context.html(renderRecoveryCodes(recoveryCodes));
+  const vault = await services.vaultConnection.status();
+  return context.html(renderRecoveryCodes(recoveryCodes, { connectVault: !vault.configured }));
 }
 
 export function registerSetupRoutes(

@@ -9,19 +9,23 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 
 - **VAULT-1** `src/bitwarden/serve-process.ts` is the only module that spawns processes (ARCH-2).
   It runs `bw serve --hostname 127.0.0.1 --port <free port chosen by binding port 0 first>`
-  with `BITWARDENCLI_APPDATA_DIR=${DATA_DIR}/bw` and a minimal environment (no inherited
+  with `BITWARDENCLI_APPDATA_DIR=${DATA_DIR}/bw/<n>` (`n` is the credential generation, VAULT-8;
+  `1` at start-up) and a minimal environment (no inherited
   variables other than `PATH`, `HOME`, `TMPDIR`; vaultgate adds `BW_NOINTERACTION=true` so the
   CLI can never wait on a prompt).
 - **VAULT-2** The `bw` binary path comes from `VAULTGATE_BW_BIN` (default: `bw` on `PATH`). At
   start-up vaultgate runs `bw --version`, logs it, and refuses versions below the minimum recorded
   in `src/bitwarden/versions.ts`.
-- **VAULT-3** Server selection: if `VAULTGATE_BW_SERVER` is set, `bw config server <url>` is run
-  before login. It accepts any `https://` URL (self-hosted / Vaultwarden) and the literal
-  `bitwarden.eu`.
+- **VAULT-3** Server selection: before a login, `bw config server <url>` is run when the
+  connection names a server (any `https://` URL for self-hosted / Vaultwarden, or the literal
+  `bitwarden.eu`). When it names none but the app-data directory in use still records a server
+  from an earlier connection, `bw config server bitwarden.com` resets the CLI to its cloud
+  default first, so a login never goes to a server the connection no longer names. The server
+  comes from the stored connection or, for a seed, `VAULTGATE_BW_SERVER` (VAULT-18).
 - **VAULT-4** Login: if `bw status` (run before `bw serve`) reports `unauthenticated`, vaultgate
   runs `bw login --apikey` with `BW_CLIENTID` and `BW_CLIENTSECRET` in the child environment only.
-  Unlock: `POST /unlock` with the master password in the request body over loopback. Both
-  secrets are read at start-up and kept only in process memory.
+  Unlock: `POST /unlock` with the master password in the request body over loopback. The
+  credentials are resolved once per generation (VAULT-18) and kept only in process memory.
 - **VAULT-5** Readiness is `true` only after `GET /status` reports `unlocked`. Until then `/readyz`
   answers `503` and MCP tool calls return a structured `vault_unavailable` error.
 - **VAULT-6** If the child exits, vaultgate restarts it with exponential backoff (1 s → 60 s),
@@ -43,7 +47,31 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 - **VAULT-7** On `SIGTERM`/`SIGINT` vaultgate calls `POST /lock`, then sends `SIGTERM` to the
   child and waits up to 5 s before `SIGKILL`, logging `vault locked` and `bw serve stopped` as each
   step completes.
-- **VAULT-8** vaultgate never calls `bw logout` and never deletes the CLI app-data directory.
+- **VAULT-8** vaultgate never calls `bw logout`. Instead each credential generation (the one
+  resolved at start-up and every account-page reconfiguration, VAULT-18) gets its own CLI
+  app-data directory, `${DATA_DIR}/bw/<n>` with `n` counting from 1 per process. A switch
+  removes whatever a previous process left under the new number and logs in afresh there, so an
+  old session is never reused and no logout is needed; once the new generation is unlocked the
+  retired generation's directory is deleted, and when the switch fails the new generation's
+  directory is deleted and the previous one, still intact, is resumed. A directory whose session
+  may still be wanted is never deleted, and `bw/1` survives restarts so an unchanged connection
+  reuses its session (VAULT-4).
+- **VAULT-18** Credential source and reconfiguration. At start-up the backend resolves its
+  credentials in this order: the connection stored by the account page (`vault_settings`,
+  STORE-9, decrypted under `VAULTGATE_SECRET_KEY`); otherwise the environment seed when all
+  three of `VAULTGATE_BW_CLIENT_ID`, `VAULTGATE_BW_CLIENT_SECRET` and `VAULTGATE_BW_PASSWORD` are
+  set (a partial set is logged and ignored; a stored row that does not decrypt is logged and
+  skipped); otherwise the backend is _unconfigured_: no process is spawned, `/readyz` answers
+  `503` naming `vault` with `configured: false`, and tool calls return `vault_unavailable` as for
+  a locked vault. `reconfigure(credentials)` (driven by ID-25) locks and stops the running child
+  (VAULT-7 steps), starts the new generation in a fresh app-data directory (VAULT-8: version
+  gate, `bw config server`, `bw login --apikey`, `bw serve`, unlock, initial sync), and only then
+  retires the old one; readiness is `false` in between. A failure at any step stops whatever was
+  started, restores the previous generation (or the unconfigured state) and returns
+  `vault_unavailable` with one fixed, secret-free phrase per cause (rejected API key, rejected
+  master password, refused server, `bw serve` not answering, CLI too old, or "see the log");
+  the underlying error is logged. Only one reconfiguration runs at a time and none during
+  shutdown; both are refused with `vault_unavailable`.
 
 ## 5.2 Synchronisation
 
@@ -109,7 +137,9 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 
 ## 5.5 Secret material in memory
 
-- **VAULT-15** The master password and API secret are held in a single `Credentials` object,
-  passed by reference, and zero-filled (`Buffer.fill(0)`) on shutdown. They are never
-  serialised, never placed on a `Config` object that is logged, and the logger redacts the
-  field names regardless (`masterPassword`, `clientSecret`).
+- **VAULT-15** The master password and API secret of a generation are held in a single
+  `Credentials` object, passed by reference, and zero-filled (`Buffer.fill(0)`) when the
+  generation is retired (a successful switch, a failed switch's new generation) and on shutdown.
+  They are never serialised, never placed on a `Config` object that is logged, and the logger
+  redacts the field names regardless (`masterPassword`, `clientSecret`). At rest they exist only
+  as the `vault_settings` ciphertext (STORE-9).

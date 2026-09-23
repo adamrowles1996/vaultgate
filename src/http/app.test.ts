@@ -42,19 +42,19 @@ describe('createApp', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toStrictEqual({
       status: 'ok',
-      vault: { ready: true, lastSyncAt: '2026-09-22T12:00:00.000Z' },
+      vault: { ready: true, configured: true, lastSyncAt: '2026-09-22T12:00:00.000Z' },
     });
   });
 
   it('OPS-4 answers 503 naming the failing components when not ready', async () => {
-    const vault = { ready: false, lastSyncAt: null };
+    const vault = { ready: false, configured: false, lastSyncAt: null };
     const { app } = appWithLogSink(() => ({ ready: false, failing: ['store', 'vault'], vault }));
     const response = await app.request('/readyz');
     expect(response.status).toBe(503);
     expect(await response.json()).toStrictEqual({
       status: 'unavailable',
       failing: ['store', 'vault'],
-      vault: { ready: false, lastSyncAt: null },
+      vault: { ready: false, configured: false, lastSyncAt: null },
     });
   });
 

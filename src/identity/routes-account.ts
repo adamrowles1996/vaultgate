@@ -13,6 +13,7 @@ import {
 import { accountSubject, ipSubject } from './login-throttle.ts';
 import { type AccountView, renderAccount, renderTotpRotation } from './pages/account.ts';
 import { renderRecoveryCodes } from './pages/recovery-codes.ts';
+import { EMPTY_VAULT_FORM, type VaultFormValues } from './pages/vault-connection.ts';
 import { checkPasswordPolicy, hashPassword, isCorrectPassword } from './password.ts';
 import { loginLocation } from './provider.ts';
 import { generateRecoveryCodes, hashRecoveryCode } from './recovery-codes.ts';
@@ -30,6 +31,7 @@ const NOTICES: Readonly<Record<string, string>> = {
   'totp-rotated': 'Your authenticator has been replaced.',
   'email-set': 'E-mail address saved. Sign in with it from now on.',
   'email-changed': 'E-mail address changed. Sign in with the new one from now on.',
+  'vault-updated': 'Vault connection saved. The backend is using it now.',
 };
 
 /**
@@ -42,12 +44,20 @@ export interface Authenticated {
   readonly operator: OperatorRecord;
 }
 
-export function accountView(
+export interface AccountViewOptions {
+  readonly notice?: string | undefined;
+  readonly error?: string | undefined;
+  /**
+  The vault form as submitted, shown again with the error; secrets are never part of it.
+  */
+  readonly vaultForm?: VaultFormValues;
+}
+
+export async function accountView(
   services: IdentityServices,
   authenticated: Authenticated,
-  notice: string | undefined,
-  error: string | undefined,
-): AccountView {
+  options: AccountViewOptions = {},
+): Promise<AccountView> {
   const { session, operator } = authenticated;
   const sessions = services.sessions.list(operator.id).map((record) => ({
     createdAt: new Date(record.createdAt).toISOString(),
@@ -61,9 +71,11 @@ export function accountView(
     csrfToken: session.csrfToken,
     isReauthenticated: session.isReauthenticated,
     sessions,
-    notice,
-    error,
+    notice: options.notice,
+    error: options.error,
     connectedClients: services.connectedClients(session),
+    vault: await services.vaultConnection.status(),
+    vaultForm: options.vaultForm ?? EMPTY_VAULT_FORM,
   };
 }
 
@@ -141,13 +153,8 @@ async function reauthenticate(context: IdentityContext, services: IdentityServic
       ...auditEvent(context, services, 'reauthentication.failed', operator.id),
       outcome: 'failure',
     });
-    const view = accountView(
-      services,
-      authenticated,
-      undefined,
-      'That password was not recognised.',
-    );
-    return context.html(renderAccount(view), 401);
+    const error = 'That password was not recognised.';
+    return context.html(renderAccount(await accountView(services, authenticated, { error })), 401);
   }
   services.sessions.markReauthenticated(session.idHash);
   services.audit.record(auditEvent(context, services, 'reauthentication.succeeded', operator.id));
@@ -163,7 +170,7 @@ async function changePassword(context: IdentityContext, services: IdentityServic
   const { session, operator } = authenticated;
   const password = checkPasswordPolicy(field(form, 'password'));
   if (!password.ok) {
-    const view = accountView(services, authenticated, undefined, password.error.message);
+    const view = await accountView(services, authenticated, { error: password.error.message });
     return context.html(renderAccount(view), 400);
   }
   const hash = await hashPassword(password.value, services.random, services.passwordParameters);
@@ -236,7 +243,7 @@ export function registerAccountRoutes(
   app: Hono<IdentityEnvironment>,
   services: IdentityServices,
 ): void {
-  app.get('/account', (context) => {
+  app.get('/account', async (context) => {
     const session = context.get('session');
     const operator =
       session === undefined ? undefined : services.stores.operators.findById(session.operatorId);
@@ -245,7 +252,7 @@ export function registerAccountRoutes(
     }
     const notice = NOTICES[context.req.query('notice') ?? ''];
     return context.html(
-      renderAccount(accountView(services, { session, operator }, notice, undefined)),
+      renderAccount(await accountView(services, { session, operator }, { notice })),
     );
   });
   app.post('/account/reauthenticate', (context) => reauthenticate(context, services));

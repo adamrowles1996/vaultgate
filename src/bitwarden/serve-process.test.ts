@@ -21,7 +21,7 @@ function cliWith(
 ): BwCli {
   return new BwCli({
     bin: '/opt/bw/bw',
-    dataDir: '/data',
+    appDataDirectory: '/data/bw/1',
     environment,
     spawn: spawner.spawn,
     clock,
@@ -45,7 +45,7 @@ describe('BwCli environment', () => {
         PATH: '/usr/bin',
         HOME: '/home/vaultgate',
         TMPDIR: '/tmp/x',
-        BITWARDENCLI_APPDATA_DIR: '/data/bw',
+        BITWARDENCLI_APPDATA_DIR: '/data/bw/1',
         BW_NOINTERACTION: 'true',
       },
     });
@@ -187,7 +187,12 @@ describe('BwCli.status', () => {
 describe('BwCli.login', () => {
   it('VAULT-4 passes the api key to that child only', async () => {
     const spawner = new FakeSpawner({ login: finishing('You are logged in!\n') });
-    const credentials = new Credentials('user.abc', 'master-pw', 'client-secret');
+    const credentials = new Credentials({
+      clientId: 'user.abc',
+      masterPassword: 'master-pw',
+      clientSecret: 'client-secret',
+      server: undefined,
+    });
     const cli = cliWith(spawner);
     expect(await cli.login(credentials)).toStrictEqual({ ok: true, value: undefined });
     expect(spawner.records[0]).toMatchObject({
@@ -202,7 +207,14 @@ describe('BwCli.login', () => {
   it('reports a rejected login without the secret', async () => {
     const spawner = new FakeSpawner({ login: finishing('', 1) });
     const error = unwrapFail(
-      await cliWith(spawner).login(new Credentials('user.abc', 'pw', 'client-secret')),
+      await cliWith(spawner).login(
+        new Credentials({
+          clientId: 'user.abc',
+          masterPassword: 'pw',
+          clientSecret: 'client-secret',
+          server: undefined,
+        }),
+      ),
     );
     expect(error.message).toBe('bw login exited with status 1');
   });

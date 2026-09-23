@@ -24,7 +24,7 @@ function clientFor(
   const clock = new ManualClock(Date.UTC(2026, 8, 22, 12, 0, 12));
   const api = new BwServeApi(() => (isOffline ? undefined : ENDPOINT), fake.fetch);
   const client = new BwServeVaultClient(
-    serverUrl === undefined ? { api, clock } : { api, clock, serverUrl },
+    serverUrl === undefined ? { api, clock } : { api, clock, serverUrl: () => serverUrl },
   );
   return { client, clock };
 }

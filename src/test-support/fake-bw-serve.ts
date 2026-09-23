@@ -51,13 +51,16 @@ interface StaleRead {
 }
 
 export class FakeBwServe {
-  readonly #masterPassword: string;
   readonly #revisionLag: number;
   readonly #stale = new Map<string, StaleRead>();
   readonly #overrides = new Map<string, string>();
   readonly #app = new Hono();
   #revision = 0;
   #nextId = 1;
+  /**
+  What `/unlock` accepts; settable so a credential switch can be exercised.
+  */
+  masterPassword: string;
   readonly requests: RecordedRequest[] = [];
   readonly items = new Map<string, FixtureItem>();
   readonly folders = fixtureFolders();
@@ -86,7 +89,7 @@ export class FakeBwServe {
   };
 
   constructor(options: FakeBwServeOptions = {}) {
-    this.#masterPassword = options.masterPassword ?? CANARY.masterPassword;
+    this.masterPassword = options.masterPassword ?? CANARY.masterPassword;
     this.state = options.state ?? 'unlocked';
     this.#revisionLag = options.revisionLag ?? 0;
     for (const item of fixtureItems()) {
@@ -136,7 +139,7 @@ export class FakeBwServe {
       if (this.state === 'unauthenticated') {
         return context.json(failure('You are not logged in.'), 400);
       }
-      if (body['password'] !== this.#masterPassword) {
+      if (body['password'] !== this.masterPassword) {
         return context.json(failure('Invalid master password.'), 400);
       }
       this.state = 'unlocked';

@@ -32,9 +32,11 @@ export const environmentSchema = z.object({
   VAULTGATE_ALLOWED_ORIGINS: originListSchema,
   VAULTGATE_DATA_DIR: z.string().min(1).default('./data'),
   VAULTGATE_SECRET_KEY: secretKeySchema,
-  VAULTGATE_BW_PASSWORD: z.string().min(1),
-  VAULTGATE_BW_CLIENT_ID: z.string().min(1),
-  VAULTGATE_BW_CLIENT_SECRET: z.string().min(1),
+  // Seeds for the first boot only (CFG-5): once the operator saves a vault
+  // connection on the account page the stored row wins and these are ignored.
+  VAULTGATE_BW_PASSWORD: z.string().min(1).optional(),
+  VAULTGATE_BW_CLIENT_ID: z.string().min(1).optional(),
+  VAULTGATE_BW_CLIENT_SECRET: z.string().min(1).optional(),
   VAULTGATE_BW_SERVER: bitwardenServerSchema,
   VAULTGATE_BW_BIN: z.string().min(1).default('bw'),
   VAULTGATE_BW_SYNC_INTERVAL: durationSchema({ min: '1m', max: '24h', fallback: '15m' }),

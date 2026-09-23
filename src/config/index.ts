@@ -16,7 +16,10 @@ export type { LogLevel } from './schema.ts';
 interface BitwardenConfig {
   readonly server: string | undefined;
   readonly bin: string;
-  readonly clientId: string;
+  /**
+  First-boot seed; the account page's stored connection takes precedence (CFG-5).
+  */
+  readonly clientId: string | undefined;
   readonly syncIntervalMs: number;
 }
 
@@ -25,8 +28,8 @@ Secret material, kept together so it is masked as one unit when described.
 */
 interface Secrets {
   readonly secretKey: Buffer;
-  readonly masterPassword: string;
-  readonly clientSecret: string;
+  readonly masterPassword: string | undefined;
+  readonly clientSecret: string | undefined;
   readonly bootstrapToken: string | undefined;
 }
 

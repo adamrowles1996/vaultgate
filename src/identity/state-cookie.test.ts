@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { createSecretBox, STATE_COOKIE_INFO } from '../crypto/secret-box.ts';
 import { fixedRandom } from '../test-support/identity.ts';
 
-import { createSecretBox, STATE_COOKIE_INFO } from './secret-box.ts';
 import { createStateCodec } from './state-cookie.ts';
 
 const box = createSecretBox(Buffer.alloc(32, 3), STATE_COOKIE_INFO, fixedRandom());

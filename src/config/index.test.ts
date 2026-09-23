@@ -18,6 +18,7 @@ const REQUIRED = {
 const files: Record<string, SecretFile> = {
   '/run/secrets/master': { value: 'master-from-file', worldReadable: false },
   '/run/secrets/key': { value: KEY_BYTES.toString('hex'), worldReadable: true },
+  '/run/secrets/blank': { value: '', worldReadable: false },
 };
 
 function readSecretFile(path: string): SecretFile {
@@ -130,6 +131,31 @@ describe('loadConfig', () => {
     });
   });
 
+  it('CFG-5 needs no Bitwarden credentials: the account page can supply them later', () => {
+    const { config } = unwrapOk(
+      load({
+        VAULTGATE_PUBLIC_URL: REQUIRED.VAULTGATE_PUBLIC_URL,
+        VAULTGATE_SECRET_KEY: REQUIRED.VAULTGATE_SECRET_KEY,
+      }),
+    );
+    expect(config.bitwarden.clientId).toBeUndefined();
+    expect(config.secrets.masterPassword).toBeUndefined();
+    expect(config.secrets.clientSecret).toBeUndefined();
+    expect(describeConfig(config)['secrets']).toStrictEqual({
+      secretKey: '[set]',
+      masterPassword: '[unset]',
+      clientSecret: '[unset]',
+      bootstrapToken: '[unset]',
+    });
+  });
+
+  it('CFG-1 treats an empty secret file as unset, like an empty variable', () => {
+    const { config } = unwrapOk(
+      load({ ...REQUIRED, VAULTGATE_BW_PASSWORD_FILE: '/run/secrets/blank' }),
+    );
+    expect(config.secrets.masterPassword).toBeUndefined();
+  });
+
   it('treats empty values as unset', () => {
     const { config } = unwrapOk(load({ ...REQUIRED, VAULTGATE_BW_SERVER: '', VAULTGATE_PORT: '' }));
     expect(config.bitwarden.server).toBeUndefined();
@@ -156,7 +182,6 @@ describe('loadConfig', () => {
       'VAULTGATE_PUBLIC_URL',
       'VAULTGATE_PORT',
       'VAULTGATE_SECRET_KEY',
-      'VAULTGATE_BW_PASSWORD',
       'VAULTGATE_BW_SYNC_INTERVAL',
       'VAULTGATE_BOOTSTRAP_TOKEN',
       'VAULTGATE_LOG_LEVEL',

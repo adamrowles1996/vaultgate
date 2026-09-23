@@ -24,10 +24,11 @@ const STRICT_TRANSPORT_SECURITY = 'max-age=31536000; includeSubDomains';
 export type App = Hono<AppEnvironment>;
 
 /**
-The vault's detail on `/readyz`: whether it serves and when it last synced (VAULT-9).
+The vault's detail on `/readyz`: whether it serves, whether it has credentials at all (VAULT-18) and when it last synced (VAULT-9).
 */
 interface VaultReadiness {
   readonly ready: boolean;
+  readonly configured: boolean;
   readonly lastSyncAt: string | null;
 }
 

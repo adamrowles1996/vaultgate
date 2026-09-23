@@ -1,6 +1,9 @@
 import { createCipheriv, createDecipheriv, hkdfSync } from 'node:crypto';
 
-import type { RandomSource } from './primitives.ts';
+/**
+Bytes from an injected entropy source; production wires `randomBytes`.
+*/
+export type RandomSource = (bytes: number) => Buffer;
 
 const VERSION = 'v1';
 const KEY_BYTES = 32;
@@ -21,8 +24,9 @@ export interface SecretBox {
 
 /**
  * AES-256-GCM under a key derived from the root secret with HKDF-SHA256
- * (ID-9). `info` separates purposes: TOTP secrets and browser state cookies
- * never share a key even though they share the root.
+ * (ID-9, STORE-9). `info` separates purposes: TOTP secrets, browser state
+ * cookies and the stored vault credentials never share a key even though
+ * they share the root. Every purpose is catalogued below.
  */
 export function createSecretBox(rootKey: Buffer, info: string, random: RandomSource): SecretBox {
   const key = Buffer.from(hkdfSync('sha256', rootKey, Buffer.alloc(0), info, KEY_BYTES));
@@ -56,3 +60,5 @@ export function createSecretBox(rootKey: Buffer, info: string, random: RandomSou
 
 export const TOTP_SECRET_INFO = 'vaultgate/totp-secret/v1';
 export const STATE_COOKIE_INFO = 'vaultgate/state-cookie/v1';
+export const VAULT_CLIENT_SECRET_INFO = 'vaultgate/vault-client-secret/v1';
+export const VAULT_MASTER_PASSWORD_INFO = 'vaultgate/vault-master-password/v1';

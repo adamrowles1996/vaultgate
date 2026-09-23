@@ -42,7 +42,7 @@ async function exportAudit(context: IdentityContext, services: IdentityServices)
     format: form.get('format'),
   });
   if (!request.ok) {
-    const view = accountView(services, authenticated, undefined, request.error.message);
+    const view = await accountView(services, authenticated, { error: request.error.message });
     return context.html(renderAccount(view), 400);
   }
   const { from, to, format } = request.value;

@@ -8,9 +8,9 @@
     "bitwardenServer": { "value": "" },
     "enableWriteScope": { "value": false },
     "logLevel": { "value": "info" },
-    "bwPassword": { "value": "REPLACE-WITH-YOUR-BITWARDEN-MASTER-PASSWORD" },
-    "bwClientId": { "value": "user.REPLACE-WITH-YOUR-API-KEY-CLIENT-ID" },
-    "bwClientSecret": { "value": "REPLACE-WITH-YOUR-API-KEY-CLIENT-SECRET" },
+    "bwPassword": { "value": "" },
+    "bwClientId": { "value": "" },
+    "bwClientSecret": { "value": "" },
     "secretKey": {
       "value": "REPLACE-WITH-openssl-rand-base64-32-OR-REMOVE-THIS-LINE-TO-GENERATE-ONE"
     }

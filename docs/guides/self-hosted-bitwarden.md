@@ -2,27 +2,31 @@
 
 vaultgate reaches the vault through the Bitwarden CLI, so it works with every server the CLI
 works with: bitwarden.com (US), bitwarden.eu, a self-hosted Bitwarden server and Vaultwarden.
-The only difference is `VAULTGATE_BW_SERVER`. Specification:
+The only difference is the server field of the vault connection. Specification:
 [05 Vault backend](../spec/05-vault-backend.md) and [12 § 12.3](../spec/12-compatibility.md).
 
-## `VAULTGATE_BW_SERVER`
+## The server
+
+Enter it in the **Server** field of the account page's vault connection
+([First run, section 6](first-run.md#6-connect-the-vault)), or as `VAULTGATE_BW_SERVER` when
+seeding the first boot from the environment:
 
 | Server                | Value                                    |
 | --------------------- | ---------------------------------------- |
-| bitwarden.com (US)    | leave unset (an empty value means unset) |
+| bitwarden.com (US)    | leave empty (an empty value means unset) |
 | bitwarden.eu          | `bitwarden.eu`                           |
 | Self-hosted Bitwarden | `https://vault.example.com`              |
 | Vaultwarden           | `https://vault.example.com`              |
 
-Anything else is rejected at start-up: the value must be the literal `bitwarden.eu` or an
-`https://` URL. Plain `http://` is not accepted, because the CLI would send the master password
-to that address.
+Anything else is rejected, by the form and at start-up alike: the value must be the literal
+`bitwarden.eu` or an `https://` URL. Plain `http://` is not accepted, because the CLI would send
+the master password to that address.
 
-At start-up, when the CLI reports that it is not logged in, vaultgate runs
-`bw config server <value>` and then `bw login --apikey`. The server setting is applied only on
-that first login. To move an existing installation to a different server, stop vaultgate,
-delete the CLI's app data (`bw/` inside `VAULTGATE_DATA_DIR`; it is a cache and is rebuilt),
-change the variable and start again.
+Before a login vaultgate runs `bw config server <value>` (or `bw config server bitwarden.com`
+to reset a reused CLI directory to the default) and then `bw login --apikey`. Saving the form
+with a different server switches at once: the new connection logs in inside a fresh CLI app-data
+directory and the old one is retired, so moving an installation to another server is one save,
+with no restart and nothing to delete by hand.
 
 ## Creating a personal API key
 
@@ -31,13 +35,13 @@ new-device e-mail. In the web vault:
 
 1. Sign in and open **Settings → Security → Keys**.
 2. Under **API key**, click **View API key** and confirm your master password.
-3. Copy `client_id` (`user.` followed by a UUID) into `VAULTGATE_BW_CLIENT_ID` and
-   `client_secret` into `VAULTGATE_BW_CLIENT_SECRET` (or the file `VAULTGATE_BW_CLIENT_SECRET_FILE`
-   points at).
+3. Copy `client_id` (`user.` followed by a UUID) and `client_secret` into the account page's
+   vault connection (or, to seed the first boot, into `VAULTGATE_BW_CLIENT_ID` and
+   `VAULTGATE_BW_CLIENT_SECRET`, the latter also through `VAULTGATE_BW_CLIENT_SECRET_FILE`).
 
 The same page has **Rotate API key**. Rotating invalidates the old key everywhere it is used:
-update vaultgate's configuration and restart, then delete the CLI app data as above if the CLI
-still holds a session from the old key.
+enter the new client id and secret on the account page, leave the master password blank, and
+save. The CLI logs in again with the new key in a fresh directory; nothing to delete, no restart.
 
 Vaultwarden serves Bitwarden's web vault, so the path is the same there.
 
@@ -52,9 +56,12 @@ key is derived from the master password on the client. So two different things a
 - **The master password** unlocks the _data_: the CLI derives the encryption key from it and
   decrypts the downloaded vault in memory.
 
-Neither one alone gives access. Both are read once at start-up, kept only in the vaultgate
-process's memory (never in the database or the log), and zero-filled on shutdown. The CLI's own
-session key stays inside the `bw serve` child process on loopback.
+Neither one alone gives access. Both are kept in the vaultgate process's memory for the
+connection in use, zero-filled when it is replaced or on shutdown, and never logged. When saved
+on the account page they are also stored in the database as AES-256-GCM ciphertext under keys
+derived from `VAULTGATE_SECRET_KEY`, which is why that key is backed up separately from the
+database ([security model](security-model.md)). The CLI's own session key stays inside the
+`bw serve` child process on loopback.
 
 Bitwarden's [personal API key documentation](https://bitwarden.com/help/personal-api-key/)
 describes the key and its rotation in more detail.
@@ -67,8 +74,8 @@ describes the key and its rotation in more detail.
   Vaultwarden and invite further users from the admin page.
 - **A personal API key is required**, exactly as for bitwarden.com: Settings → Security → Keys
   in the Vaultwarden web vault. Vaultwarden's admin token is unrelated and must not be used.
-- **`DOMAIN` must be set** on Vaultwarden to the `https://` origin it is served at, and
-  `VAULTGATE_BW_SERVER` must be that same origin. The CLI derives the API, identity and
+- **`DOMAIN` must be set** on Vaultwarden to the `https://` origin it is served at, and the
+  server in vaultgate must be that same origin. The CLI derives the API, identity and
   notification endpoints from it.
 - **Organisations and collections** work the same way as on Bitwarden: `list_collections` shows
   the collections the account can see, and `search_items` filters by `collection_id`.
@@ -78,8 +85,8 @@ describes the key and its rotation in more detail.
 
 ## Self-hosted Bitwarden notes
 
-- Set `VAULTGATE_BW_SERVER` to the base URL of the installation, the same one you open in a
-  browser. The CLI derives the individual service endpoints from it.
+- Set the server to the base URL of the installation, the same one you open in a browser. The
+  CLI derives the individual service endpoints from it.
 - If your server uses a private certificate authority, the CLI (a Node application) must trust
   it. In the container that means mounting the CA and setting `NODE_EXTRA_CA_CERTS` for the
   process; on a Linux install, add the CA to the system store or set the same variable in

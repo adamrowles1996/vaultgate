@@ -17,9 +17,10 @@ Edit `.env`:
 
 - `VAULTGATE_DOMAIN`: the hostname Caddy serves, for example `vault.example.com`.
 - `VAULTGATE_PUBLIC_URL`: `https://` followed by that same hostname.
-- `VAULTGATE_BW_CLIENT_ID`: the `user.…` client id of your Bitwarden personal API key.
 - `VAULTGATE_VERSION`: a release such as `0.1.0`, or `latest`.
-- `VAULTGATE_BW_SERVER` only for bitwarden.eu, a self-hosted server or Vaultwarden.
+- Optionally, to seed the Bitwarden connection from files rather than the account page:
+  `VAULTGATE_BW_CLIENT_ID`, the `user.…` client id of your personal API key, and
+  `VAULTGATE_BW_SERVER` for bitwarden.eu, a self-hosted server or Vaultwarden.
 
 Leave the remaining lines alone. The Compose file fixes the bind address, port, data directory
 and proxy trust inside the container, and the secret files below take precedence over the
@@ -30,15 +31,22 @@ placeholder values (`*_FILE` always wins).
 ```bash
 mkdir -p secrets
 head -c 32 /dev/urandom | base64 > secrets/vaultgate_secret_key
-printf '%s' 'your master password' > secrets/bw_password
-printf '%s' 'your API key client secret' > secrets/bw_client_secret
+touch secrets/bw_password secrets/bw_client_secret
 chmod 0400 secrets/* && sudo chown 10001 secrets/*
 ```
 
+The two Bitwarden files are mounted either way; empty, they mean "not set" and you connect the
+vault from the account page after the first sign-in
+([First run, section 6](first-run.md#6-connect-the-vault)). To seed the connection from files
+instead, write the master password into `secrets/bw_password` and the API key client secret into
+`secrets/bw_client_secret` (`printf '%s' '…' > secrets/bw_password`) and set
+`VAULTGATE_BW_CLIENT_ID` in `.env`; all three are needed, and they are ignored once the account
+page has saved a connection.
+
 The container runs as uid 10001, so each file must be readable by that user and nobody else; a
 world-readable secret file is reported at start-up (spec CFG-1). Back up
-`secrets/vaultgate_secret_key` with the data volume: without it the TOTP secrets in the database
-cannot be decrypted.
+`secrets/vaultgate_secret_key` with the data volume: without it the TOTP secret and the saved
+vault connection in the database cannot be decrypted.
 
 ## 3. Start
 

@@ -7,6 +7,7 @@ import { registerAuditRoutes } from './routes-audit.ts';
 import { registerEmailRoutes } from './routes-email.ts';
 import { registerLoginRoutes } from './routes-login.ts';
 import { registerSetupRoutes } from './routes-setup.ts';
+import { registerVaultRoutes } from './routes-vault.ts';
 
 import type { IdentityServices } from './services.ts';
 
@@ -44,5 +45,6 @@ export function createIdentityRoutes(services: IdentityServices): Hono<IdentityE
   registerAccountRoutes(app, services);
   registerAuditRoutes(app, services);
   registerEmailRoutes(app, services);
+  registerVaultRoutes(app, services);
   return app;
 }

@@ -65,7 +65,8 @@ added without touching the OAuth layer (see `PLAN.md`).
   absolute limit.
 - **ID-15** Re-authentication (password only) is required within 5 minutes before: revoking a
   client, regenerating recovery codes, changing the password, changing the e-mail address,
-  rotating TOTP, enabling `vault:write` from the account page.
+  rotating TOTP, enabling `vault:write` from the account page, changing the vault connection
+  (ID-25).
 
 ## 4.5 Session cookie
 
@@ -109,15 +110,29 @@ interface IdentityProvider {
 
 ## 4.9 HTTP routes
 
-| Route                                             | Purpose                                                                                                            |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `GET /`                                           | **ID-23** `303` to `/account` when the request carries a live operator session, otherwise to `/login`; `no-store`. |
-| `GET /setup`, `POST /setup`                       | First-run bootstrap (ID-1 to ID-4).                                                                                |
-| `GET /login`, `POST /login`, `POST /login/verify` | The two-step login (ID-12).                                                                                        |
-| `POST /logout`                                    | Ends the session (ID-17).                                                                                          |
-| `GET /account`, `POST /account/*`                 | The account page and its ID-15 actions, including `POST /account/email` (ID-3, ID-26).                             |
-| `GET /static/vaultgate.css`                       | The single stylesheet (ID-19).                                                                                     |
+| Route                                             | Purpose                                                                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `GET /`                                           | **ID-23** `303` to `/account` when the request carries a live operator session, otherwise to `/login`; `no-store`.       |
+| `GET /setup`, `POST /setup`                       | First-run bootstrap (ID-1 to ID-4).                                                                                      |
+| `GET /login`, `POST /login`, `POST /login/verify` | The two-step login (ID-12).                                                                                              |
+| `POST /logout`                                    | Ends the session (ID-17).                                                                                                |
+| `GET /account`, `POST /account/*`                 | The account page and its ID-15 actions, including `POST /account/email` (ID-3, ID-26) and `POST /account/vault` (ID-25). |
+| `GET /static/vaultgate.css`                       | The single stylesheet (ID-19).                                                                                           |
 
+- **ID-25** The account page has a "Vault connection" section: the status for any signed-in
+  operator (whether credentials are configured and where they came from, the server, the masked
+  account e-mail from `bw serve`'s `/status`, readiness, last sync) and, after re-authentication
+  (ID-15), a form with the server (optional; `bitwarden.eu` or an `https://` URL, validated by the
+  same primitive as `VAULTGATE_BW_SERVER`), the API key client id, the client secret and the master
+  password. Secret fields are always rendered empty and a stored secret is never echoed; a blank
+  secret keeps the one in use (both are required while nothing is configured). `POST /account/vault`
+  passes the ID-18 checks and ID-15, then stores the connection (STORE-9) and switches the backend to
+  it in one step (VAULT-18): there is no separate "test" path, saving is the test. Success redirects
+  to the section with a notice; a failure re-renders the form with the backend's fixed reason
+  (`400` for input the page itself rejects, `503` when the backend refuses the connection) and
+  without either secret. Every attempt records `vault.settings_updated` (`ok`/`failure`, the server
+  and, on failure, the reason; never a secret). When setup completes (ID-3) while no connection is
+  configured, the recovery-codes page ends with a link to this section.
 - **ID-24** Any other path answers `404`. When the `Accept` header prefers `text/html` the body is
   a short page rendered by the same escaping template and stylesheet as every other page, under
   the ID-19 policy and `Cache-Control: no-store`; otherwise (JSON accepted, `*/*`, or no `Accept`

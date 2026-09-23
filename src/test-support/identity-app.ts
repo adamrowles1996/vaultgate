@@ -8,6 +8,7 @@ import { totp } from '../identity/totp.ts';
 
 import { type Browser, createBrowser } from './browser.ts';
 import { openTestDatabase } from './database.ts';
+import { FakeVaultConnection } from './fake-vault-connection.ts';
 import { sequentialRandom } from './identity.ts';
 import { captureLogger } from './logging.ts';
 
@@ -28,6 +29,10 @@ export interface HarnessOptions {
   The account page's connected-clients section, supplied by the OAuth harness.
   */
   readonly connectedClients?: ConnectedClientsRenderer;
+  /**
+  The vault as the account page sees it; a fresh unconfigured fake by default.
+  */
+  readonly vault?: FakeVaultConnection;
 }
 
 export interface Harness {
@@ -37,6 +42,7 @@ export interface Harness {
   readonly stores: IdentityStores;
   readonly audits: AuditEvent[];
   readonly delays: number[];
+  readonly vault: FakeVaultConnection;
   readonly logged: () => readonly Record<string, unknown>[];
   readonly now: () => number;
   readonly advance: (ms: number) => void;
@@ -53,6 +59,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
   const { logger, lines } = captureLogger();
   const audits: AuditEvent[] = [];
   const delays: number[] = [];
+  const vault = options.vault ?? new FakeVaultConnection();
   let now = START;
   const identity = createIdentity({
     config: {
@@ -82,6 +89,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     clientAddress: () => '203.0.113.7',
     passwordParameters: FAST_SCRYPT,
     connectedClients: options.connectedClients,
+    vaultConnection: vault,
   });
   const app = new Hono<IdentityEnvironment>();
   app.use(requestId());
@@ -94,6 +102,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     stores: createIdentityStores(database),
     audits,
     delays,
+    vault,
     logged: lines,
     now: () => now,
     advance: (ms) => {
@@ -143,6 +152,10 @@ export interface OperatorSetup {
   readonly browser: Browser;
   readonly key: string;
   readonly recoveryCodes: string[];
+  /**
+  The recovery-codes page as rendered at the end of setup.
+  */
+  readonly page: string;
 }
 
 /**
@@ -161,7 +174,8 @@ export async function setUpOperator(harness: Harness): Promise<OperatorSetup> {
     password: PASSWORD,
     code: totpFor(key, harness.now()),
   });
-  return { browser, key, recoveryCodes: recoveryCodesOf(await done.text()) };
+  const page = await done.text();
+  return { browser, key, recoveryCodes: recoveryCodesOf(page), page };
 }
 
 /**
