@@ -65,7 +65,14 @@ describe('GET /account', () => {
     expect(markup).not.toContain('action="/account/password"');
     expect(markup).not.toContain('class="notice"');
     expect(markup).toContain('Connected clients');
-    expect(markup).toContain('<td>unknown</td>');
+    expect(markup).toContain('<td data-label="Address">unknown</td>');
+    for (const heading of ['Started', 'Last seen', 'Browser']) {
+      expect(markup).toContain(`<th>${heading}</th>`);
+      expect(markup.match(new RegExp(`<td data-label="${heading}">`, 'g'))).toHaveLength(2);
+    }
+    expect(markup).toContain(
+      '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    );
   });
 
   it('ID-21 redirects when the operator no longer exists', async () => {

@@ -10,6 +10,12 @@ All notable changes to this project are documented here. The format follows
 
 - ID-23: opening the bare site root answered the JSON `{"error":"not_found"}`. `GET /` now
   redirects (`303`) to `/account` when an operator session is present and to `/login` otherwise.
+- ID-19: the sessions and connected-clients tables on `/account` needed horizontal scrolling on a
+  phone. Every table cell now carries its column heading in `data-label`, and at 640px and below
+  the stylesheet stacks each row into a labelled card with full-width buttons; inputs, selects
+  and preformatted text are capped at the page width, form controls are at least 44px tall on
+  small or touch screens, and the `select` inherits the 16px page font so mobile browsers do not
+  zoom. The desktop layout is unchanged. Still CSS only: the pages ship no JavaScript.
 - ID-24: an unknown path requested by a browser (an `Accept` header preferring `text/html`) is
   answered with a short HTML page under the ID-19 policy; API clients (JSON accepted, `*/*`, or no
   `Accept`) still receive the JSON body. `/mcp` and the well-known routes are unchanged.

@@ -96,15 +96,16 @@ describe('renderConnectedClients', () => {
 
   it('OAUTH-30 falls back to the client id for an unnamed client that was never used', () => {
     const markup = renderConnectedClients([UNNAMED], CONFIRMED).markup;
-    expect(markup).toContain('<td>vg_c_unnamed</td>');
-    expect(markup).toContain('<td>never</td>');
+    expect(markup).toContain('<td data-label="Client">vg_c_unnamed</td>');
+    expect(markup).toContain('<td data-label="Last used">never</td>');
+    expect(markup).toContain('<td data-label=""><form method="post"');
     expect(markup).toContain(DISCONNECT_BUTTON);
     expect(markup).not.toContain(REAUTHENTICATION_LINK);
   });
 
   it('ID-15 lists the clients without Disconnect forms and links to the re-authentication form until the password is confirmed', () => {
     const markup = renderConnectedClients([UNNAMED], UNCONFIRMED).markup;
-    expect(markup).toContain('<td>vg_c_unnamed</td>');
+    expect(markup).toContain('<td data-label="Client">vg_c_unnamed</td>');
     expect(markup).not.toContain('<form');
     expect(markup).not.toContain('Disconnect');
     expect(markup).toContain(REAUTHENTICATION_LINK);
@@ -119,9 +120,11 @@ describe('the account page', () => {
     const page = await harness.exchange('/account', { headers: signedIn.headers });
     expect(page.status).toBe(200);
     expect(page.text).toContain('<h3>Connected clients</h3>');
-    expect(page.text).toContain('<td>Desk Agent</td>');
-    expect(page.text).toContain('<td>vault:read vault:reveal</td>');
-    expect(page.text).toContain(`<td>${new Date(harness.now() - 60_000).toISOString()}</td>`);
+    expect(page.text).toContain('<td data-label="Client">Desk Agent</td>');
+    expect(page.text).toContain('<td data-label="Permissions">vault:read vault:reveal</td>');
+    expect(page.text).toContain(
+      `<td data-label="Last used">${new Date(harness.now() - 60_000).toISOString()}</td>`,
+    );
     expect(page.text).toContain(`<form method="post" action="${REVOKE_PATH}">`);
     expect(page.text).toContain(
       `<input type="hidden" name="csrf" value="${signedIn.session.csrfToken}" />`,
@@ -135,7 +138,7 @@ describe('the account page', () => {
     connect(harness, OPERATOR_ID);
     const page = await harness.exchange('/account', { headers: signedIn.headers });
     expect(page.status).toBe(200);
-    expect(page.text).toContain('<td>Desk Agent</td>');
+    expect(page.text).toContain('<td data-label="Client">Desk Agent</td>');
     expect(page.text).not.toContain('Disconnect');
     expect(page.text).toContain(REAUTHENTICATION_LINK);
     expect(page.text).toContain('<section id="sensitive-actions">');
@@ -233,7 +236,7 @@ describe('the account page', () => {
     const during = await pageText(browser, '/account');
     const revoked = await browser.submit(REVOKE_PATH, { csrf });
     const after = await pageText(browser, '/account');
-    expect(before).toContain('<td>Desk Agent</td>');
+    expect(before).toContain('<td data-label="Client">Desk Agent</td>');
     expect(before).not.toContain('Disconnect');
     expect(before).toContain(REAUTHENTICATION_LINK);
     expect(refused.status).toBe(403);

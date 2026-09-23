@@ -98,6 +98,9 @@ describe('createApp', () => {
     expect(markup).toContain('<title>Not found · vaultgate</title>');
     expect(markup).toContain('<link rel="stylesheet" href="/static/vaultgate.css" />');
     expect(markup).toContain('Page not found');
+    expect(markup).toContain(
+      '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    );
     expect(markup).not.toContain('<script');
   });
 

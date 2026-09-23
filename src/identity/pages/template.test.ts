@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 // Aliased: Prettier reformats `tag` tagged templates, and this test asserts exact markup.
 import {
+  cell,
   document,
   EMPTY,
   errorBanner,
@@ -9,6 +10,7 @@ import {
   hidden,
   html as tag,
   noticeBanner,
+  tableHead,
   when,
 } from './template.ts';
 
@@ -27,8 +29,20 @@ describe('template', () => {
     const page = document('Title <1>', tag`<p>body</p>`);
     expect(page).toContain('<title>Title &lt;1&gt; · vaultgate</title>');
     expect(page).toContain('<link rel="stylesheet" href="/static/vaultgate.css" />');
+    expect(page).toContain(
+      '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    );
     expect(page).toContain('<p>body</p>');
     expect(page).not.toContain('<script');
+  });
+
+  it('ID-19 labels table cells with their column heading so narrow screens can stack them', () => {
+    const head = tableHead(['Client', '']).markup.replaceAll(/\s+/g, '');
+    expect(head).toBe('<thead><tr><th>Client</th><th></th></tr></thead>');
+    expect(cell('Last <seen>', 'a & b').markup).toBe(
+      '<td data-label="Last &lt;seen&gt;">a &amp; b</td>',
+    );
+    expect(cell('', tag`<em>x</em>`).markup).toBe('<td data-label=""><em>x</em></td>');
   });
 
   it('ID-19 renders optional fragments', () => {
