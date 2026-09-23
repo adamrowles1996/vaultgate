@@ -6,7 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Docs
+
+- `docs/reviews/`: the independent security review and code review of v0.1.0-rc.4, reproduced
+  verbatim.
 
 ## [0.1.0-rc.4] - 2026-09-23
 
