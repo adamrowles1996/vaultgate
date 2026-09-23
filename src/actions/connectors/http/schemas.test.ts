@@ -16,8 +16,8 @@ type Documents = TargetDocuments<HttpDestination, HttpCredential, HttpPolicy>;
 
 const GRAPH: HttpCredential = {
   mode: 'graph',
-  tenant_id: 'tenant',
-  client_id: 'client',
+  tenant_id: 'contoso.onmicrosoft.com',
+  client_id: '11111111-2222-3333-4444-555555555555',
   grant: 'client_credentials',
   scope: 'https://graph.microsoft.com/.default',
   secret_field: 'custom.client-secret',
@@ -104,8 +104,8 @@ describe('http credential', () => {
     expect(
       httpCredentialSchema.parse({
         mode: 'graph',
-        tenant_id: 'tenant',
-        client_id: 'client',
+        tenant_id: 'contoso.onmicrosoft.com',
+        client_id: '11111111-2222-3333-4444-555555555555',
         grant: 'client_credentials',
         secret_field: 'custom.client-secret',
       }),
@@ -208,19 +208,24 @@ describe('httpSchemas', () => {
     ]);
   });
 
-  it('ACT-81 ACT-79 ACT-35 reports save-time problems: graph before its M10 adapter and off graph.microsoft.com, query mode without allow_query_credentials, and a path pattern that is not a normalised path', () => {
+  it('ACT-81 ACT-79 ACT-35 reports save-time problems: a graph mapping off graph.microsoft.com, query mode without allow_query_credentials, and a path pattern that is not a normalised path', () => {
     expect(httpSchemas.saveProblems(documents())).toStrictEqual([]);
     expect(httpSchemas.saveProblems(documents({ credential: GRAPH }))).toStrictEqual([
-      'credential.mapping: the graph mode is not available yet; the graph adapter arrives in M10',
-      'credential.mapping: the graph mode requires base_url https://graph.microsoft.com',
+      'credential.mapping: the graph mode requires base_url on https://graph.microsoft.com',
     ]);
     expect(
       httpSchemas.saveProblems(
         documents({ destination: { base_url: 'https://graph.microsoft.com' }, credential: GRAPH }),
       ),
-    ).toStrictEqual([
-      'credential.mapping: the graph mode is not available yet; the graph adapter arrives in M10',
-    ]);
+    ).toStrictEqual([]);
+    expect(
+      httpSchemas.saveProblems(
+        documents({
+          destination: { base_url: 'https://graph.microsoft.com/v1.0' },
+          credential: GRAPH,
+        }),
+      ),
+    ).toStrictEqual([]);
     const query: HttpCredential = { mode: 'query', field: 'password', name: 'key' };
     expect(httpSchemas.saveProblems(documents({ credential: query }))).toStrictEqual([
       'credential.mapping: the query mode requires policy.allow_query_credentials',

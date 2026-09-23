@@ -7,6 +7,7 @@ import { FIELD_TYPES, ITEM_TYPES, type RawField, type RawItem } from './types.ts
 
 import type {
   CustomFieldKind,
+  CustomFieldPatch,
   CustomFieldSummary,
   ItemPatch,
   ItemSummary,
@@ -122,6 +123,29 @@ function patchedLogin(raw: RawItem, login: ItemPatch['login']): Record<string, u
 }
 
 /**
+ * The item's custom fields with the patch applied (ACT-83): a named field
+ * keeps its kind and takes the new value, a name the item does not carry is
+ * appended as a `hidden` field.
+ */
+function patchedFields(raw: RawItem, patch: readonly CustomFieldPatch[]): readonly RawField[] {
+  const existing = raw.fields ?? [];
+  const written = new Map(patch.map((field) => [field.name, field.value]));
+  // A `custom.<name>` selector always names a non-empty field, so an item
+  // field the vault left unnamed can never be the one a patch means.
+  const updated = existing.map((field) => {
+    const value = written.get(field.name ?? '');
+    return value === undefined ? field : { ...field, value };
+  });
+  const names = new Set(existing.map((field) => field.name ?? ''));
+  return [
+    ...updated,
+    ...patch
+      .filter((field) => !names.has(field.name))
+      .map((field) => ({ name: field.name, value: field.value, type: FIELD_TYPES.hidden })),
+  ];
+}
+
+/**
  * The `PUT /object/item/{id}` body: the raw item with the patch applied.
  * Fields vaultgate does not model pass through untouched.
  */
@@ -133,6 +157,7 @@ export function patchedItemBody(raw: RawItem, patch: ItemPatch): Record<string, 
     notes: patch.notes ?? raw.notes ?? null,
     favorite: patch.favorite ?? raw.favorite ?? false,
     login: patchedLogin(raw, patch.login),
+    ...(patch.customFields !== undefined && { fields: patchedFields(raw, patch.customFields) }),
   };
 }
 

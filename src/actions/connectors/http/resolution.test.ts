@@ -14,8 +14,8 @@ import { coded, harnessOver, textResponse as text } from '../../../test-support/
 
 const GRAPH = {
   mode: 'graph',
-  tenant_id: 'tenant',
-  client_id: 'client',
+  tenant_id: 'contoso.onmicrosoft.com',
+  client_id: '11111111-2222-3333-4444-555555555555',
   grant: 'client_credentials',
   secret_field: 'password',
 };
@@ -77,14 +77,14 @@ describe('the http connector through the engine: refusals and failures', () => {
     expect(JSON.stringify([tls.detail, reset.detail])).not.toContain('93.184');
   });
 
-  it('ACT-1 ACT-81 a stored target the connector refuses to save (graph before M10, query without consent) is invalid on read and refuses every call with target_invalid', async () => {
+  it('ACT-1 ACT-81 a stored target the connector refuses to save (a graph mapping off graph.microsoft.com, query without consent) is invalid on read and refuses every call with target_invalid', async () => {
     const { fake, harness } = harnessOver(() => text(200, 'never'));
     const { repo } = harness.engine.targets;
     repo.insert(
       fixtureTargetRow({
         id: 'graph-row',
         name: 'graph',
-        destination: { base_url: 'https://graph.microsoft.com' },
+        destination: { base_url: 'https://api.example.com/v1' },
         credential: { item_id: 'item-login', mapping: GRAPH },
       }),
     );
@@ -108,7 +108,7 @@ describe('the http connector through the engine: refusals and failures', () => {
     expect(harness.engine.targets.get('graph-row')).toMatchObject({
       state: 'invalid',
       problems: [
-        'credential.mapping: the graph mode is not available yet; the graph adapter arrives in M10',
+        'credential.mapping: the graph mode requires base_url on https://graph.microsoft.com',
       ],
     });
     expect(harness.engine.targets.get('query-row')).toMatchObject({

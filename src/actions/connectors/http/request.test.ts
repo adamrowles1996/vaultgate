@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { unwrapFail, unwrapOk } from '../../../test-support/result.ts';
-import { createInjectedValues, type InjectedValues } from '../../scrub.ts';
+import { createSecretHolder } from '../../secrets.ts';
 
 import {
+  bearerInjection,
   buildRequest,
   credentialInjection,
   encodeBody,
@@ -16,6 +17,7 @@ import {
 
 import type { HttpOperation } from './operation.ts';
 import type { HttpCredential } from './schemas.ts';
+import type { InjectedValues } from '../../scrub.ts';
 
 const BASE = 'https://api.example.com/v1';
 const BEARER: HttpCredential = { mode: 'bearer', field: 'password' };
@@ -27,7 +29,8 @@ const BEARER_INJECTION = {
 } as const;
 
 function injected(value = 'secret-value', username?: string): InjectedValues {
-  return createInjectedValues([{ field: 'password', value: Buffer.from(value, 'utf8') }], username);
+  return createSecretHolder([{ field: 'password', value: Buffer.from(value, 'utf8') }], username)
+    .injected;
 }
 
 const VALUES = injected();
@@ -80,20 +83,19 @@ describe('credentialInjection', () => {
     ).toStrictEqual({ kind: 'query', name: 'key', value: 'v1-secret-value' });
   });
 
-  it('ACT-79 ACT-54 answers credential_unavailable for basic without a username, a field the call does not hold, and the graph mode before M10', () => {
+  it('ACT-79 ACT-54 answers credential_unavailable for basic without a username and for a field the call does not hold', () => {
     expect(unwrapFail(credentialInjection(BASIC, VALUES)).code).toBe('credential_unavailable');
     expect(
       unwrapFail(credentialInjection({ mode: 'bearer', field: 'custom.other' }, VALUES)).code,
     ).toBe('credential_unavailable');
-    const graph: HttpCredential = {
-      mode: 'graph',
-      tenant_id: 't',
-      client_id: 'c',
-      grant: 'client_credentials',
-      scope: 's',
-      secret_field: 'password',
-    };
-    expect(unwrapFail(credentialInjection(graph, VALUES)).code).toBe('credential_unavailable');
+  });
+
+  it('ACT-82 puts a graph access token in the same Authorization header a bearer credential uses', () => {
+    expect(bearerInjection('access-token')).toStrictEqual({
+      kind: 'header',
+      name: 'authorization',
+      value: 'Bearer access-token',
+    });
   });
 });
 

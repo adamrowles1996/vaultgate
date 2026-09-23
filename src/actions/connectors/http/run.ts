@@ -11,6 +11,7 @@ import { fail, ok, type Result } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
 
 import {
+  bearerInjection,
   buildRequest,
   credentialInjection,
   inject,
@@ -24,6 +25,7 @@ import { toOutput, transportFailure } from './response.ts';
 import type { HttpOperation } from './operation.ts';
 import type { HttpCredential, HttpDestination, HttpPolicy } from './schemas.ts';
 import type { ConnectorOutput, RunContext } from '../connector.ts';
+import type { GraphTokens } from '../graph/adapter.ts';
 
 export type HttpRunContext = RunContext<HttpDestination, HttpCredential, HttpPolicy>;
 
@@ -117,37 +119,97 @@ async function exchange(
   return response;
 }
 
+const UNAUTHORIZED = 401;
+
 /**
-`run` of the `http` connector over an injected transport (ACT-78).
+ * The credential in its injection point: a vault value for the mapped modes,
+ * an access token the adapter obtains for `graph` (ACT-82). `isRetry` tells
+ * the adapter to discard the token it cached.
+ */
+async function injectionFor(
+  tokens: GraphTokens,
+  context: HttpRunContext,
+  isRetry: boolean,
+): Promise<Result<Injection, ActionError>> {
+  const { credential } = context;
+  if (credential.mode !== 'graph') {
+    return credentialInjection(credential, context.injected);
+  }
+  const token = await tokens.accessToken({ ...context, credential }, isRetry);
+  return token.ok ? ok(bearerInjection(token.value)) : token;
+}
+
+/**
+ * ACT-82: a `401` on a graph target may mean the cached token was revoked
+ * before it expired, so one attempt is made with a fresh one. A `401` on
+ * that attempt is the result the agent sees, like any other status.
+ */
+function isStaleToken(context: HttpRunContext, response: Response): boolean {
+  return response.status === UNAUTHORIZED && context.credential.mode === 'graph';
+}
+
+interface Attempt {
+  readonly transport: PinnedFetch;
+  readonly version: string;
+  readonly tokens: GraphTokens;
+  readonly address: string;
+}
+
+async function attempt(
+  plan: Attempt,
+  context: HttpRunContext,
+  operation: HttpOperation,
+  isRetry: boolean,
+): Promise<Result<Response, ActionError>> {
+  const injection = await injectionFor(plan.tokens, context, isRetry);
+  if (!injection.ok) {
+    return injection;
+  }
+  const first = buildRequest({
+    baseUrl: context.destination.base_url,
+    operation,
+    injection: injection.value,
+    version: plan.version,
+  });
+  if (!first.ok) {
+    return first;
+  }
+  return ok(
+    await exchange(plan.transport, context, {
+      address: plan.address,
+      first: first.value,
+      injection: injection.value,
+    }),
+  );
+}
+
+async function readResponse(
+  context: HttpRunContext,
+  response: Response,
+): Promise<Result<ConnectorOutput, ActionError>> {
+  const limit = context.outputLimit.maxBytes + context.outputLimit.guardBytes;
+  const raw = await readBodyCapped(response, limit);
+  return ok(toOutput(response, raw, context.policy, context.outputLimit.maxBytes));
+}
+
+/**
+`run` of the `http` connector over an injected transport (ACT-78), with the `graph` adapter for that mode.
 */
-export function createRun(transport: PinnedFetch, version: string): HttpRun {
+export function createRun(transport: PinnedFetch, version: string, tokens: GraphTokens): HttpRun {
   return async (context, operation) => {
     const [endpoint] = context.pinned;
     if (endpoint === undefined) {
       return fail(new ActionError('destination_refused', { reason: 'unpinned' }));
     }
-    const injection = credentialInjection(context.credential, context.injected);
-    if (!injection.ok) {
-      return injection;
-    }
-    const first = buildRequest({
-      baseUrl: context.destination.base_url,
-      operation,
-      injection: injection.value,
-      version,
-    });
-    if (!first.ok) {
-      return first;
-    }
+    const plan: Attempt = { transport, version, tokens, address: endpoint.address };
     try {
-      const response = await exchange(transport, context, {
-        address: endpoint.address,
-        first: first.value,
-        injection: injection.value,
-      });
-      const limit = context.outputLimit.maxBytes + context.outputLimit.guardBytes;
-      const raw = await readBodyCapped(response, limit);
-      return ok(toOutput(response, raw, context.policy, context.outputLimit.maxBytes));
+      const first = await attempt(plan, context, operation, false);
+      if (!first.ok || !isStaleToken(context, first.value)) {
+        return first.ok ? await readResponse(context, first.value) : first;
+      }
+      await first.value.body?.cancel();
+      const retried = await attempt(plan, context, operation, true);
+      return retried.ok ? await readResponse(context, retried.value) : retried;
     } catch (error: unknown) {
       return fail(transportFailure(error, context.signal));
     }

@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `graph` credential adapter for `http` targets (spec 14 §14.3, M10; ACT-81, ACT-82, ACT-83): a
+  target whose `base_url` is on `https://graph.microsoft.com` may map its credential as
+  `mode: "graph"`, and `http_request` then behaves exactly as it does on a bearer target while
+  vaultgate obtains the Microsoft Graph access token itself. The adapter document names the
+  tenant (a GUID or a domain name), the application id, the grant (`client_credentials` or
+  `refresh_token`), the scope and the vault fields holding the client secret and, for the
+  refresh grant, the refresh token; the M9 save-time refusal of the mode is gone and a `graph`
+  mapping is checked like any other (ACT-4). Before the request the adapter posts the grant to
+  `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token` through the pinned transport,
+  resolving and validating that host by the same private-range rule as any destination, and
+  validates the response against a schema before reading a field. The token is held in process
+  memory only, keyed by target id and revision and given up 60 s before it expires (the one
+  caching exception of ACT-50); it is never stored, never logged, and is redacted from every
+  result, row, log line and elicitation message as `[redacted:graph.access_token]`, in every
+  ACT-51 encoding. A `401` from Graph discards it and the request is retried once with a fresh
+  token; a `401` on that attempt is the result. When the token endpoint rotates the refresh
+  token, the new one is written back to the mapped vault field **before** the Graph request and
+  an `actions.credential_rotated` event is recorded (target, item id, field name, never the
+  value); a write-back that fails fails the call with `credential_rotation_failed` so the
+  operator learns while the old token still works. Token-endpoint failures map to
+  `authentication_failed` for `invalid_client` and `invalid_grant` (the OAuth error code is the
+  only detail; the AADSTS description is not scrub-safe), to `connection_failed`, `tls_error`
+  or `timeout` for a transport failure, and to `upstream_error` otherwise. Contract tests cover
+  both grants, the cache and its 60 s margin, a revision change, the `401` retry and the
+  absence of a loop, rotation and a failed write-back, every error mapping, and an ACT-53 canary
+  suite through the engine in which the fake Graph echoes the `Authorization` header and the
+  fake token endpoint echoes the form it was posted. Operator guide: `docs/guides/actions.md`
+  ("Microsoft Graph targets").
+
+### Changed
+
+- `VaultClient.updateItem` can write custom fields (`ItemPatch.customFields`): a named field
+  keeps its kind and takes the new value, a name the item does not carry is created `hidden`.
+  This is what the ACT-83 refresh-token write-back uses; it is the only path by which the
+  actions layer writes to the vault, and it needs no agent scope.
+
 ### Fixed
 
 - The account page's create-target form carried no `connector` field, while `POST /account/actions`
