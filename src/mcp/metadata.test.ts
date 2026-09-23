@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createTestApp, TEST_PUBLIC_URL } from '../test-support/test-app.ts';
+import { createTestApp, TEST_PUBLIC_URL, testConfig } from '../test-support/test-app.ts';
 
 import { resourceUrls } from './metadata.ts';
 
@@ -60,6 +60,29 @@ describe('protected resource metadata', () => {
     expect(response.headers.get('access-control-expose-headers')).toBe(
       'WWW-Authenticate,Mcp-Session-Id',
     );
+  });
+
+  it('ACT-14 lists an actions scope only when the layer and its connector are enabled', async () => {
+    const config = testConfig({
+      VAULTGATE_ENABLE_ACTIONS: 'true',
+      VAULTGATE_ACTIONS_ENABLE_HTTP: 'true',
+      VAULTGATE_ACTIONS_ENABLE_SQL: 'false',
+    });
+    const { app } = createTestApp({ config });
+    const response = await app.request('/.well-known/oauth-protected-resource');
+    expect(await response.json()).toMatchObject({
+      scopes_supported: [...EXPECTED.scopes_supported, 'actions:http'],
+    });
+  });
+
+  it('OAUTH-16 omits vault:write when the operator has not enabled it', async () => {
+    const { app } = createTestApp({
+      config: testConfig({ VAULTGATE_ENABLE_WRITE_SCOPE: 'false' }),
+    });
+    const response = await app.request('/.well-known/oauth-protected-resource');
+    expect(await response.json()).toMatchObject({
+      scopes_supported: ['vault:read', 'vault:reveal', 'vault:generate'],
+    });
   });
 
   it('OAUTH-4 never advertises offline_access', async () => {

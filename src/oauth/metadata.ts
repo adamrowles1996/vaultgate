@@ -1,4 +1,4 @@
-import { enabledScopes, type Scope } from '../scopes/registry.ts';
+import { enabledScopes, type Scope, type ScopeSwitches } from '../scopes/registry.ts';
 
 export interface AuthorizationServerMetadata {
   readonly issuer: string;
@@ -16,9 +16,8 @@ export interface AuthorizationServerMetadata {
   readonly authorization_response_iss_parameter_supported: true;
 }
 
-export interface MetadataConfig {
+export interface MetadataConfig extends ScopeSwitches {
   readonly publicUrl: string;
-  readonly enableWriteScope: boolean;
 }
 
 export const METADATA_PATH = '/.well-known/oauth-authorization-server';

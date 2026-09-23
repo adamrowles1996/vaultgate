@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { fail, ok, type Result } from '../result.ts';
-import { enabledScopes, type Scope } from '../scopes/registry.ts';
+import { enabledScopes, type Scope, type ScopeSwitches } from '../scopes/registry.ts';
 
 import { OAuthError } from './errors.ts';
 import { readQuery, type FormFields } from './form.ts';
@@ -42,9 +42,8 @@ export class AuthorizationRequestError extends Error {
   }
 }
 
-export interface AuthorizationRequestOptions {
+export interface AuthorizationRequestOptions extends ScopeSwitches {
   readonly publicUrl: string;
-  readonly enableWriteScope: boolean;
   readonly resolver: ClientResolver;
 }
 

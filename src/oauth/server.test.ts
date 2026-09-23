@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { ACTIONS_OFF } from '../test-support/actions-config.ts';
 import { createOAuthHarness, OPERATOR_ID } from '../test-support/oauth-harness.ts';
 import { unwrapFail } from '../test-support/result.ts';
 
@@ -15,6 +16,7 @@ describe('createAuthorizationServer', () => {
       config: {
         publicUrl: 'https://vault.example.com',
         enableWriteScope: false,
+        actions: ACTIONS_OFF,
         oauthClients: [
           { clientId: 'bad', clientName: undefined, redirectUris: ['http://evil.example.com/cb'] },
         ],

@@ -6,7 +6,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
-import { SCOPES } from '../scopes/registry.ts';
+import { enabledScopes, type ScopeSwitches } from '../scopes/registry.ts';
 
 import type { Config } from '../config/index.ts';
 
@@ -46,6 +46,8 @@ export function resourceUrls(config: Pick<Config, 'publicUrl'>): ResourceUrls {
   };
 }
 
+type MetadataConfig = Pick<Config, 'publicUrl'> & ScopeSwitches;
+
 interface ProtectedResourceMetadata {
   readonly resource: string;
   readonly authorization_servers: readonly string[];
@@ -55,13 +57,13 @@ interface ProtectedResourceMetadata {
   readonly resource_documentation: string;
 }
 
-function protectedResourceMetadata(config: Pick<Config, 'publicUrl'>): ProtectedResourceMetadata {
+function protectedResourceMetadata(config: MetadataConfig): ProtectedResourceMetadata {
   const urls = resourceUrls(config);
   return {
     resource: urls.resource,
     authorization_servers: [urls.issuer],
-    // OAUTH-4: offline_access is never advertised.
-    scopes_supported: [...SCOPES],
+    // OAUTH-1, OAUTH-16, ACT-14: the scopes this deployment grants; never offline_access (OAUTH-4).
+    scopes_supported: enabledScopes(config),
     bearer_methods_supported: ['header'],
     resource_name: 'vaultgate',
     resource_documentation: RESOURCE_DOCUMENTATION_URL,
@@ -71,7 +73,7 @@ function protectedResourceMetadata(config: Pick<Config, 'publicUrl'>): Protected
 /**
 A sub-application serving the metadata document at both well-known paths.
 */
-export function createMetadataApp(config: Pick<Config, 'publicUrl'>): Hono {
+export function createMetadataApp(config: MetadataConfig): Hono {
   const app = new Hono();
   const document = protectedResourceMetadata(config);
   app.use(

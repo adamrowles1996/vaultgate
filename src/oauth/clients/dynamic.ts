@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { fail, ok, type Result } from '../../result.ts';
-import { enabledScopes, isScope, type Scope } from '../../scopes/registry.ts';
+import { enabledScopes, isScope, type Scope, type ScopeSwitches } from '../../scopes/registry.ts';
 import { CREDENTIAL_PREFIX, mintCredential, type RandomSource } from '../credentials.ts';
 import { OAuthError } from '../errors.ts';
 import { validateRedirectUri } from '../redirect-uri.ts';
@@ -40,12 +40,11 @@ export interface RegistrationResponse extends RegistrationRequest {
   readonly client_id_issued_at: number;
 }
 
-export interface DynamicRegistrationOptions {
+export interface DynamicRegistrationOptions extends ScopeSwitches {
   readonly clients: ClientsRepo;
   readonly now: Clock;
   readonly random: RandomSource;
   readonly newId: () => string;
-  readonly enableWriteScope: boolean;
 }
 
 function invalidScope(scope: string | undefined, enabled: readonly Scope[]): string | undefined {

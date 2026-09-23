@@ -1,0 +1,170 @@
+/**
+ * The connector interface (spec §14.1). A connector is the protocol behind a
+ * target: it owns the shape of the three target documents, says which vault
+ * fields a mapping needs and which hosts a destination names, exposes its
+ * tools, classifies an operation against the policy without I/O
+ * (`authorize`, ACT-78) and runs it with the injected values the engine hands
+ * it for the duration of `run` only (ACT-50). Output is raw: the engine
+ * scrubs it (ACT-51) and cuts it at the cap (ACT-52).
+ */
+import type { ConnectorKind } from '../../config/actions.ts';
+import type { Logger } from '../../logger.ts';
+import type { Result } from '../../result.ts';
+import type { ActionScope } from '../../scopes/registry.ts';
+import type { ActionError } from '../errors.ts';
+import type { CommonPolicy, OperationKind, PolicyDecision } from '../policy.ts';
+import type { InjectedValues } from '../scrub.ts';
+import type { z } from 'zod';
+
+/**
+One host a destination names and whether the transport to it is encrypted (ACT-57).
+*/
+export interface Endpoint {
+  readonly host: string;
+  readonly tls: boolean;
+}
+
+/**
+An endpoint with the address the engine resolved and validated once for this call (ACT-55).
+*/
+export interface PinnedEndpoint extends Endpoint {
+  readonly address: string;
+}
+
+/**
+ * A vault field a credential mapping needs: the marker name, the selector
+ * (`src/vault/fields.ts`) and its role. A `secret` becomes an injected value;
+ * the `username` (at most one, `login.username` or any selector) feeds the
+ * `basic` injection mode and the `basic` scrub variant.
+ */
+export interface CredentialField {
+  readonly name: string;
+  readonly selector: string;
+  readonly role: 'secret' | 'username';
+}
+
+export interface TargetDocuments<Destination, Credential, Policy> {
+  readonly destination: Destination;
+  readonly credential: Credential;
+  readonly policy: Policy;
+}
+
+/**
+ * The static half of a connector: what the targets service needs to validate
+ * and describe a target of this kind, present in every build so the account
+ * page can edit targets of a connector whose runtime is not loaded.
+ */
+export interface ConnectorSchemas<Destination, Credential, Policy> {
+  readonly kind: ConnectorKind;
+  readonly destinationSchema: z.ZodType<Destination>;
+  readonly credentialSchema: z.ZodType<Credential>;
+  readonly policySchema: z.ZodType<Policy>;
+  endpoints(destination: Destination): readonly Endpoint[];
+  credentialFields(credential: Credential): readonly CredentialField[];
+  /**
+  Save-time checks beyond the schemas (ACT-79, ACT-81); each problem is shown to the operator.
+  */
+  saveProblems(documents: TargetDocuments<Destination, Credential, Policy>): readonly string[];
+  /**
+  ACT-43: the host and, where relevant, the database, base path or origin. Never a credential.
+  */
+  summariseDestination(destination: Destination): string;
+}
+
+export interface ConnectorTool<Operation> {
+  readonly name: string;
+  readonly scope: ActionScope;
+  /**
+  The tool's arguments minus `target` (and `session_id`), strict.
+  */
+  readonly inputSchema: z.ZodType<Operation>;
+}
+
+export interface OperationGrant {
+  readonly operation: OperationKind;
+  readonly scope: ActionScope;
+}
+
+/**
+What `actions_list_targets` may say about a target (ACT-19), before the scope filter.
+*/
+export interface TargetCapabilities {
+  readonly operations: readonly OperationGrant[];
+  readonly engine?: 'mssql' | 'postgres';
+  readonly unrestricted?: boolean;
+}
+
+export interface OutputLimit {
+  readonly maxBytes: number;
+  /**
+  ACT-52: capture this many bytes beyond `maxBytes` so a value straddling the cut is still scrubbed.
+  */
+  readonly guardBytes: number;
+}
+
+export interface RunContext<Destination, Credential, Policy> extends TargetDocuments<
+  Destination,
+  Credential,
+  Policy
+> {
+  readonly common: CommonPolicy;
+  readonly injected: InjectedValues;
+  /**
+  ACT-55: connect to `address`; `host` is for TLS (SNI, verification), `Host` and host-key lookup only.
+  */
+  readonly pinned: readonly PinnedEndpoint[];
+  /**
+  ACT-59: aborted when the policy timeout elapses; the connector cancels its work.
+  */
+  readonly signal: AbortSignal;
+  readonly outputLimit: OutputLimit;
+  readonly logger: Logger;
+}
+
+export interface OperationDescription {
+  /**
+  ACT-43: the method and path, the statement or command (first 1 KiB), or the page URL and element.
+  */
+  readonly summary: string;
+  /**
+  ACT-60: the SQL class, the HTTP method, `command`, or the browser page URL.
+  */
+  readonly classification: string;
+}
+
+export interface ConnectorOutput {
+  /**
+  The tool result before scrubbing; every string inside is scrubbed by the engine.
+  */
+  readonly result: Readonly<Record<string, unknown>>;
+  /**
+  Byte streams captured up to `maxBytes + guardBytes` (`body`, `stdout`, `stderr`, `snapshot`); the
+  engine scrubs and cuts each and writes the text into `result` under the same key.
+  */
+  readonly captured: Readonly<Record<string, Buffer>>;
+}
+
+export interface Connector<Destination, Credential, Policy, Operation> extends ConnectorSchemas<
+  Destination,
+  Credential,
+  Policy
+> {
+  readonly tools: readonly ConnectorTool<Operation>[];
+  capabilities(destination: Destination, policy: Policy): TargetCapabilities;
+  /**
+  Pure: classifies and checks the operation against the policy; no I/O (ACT-78).
+  */
+  authorize(policy: Policy, operation: Operation): PolicyDecision;
+  describe(operation: Operation): OperationDescription;
+  /**
+  Runs one operation with the injected values; output is raw, the engine scrubs it.
+  */
+  run(
+    context: RunContext<Destination, Credential, Policy>,
+    operation: Operation,
+  ): Promise<Result<ConnectorOutput, ActionError>>;
+}
+
+export type AnyConnectorSchemas = ConnectorSchemas<unknown, unknown, unknown>;
+
+export type AnyConnector = Connector<unknown, unknown, unknown, unknown>;

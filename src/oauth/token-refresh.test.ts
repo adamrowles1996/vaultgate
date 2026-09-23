@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 
+import { ACTIONS_OFF } from '../test-support/actions-config.ts';
 import { RESOURCE } from '../test-support/oauth-harness.ts';
 import { formBody } from '../test-support/oauth-http.ts';
 import {
@@ -161,6 +162,7 @@ describe('POST /oauth/token refresh_token', () => {
     const dependencies: TokenEndpointDependencies = {
       publicUrl: 'https://vault.example.com',
       enableWriteScope: false,
+      actions: ACTIONS_OFF,
       repos: { ...harness.repos, tokens: { ...harness.repos.tokens, markReplaced: () => false } },
       audit: { record: noop },
       rateLimiter: { take: () => ({ allowed: true }) },

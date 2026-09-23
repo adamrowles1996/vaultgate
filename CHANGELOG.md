@@ -6,6 +6,44 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Actions engine core (spec 13, M9 first pull request; ACT-1…ACT-74 as far as the engine
+  enforces them), off by default behind `VAULTGATE_ENABLE_ACTIONS` with one switch per connector
+  (`VAULTGATE_ACTIONS_ENABLE_{HTTP,SQL,SSH,WINRM,BROWSER}`, `VAULTGATE_ACTIONS_BROWSER_CDP_URL`,
+  `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND`; a connector switch without the master switch is a
+  start-up warning): the six `actions:*` scopes in the registry, advertised and effective only
+  when the layer and the connector are on, with the consent-page group and its warning lines;
+  migration `004-actions` (`action_targets`, `action_grants`, `action_calls`, `action_sessions`)
+  and the maintenance rules that close expired sessions as `idle` and retire calls past audit
+  retention; the targets service (create, edit, enable, disable, delete, grant, revoke, consent
+  revocation callback) with save-time destination resolution, vault item and field checks and
+  `actions.*` audit events; the glob-like policy matcher and HTTP subject normalisation; the
+  confirmation `requestState` (HKDF-derived HMAC, 120 s, single-use nonce) and the ACT-42
+  elicitation document; the scrubber over every encoded variant with the guard band; per-target
+  and per-client limits; the engine (`createActionsEngine`: `listTargets`, `call`) with the
+  ACT-16 order, one error code per failure and one `action_calls` row plus one audit event per
+  call; `node dist/cli.js audit export --stream actions`; the dependency-cruiser rules for the
+  `actions` layer; and the `http` connector's document schemas (including the `graph` adapter
+  document). No MCP tool, account page or connector runtime yet: those are the next pull
+  requests. Test support gains an echo connector whose fake destination returns its request, so
+  the canary suite proves end to end that no injected value, in any encoding, reaches a result,
+  an audit row, a log line or an elicitation message.
+
+### Changed
+
+- One in-memory limiter module, `src/net/rate-limit.ts`, serves the authorization server, the
+  MCP endpoint and the actions engine; `src/oauth/rate-limit.ts` and `src/mcp/rate-limit.ts` are
+  gone. A token bucket now remembers the budget it was taken under, so a key with its own limit
+  (a target's `rate_limit_per_minute`) is never judged full against the limiter's default.
+- `src/oauth/ip-ranges.ts` moved to `src/net/ip-ranges.ts` and gained `classifyAddress`
+  (`public`, `private`, `forbidden`, `invalid`) and the `Lookup` type; `isPublicAddress` and the
+  CIMD fetcher are unchanged.
+- The audit keyset pagination and streaming export are shared by both streams
+  (`src/audit/keyset.ts`, `lineFormats`); `listAuditEvents` returns `records`.
+- `parseSecretField` lives in `src/vault/fields.ts` with the field-presence check ACT-4 needs;
+  `deriveKey` is exported from `src/crypto/secret-box.ts` for the confirmation HMAC purpose.
+
 ### Docs
 
 - ADR 0007 and spec sections 13 (Actions) and 14 (Action connectors) specify a planned,

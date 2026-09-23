@@ -27,6 +27,13 @@ const TOKEN =
   "INSERT INTO tokens (id, token_hash, kind, family_id, client_id, consent_id, scopes, issued_at, expires_at, revoked_at) VALUES (?, ?, 'access', 'f', 'client', 'co', '[]', 0, ?, ?)";
 const AUDIT =
   "INSERT INTO audit_events (id, at, category, action, outcome) VALUES (?, ?, 'c', 'a', 'ok')";
+const ACTION_SESSION =
+  'INSERT INTO action_sessions (id_hash, target_id, client_id, token_prefix, opened_at, ' +
+  "last_used_at, expires_at, closed_at, close_reason, calls) VALUES (?, 't', 'client', 'p', 0, 0, ?, ?, ?, 0)";
+const ACTION_CALL =
+  'INSERT INTO action_calls (id, at, target_name, tool, client_id, token_prefix, arguments, ' +
+  'arguments_truncated, output_bytes, output_truncated, duration_ms, outcome, elicitation) ' +
+  "VALUES (?, ?, 'api', 'http_request', 'client', 'p', '{}', 0, 0, 0, 0, 'ok', 'not_required')";
 
 const OPERATOR =
   'INSERT INTO operators (id, email, password_hash, totp_secret_ciphertext, totp_last_step, ' +
@@ -70,7 +77,14 @@ const SEEDS: readonly Seed[] = [
   ['INSERT INTO pending_authorizations VALUES (?, ?, ?, ?)', 'pend-drop', 'b', '{}', T],
   [AUDIT, 'audit-keep', T - RETENTION_DAYS * DAY],
   [AUDIT, 'audit-drop', T - RETENTION_DAYS * DAY - 1],
+  [ACTION_SESSION, 'session-open-keep', T + 1, null, null],
+  [ACTION_SESSION, 'session-closed-keep', T, T - 1, 'agent'],
+  [ACTION_SESSION, 'session-idle', T, null, null],
+  [ACTION_CALL, 'call-keep', T - RETENTION_DAYS * DAY],
+  [ACTION_CALL, 'call-drop', T - RETENTION_DAYS * DAY - 1],
 ];
+
+const sessionSchema = z.object({ id_hash: z.string(), close_reason: z.string().nullable() });
 
 function seeded(): DatabaseSync {
   const database = new DatabaseSync(':memory:');
@@ -100,6 +114,8 @@ describe('runMaintenance', () => {
       cimd_cache: 1,
       pending_authorizations: 1,
       audit_events: 1,
+      action_sessions: 1,
+      action_calls: 1,
     });
     expect(remaining(database, 'authorization_codes', 'code_hash')).toStrictEqual(['code-keep']);
     expect(remaining(database, 'sessions', 'id_hash')).toStrictEqual(['session-keep']);
@@ -113,16 +129,33 @@ describe('runMaintenance', () => {
     expect(remaining(database, 'cimd_cache', 'client_id')).toStrictEqual(['cimd-keep']);
     expect(remaining(database, 'pending_authorizations')).toStrictEqual(['pend-keep']);
     expect(remaining(database, 'audit_events')).toStrictEqual(['audit-keep']);
+    expect(remaining(database, 'action_calls')).toStrictEqual(['call-keep']);
     expect(remaining(database, 'operators')).toStrictEqual(['op']);
     expect(remaining(database, 'oauth_clients')).toStrictEqual(['cl']);
     expect(remaining(database, 'consents')).toStrictEqual(['co']);
+  });
+
+  it('ACT-66 ACT-62 closes an open browser session past its expiry as idle and retires calls past retention', () => {
+    const database = seeded();
+    runMaintenance(database, NOW, RETENTION_DAYS);
+    expect(
+      all(
+        database,
+        'SELECT id_hash, close_reason FROM action_sessions WHERE closed_at IS NOT NULL ORDER BY id_hash',
+        sessionSchema,
+      ),
+    ).toStrictEqual([
+      { id_hash: 'session-closed-keep', close_reason: 'agent' },
+      { id_hash: 'session-idle', close_reason: 'idle' },
+    ]);
+    expect(remaining(database, 'action_sessions', 'id_hash')).toHaveLength(3);
   });
 
   it('STORE-6 reports zero counts on a clean database', () => {
     const database = seeded();
     runMaintenance(database, NOW, RETENTION_DAYS);
     expect(Object.values(runMaintenance(database, NOW, RETENTION_DAYS))).toStrictEqual([
-      0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ]);
   });
 });

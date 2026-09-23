@@ -1,28 +1,64 @@
 # 14 Action connectors
 
-> **Status: planned.** The connector contracts of the actions layer
-> ([13 Actions](13-actions.md), [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)).
-> Requirement identifiers continue the `ACT-n` sequence of section 13.
+> **Status: planned; the interface (14.1) and the `http` document schemas (14.2, with the
+> `graph` adapter document of 14.3) landed with M9's first pull request.** The connector
+> contracts of the actions layer ([13 Actions](13-actions.md),
+> [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). No connector runtime exists
+> yet. Requirement identifiers continue the `ACT-n` sequence of section 13.
 
 ## 14.1 Connector interface
 
-Each connector is a sub-module of `src/actions/connectors/` implementing one interface:
+Each connector is a sub-module of `src/actions/connectors/` implementing one interface
+(`src/actions/connectors/connector.ts`). Its static half, `ConnectorSchemas`, is present in
+every build so the account page can validate and edit targets of a connector whose runtime is
+not loaded; the runtime half is imported dynamically only when the connector is enabled (ACT-73).
 
 ```ts
-interface Connector<Destination, Credential, Policy, Operation, Output> {
+interface ConnectorSchemas<Destination, Credential, Policy> {
   readonly kind: 'http' | 'sql' | 'ssh' | 'winrm' | 'browser';
   readonly destinationSchema: z.ZodType<Destination>;
   readonly credentialSchema: z.ZodType<Credential>;
   readonly policySchema: z.ZodType<Policy>;
+  /** The hosts a destination names and whether each is reached over TLS (ACT-3, ACT-55, ACT-57). */
+  endpoints(destination: Destination): readonly Endpoint[];
+  /** The vault fields a mapping needs, as `get_secret` selectors (ACT-4). */
+  credentialFields(credential: Credential): readonly CredentialField[];
+  /** Save-time rules beyond the schemas (ACT-79, ACT-81); each problem is shown to the operator. */
+  saveProblems(documents: TargetDocuments<Destination, Credential, Policy>): readonly string[];
+  /** The host (and database, base path or origin) for ACT-43 and the account page. */
+  summariseDestination(destination: Destination): string;
+}
+
+interface Connector<Destination, Credential, Policy, Operation> extends ConnectorSchemas<
+  Destination,
+  Credential,
+  Policy
+> {
+  /** The tools this connector serves (`sql` has two), each with its scope and its strict input schema minus `target`. */
+  readonly tools: readonly ConnectorTool<Operation>[];
+  /** What `actions_list_targets` may say about a target before the scope filter (ACT-19). */
+  capabilities(destination: Destination, policy: Policy): TargetCapabilities;
   /** Pure: classifies and checks the operation against the policy; no I/O. */
   authorize(policy: Policy, operation: Operation): PolicyDecision;
+  /** The ACT-43 operation summary and the ACT-60 classification. */
+  describe(operation: Operation): OperationDescription;
   /** Runs one operation with the injected values; output is raw, the engine scrubs it. */
   run(
     context: RunContext<Destination, Credential, Policy>,
     operation: Operation,
-  ): Promise<Result<Output, ActionError>>;
+  ): Promise<Result<ConnectorOutput, ActionError>>;
 }
 ```
+
+`RunContext` carries the parsed documents, the common policy fields, the `InjectedValues`
+holder (ACT-50), the pinned endpoints (ACT-55), the `AbortSignal` of the policy timeout
+(ACT-59), the output limit with its guard band (ACT-52) and a logger. `ConnectorOutput` is
+`{ result, captured }`: `result` is the tool result before scrubbing and `captured` the byte
+streams (`body`, `stdout`, `stderr`, `snapshot`) taken up to `max_output_bytes` plus the guard
+band, which the engine scrubs, cuts and writes back into `result` under the same keys. The
+ACT-35 rule for command patterns and the ACT-88 switch are applied by the targets service to
+any policy document that carries `allowed_commands`/`any_command`, so a connector does not
+repeat them.
 
 - **ACT-78** `authorize` is pure and fully unit-tested; `run` takes an injected transport (a
   `fetch`-like function, a database client factory, an SSH client factory, an HTTPS request

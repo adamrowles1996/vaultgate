@@ -1,12 +1,17 @@
 # 13 Actions: typed, policy-gated use of vault credentials
 
-> **Status: planned.** This section specifies the actions layer decided in
-> [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as
-> milestones M9 to M15 in [`PLAN.md`](../PLAN.md). Nothing in it is implemented;
-> the identifiers exist so the implementing pull requests can cite them. Until M9
-> lands, the vault tools of section 06 are the whole MCP surface. The per-connector
-> contracts are in [14 Action connectors](14-actions-connectors.md); the `ACT-n`
-> sequence continues there.
+> **Status: M9 in progress — engine core landed; tools and pages follow.** This section
+> specifies the actions layer decided in
+> [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as milestones
+> M9 to M15 in [`PLAN.md`](../PLAN.md). Landed with M9's first pull request: configuration
+> (13.14), scopes and consent (13.5), storage and maintenance (13.13), targets and grants
+> (13.3, 13.4), policy patterns (13.7.1), confirmation state (13.8), secret handling (13.9),
+> limits (13.11), the engine in `src/actions/` with the resolution order of ACT-16, the
+> `action_calls` trail and its export stream (13.12), the layering rules (13.15) and the
+> `http` connector's document schemas (14.2). Not yet: any MCP tool (13.6), the account
+> pages (13.3.2), the `http` runtime and every other connector; until the tools land, the
+> vault tools of section 06 are the whole MCP surface. The per-connector contracts are in
+> [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence continues there.
 
 ## 13.1 Purpose
 
@@ -114,7 +119,7 @@ Design rules, in priority order:
 
 - **ACT-9** A target is usable by an OAuth client only while a row in `action_grants` joins
   them and neither the grant nor the client's consent is revoked. Grants are per client (the
-  `oauth_clients.id`), not per token, and are managed from the target's page by choosing among
+  `oauth_clients.client_id`, the identifier every consent and token row carries), not per token, and are managed from the target's page by choosing among
   the clients that currently hold a consent. A client with no grant sees the target nowhere and
   a call to it answers `not_granted`.
 - **ACT-10** Revoking a client's consent (OAUTH-30) MUST also revoke that client's grants and
@@ -156,11 +161,13 @@ Design rules, in priority order:
   to the engine (13.15).
 - **ACT-16** Every tool takes `target` (the name, ACT-1) or `session_id` (browser tools, which
   resolve the session's target) as its first argument and resolves it in this order, stopping at
-  the first failure: layer enabled → connector enabled → target exists and is enabled → client
-  granted → token holds the scope → arguments valid → policy allows the operation (13.7) → rate
-  limits (13.11) → confirmation if required (13.8) → credential fetched (13.9) → destination
-  pinned (13.10) → run. Each failure has its own error code (13.16) and its own audit outcome,
-  and the ordering means an ungranted client learns nothing about a target beyond `not_granted`.
+  the first failure: layer enabled → target exists → client granted → connector enabled →
+  target enabled → stored target valid (ACT-1) → token holds the tool's scope → arguments valid
+  → policy allows the operation (13.7) → rate limits (13.11) → confirmation if required (13.8)
+  → credential fetched (13.9) → destination pinned (13.10) → run. Each failure has its own error
+  code (13.16) and its own audit outcome, and the grant check comes before every check that
+  would describe the target, so an ungranted client learns nothing about a target beyond
+  `not_granted` (ACT-67 places `connector_disabled` after the grant for the same reason).
 - **ACT-17** Tool descriptions state the arguments' meaning, what the result contains, that the
   result never contains credentials, that `target` must come from `actions_list_targets`, and,
   for the write, shell and browser tools, that the operator may require a confirmation the agent
@@ -297,7 +304,9 @@ before anything else (ACT-16) and a session opened by another client answers `un
   are the exact `command` string. Browser origins are compared exactly (scheme, host, port) and
   are never patterns. A pattern that would allow everything (`*`, `**`) is refused at save for
   commands unless `any_command` is what the operator means; for paths `/**` is allowed and is the
-  documented way to say "the whole API".
+  documented way to say "the whole API". Each `allowed_paths` pattern is itself checked at save:
+  it must start with `/`, must not climb above `base_url`, and must be written in the normalised
+  form it will be matched against.
 
 ### 13.7.2 SQL classification
 
@@ -377,7 +386,8 @@ class? }` or `{ allowed: false, reason }` with `reason` one of `method`, `path`,
   1 KiB) or, for a browser action, the page URL and the element's accessible name and the text
   to type, built from the agent's arguments and the target's metadata and passed through the
   scrubber (13.9) like any output. The message never contains an injected value, a policy
-  pattern or a vault item id.
+  pattern or a vault item id. It is built before the credential is fetched (ACT-41), so at that
+  point there is no injected value to scrub; the canary suite of ACT-53 asserts it is clean.
 - **ACT-44** `requestState` is `base64url(payload) + "." + base64url(HMAC-SHA256(payload))` under
   a key derived from `VAULTGATE_SECRET_KEY` (HKDF purpose `vaultgate/actions-confirmation/v1`),
   where `payload` is JSON of `{ v: 1, nonce, target_id, revision, tool, client_id, token_prefix,
@@ -392,6 +402,8 @@ args_sha256, issued_at, expires_at }` and `expires_at` is `issued_at + 120 000`.
 - **ACT-46** The `nonce` is single-use: it is written to `action_calls.confirmation_nonce`
   (unique index) inside the same transaction that records the call, before the connector runs;
   a second retry with the same state fails `confirmation_reused`. Nonces are 16 random bytes.
+  The engine also refuses a nonce it finds already consumed before it fetches the credential;
+  the transaction is the backstop against a race between two retries.
 - **ACT-47** The `ElicitResult` is honoured as: `action: "accept"` with `content.confirm === true`
   runs the call; `accept` with `confirm` false or absent, `decline` and `cancel` fail with
   `confirmation_declined` (`accept` or `decline`) or `confirmation_cancelled` (`cancel`) and are
@@ -495,14 +507,15 @@ args_sha256, issued_at, expires_at }` and `expires_at` is `issued_at + 120 000`.
 
 - **ACT-60** Every call appends the MCP-13 audit event (tool, client, token prefix, outcome,
   duration) **and** one `action_calls` row: `id`, `at`, `target_id`, `target_name`, `connector`,
-  `revision`, `tool`, `session_id` (browser), `client_id`, `token_prefix`, `operation` (`read` \|
+  `revision`, `tool`, `session_id_hash` (the SHA-256 of the browser session id, ACT-96), `client_id`, `token_prefix`, `operation` (`read` \|
   `write` \| `shell` \| `act`), `classification` (SQL class, HTTP method, `command`, or the browser
   page URL), `arguments` (JSON of the tool arguments minus injected values and minus any header
   the policy did not allow, capped at 4 KiB with `arguments_truncated`), `output_bytes`,
   `output_truncated`, `duration_ms`, `outcome` (`ok` \| `denied:<code>` \| `error:<code>`),
   `elicitation` (`not_required` \| `accepted` \| `declined` \| `cancelled` \| `unavailable` \|
   `invalid`), `confirmation_nonce`, `request_id`, `ip`. Results, snapshots and screenshots are
-  never stored.
+  never stored. A call that ends in a confirmation request (ACT-42) records nothing yet: the
+  retry that carries the answer is the call that is recorded.
 - **ACT-61** Arguments are stored because an operator who finds an unexpected write needs to see
   the statement, command or typed text that ran, and because the agent supplied them in the
   clear; the scrubber still runs over them (a prompt-injected agent could echo a value it obtained
@@ -521,8 +534,8 @@ Migration `004-actions` adds four tables (conventions of 07.1):
 | Table             | Columns                                                                                                                                                                                                                                                                                                                                                                    |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `action_targets`  | `id`, `name` (unique), `description`, `connector`, `destination` (JSON), `internal`, `credential` (JSON: item id and field names only), `policy` (JSON), `enabled`, `revision`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                   |
-| `action_grants`   | `target_id` (FK, cascade), `client_id` (FK `oauth_clients.id`), `granted_at`, `granted_by`, `revoked_at`; primary key (`target_id`, `client_id`)                                                                                                                                                                                                                           |
-| `action_calls`    | `id`, `at`, `target_id` (no FK; outlives the target), `target_name`, `connector`, `revision`, `tool`, `session_id`, `client_id`, `token_prefix`, `operation`, `classification`, `arguments` (JSON), `arguments_truncated`, `output_bytes`, `output_truncated`, `duration_ms`, `outcome`, `elicitation`, `confirmation_nonce` (unique, nullable), `request_id`, `ip`        |
+| `action_grants`   | `target_id` (FK, cascade), `client_id` (FK `oauth_clients.client_id`), `granted_at`, `granted_by`, `revoked_at`; primary key (`target_id`, `client_id`)                                                                                                                                                                                                                    |
+| `action_calls`    | `id`, `at`, `target_id` (no FK; outlives the target), `target_name`, `connector`, `revision`, `tool`, `session_id_hash`, `client_id`, `token_prefix`, `operation`, `classification`, `arguments` (JSON), `arguments_truncated`, `output_bytes`, `output_truncated`, `duration_ms`, `outcome`, `elicitation`, `confirmation_nonce` (unique, nullable), `request_id`, `ip`   |
 | `action_sessions` | `id_hash` (SHA-256 of the session id), `target_id`, `client_id`, `token_prefix`, `opened_at`, `last_used_at`, `expires_at`, `closed_at`, `close_reason` (`agent` \| `idle` \| `absolute` \| `revoked` \| `target_changed` \| `operator` \| `shutdown` \| `error`), `calls`; the live context lives in the sidecar, this row is the record and the revocation handle (14.7) |
 
 - **ACT-64** No column holds an injected value, a vault secret, a token, a raw session id or a
@@ -562,25 +575,44 @@ Migration `004-actions` adds four tables (conventions of 07.1):
 ## 13.15 Architecture and dependencies
 
 - **ACT-69** The engine and connectors live in `src/actions/` with this layout, every file under
-  300 lines (11.1):
+  300 lines (11.1). Where one concern outgrew a file it is split by cohesion, never by line
+  count; the names below are the modules as they exist (M9's first pull request) or are
+  planned for a later milestone (marked so):
 
 ```text
 src/actions/
-  engine.ts          resolve target → grant → scope → policy → limits → confirm → fetch → run → scrub → audit
-  targets.ts         repository over action_targets and action_grants; zod schemas per connector
-  policy.ts          pattern matcher (ACT-34), common policy fields
-  confirm.ts         requestState mint/verify (ACT-44…46), ElicitResult handling
-  scrub.ts           variant generation and replacement (ACT-51, 52)
-  limits.ts          per-target and per-client buckets and in-flight counters
-  sessions.ts        browser session registry: open, touch, expire, close on revocation (14.7)
-  pages/             account-page section (ACT-5, 6), composed by src/http/
+  engine.ts            createActionsEngine: listTargets (ACT-19) and call in the ACT-16 order
+  engine-resolve.ts    layer → target → grant → connector → enabled → valid → scope → arguments → policy
+  engine-confirm.ts    the confirmation step (ACT-41…48) before the credential is fetched
+  engine-run.ts        credential fetch (ACT-50, 54), destination pinning (ACT-55, 56), run under the timeout, scrub and cap
+  engine-record.ts     the action_calls row and the MCP-13 audit event of every call (ACT-60, 61)
+  engine-listing.ts    actions_list_targets (ACT-19)
+  caller.ts            who is calling: client, token prefix, scopes, request, elicitation capability, confirmation input
+  errors.ts            the codes and fixed messages of 13.16 (ACT-74)
+  targets.ts           the targets service: create, edit, enable, disable, delete, grant, revoke, consent revocation (ACT-10)
+  targets-lifecycle.ts create, update, enable, disable, delete with the revision bump and the ACT-7 events
+  targets-checks.ts    the save-time checks: ACT-3, ACT-4, ACT-35, ACT-57, ACT-88 and the connector's own
+  targets-schemas.ts   the common row schema (ACT-1) and the connector documents through the schema registry
+  targets-repo.ts      the repository over action_targets and action_grants
+  targets-context.ts   what the target operations share: the summary the pages render, the ACT-7 record
+  calls.ts             the action_calls writer: reserve, complete, the single-use nonce (ACT-46)
+  policy.ts            pattern matcher (ACT-34), HTTP subject normalisation (ACT-35), common policy fields, PolicyDecision (ACT-39)
+  destination.ts       the private-range rule and the pinned address (ACT-55, 56)
+  confirm.ts           requestState mint/verify (ACT-44…46), ElicitResult handling, the ACT-42 document
+  scrub.ts             injected values (ACT-50), variant generation and replacement (ACT-51, 52)
+  limits.ts            per-target and per-client buckets and in-flight counters (ACT-59)
+  sessions.ts          closing action_sessions on the revocation paths; the browser session registry is M15
+  audit.ts             the actions.* audit events (ACT-7)
+  pages/               account-page section (ACT-5, 6), composed by src/http/ (planned)
   connectors/
-    http/            request builder, injection modes, pinned transport use
-    graph/           token exchange, cache, refresh-token write-back
-    sql/             tokeniser and classifier; mssql/ and postgres/ drivers
-    ssh/             ssh2 client wrapper, host-key pinning
-    winrm/           WS-Management client, shell lifecycle
-    browser/         CDP client, login sequence, origin interception, snapshot and masking
+    connector.ts       the connector interface (14.1)
+    registry.ts        schemas of every connector; runtimes loaded for enabled connectors only (ACT-73)
+    http/              document schemas now; request builder, injection modes, pinned transport use (planned)
+    graph/             token exchange, cache, refresh-token write-back (planned)
+    sql/               tokeniser and classifier; mssql/ and postgres/ drivers (planned)
+    ssh/               ssh2 client wrapper, host-key pinning (planned)
+    winrm/             WS-Management client, shell lifecycle (planned)
+    browser/           CDP client, login sequence, origin interception, snapshot and masking (planned)
 ```
 
 - **ACT-70** Dependency-cruiser gains a layer: `src/actions/` MAY import `result`, `config`,
@@ -616,6 +648,7 @@ src/actions/
 | `target_disabled`            | The target exists and is granted but is disabled.                                                                                                 |
 | `target_invalid`             | The stored target fails schema validation (ACT-1); the operator page shows why.                                                                   |
 | `not_granted`                | The target exists but this client has no grant.                                                                                                   |
+| `insufficient_scope`         | The token does not hold the scope the tool needs (ACT-16). The MCP layer answers this with the OAUTH-33 challenge before the engine is reached.   |
 | `invalid_arguments`          | Argument shape or parameter binding problem (ACT-20, 23, 27, 29…33).                                                                              |
 | `policy_denied`              | The policy refused the operation; `detail.reason` is one of ACT-39's reasons.                                                                     |
 | `rate_limited`               | ACT-59; `detail.retry_after_s`.                                                                                                                   |

@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { enabledScopes } from '../scopes/registry.ts';
+import { ACTIONS_OFF } from '../test-support/actions-config.ts';
 import { unwrapFail, unwrapOk } from '../test-support/result.ts';
 
 import { DEFAULT_SCOPES, isScopeSubset, parseScopeParameter } from './scopes.ts';
 
 describe('parseScopeParameter', () => {
-  const enabled = enabledScopes({ enableWriteScope: false });
+  const enabled = enabledScopes({ enableWriteScope: false, actions: ACTIONS_OFF });
 
   it('OAUTH-16 defaults an empty scope to vault:read', () => {
     expect(unwrapOk(parseScopeParameter(undefined, enabled))).toStrictEqual(DEFAULT_SCOPES);

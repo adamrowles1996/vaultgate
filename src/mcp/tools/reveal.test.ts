@@ -4,8 +4,9 @@ import { InMemoryVaultClient } from '../../test-support/in-memory-vault-client.t
 import { failureCode, runFail, runOk } from '../../test-support/run-tool.ts';
 import { CANARY } from '../../test-support/vault-fixture.ts';
 import { VaultError } from '../../vault/client.ts';
+import { parseSecretField } from '../../vault/fields.ts';
 
-import { parseSecretField, toolGetSecret } from './reveal.ts';
+import { toolGetSecret } from './reveal.ts';
 
 describe('parseSecretField', () => {
   it('§6.2 recognises every fixed field name and the two prefixed forms', () => {

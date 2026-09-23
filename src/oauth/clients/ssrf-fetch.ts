@@ -1,8 +1,9 @@
 import { isIP } from 'node:net';
 
+import { isPublicAddress } from '../../net/ip-ranges.ts';
 import { fail, ok, type Result } from '../../result.ts';
-import { isPublicAddress } from '../ip-ranges.ts';
 
+import type { Lookup } from '../../net/ip-ranges.ts';
 import type { PinnedFetch } from '../../net/pinned-https.ts';
 
 /**
@@ -10,11 +11,6 @@ import type { PinnedFetch } from '../../net/pinned-https.ts';
  * fresh resolution of the host name. Injected (QG-2).
  */
 export type FetchLike = PinnedFetch;
-
-/**
- * Resolves a host name to every address it maps to. Injected (QG-2).
- */
-export type Lookup = (hostname: string) => Promise<readonly string[]>;
 
 export interface SafeFetchOptions {
   readonly fetch: FetchLike;

@@ -5,6 +5,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { serve } from '@hono/node-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 
+import { loadConnectors } from './actions/connectors/registry.ts';
+import { createActionsEngine } from './actions/engine.ts';
 import { StoreAuditSink } from './audit/store-sink.ts';
 import {
   createVaultConnection,
@@ -66,6 +68,12 @@ const vaultConnection = createVaultConnection({
   clock: Date.now,
 });
 
+// Every address a name maps to, for the SSRF checks of OAUTH-8 and ACT-55.
+async function resolveAddresses(hostname: string): Promise<readonly string[]> {
+  const entries = await lookup(hostname, { all: true });
+  return entries.map((entry) => entry.address);
+}
+
 // The ID-18 guards are shared by the operator pages and the authorization
 // server, so they are built first; the server follows, and identity last with
 // the server's connected-clients renderer for the account page.
@@ -83,10 +91,7 @@ const oauth = createAuthorizationServer({
   audit: auditSink,
   logger,
   fetch: createPinnedHttpsFetch(), // OAUTH-8: pinned to the address the SSRF check approved
-  lookup: async (hostname) => {
-    const entries = await lookup(hostname, { all: true });
-    return entries.map((entry) => entry.address);
-  },
+  lookup: resolveAddresses,
   now: Date.now,
   random: randomBytes,
   newId: randomUUID,
@@ -110,6 +115,31 @@ const identity = createIdentity({
   vaultConnection,
 });
 identity.bootstrap.ensureToken();
+
+// The actions engine exists only when the layer is enabled (ACT-73); its
+// tools and pages follow in M9's next pull requests, so nothing serves it yet.
+if (config.actions.enabled) {
+  const engine = createActionsEngine({
+    config: config.actions,
+    database: store.db,
+    vault: vault.client,
+    connectors: await loadConnectors(config.actions),
+    lookup: resolveAddresses,
+    audit: auditSink,
+    logger,
+    secretKey: config.secrets.secretKey,
+    now: Date.now,
+    schedule: (callback, delayMs) => {
+      const timer = setTimeout(callback, delayMs);
+      return () => {
+        clearTimeout(timer);
+      };
+    },
+    random: randomBytes,
+    newId: randomUUID,
+  });
+  logger.info({ connectors: engine.connectors }, 'actions engine ready');
+}
 
 const app = createApp({
   config,

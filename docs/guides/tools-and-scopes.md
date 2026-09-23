@@ -171,8 +171,11 @@ vault item that signs in to it, an allowlist policy and the clients allowed to u
 agent calls `http_request`, `sql_query`, `sql_execute`, `ssh_run`, `winrm_run` or the
 `browser_*` tools by target name. Each connector has its own `actions:*` scope, marked risky at
 consent; write and shell calls carry MCP `destructiveHint` annotations and can require a per-call
-confirmation through MCP elicitation; every injected value is scrubbed from every result. Nothing
-of this exists yet: see [13 Actions](../spec/13-actions.md),
+confirmation through MCP elicitation; every injected value is scrubbed from every result. The
+engine core (targets, grants, policy, confirmation, scrubbing, limits and audit, behind
+`VAULTGATE_ENABLE_ACTIONS`) landed with M9's first pull request, but no tool or page exists yet,
+so nothing changes for an agent or an operator until they do: see
+[13 Actions](../spec/13-actions.md),
 [14 Action connectors](../spec/14-actions-connectors.md) and
 [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md); milestones M9 to M15 in
 [`PLAN.md`](../PLAN.md).

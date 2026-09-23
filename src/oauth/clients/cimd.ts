@@ -3,9 +3,10 @@ import { type Clock, HOUR_MS, MINUTE_MS, SECOND_MS } from '../clock.ts';
 import { OAuthError } from '../errors.ts';
 
 import { type CimdDocument, parseCimdDocument } from './cimd-document.ts';
-import { type FetchLike, type Lookup, safeFetch } from './ssrf-fetch.ts';
+import { type FetchLike, safeFetch } from './ssrf-fetch.ts';
 
-import type { RateLimiter } from '../rate-limit.ts';
+import type { Lookup } from '../../net/ip-ranges.ts';
+import type { RateLimiter } from '../../net/rate-limit.ts';
 import type { CimdCacheRepo } from '../repositories/cimd-cache.ts';
 
 export interface WarnLogger {

@@ -9,11 +9,11 @@ import { readForm, requireField } from './form.ts';
 
 import type { OAuthAuditSink } from './audit.ts';
 import type { Clock } from './clock.ts';
-import type { RateLimiter } from './rate-limit.ts';
 import type { ConnectedClient } from './repositories/consents.ts';
+import type { OAuthRepos } from './repositories/index.ts';
 import type { ClientIpResolver, OAuthContext, OAuthHandler } from './request-context.ts';
 import type { Guards } from '../identity/guards.ts';
-import type { OAuthRepos } from './repositories/index.ts';
+import type { RateLimiter } from '../net/rate-limit.ts';
 
 const MAX_FORM_BYTES = 16 * 1024;
 

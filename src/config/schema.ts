@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { cdpUrlSchema } from './actions.ts';
 import { durationSchema } from './duration.ts';
 import {
   bitwardenServerSchema,
@@ -26,7 +27,7 @@ const DEFAULT_AUDIT_RETENTION_DAYS = 365;
  * Every setting the process reads from its environment (spec §08). Defaults
  * bind to loopback: exposing the server is an explicit act.
  */
-export const environmentSchema = z.object({
+const baseEnvironmentSchema = z.object({
   VAULTGATE_PUBLIC_URL: publicUrlSchema,
   VAULTGATE_HOST: z.string().min(1).default('127.0.0.1'),
   VAULTGATE_PORT: z.coerce.number().int().min(MIN_PORT).max(MAX_PORT).default(DEFAULT_PORT),
@@ -63,6 +64,31 @@ export const environmentSchema = z.object({
     .default(DEFAULT_AUDIT_RETENTION_DAYS),
   VAULTGATE_SQLITE_NETWORK_FS: booleanSchema('false'),
   VAULTGATE_LOG_LEVEL: z.enum(LOG_LEVELS).default('info'),
+  // The actions layer (spec §13.14): a master switch, one switch per connector.
+  VAULTGATE_ENABLE_ACTIONS: booleanSchema('false'),
+  VAULTGATE_ACTIONS_ENABLE_HTTP: booleanSchema('false'),
+  VAULTGATE_ACTIONS_ENABLE_SQL: booleanSchema('false'),
+  VAULTGATE_ACTIONS_ENABLE_SSH: booleanSchema('false'),
+  VAULTGATE_ACTIONS_ENABLE_WINRM: booleanSchema('false'),
+  VAULTGATE_ACTIONS_ENABLE_BROWSER: booleanSchema('false'),
+  VAULTGATE_ACTIONS_BROWSER_CDP_URL: cdpUrlSchema,
+  VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND: booleanSchema('false'),
+});
+
+/**
+ * Cross-field rules the object schema cannot express column by column.
+ */
+export const environmentSchema = baseEnvironmentSchema.superRefine((data, context) => {
+  if (
+    data.VAULTGATE_ACTIONS_ENABLE_BROWSER &&
+    data.VAULTGATE_ACTIONS_BROWSER_CDP_URL === undefined
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['VAULTGATE_ACTIONS_BROWSER_CDP_URL'],
+      message: 'is required when VAULTGATE_ACTIONS_ENABLE_BROWSER is true',
+    });
+  }
 });
 
 export type ParsedEnvironment = z.output<typeof environmentSchema>;

@@ -56,4 +56,23 @@ describe('createLogger', () => {
     }
     expect(serialised).toContain('[REDACTED]');
   });
+
+  it("ACT-53 redacts the actions engine's injected values and credential documents by field name", () => {
+    const { sink, lines } = collectingSink();
+    createLogger('info', sink).info(
+      {
+        call: {
+          injected: 'canary-injected',
+          injectedValues: ['canary-values'],
+          secret: 'canary-secret',
+        },
+        target: { credential: { item_id: 'item-1', mapping: { field: 'password' } } },
+      },
+      'call',
+    );
+    const serialised = JSON.stringify(lines()[0]);
+    for (const secret of ['canary-injected', 'canary-values', 'canary-secret', 'item-1']) {
+      expect(serialised).not.toContain(secret);
+    }
+  });
 });
