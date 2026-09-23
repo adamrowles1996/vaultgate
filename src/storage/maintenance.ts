@@ -26,6 +26,8 @@ export interface MaintenanceCounts {
   readonly cimd_cache: number;
   readonly pending_authorizations: number;
   readonly audit_events: number;
+  readonly action_sessions: number;
+  readonly action_calls: number;
 }
 
 interface Rule {
@@ -35,7 +37,10 @@ interface Rule {
 }
 
 /**
- * What STORE-6 lists, and nothing else. "Expired" means the expiry instant
+ * What STORE-6 lists, and nothing else, plus the actions layer's two rules
+ * (ACT-62, ACT-66): an open browser session past its expiry is closed as
+ * `idle` (the engine closes every other case itself) and call rows follow
+ * the audit retention. "Expired" means the expiry instant
  * has been reached (`<=`); "older than" is strict (`<`). `?1` binds the one
  * threshold wherever it appears.
  */
@@ -80,10 +85,22 @@ const RULES: readonly Rule[] = [
     sql: 'DELETE FROM audit_events WHERE at < ?1',
     threshold: (now, retentionDays) => now - retentionDays * DAY_MS,
   },
+  {
+    table: 'action_sessions',
+    sql:
+      "UPDATE action_sessions SET closed_at = ?1, close_reason = 'idle' " +
+      'WHERE closed_at IS NULL AND expires_at <= ?1',
+    threshold: (now) => now,
+  },
+  {
+    table: 'action_calls',
+    sql: 'DELETE FROM action_calls WHERE at < ?1',
+    threshold: (now, retentionDays) => now - retentionDays * DAY_MS,
+  },
 ];
 
 /**
-Deletes every row STORE-6 calls expired as of `now`, in one transaction, and reports the counts.
+Retires every row STORE-6 calls expired as of `now`, in one transaction, and reports the counts.
 */
 export function runMaintenance(
   database: DatabaseSync,
@@ -99,6 +116,8 @@ export function runMaintenance(
     cimd_cache: 0,
     pending_authorizations: 0,
     audit_events: 0,
+    action_sessions: 0,
+    action_calls: 0,
   };
   transaction(database, () => {
     for (const rule of RULES) {

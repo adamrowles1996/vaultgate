@@ -65,6 +65,12 @@ describe('loadConfig', () => {
       sqliteNetworkFs: false,
       logLevel: 'info',
       bitwarden: { server: undefined, bin: 'bw', clientId: 'user.abc', syncIntervalMs: 900_000 },
+      actions: {
+        enabled: false,
+        connectors: { http: false, sql: false, ssh: false, winrm: false, browser: false },
+        browserCdpUrl: undefined,
+        allowAnyCommand: false,
+      },
       secrets: {
         secretKey: KEY_BYTES,
         masterPassword: 'master-password',
@@ -135,6 +141,12 @@ describe('loadConfig', () => {
         bin: '/usr/local/bin/bw',
         clientId: 'user.abc',
         syncIntervalMs: 300_000,
+      },
+      actions: {
+        enabled: false,
+        connectors: { http: false, sql: false, ssh: false, winrm: false, browser: false },
+        browserCdpUrl: undefined,
+        allowAnyCommand: false,
       },
       secrets: {
         secretKey: KEY_BYTES,

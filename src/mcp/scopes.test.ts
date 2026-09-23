@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { enabledScopes, SCOPES } from '../scopes/registry.ts';
+import { ACTIONS_OFF } from '../test-support/actions-config.ts';
 
 import {
   effectiveScopes,
@@ -44,7 +45,7 @@ describe('scopes', () => {
   it('OAUTH-16 narrows held scopes to the enabled set and reports what is missing', () => {
     const effective = effectiveScopes(
       ['vault:write', 'vault:read', 'offline_access'],
-      enabledScopes({ enableWriteScope: false }),
+      enabledScopes({ enableWriteScope: false, actions: ACTIONS_OFF }),
     );
     expect(effective).toStrictEqual(['vault:read']);
     expect(missingScopes(['vault:write', 'vault:reveal'], effective)).toStrictEqual([

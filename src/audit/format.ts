@@ -2,23 +2,76 @@ import type { StoredAuditEvent } from './event.ts';
 
 export type ExportFormat = 'jsonl' | 'csv';
 
-export interface LineFormat {
+export interface LineFormat<Record> {
   readonly contentType: string;
   readonly extension: string;
   /**
-  Lines written before any event; CSV's header row, nothing for JSON Lines.
+  Lines written before any record; CSV's header row, nothing for JSON Lines.
   */
   readonly header: readonly string[];
   /**
-  One event as one line, terminator included.
+  One record as one line, terminator included.
   */
-  readonly line: (event: StoredAuditEvent) => string;
+  readonly line: (record: Record) => string;
 }
 
 /**
-Column order shared by both formats; JSON Lines keys and CSV headers are the same names.
+A JSON Lines value; CSV writes an object as its JSON text.
 */
-const FIELDS = [
+export type Cell = string | number | boolean | undefined | Readonly<Record<string, unknown>>;
+
+/**
+RFC 4180 §2: quote a field holding a comma, a double quote or a line break, doubling the quotes.
+*/
+const NEEDS_QUOTING = /[",\r\n]/;
+const CSV_LINE_END = '\r\n';
+
+function csvField(value: Cell): string {
+  if (value === undefined) {
+    return '';
+  }
+  const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  return NEEDS_QUOTING.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+/**
+ * Both formats over one column list: JSON Lines keys and CSV headers are
+ * the same names, in the same order, and `at` is written as ISO 8601 in both.
+ */
+export function lineFormats<Record extends { readonly at: number }>(
+  fields: readonly string[],
+  cells: (record: Record) => Readonly<globalThis.Record<string, Cell>>,
+): Readonly<globalThis.Record<ExportFormat, LineFormat<Record>>> {
+  const values = (record: Record): Readonly<globalThis.Record<string, Cell>> => ({
+    ...cells(record),
+    at: new Date(record.at).toISOString(),
+  });
+  return {
+    jsonl: {
+      contentType: 'application/jsonl; charset=utf-8',
+      extension: 'jsonl',
+      header: [],
+      line: (record) => {
+        const row = values(record);
+        return JSON.stringify(Object.fromEntries(fields.map((name) => [name, row[name]]))) + '\n';
+      },
+    },
+    csv: {
+      contentType: 'text/csv; charset=utf-8',
+      extension: 'csv',
+      header: [fields.join(',') + CSV_LINE_END],
+      line: (record) => {
+        const row = values(record);
+        return fields.map((name) => csvField(row[name])).join(',') + CSV_LINE_END;
+      },
+    },
+  };
+}
+
+/**
+Column order of the `audit` stream (OPS-5).
+*/
+const AUDIT_FIELDS = [
   'id',
   'at',
   'category',
@@ -35,57 +88,24 @@ const FIELDS = [
   'details',
 ] as const;
 
-/**
-RFC 4180 §2: quote a field holding a comma, a double quote or a line break, doubling the quotes.
-*/
-const NEEDS_QUOTING = /[",\r\n]/;
-const CSV_LINE_END = '\r\n';
-
-function csvField(value: string | number | undefined): string {
-  if (value === undefined) {
-    return '';
-  }
-  const text = String(value);
-  return NEEDS_QUOTING.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
-function csvLine(event: StoredAuditEvent): string {
-  const { details, at, ...rest } = event;
-  const cells = FIELDS.map((name) => {
-    switch (name) {
-      case 'at': {
-        return csvField(new Date(at).toISOString());
-      }
-      case 'details': {
-        return csvField(details === undefined ? undefined : JSON.stringify(details));
-      }
-      default: {
-        return csvField(rest[name]);
-      }
-    }
-  });
-  return cells.join(',') + CSV_LINE_END;
-}
-
-function jsonLine(event: StoredAuditEvent): string {
-  const { id, at, ...rest } = event;
-  return JSON.stringify({ id, at: new Date(at).toISOString(), ...rest }) + '\n';
-}
-
-export const FORMATS: Readonly<Record<ExportFormat, LineFormat>> = {
-  jsonl: {
-    contentType: 'application/jsonl; charset=utf-8',
-    extension: 'jsonl',
-    header: [],
-    line: jsonLine,
-  },
-  csv: {
-    contentType: 'text/csv; charset=utf-8',
-    extension: 'csv',
-    header: [FIELDS.join(',') + CSV_LINE_END],
-    line: csvLine,
-  },
-};
+export const FORMATS: Readonly<Record<ExportFormat, LineFormat<StoredAuditEvent>>> = lineFormats(
+  AUDIT_FIELDS,
+  (event) => ({
+    id: event.id,
+    category: event.category,
+    action: event.action,
+    outcome: event.outcome,
+    operatorId: event.operatorId,
+    clientId: event.clientId,
+    tokenPrefix: event.tokenPrefix,
+    itemId: event.itemId,
+    field: event.field,
+    requestId: event.requestId,
+    ip: event.ip,
+    durationMs: event.durationMs,
+    details: event.details,
+  }),
+);
 
 export function isExportFormat(value: string): value is ExportFormat {
   return Object.hasOwn(FORMATS, value);

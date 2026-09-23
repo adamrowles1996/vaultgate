@@ -81,7 +81,7 @@ describe('listAuditEvents', () => {
     record(WINDOW.to - 1);
     record(WINDOW.to);
     const page = listAuditEvents(database, { ...WINDOW, limit: 10 });
-    expect(page.events.map((event) => [event.id, event.at])).toStrictEqual([
+    expect(page.records.map((event) => [event.id, event.at])).toStrictEqual([
       ['id-004', WINDOW.to - 1],
       ['id-003', T],
       ['id-002', WINDOW.from],
@@ -93,7 +93,7 @@ describe('listAuditEvents', () => {
     const { database, record } = seeded();
     record(T);
     record(T, { category: 'mcp', action: 'list_folders', outcome: 'error:unavailable' });
-    const { events } = listAuditEvents(database, { ...WINDOW, limit: 10 });
+    const { records: events } = listAuditEvents(database, { ...WINDOW, limit: 10 });
     expect(events).toStrictEqual([
       {
         id: 'id-002',
@@ -132,11 +132,11 @@ describe('listAuditEvents', () => {
     const first = listAuditEvents(database, { ...WINDOW, limit: 2 });
     const second = listAuditEvents(database, { ...WINDOW, limit: 2, cursor: first.next });
     const third = listAuditEvents(database, { ...WINDOW, limit: 2, cursor: second.next });
-    expect(first.events.map((event) => event.id)).toStrictEqual(['id-005', 'id-004']);
+    expect(first.records.map((event) => event.id)).toStrictEqual(['id-005', 'id-004']);
     expect(first.next).toStrictEqual({ at: T + 1, id: 'id-004' });
-    expect(second.events.map((event) => event.id)).toStrictEqual(['id-003', 'id-002']);
+    expect(second.records.map((event) => event.id)).toStrictEqual(['id-003', 'id-002']);
     expect(second.next).toStrictEqual({ at: T, id: 'id-002' });
-    expect(third.events.map((event) => event.id)).toStrictEqual(['id-001']);
+    expect(third.records.map((event) => event.id)).toStrictEqual(['id-001']);
     expect(third.next).toBeUndefined();
   });
 
@@ -147,9 +147,9 @@ describe('listAuditEvents', () => {
     const before = listAuditEvents(database, { ...ALL_TIME, limit: 10 });
     const counts = runMaintenance(database, new Date(T), RETENTION_DAYS);
     const after = listAuditEvents(database, { ...ALL_TIME, limit: 10 });
-    expect(before.events).toHaveLength(2);
+    expect(before.records).toHaveLength(2);
     expect(counts.audit_events).toBe(1);
-    expect(after.events.map((event) => event.id)).toStrictEqual(['id-001']);
+    expect(after.records.map((event) => event.id)).toStrictEqual(['id-001']);
   });
 });
 

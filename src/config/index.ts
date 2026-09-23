@@ -1,5 +1,6 @@
 import { fail, ok, type Result } from '../result.ts';
 
+import { type ActionsConfig, actionsWarnings } from './actions.ts';
 import { type Environment, withoutEmptyValues } from './environment.ts';
 import { environmentSchema, type LogLevel, type ParsedEnvironment } from './schema.ts';
 import {
@@ -10,6 +11,7 @@ import {
 
 import type { PreregisteredClient } from './primitives.ts';
 
+export type { ActionsConfig } from './actions.ts';
 export type { Environment } from './environment.ts';
 export type { LogLevel } from './schema.ts';
 
@@ -53,6 +55,7 @@ export interface Config {
   readonly sqliteNetworkFs: boolean;
   readonly logLevel: LogLevel;
   readonly bitwarden: BitwardenConfig;
+  readonly actions: ActionsConfig;
   readonly secrets: Secrets;
 }
 
@@ -101,6 +104,18 @@ function toConfig(data: ParsedEnvironment): Config {
       clientId: data.VAULTGATE_BW_CLIENT_ID,
       syncIntervalMs: data.VAULTGATE_BW_SYNC_INTERVAL,
     },
+    actions: {
+      enabled: data.VAULTGATE_ENABLE_ACTIONS,
+      connectors: {
+        http: data.VAULTGATE_ACTIONS_ENABLE_HTTP,
+        sql: data.VAULTGATE_ACTIONS_ENABLE_SQL,
+        ssh: data.VAULTGATE_ACTIONS_ENABLE_SSH,
+        winrm: data.VAULTGATE_ACTIONS_ENABLE_WINRM,
+        browser: data.VAULTGATE_ACTIONS_ENABLE_BROWSER,
+      },
+      browserCdpUrl: data.VAULTGATE_ACTIONS_BROWSER_CDP_URL,
+      allowAnyCommand: data.VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND,
+    },
     secrets: {
       secretKey: data.VAULTGATE_SECRET_KEY,
       masterPassword: data.VAULTGATE_BW_PASSWORD,
@@ -129,9 +144,11 @@ export function loadConfig(
     );
     return fail(new ConfigError([...resolved.issues, ...schemaIssues]));
   }
-  return resolved.issues.length > 0
-    ? fail(new ConfigError(resolved.issues))
-    : ok({ config: toConfig(parsed.data), warnings: resolved.warnings });
+  if (resolved.issues.length > 0) {
+    return fail(new ConfigError(resolved.issues));
+  }
+  const config = toConfig(parsed.data);
+  return ok({ config, warnings: [...resolved.warnings, ...actionsWarnings(config.actions)] });
 }
 
 function masked(value: string | Buffer | undefined): '[set]' | '[unset]' {

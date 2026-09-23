@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { ACTIONS_OFF } from '../../test-support/actions-config.ts';
 import { openTestRepos } from '../../test-support/oauth-store.ts';
 import { unwrapFail, unwrapOk } from '../../test-support/result.ts';
 
@@ -22,6 +23,7 @@ function options(canWrite = false): Options {
     random: (bytes) => Buffer.alloc(bytes, 1),
     newId: () => 'row-1',
     enableWriteScope: canWrite,
+    actions: ACTIONS_OFF,
   };
 }
 

@@ -1,12 +1,20 @@
 import { z } from 'zod';
 
-import { all } from '../storage/query.ts';
-
 import { FORMATS } from './format.ts';
+import {
+  type AuditRange,
+  exportPages,
+  type KeysetSource,
+  listPage,
+  type Page,
+  type PageOptions,
+} from './keyset.ts';
 
 import type { StoredAuditEvent } from './event.ts';
 import type { ExportFormat } from './format.ts';
 import type { DatabaseSync } from 'node:sqlite';
+
+export type { AuditRange } from './keyset.ts';
 
 const detailValueSchema = z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]);
 const detailsSchema = z.record(z.string(), detailValueSchema);
@@ -21,7 +29,7 @@ const outcomeSchema = z.union([
 const rowSchema = z.object({
   id: z.string(),
   at: z.number().int(),
-  category: z.enum(['identity', 'oauth', 'mcp']),
+  category: z.enum(['identity', 'oauth', 'mcp', 'actions']),
   action: z.string(),
   outcome: outcomeSchema,
   operator_id: z.string().nullable(),
@@ -36,44 +44,6 @@ const rowSchema = z.object({
 });
 
 type Row = z.output<typeof rowSchema>;
-
-/**
-A half-open window in milliseconds since the epoch: `from` inclusive, `to` exclusive.
-*/
-export interface AuditRange {
-  readonly from: number;
-  readonly to: number;
-}
-
-/**
-Where the previous page ended; pages are newest first, so the next one is strictly older.
-*/
-interface AuditCursor {
-  readonly at: number;
-  readonly id: string;
-}
-
-interface ListAuditOptions extends AuditRange {
-  readonly limit: number;
-  readonly cursor?: AuditCursor | undefined;
-}
-
-interface AuditPage {
-  readonly events: readonly StoredAuditEvent[];
-  /**
-  Absent on the last page.
-  */
-  readonly next: AuditCursor | undefined;
-}
-
-const COLUMNS =
-  'id, at, category, action, outcome, operator_id, client_id, token_prefix, item_id, field, ' +
-  'request_id, ip, duration_ms, details';
-
-/**
-Rows the export walks per query; bounds memory whatever the range holds.
-*/
-const EXPORT_PAGE_SIZE = 500;
 
 function toRecord(row: Row): StoredAuditEvent {
   return {
@@ -94,53 +64,34 @@ function toRecord(row: Row): StoredAuditEvent {
   };
 }
 
-function nextCursor(rows: readonly Row[], limit: number): AuditCursor | undefined {
-  const last = rows.length > limit ? rows[limit - 1] : undefined;
-  return last === undefined ? undefined : { at: last.at, id: last.id };
+const SOURCE: KeysetSource<Row, StoredAuditEvent> = {
+  table: 'audit_events',
+  columns:
+    'id, at, category, action, outcome, operator_id, client_id, token_prefix, item_id, field, ' +
+    'request_id, ip, duration_ms, details',
+  rowSchema,
+  toRecord,
+};
+
+/**
+One page of events in the window, newest first, with keyset pagination on `(at, id)`.
+*/
+export function listAuditEvents(
+  database: DatabaseSync,
+  options: PageOptions,
+): Page<StoredAuditEvent> {
+  return listPage(database, SOURCE, options);
 }
 
 /**
- * One page of events in the window, newest first, with keyset pagination on
- * `(at, id)` so a page never shifts when rows are appended or retired while
- * an operator is reading. Reads `limit + 1` rows to learn whether a next page
- * exists without a second query.
- */
-export function listAuditEvents(database: DatabaseSync, options: ListAuditOptions): AuditPage {
-  const { from, to, limit, cursor } = options;
-  const keyset = cursor === undefined ? '' : ' AND (at < ?4 OR (at = ?4 AND id < ?5))';
-  const sql =
-    `SELECT ${COLUMNS} FROM audit_events WHERE at >= ?1 AND at < ?2${keyset} ` +
-    'ORDER BY at DESC, id DESC LIMIT ?3';
-  const parameters = cursor === undefined ? [] : [cursor.at, cursor.id];
-  const rows = all(database, sql, rowSchema, from, to, limit + 1, ...parameters);
-  return {
-    events: rows.slice(0, limit).map((row) => toRecord(row)),
-    next: nextCursor(rows, limit),
-  };
-}
-
-function* exportLines(database: DatabaseSync, range: AuditRange, format: ExportFormat) {
-  const { header, line } = FORMATS[format];
-  yield* header;
-  let cursor: AuditCursor | undefined;
-  do {
-    const page = listAuditEvents(database, { ...range, limit: EXPORT_PAGE_SIZE, cursor });
-    for (const event of page.events) {
-      yield line(event);
-    }
-    cursor = page.next;
-  } while (cursor !== undefined);
-}
-
-/**
- * Every event in the window as a stream of lines (each with its terminator),
- * newest first, produced page by page as the consumer reads: JSON Lines, or
- * CSV per RFC 4180 with a header row (OPS-5).
+ * Every event in the window as a stream of lines, newest first, produced
+ * page by page as the consumer reads: JSON Lines, or CSV per RFC 4180 with
+ * a header row (OPS-5).
  */
 export function exportAuditEvents(
   database: DatabaseSync,
   range: AuditRange,
   format: ExportFormat,
 ): ReadableStream<string> {
-  return ReadableStream.from(exportLines(database, range, format));
+  return exportPages((options) => listAuditEvents(database, options), range, FORMATS[format]);
 }

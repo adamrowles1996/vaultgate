@@ -5,8 +5,8 @@ import { auditPrefix } from './credentials.ts';
 import { OAuthError, respondRateLimited, respondWithOAuthError } from './errors.ts';
 
 import type { OAuthAuditSink } from './audit.ts';
-import type { RateLimiter } from './rate-limit.ts';
 import type { ClientIpResolver, OAuthHandler } from './request-context.ts';
+import type { RateLimiter } from '../net/rate-limit.ts';
 
 /**
  * OAUTH-11: 16 KiB body cap.

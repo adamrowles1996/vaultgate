@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import { ACTIONS_OFF } from '../test-support/actions-config.ts';
 import { InMemoryTokenVerifier } from '../test-support/in-memory-token-verifier.ts';
 import { FakeClock, TEST_METADATA_URL, TEST_RESOURCE } from '../test-support/test-app.ts';
 
 import { authenticate } from './bearer.ts';
 import { invalidTokenChallenge, missingTokenChallenge } from './challenges.ts';
 
-const CONFIG = { enableWriteScope: false };
+const CONFIG = { enableWriteScope: false, actions: ACTIONS_OFF };
 
 function verifier(): { verifier: InMemoryTokenVerifier; clock: FakeClock } {
   const clock = new FakeClock();

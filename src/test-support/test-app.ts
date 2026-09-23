@@ -56,6 +56,11 @@ export interface TestConfigOverrides {
   readonly VAULTGATE_TRUST_PROXY?: string;
   readonly VAULTGATE_TRUSTED_PROXY_HOPS?: string;
   readonly VAULTGATE_PUBLIC_URL?: string;
+  readonly VAULTGATE_ENABLE_ACTIONS?: string;
+  readonly VAULTGATE_ACTIONS_ENABLE_HTTP?: string;
+  readonly VAULTGATE_ACTIONS_ENABLE_SQL?: string;
+  readonly VAULTGATE_ACTIONS_ENABLE_BROWSER?: string;
+  readonly VAULTGATE_ACTIONS_BROWSER_CDP_URL?: string;
 }
 
 export function testConfig(overrides: TestConfigOverrides = {}): Config {

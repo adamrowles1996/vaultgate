@@ -1,6 +1,7 @@
 /**
- * `node dist/cli.js audit export --from <iso> --to <iso> [--format csv]`
- * (OPS-5): the same export as the account page, for scripted retention.
+ * `node dist/cli.js audit export --from <iso> --to <iso> [--format csv]
+ * [--stream actions]` (OPS-5, ACT-62): the same export as the account page,
+ * for scripted retention; `--stream actions` exports the `action_calls` rows.
  * Reads the store read-only under the server's configuration and streams
  * the lines to standard output; nothing else in the process writes there.
  */

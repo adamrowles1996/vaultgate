@@ -20,6 +20,11 @@ const REDACTED_PATHS = [
   '*.refreshToken',
   '*.clientSecret',
   '*.totp',
+  // ACT-53: the actions engine's injected values and credential documents, by field name.
+  '*.injected',
+  '*.injectedValues',
+  '*.secret',
+  '*.credential',
 ] as const;
 
 export function createLogger(level: LogLevel, destination?: DestinationStream): Logger {

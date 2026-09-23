@@ -1,14 +1,15 @@
 import { OAuthError } from './errors.ts';
 
 import type { OAuthAuditSink } from './audit.ts';
-import type { RateLimiter } from './rate-limit.ts';
 import type { OAuthRepos } from './repositories/index.ts';
 import type { ClientIpResolver } from './request-context.ts';
 import type { TokenIssuerOptions } from './token-issuance.ts';
+import type { RateLimiter } from '../net/rate-limit.ts';
+import type { ScopeSwitches } from '../scopes/registry.ts';
 
-export interface TokenEndpointDependencies extends Omit<TokenIssuerOptions, 'tokens'> {
+export interface TokenEndpointDependencies
+  extends Omit<TokenIssuerOptions, 'tokens'>, ScopeSwitches {
   readonly publicUrl: string;
-  readonly enableWriteScope: boolean;
   readonly repos: OAuthRepos;
   readonly audit: OAuthAuditSink;
   /**

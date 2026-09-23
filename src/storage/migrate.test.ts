@@ -11,6 +11,7 @@ import { all } from './query.ts';
 
 const NOW = new Date('2026-09-22T10:00:00Z');
 const nameSchema = z.object({ name: z.string() });
+const columnSchema = z.object({ name: z.string() });
 const versionSchema = z.object({ version: z.number() });
 const registrySchema = z.object({
   version: z.number(),
@@ -27,6 +28,12 @@ function tables(database: DatabaseSync): string[] {
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     nameSchema,
   ).map((row) => row.name);
+}
+
+function columns(database: DatabaseSync, table: string): string[] {
+  return all(database, `SELECT name FROM pragma_table_info('${table}')`, columnSchema).map(
+    (row) => row.name,
+  );
 }
 
 function indexes(database: DatabaseSync): string[] {
@@ -113,13 +120,17 @@ describe('migrate', () => {
     expect(error.message).toBe('schema_migrations is not contiguous from 1: row 0 has version 5');
   });
 
-  it('STORE-5 STORE-9 creates the current schema with every table and hot-path index', () => {
+  it('STORE-5 STORE-9 ACT-65 creates the current schema with every table and hot-path index', () => {
     const database = new DatabaseSync(':memory:');
     expect(unwrapOk(migrate(database, MIGRATIONS, NOW))).toStrictEqual({
-      applied: [1, 2, 3],
-      version: 3,
+      applied: [1, 2, 3, 4],
+      version: 4,
     });
     expect(tables(database)).toStrictEqual([
+      'action_calls',
+      'action_grants',
+      'action_sessions',
+      'action_targets',
       'audit_events',
       'authorization_codes',
       'bootstrap_tokens',
@@ -136,6 +147,12 @@ describe('migrate', () => {
       'vault_settings',
     ]);
     expect(indexes(database)).toStrictEqual([
+      'idx_action_calls_at',
+      'idx_action_calls_confirmation_nonce',
+      'idx_action_calls_target_id_at',
+      'idx_action_grants_client_id',
+      'idx_action_sessions_client_id',
+      'idx_action_targets_name',
       'idx_audit_events_at',
       'idx_audit_events_client_id_at',
       'idx_audit_events_operator_id_at',
@@ -160,5 +177,68 @@ describe('migrate', () => {
     expect(unique.map((row) => row.name)).toContain('sqlite_autoindex_tokens_2');
     expect(unique.map((row) => row.name)).toContain('sqlite_autoindex_sessions_1');
     expect(unique.map((row) => row.name)).toContain('sqlite_autoindex_authorization_codes_1');
+  });
+
+  it('ACT-64 the four actions tables hold destinations, item ids, field names and hashes: no column for a secret, a token, a raw session id or a requestState', () => {
+    const database = new DatabaseSync(':memory:');
+    unwrapOk(migrate(database, MIGRATIONS, NOW));
+    expect(columns(database, 'action_targets')).toStrictEqual([
+      'id',
+      'name',
+      'description',
+      'connector',
+      'destination',
+      'internal',
+      'credential',
+      'policy',
+      'enabled',
+      'revision',
+      'created_at',
+      'updated_at',
+      'updated_by',
+    ]);
+    expect(columns(database, 'action_grants')).toStrictEqual([
+      'target_id',
+      'client_id',
+      'granted_at',
+      'granted_by',
+      'revoked_at',
+    ]);
+    expect(columns(database, 'action_calls')).toStrictEqual([
+      'id',
+      'at',
+      'target_id',
+      'target_name',
+      'connector',
+      'revision',
+      'tool',
+      'session_id_hash',
+      'client_id',
+      'token_prefix',
+      'operation',
+      'classification',
+      'arguments',
+      'arguments_truncated',
+      'output_bytes',
+      'output_truncated',
+      'duration_ms',
+      'outcome',
+      'elicitation',
+      'confirmation_nonce',
+      'request_id',
+      'ip',
+    ]);
+    expect(columns(database, 'action_sessions')).toStrictEqual([
+      'id_hash',
+      'target_id',
+      'client_id',
+      'token_prefix',
+      'opened_at',
+      'last_used_at',
+      'expires_at',
+      'closed_at',
+      'close_reason',
+      'calls',
+    ]);
   });
 });

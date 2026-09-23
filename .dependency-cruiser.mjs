@@ -9,7 +9,9 @@
 //   audit                       the event shape and the store sink every
 //                               feature records through; knows no feature
 //   identity, oauth, mcp,       features: independent of each other except
-//   bitwarden                   through interfaces in the layers below them
+//   bitwarden, actions          through interfaces in the layers below them
+//                               (actions: ACT-70, type-only imports from
+//                               identity/ and mcp/ are the one exception)
 //   http                        composition of features into routes
 //   main.ts, cli.ts             process entrypoints
 const RUNTIME = { path: '^src/', pathNot: [String.raw`\.test\.ts$`, '^src/test-support/'] };
@@ -44,21 +46,21 @@ export default {
       name: 'foundation-imports-nothing-above-itself',
       severity: 'error',
       from: { path: '^src/(result|config|logger|net|scopes|auth)' },
-      to: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|http)/' },
+      to: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|actions|http)/' },
     },
     {
       name: 'storage-knows-no-features',
       severity: 'error',
       from: { path: '^src/storage/' },
-      to: { path: '^src/(identity|oauth|mcp|bitwarden|audit|http)/' },
+      to: { path: '^src/(identity|oauth|mcp|bitwarden|audit|actions|http)/' },
     },
     {
       name: 'audit-knows-no-features',
       severity: 'error',
       comment:
-        'identity, oauth and mcp record events through src/audit/ (one AuditEvent shape, one sink); the audit module never looks back up at them.',
+        'identity, oauth, mcp and actions record events through src/audit/ (one AuditEvent shape, one sink); the audit module never looks back up at them. The action_calls reader lives here, the writer in actions/ (ACT-62).',
       from: { path: '^src/audit/' },
-      to: { path: '^src/(identity|oauth|mcp|bitwarden)/' },
+      to: { path: '^src/(identity|oauth|mcp|bitwarden|actions)/' },
     },
     {
       name: 'mcp-uses-the-vault-interface-not-bitwarden',
@@ -82,9 +84,41 @@ export default {
       to: { path: '^src/(oauth|mcp|bitwarden)/' },
     },
     {
+      name: 'actions-uses-only-its-allowed-layers',
+      severity: 'error',
+      comment:
+        'ACT-70: src/actions/ may import result, config, logger, net, crypto, scopes, vault, storage and audit; never oauth/, bitwarden/ or http/.',
+      from: { path: '^src/actions/' },
+      to: { path: '^src/(oauth|bitwarden|http)/' },
+    },
+    {
+      name: 'actions-imports-identity-and-mcp-types-only',
+      severity: 'error',
+      comment:
+        'ACT-70: the guard and session types its pages need and the Tool shape are injected by composition; only type-only imports cross.',
+      from: { path: '^src/actions/' },
+      to: { path: '^src/(identity|mcp)/', dependencyTypesNot: ['type-only'] },
+    },
+    {
+      name: 'features-never-import-actions',
+      severity: 'error',
+      comment:
+        'ACT-70: identity/, oauth/ and bitwarden/ reach the actions layer only through callbacks the composition layer wires.',
+      from: { path: '^src/(identity|oauth|bitwarden)/' },
+      to: { path: '^src/actions/' },
+    },
+    {
+      name: 'actions-never-spawn-a-process',
+      severity: 'error',
+      comment:
+        'ARCH-2, ACT-71: no connector imports child_process; ssh and winrm execute on the remote host only.',
+      from: { path: '^src/actions/' },
+      to: { dependencyTypes: ['core'], path: '^(node:)?child_process$' },
+    },
+    {
       name: 'features-do-not-import-the-composition-layer',
       severity: 'error',
-      from: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit)/' },
+      from: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|actions)/' },
       to: { path: String.raw`^src/(http/|main\.ts$|cli\.ts$)` },
     },
     {

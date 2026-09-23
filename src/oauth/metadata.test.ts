@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { ACTIONS_OFF, actionsEnabled } from '../test-support/actions-config.ts';
+
 import { authorizationServerMetadata, canonicalResource, METADATA_HEADERS } from './metadata.ts';
 
 describe('authorizationServerMetadata', () => {
@@ -8,6 +10,7 @@ describe('authorizationServerMetadata', () => {
       authorizationServerMetadata({
         publicUrl: 'https://vault.example.com',
         enableWriteScope: true,
+        actions: ACTIONS_OFF,
       }),
     ).toStrictEqual({
       issuer: 'https://vault.example.com',
@@ -30,6 +33,7 @@ describe('authorizationServerMetadata', () => {
     const document = authorizationServerMetadata({
       publicUrl: 'https://vault.example.com',
       enableWriteScope: false,
+      actions: ACTIONS_OFF,
     });
     expect(document.scopes_supported).toStrictEqual([
       'vault:read',
@@ -38,10 +42,26 @@ describe('authorizationServerMetadata', () => {
     ]);
   });
 
+  it('ACT-14 advertises an actions scope only when the layer and its connector are enabled', () => {
+    const document = authorizationServerMetadata({
+      publicUrl: 'https://vault.example.com',
+      enableWriteScope: false,
+      actions: actionsEnabled(['sql']),
+    });
+    expect(document.scopes_supported).toStrictEqual([
+      'vault:read',
+      'vault:reveal',
+      'vault:generate',
+      'actions:sql.read',
+      'actions:sql.write',
+    ]);
+  });
+
   it('OAUTH-4 never advertises offline_access', () => {
     const document = authorizationServerMetadata({
       publicUrl: 'https://vault.example.com',
       enableWriteScope: true,
+      actions: ACTIONS_OFF,
     });
     expect(JSON.stringify(document)).not.toContain('offline_access');
   });

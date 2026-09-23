@@ -31,17 +31,18 @@
                                             Bitwarden cloud / self-hosted / Vaultwarden
 ```
 
-| Component            | Responsibility                                                                                       | Module                         |
-| -------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------ |
-| HTTP application     | Hono app: routing, security headers, request ids, error masking, rate limiting                       | `src/http/`                    |
-| Authorization server | Metadata documents, client resolution (CIMD, DCR, pre-registered), authorize, token, refresh, revoke | `src/oauth/`                   |
-| Identity             | Bootstrap, operator credentials (scrypt), TOTP, recovery codes, sessions, CSRF                       | `src/identity/`                |
-| MCP resource server  | Bearer verification, `WWW-Authenticate` challenges, scope gates, tool registry, Streamable HTTP      | `src/mcp/`                     |
-| Vault backend        | `bw serve` lifecycle, unlock, sync, typed client for the Vault Management API, error mapping         | `src/bitwarden/`               |
-| Store                | SQLite connection, migrations, repositories, retention jobs                                          | `src/storage/`                 |
-| Audit                | Append-only audit events, export                                                                     | `src/audit/`                   |
-| Config and logging   | Environment validation, structured logs with redaction                                               | `src/config/`, `src/logger.ts` |
-| Network              | Proxy-aware client address, HTTPS transport pinned to a checked address                              | `src/net/`                     |
+| Component            | Responsibility                                                                                                                  | Module                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| HTTP application     | Hono app: routing, security headers, request ids, error masking, rate limiting                                                  | `src/http/`                    |
+| Authorization server | Metadata documents, client resolution (CIMD, DCR, pre-registered), authorize, token, refresh, revoke                            | `src/oauth/`                   |
+| Identity             | Bootstrap, operator credentials (scrypt), TOTP, recovery codes, sessions, CSRF                                                  | `src/identity/`                |
+| MCP resource server  | Bearer verification, `WWW-Authenticate` challenges, scope gates, tool registry, Streamable HTTP                                 | `src/mcp/`                     |
+| Vault backend        | `bw serve` lifecycle, unlock, sync, typed client for the Vault Management API, error mapping                                    | `src/bitwarden/`               |
+| Store                | SQLite connection, migrations, repositories, retention jobs                                                                     | `src/storage/`                 |
+| Audit                | Append-only audit events, export                                                                                                | `src/audit/`                   |
+| Config and logging   | Environment validation, structured logs with redaction                                                                          | `src/config/`, `src/logger.ts` |
+| Network              | Proxy-aware client address, address classes, rate limiters, HTTPS transport pinned to a checked address                         | `src/net/`                     |
+| Actions              | Operator-defined targets and the engine that runs typed operations at them with vault credentials (spec 13, 14; off by default) | `src/actions/`                 |
 
 ## 2.2 Module boundaries (enforced)
 
@@ -100,7 +101,7 @@ src/
   config/                 environment schema → Config
   logger.ts               pino with redaction
   result.ts               Result<T, E>
-  net/                    client address behind a proxy, HTTPS transport pinned to a checked address
+  net/                    client address behind a proxy, address classes, rate limiters, HTTPS transport pinned to a checked address
   scopes/                 the one scope registry (names, order, consent text) oauth/ and mcp/ share
   auth/                   the bearer-token contract (VerifiedToken, TokenVerifier) oauth/ and mcp/ share
   crypto/                 the secret box: authenticated encryption under keys derived from VAULTGATE_SECRET_KEY
@@ -109,6 +110,7 @@ src/
   oauth/                  metadata, clients (cimd, dcr, preregistered), authorize, token, revoke, scopes
   identity/               bootstrap, password (scrypt), totp, recovery codes, sessions, csrf, pages
   mcp/                    bearer verifier, server factory, tool registry, tool contracts
+  actions/                targets, grants, policy, confirmation, scrubbing, limits, the engine and connectors/ (spec 13; ACT-70 layer)
   bitwarden/              serve-process (spawn boundary), vault-client, types, error mapping
   storage/                database, migrations/, repositories
   audit/                  the AuditEvent shape, the store-backed sink, listing and export

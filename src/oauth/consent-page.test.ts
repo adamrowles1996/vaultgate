@@ -48,6 +48,27 @@ describe('renderConsentPage', () => {
     expect(html).not.toContain('vault:write');
   });
 
+  it('ACT-13 groups the actions scopes under the plain-language warning and adds the browser sentence, verbatim', () => {
+    const html = flattenHtml(
+      renderConsentPage({ ...VIEW, scopes: ['vault:read', 'actions:http', 'actions:browser'] }),
+    );
+    expect(html).toContain(
+      '<p class="actions-note">These let the agent act on other systems with your credentials. ' +
+        'It never sees the credentials, but it can do what the targets allow.</p>',
+    );
+    expect(html).toContain(
+      '<code>actions:http</code><strong class="risk">Sensitive</strong>— Send HTTP requests to ' +
+        'web APIs the operator has configured, signed with credentials from the vault.</label>',
+    );
+    expect(html).toContain(
+      '<code>actions:browser</code><strong class="risk">Sensitive</strong>— Sign in to websites ' +
+        'the operator has configured and act there as you, within the pages the operator allows. ' +
+        'A signed-in browser can do anything you can do on that site.</label>',
+    );
+    expect(html.indexOf('actions-note')).toBeGreaterThan(html.indexOf('vault:read'));
+    expect(flattenHtml(renderConsentPage(VIEW))).not.toContain('actions-note');
+  });
+
   it('OAUTH-16 / OAUTH-18 makes vault:read untickable and the others ticked, in a CSRF-guarded form', () => {
     const html = flattenHtml(renderConsentPage({ ...VIEW, mode: 'preregistered' }));
     expect(html).toContain(

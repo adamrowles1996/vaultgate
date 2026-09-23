@@ -11,10 +11,11 @@ import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
 
+import { FixedWindowRateLimiter } from '../net/rate-limit.ts';
+
 import { authenticate, type BearerVerdict } from './bearer.ts';
 import { forbiddenResponse, insufficientScopeChallenge } from './challenges.ts';
 import { CORS_ALLOW_HEADERS, CORS_EXPOSE_HEADERS, resourceUrls } from './metadata.ts';
-import { FixedWindowRateLimiter } from './rate-limit.ts';
 import { checkHost, checkOrigin, hasQueryStringToken, resolveSourceIp } from './request-guards.ts';
 import { isToolName, missingScopes, requiredScopes, type ToolName } from './scopes.ts';
 import { type CallContext, createVaultMcpServer } from './server.ts';

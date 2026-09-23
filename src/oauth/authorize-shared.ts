@@ -17,13 +17,13 @@ import type { Guards } from '../identity/guards.ts';
 import type { SessionState } from '../identity/session-manager.ts';
 import type { ClientResolver } from './clients/resolve.ts';
 import type { Clock } from './clock.ts';
-import type { RateLimiter } from './rate-limit.ts';
+import type { RateLimiter } from '../net/rate-limit.ts';
 import type { OAuthRepos } from './repositories/index.ts';
 import type { ClientIpResolver, OAuthContext } from './request-context.ts';
+import type { ScopeSwitches } from '../scopes/registry.ts';
 
-export interface AuthorizeDependencies {
+export interface AuthorizeDependencies extends ScopeSwitches {
   readonly publicUrl: string;
-  readonly enableWriteScope: boolean;
   readonly resolver: ClientResolver;
   readonly repos: OAuthRepos;
   /**

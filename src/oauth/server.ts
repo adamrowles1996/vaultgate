@@ -1,3 +1,4 @@
+import { createRateLimiter } from '../net/rate-limit.ts';
 import { fail, ok, type Result } from '../result.ts';
 
 import { createAuthorizeHandler, createConsentPageHandler } from './authorize.ts';
@@ -10,7 +11,6 @@ import { type ClientResolver, createClientResolver } from './clients/resolve.ts'
 import { type Clock, HOUR_MS, MINUTE_MS } from './clock.ts';
 import { renderConnectedClients } from './connected-clients.ts';
 import { createConsentDecisionHandler } from './consent.ts';
-import { createRateLimiter } from './rate-limit.ts';
 import { createRegisterHandler } from './register.ts';
 import { createOAuthRepos, type OAuthRepos } from './repositories/index.ts';
 import { clientIpResolver } from './request-context.ts';
@@ -30,7 +30,8 @@ import type { Config } from '../config/index.ts';
 import type { Guards } from '../identity/guards.ts';
 import type { Html } from '../identity/pages/template.ts';
 import type { SessionState } from '../identity/session-manager.ts';
-import type { FetchLike, Lookup } from './clients/ssrf-fetch.ts';
+import type { Lookup } from '../net/ip-ranges.ts';
+import type { FetchLike } from './clients/ssrf-fetch.ts';
 import type { RandomSource } from './credentials.ts';
 import type { ClientRecord } from './repositories/clients.ts';
 import type { ConnectedClient } from './repositories/consents.ts';
@@ -38,7 +39,12 @@ import type { DatabaseSync } from 'node:sqlite';
 
 type AuthorizationServerConfig = Pick<
   Config,
-  'publicUrl' | 'enableWriteScope' | 'oauthClients' | 'accessTokenTtlMs' | 'refreshTokenTtlMs'
+  | 'publicUrl'
+  | 'enableWriteScope'
+  | 'actions'
+  | 'oauthClients'
+  | 'accessTokenTtlMs'
+  | 'refreshTokenTtlMs'
 >;
 
 export interface AuthorizationServerDependencies {

@@ -1,37 +1,66 @@
 /**
- * The audit export as both entrypoints drive it (OPS-5): the account page
- * form and `cli.ts` each collect `from`, `to` and `format` as text, validate
- * them here, and stream the lines to wherever they are going.
+ * The audit export as both entrypoints drive it (OPS-5, ACT-62): the
+ * account page form and `cli.ts` each collect `from`, `to`, `format` and
+ * `stream` as text, validate them here, and stream the lines to wherever
+ * they are going.
  */
 import { pipeline } from 'node:stream/promises';
 import { parseArgs, type ParseArgsConfig } from 'node:util';
 
 import { fail, ok, type Result } from '../result.ts';
 
+import { ACTION_CALL_FORMATS, exportActionCalls } from './actions-query.ts';
 import { FORMATS, isExportFormat } from './format.ts';
 import { exportAuditEvents } from './query.ts';
 
 import type { ExportFormat } from './format.ts';
-import type { AuditRange } from './query.ts';
+import type { AuditRange } from './keyset.ts';
 import type { DatabaseSync } from 'node:sqlite';
+
+/**
+`audit` is the audit events of MCP-13/14; `actions` the `action_calls` rows of ACT-60.
+*/
+export type ExportStream = 'audit' | 'actions';
 
 export interface ExportRequest extends AuditRange {
   readonly format: ExportFormat;
+  readonly stream: ExportStream;
 }
 
 /**
-The three inputs as text, before validation; absent when the form or command line omitted them.
+The inputs as text, before validation; absent when the form or command line omitted them.
 */
 export interface ExportInput {
   readonly from?: string | undefined;
   readonly to?: string | undefined;
   readonly format?: string | undefined;
+  readonly stream?: string | undefined;
 }
 
 export const USAGE =
-  'usage: node dist/cli.js audit export --from <iso-8601> --to <iso-8601> [--format jsonl|csv]';
+  'usage: node dist/cli.js audit export --from <iso-8601> --to <iso-8601> ' +
+  '[--format jsonl|csv] [--stream audit|actions]';
 
 const DEFAULT_FORMAT: ExportFormat = 'jsonl';
+const DEFAULT_STREAM: ExportStream = 'audit';
+
+interface Stream {
+  readonly header: (format: ExportFormat) => readonly string[];
+  readonly lines: (
+    database: DatabaseSync,
+    range: AuditRange,
+    format: ExportFormat,
+  ) => ReadableStream<string>;
+}
+
+const STREAMS: Readonly<Record<ExportStream, Stream>> = {
+  audit: { header: (format) => FORMATS[format].header, lines: exportAuditEvents },
+  actions: { header: (format) => ACTION_CALL_FORMATS[format].header, lines: exportActionCalls },
+};
+
+function isExportStream(value: string): value is ExportStream {
+  return Object.hasOwn(STREAMS, value);
+}
 
 function parseInstant(name: string, value: string | undefined): Result<number> {
   if (value === undefined) {
@@ -45,7 +74,8 @@ function parseInstant(name: string, value: string | undefined): Result<number> {
 
 /**
  * Validates the export inputs: both instants ISO 8601 with `from` before
- * `to` (a half-open window), and the format one of the two supported.
+ * `to` (a half-open window), the format one of the two supported and the
+ * stream one of the two known.
  */
 export function parseExportRequest(input: ExportInput): Result<ExportRequest> {
   const from = parseInstant('from', input.from);
@@ -60,15 +90,20 @@ export function parseExportRequest(input: ExportInput): Result<ExportRequest> {
     return fail(new Error('from must be before to'));
   }
   const format = input.format ?? DEFAULT_FORMAT;
-  return isExportFormat(format)
-    ? ok({ from: from.value, to: to.value, format })
-    : fail(new Error(`format must be jsonl or csv, not ${format}`));
+  if (!isExportFormat(format)) {
+    return fail(new Error(`format must be jsonl or csv, not ${format}`));
+  }
+  const stream = input.stream ?? DEFAULT_STREAM;
+  return isExportStream(stream)
+    ? ok({ from: from.value, to: to.value, format, stream })
+    : fail(new Error(`stream must be audit or actions, not ${stream}`));
 }
 
 const OPTIONS = {
   from: { type: 'string' },
   to: { type: 'string' },
   format: { type: 'string' },
+  stream: { type: 'string' },
 } as const satisfies ParseArgsConfig['options'];
 
 interface ParsedCommandLine {
@@ -87,7 +122,7 @@ function parseCommandLine(argv: readonly string[]): Result<ParsedCommandLine> {
 }
 
 /**
-`audit export --from … --to … [--format …]` from the command line, after the node and script paths.
+`audit export --from … --to … [--format …] [--stream …]` from the command line, after the node and script paths.
 */
 export function parseExportArguments(argv: readonly string[]): Result<ExportRequest> {
   const parsed = parseCommandLine(argv);
@@ -110,9 +145,10 @@ export async function writeAuditExport(
   request: ExportRequest,
   output: NodeJS.WritableStream,
 ): Promise<void> {
+  const stream = STREAMS[request.stream];
   const lines =
     database === undefined
-      ? FORMATS[request.format].header
-      : exportAuditEvents(database, request, request.format);
+      ? stream.header(request.format)
+      : stream.lines(database, request, request.format);
   await pipeline(lines, output, { end: false });
 }

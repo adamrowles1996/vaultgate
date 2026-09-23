@@ -5,39 +5,10 @@
 import { z } from 'zod';
 
 import { fail, ok } from '../../result.ts';
+import { parseSecretField } from '../../vault/fields.ts';
 
 import { defineTool, READ_ONLY, type Tool, ToolError, type ToolRun } from './definition.ts';
 import { itemIdSchema } from './schemas.ts';
-
-import type { SecretField } from '../../vault/client.ts';
-
-const FIXED_FIELDS: Readonly<Record<string, SecretField>> = {
-  password: { kind: 'password' },
-  totp: { kind: 'totp' },
-  notes: { kind: 'notes' },
-  'card.number': { kind: 'card', field: 'number' },
-  'card.code': { kind: 'card', field: 'code' },
-  'sshKey.privateKey': { kind: 'sshKey', field: 'privateKey' },
-};
-
-const IDENTITY_PREFIX = 'identity.';
-const CUSTOM_PREFIX = 'custom.';
-
-/**
-Parses the `field` argument into the vault contract's discriminated union.
-*/
-export function parseSecretField(text: string): SecretField | undefined {
-  const fixed = FIXED_FIELDS[text];
-  if (fixed !== undefined) {
-    return fixed;
-  }
-  if (text.startsWith(IDENTITY_PREFIX) && text.length > IDENTITY_PREFIX.length) {
-    return { kind: 'identity', field: text.slice(IDENTITY_PREFIX.length) };
-  }
-  return text.startsWith(CUSTOM_PREFIX) && text.length > CUSTOM_PREFIX.length
-    ? { kind: 'customField', name: text.slice(CUSTOM_PREFIX.length) }
-    : undefined;
-}
 
 const secretInput = z.strictObject({
   item_id: itemIdSchema,

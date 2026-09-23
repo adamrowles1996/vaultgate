@@ -30,7 +30,7 @@ function bearerToken(header: string): string | undefined {
 export async function authenticate(
   headers: Headers,
   verifier: TokenVerifier,
-  config: Pick<Config, 'enableWriteScope'>,
+  config: Pick<Config, 'enableWriteScope' | 'actions'>,
   resourceMetadataUrl: string,
 ): Promise<BearerVerdict | Response> {
   const header = headers.get('authorization');

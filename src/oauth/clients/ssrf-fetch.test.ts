@@ -4,11 +4,12 @@ import { unwrapFail, unwrapOk } from '../../test-support/result.ts';
 
 import {
   type FetchLike,
-  type Lookup,
   safeFetch,
   type SafeFetchOptions,
   type SafeFetchResult,
 } from './ssrf-fetch.ts';
+
+import type { Lookup } from '../../net/ip-ranges.ts';
 
 const PUBLIC = '93.184.216.34';
 const PUBLIC_B = '198.41.0.4';
