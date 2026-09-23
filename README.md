@@ -57,7 +57,7 @@ What the design gives you beyond the table:
 
 ## Quick start
 
-The current version is 0.1.0-rc.7 (`package.json`; releases are tagged on GitHub). On a VM with
+The current version is 0.1.0-rc.8 (`package.json`; releases are tagged on GitHub). On a VM with
 Docker Engine, the Compose plugin, a DNS name pointing at it and ports 80 and 443 reachable from
 the internet:
 
