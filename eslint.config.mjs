@@ -108,7 +108,7 @@ const sharedRules = {
     'error',
     {
       selector: 'MemberExpression[object.name="process"][property.name="env"]',
-      message: 'Read the environment only in src/config.ts; everything else receives a Config.',
+      message: 'Read the environment only in src/config/; everything else receives a Config.',
     },
   ],
 

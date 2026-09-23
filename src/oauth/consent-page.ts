@@ -1,6 +1,5 @@
 import { document, hidden, type Html, html, when } from '../identity/pages/template.ts';
-
-import { scopeDefinition, type Scope } from './scopes.ts';
+import { scopeDefinition, type Scope } from '../scopes/registry.ts';
 
 import type { OAuthError } from './errors.ts';
 import type { ClientMode } from './repositories/clients.ts';

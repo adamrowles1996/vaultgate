@@ -1,4 +1,4 @@
-import { enabledScopes, type Scope } from './scopes.ts';
+import { enabledScopes, type Scope } from '../scopes/registry.ts';
 
 export interface AuthorizationServerMetadata {
   readonly issuer: string;

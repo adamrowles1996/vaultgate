@@ -14,8 +14,8 @@ ARG TARGETARCH
 
 # Bitwarden CLI release tag cli-v<version> (https://github.com/bitwarden/clients/releases).
 # The release publishes no checksum file, so the digests were computed from the
-# downloaded assets when the version was pinned. Keep equal to install.sh and
-# src/bitwarden/versions.ts (COMPAT-1).
+# downloaded assets when the version was pinned. Keep equal to install.sh;
+# src/bitwarden/versions.test.ts checks that and the minimum (COMPAT-1).
 ARG BW_VERSION=2026.9.0
 ARG BW_SHA256_AMD64=580c1deec8345b19dbac7f8b02babb6cc4fe250c69c567e29061f727f1e40768
 ARG BW_SHA256_ARM64=3f474cc34b701a1cebdd486009870038b034343afb83095607422cdad4c3653a

@@ -4,14 +4,16 @@
  * byte-exact contract of this project (spec §03.7) and the verifier speaks
  * `Result` rather than exceptions.
  */
+import { enabledScopes, type Scope } from '../scopes/registry.ts';
+
 import {
   invalidTokenChallenge,
   missingTokenChallenge,
   unauthorizedResponse,
 } from './challenges.ts';
-import { type Scope, effectiveScopes, enabledScopes } from './scopes.ts';
+import { effectiveScopes } from './scopes.ts';
 
-import type { TokenVerifier, VerifiedToken } from './token-verifier.ts';
+import type { TokenVerifier, VerifiedToken } from '../auth/token-types.ts';
 import type { Config } from '../config/index.ts';
 
 export interface BearerVerdict {

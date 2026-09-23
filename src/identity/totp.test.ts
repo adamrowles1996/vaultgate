@@ -2,8 +2,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { fixedRandom } from '../test-support/identity.ts';
+import { totp } from '../test-support/totp.ts';
 
-import { describeEnrolment, generateTotpSecret, hotp, totp, verifyTotp } from './totp.ts';
+import { describeEnrolment, generateTotpSecret, hotp, verifyTotp } from './totp.ts';
 
 const SECRET = Buffer.from('12345678901234567890');
 const STEP_MS = 30_000;

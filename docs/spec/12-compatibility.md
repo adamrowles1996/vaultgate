@@ -32,8 +32,9 @@ recorded evidence in the release PR):
 | Self-hosted Bitwarden | yes       | server `https://…` (account page or `VAULTGATE_BW_SERVER`)           |
 | Vaultwarden           | yes       | server `https://…` (account page or seed); personal API key required |
 
-- **COMPAT-1** The minimum Bitwarden CLI version is recorded in `src/bitwarden/versions.ts` and
-  in the Dockerfile; the two are kept equal by a test.
+- **COMPAT-1** The minimum Bitwarden CLI version is recorded in `src/bitwarden/versions.ts`; the
+  release pinned in the Dockerfile and in `install.sh` is kept equal, and at or above that
+  minimum, by a test.
 
 ## 12.4 Runtime
 

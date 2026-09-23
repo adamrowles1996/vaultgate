@@ -25,7 +25,7 @@ the rules below are enforced by tooling, not by hoping.
 | 100% test coverage, no ignore hints               | The untested branch is always the error path in the token endpoint.             |
 | Files ≤ 300 lines, functions ≤ 60 lines           | Small units are reviewable; security code must be readable in one sitting.      |
 | Cyclomatic complexity ≤ 10, cognitive ≤ 15        | Same reason.                                                                    |
-| `process.env` only in `src/config.ts`             | One validated configuration object; no hidden knobs.                            |
+| `process.env` only in `src/config/`               | One validated configuration object; no hidden knobs.                            |
 | `child_process` only in the `bw serve` supervisor | There is no legitimate second place to spawn a process in this server.          |
 | No `console`                                      | Structured logs with redaction, always.                                         |
 | No `any`, no non-null assertions                  | The compiler is a reviewer.                                                     |

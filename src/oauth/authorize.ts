@@ -1,3 +1,5 @@
+import { isScope, type Scope } from '../scopes/registry.ts';
+
 import { parseAuthorizationRequest, toPendingParameters } from './authorize-request.ts';
 import {
   type AuthorizeDependencies,
@@ -14,7 +16,6 @@ import {
 import { renderConsentPage } from './consent-page.ts';
 import { CREDENTIAL_PREFIX, hashCredential, mintCredential } from './credentials.ts';
 import { OAuthError } from './errors.ts';
-import { isScope, type Scope } from './scopes.ts';
 
 import type { OAuthContext, OAuthHandler } from './request-context.ts';
 
@@ -69,7 +70,7 @@ export function pendingScopes(pending: LivePending): readonly Scope[] {
   return pending.parameters.scope.split(' ').filter((entry) => isScope(entry));
 }
 
-export type ConsentPageHandler = (context: OAuthContext, id: string) => Promise<Response>;
+export type ConsentPageHandler = (context: OAuthContext, id: string) => Response;
 
 /**
  * `GET /oauth/authorize/:id` (OAUTH-13, OAUTH-18): renders the consent page;
@@ -79,25 +80,21 @@ export function createConsentPageHandler(dependencies: AuthorizeDependencies): C
   return (context, id) => {
     const pending = livePending(dependencies, id);
     if (pending === undefined) {
-      return Promise.resolve(
-        errorPage(
-          context,
-          new OAuthError('invalid_request', 'this authorization request has expired'),
-          400,
-        ),
+      return errorPage(
+        context,
+        new OAuthError('invalid_request', 'this authorization request has expired'),
+        400,
       );
     }
     const session = context.get('session');
     if (session === undefined) {
-      return Promise.resolve(loginRedirect(context, id));
+      return loginRedirect(context, id);
     }
     if (!isBoundToBrowser(context, dependencies, session, pending)) {
-      return Promise.resolve(
-        errorPage(
-          context,
-          new OAuthError('access_denied', 'this authorization request belongs to another browser'),
-          403,
-        ),
+      return errorPage(
+        context,
+        new OAuthError('access_denied', 'this authorization request belongs to another browser'),
+        403,
       );
     }
     const { parameters } = pending;
@@ -110,6 +107,6 @@ export function createConsentPageHandler(dependencies: AuthorizeDependencies): C
       loopbackOnly: parameters.loopback_only === '1',
       scopes: pendingScopes(pending),
     };
-    return Promise.resolve(context.html(renderConsentPage(view)));
+    return context.html(renderConsentPage(view));
   };
 }

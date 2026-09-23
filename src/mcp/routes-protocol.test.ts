@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { SCOPES } from '../scopes/registry.ts';
 import {
   callTool,
   initializeRequest,
@@ -15,7 +16,7 @@ import {
 import { createTestApp, TEST_METADATA_URL } from '../test-support/test-app.ts';
 
 import { insufficientScopeChallenge } from './challenges.ts';
-import { SCOPES, TOOL_NAMES } from './scopes.ts';
+import { TOOL_NAMES } from './scopes.ts';
 
 const ALL = [...SCOPES];
 const READ_TOOLS = ['vault_status', 'search_items', 'get_item', 'list_folders', 'list_collections'];

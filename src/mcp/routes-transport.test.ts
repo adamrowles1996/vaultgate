@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { SCOPES } from '../scopes/registry.ts';
 import { initializeRequest, mcpHeaders, postJsonRpc, request } from '../test-support/mcp-client.ts';
 import { createTestApp, TEST_METADATA_URL, testConfig } from '../test-support/test-app.ts';
 
 import { invalidTokenChallenge, missingTokenChallenge } from './challenges.ts';
-import { SCOPES } from './scopes.ts';
 
 const ALL = [...SCOPES];
 

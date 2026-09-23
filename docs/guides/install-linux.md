@@ -13,13 +13,24 @@ Read [`install.sh`](../../install.sh) before running it. It prints every step.
 
 ## 1. Run the installer
 
+Download the script, read it, then run it:
+
+```bash
+curl -fsSLo install.sh https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh
+less install.sh
+sudo bash install.sh
+```
+
+The piped one-liner does the same in one step, once you trust the script:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh | sudo bash
 ```
 
-Add `-s -- --version 0.1.0` after `bash` to pick a release; the default is the latest. The
-script downloads `vaultgate-<version>.tgz` and `vaultgate-<version>.tgz.sha256` from the GitHub
-release and verifies the tarball before unpacking it.
+Add `--version 0.1.0` after `install.sh` (or `-s -- --version 0.1.0` after `bash` in the piped
+form) to pick a release; the default is the latest. The script downloads `vaultgate-<version>.tgz`
+and `vaultgate-<version>.tgz.sha256` from the GitHub release and verifies the tarball before
+unpacking it.
 
 ## 2. Configure
 

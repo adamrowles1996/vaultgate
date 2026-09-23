@@ -1,4 +1,5 @@
 import { fail, ok, type Result } from '../result.ts';
+import { enabledScopes } from '../scopes/registry.ts';
 import { transaction } from '../storage/query.ts';
 
 import {
@@ -9,7 +10,7 @@ import {
 } from './credentials.ts';
 import { OAuthError } from './errors.ts';
 import { type FormFields, requireField } from './form.ts';
-import { enabledScopes, isScopeSubset, parseScopeParameter } from './scopes.ts';
+import { isScopeSubset, parseScopeParameter } from './scopes.ts';
 import { type IssuedPair, issueTokenPair } from './token-issuance.ts';
 import {
   invalidGrant,

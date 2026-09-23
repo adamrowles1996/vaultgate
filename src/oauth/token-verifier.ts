@@ -1,9 +1,9 @@
+import { TokenRejection, type TokenVerification, type TokenVerifier } from '../auth/token-types.ts';
 import { fail, ok, type Result } from '../result.ts';
 
 import { MINUTE_MS, type Clock } from './clock.ts';
 import { CREDENTIAL_PREFIX, hasCredentialPrefix, hashCredential } from './credentials.ts';
 import { canonicalResource } from './metadata.ts';
-import { TokenRejection, type TokenVerifier, type VerifiedToken } from './verified-token.ts';
 
 import type { ConsentRecord } from './repositories/consents.ts';
 import type { OAuthRepos } from './repositories/index.ts';
@@ -72,30 +72,28 @@ export class StoreTokenVerifier implements TokenVerifier {
     this.#resource = canonicalResource(options.publicUrl);
   }
 
-  verify(token: string): Promise<Result<VerifiedToken, TokenRejection>> {
+  verify(token: string): TokenVerification {
     if (!hasCredentialPrefix(token, CREDENTIAL_PREFIX.accessToken)) {
-      return Promise.resolve(fail(new TokenRejection('malformed', 'not a vaultgate access token')));
+      return fail(new TokenRejection('malformed', 'not a vaultgate access token'));
     }
     const hash = hashCredential(token);
     const live = findLiveToken(this.#options, this.#resource, hash);
     if (!live.ok) {
-      return Promise.resolve(live);
+      return live;
     }
     const { record, consent, at } = live.value;
     const { repos } = this.#options;
     if (record.lastUsedAt === undefined || at - record.lastUsedAt >= LAST_USED_GRANULARITY_MS) {
       repos.tokens.touchLastUsed(record.id, at);
     }
-    return Promise.resolve(
-      ok({
-        tokenId: hash.slice(0, TOKEN_ID_LENGTH),
-        clientId: record.clientId,
-        clientName: repos.clients.findByClientId(record.clientId)?.clientName ?? record.clientId,
-        subject: consent.operatorId,
-        scopes: record.scopes,
-        expiresAt: record.expiresAt,
-        resource: this.#resource,
-      }),
-    );
+    return ok({
+      tokenId: hash.slice(0, TOKEN_ID_LENGTH),
+      clientId: record.clientId,
+      clientName: repos.clients.findByClientId(record.clientId)?.clientName ?? record.clientId,
+      subject: consent.operatorId,
+      scopes: record.scopes,
+      expiresAt: record.expiresAt,
+      resource: this.#resource,
+    });
   }
 }

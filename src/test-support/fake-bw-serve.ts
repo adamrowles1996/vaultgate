@@ -151,10 +151,8 @@ export class FakeBwServe {
       this.state = 'locked';
       return context.json(success(message('Your vault is locked.')));
     });
-    this.#app.use('*', (context, next) =>
-      this.state === 'unlocked'
-        ? next()
-        : Promise.resolve(context.json(failure('Vault is locked.'), 400)),
+    this.#app.use('*', async (context, next) =>
+      this.state === 'unlocked' ? next() : context.json(failure('Vault is locked.'), 400),
     );
     this.#app.post('/sync', (context) => {
       this.lastSync = this.#nextRevision();

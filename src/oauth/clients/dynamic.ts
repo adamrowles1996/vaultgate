@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
 import { fail, ok, type Result } from '../../result.ts';
+import { enabledScopes, isScope, type Scope } from '../../scopes/registry.ts';
 import { CREDENTIAL_PREFIX, mintCredential, type RandomSource } from '../credentials.ts';
 import { OAuthError } from '../errors.ts';
 import { validateRedirectUri } from '../redirect-uri.ts';
-import { enabledScopes, isScope, type Scope } from '../scopes.ts';
 
 import { describeIssues } from './cimd-document.ts';
 

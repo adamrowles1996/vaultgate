@@ -1,6 +1,6 @@
 import { setImmediate as flushMacrotask } from 'node:timers/promises';
 
-import { startVaultSupervisor, type VaultSupervisor } from '../bitwarden/index.ts';
+import { startVaultSupervisor } from '../bitwarden/index.ts';
 import { loadConfig } from '../config/index.ts';
 
 import { FakeBwServe } from './fake-bw-serve.ts';
@@ -12,6 +12,7 @@ import { unwrapOk } from './result.ts';
 
 import type { FetchFunction } from '../bitwarden/api.ts';
 import type { StoredVaultSettings } from '../bitwarden/settings.ts';
+import type { VaultSupervisor } from '../bitwarden/supervisor.ts';
 import type { Config } from '../config/index.ts';
 
 const HARNESS_PORT = 43_210;

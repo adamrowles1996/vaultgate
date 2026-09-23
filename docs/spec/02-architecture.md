@@ -31,29 +31,29 @@
                                             Bitwarden cloud / self-hosted / Vaultwarden
 ```
 
-| Component            | Responsibility                                                                                       | Module                           |
-| -------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------- |
-| HTTP application     | Hono app: routing, security headers, request ids, error masking, rate limiting                       | `src/http/`                      |
-| Authorization server | Metadata documents, client resolution (CIMD, DCR, pre-registered), authorize, token, refresh, revoke | `src/oauth/`                     |
-| Identity             | Bootstrap, operator credentials (scrypt), TOTP, recovery codes, sessions, CSRF                       | `src/identity/`                  |
-| MCP resource server  | Bearer verification, `WWW-Authenticate` challenges, scope gates, tool registry, Streamable HTTP      | `src/mcp/`                       |
-| Vault backend        | `bw serve` lifecycle, unlock, sync, typed client for the Vault Management API, error mapping         | `src/bitwarden/`                 |
-| Store                | SQLite connection, migrations, repositories, retention jobs                                          | `src/storage/`                   |
-| Audit                | Append-only audit events, export                                                                     | `src/audit/`                     |
-| Config and logging   | Environment validation, structured logs with redaction                                               | `src/config.ts`, `src/logger.ts` |
-| Network              | Proxy-aware client address, HTTPS transport pinned to a checked address                              | `src/net/`                       |
+| Component            | Responsibility                                                                                       | Module                         |
+| -------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------ |
+| HTTP application     | Hono app: routing, security headers, request ids, error masking, rate limiting                       | `src/http/`                    |
+| Authorization server | Metadata documents, client resolution (CIMD, DCR, pre-registered), authorize, token, refresh, revoke | `src/oauth/`                   |
+| Identity             | Bootstrap, operator credentials (scrypt), TOTP, recovery codes, sessions, CSRF                       | `src/identity/`                |
+| MCP resource server  | Bearer verification, `WWW-Authenticate` challenges, scope gates, tool registry, Streamable HTTP      | `src/mcp/`                     |
+| Vault backend        | `bw serve` lifecycle, unlock, sync, typed client for the Vault Management API, error mapping         | `src/bitwarden/`               |
+| Store                | SQLite connection, migrations, repositories, retention jobs                                          | `src/storage/`                 |
+| Audit                | Append-only audit events, export                                                                     | `src/audit/`                   |
+| Config and logging   | Environment validation, structured logs with redaction                                               | `src/config/`, `src/logger.ts` |
+| Network              | Proxy-aware client address, HTTPS transport pinned to a checked address                              | `src/net/`                     |
 
 ## 2.2 Module boundaries (enforced)
 
-| Rule ID | Requirement                                                                                                                                    | Enforcement                                        |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| ARCH-1  | `process.env` is read only in `src/config.ts` (and passed in by `src/main.ts` and `src/cli.ts`). Every other module receives a `Config` value. | ESLint `no-restricted-syntax`                      |
-| ARCH-2  | `child_process` is imported only by `src/bitwarden/serve-process.ts`.                                                                          | ESLint `no-restricted-imports`                     |
-| ARCH-3  | No module writes to `console`; all output goes through the pino logger with redaction.                                                         | ESLint `no-console`                                |
-| ARCH-4  | Vault secret values never enter the store, the logger, an error message or a non-`get_secret` tool result.                                     | Code review, redaction tests, tool contract tests  |
-| ARCH-5  | Every HTTP handler is testable in-process through `app.request()`; no handler depends on a live socket.                                        | Test suite design                                  |
-| ARCH-6  | The MCP tool layer depends on a `VaultClient` interface, never on `bw serve` directly, so tools are tested against a fake.                     | TypeScript interface + fake in `src/test-support/` |
-| ARCH-7  | No import cycles.                                                                                                                              | ESLint `import-x/no-cycle`                         |
+| Rule ID | Requirement                                                                                                                                  | Enforcement                                        |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| ARCH-1  | `process.env` is read only in `src/config/` (and passed in by `src/main.ts` and `src/cli.ts`). Every other module receives a `Config` value. | ESLint `no-restricted-syntax`                      |
+| ARCH-2  | `child_process` is imported only by `src/bitwarden/serve-process.ts`.                                                                        | ESLint `no-restricted-imports`                     |
+| ARCH-3  | No module writes to `console`; all output goes through the pino logger with redaction.                                                       | ESLint `no-console`                                |
+| ARCH-4  | Vault secret values never enter the store, the logger, an error message or a non-`get_secret` tool result.                                   | Code review, redaction tests, tool contract tests  |
+| ARCH-5  | Every HTTP handler is testable in-process through `app.request()`; no handler depends on a live socket.                                      | Test suite design                                  |
+| ARCH-6  | The MCP tool layer depends on a `VaultClient` interface, never on `bw serve` directly, so tools are tested against a fake.                   | TypeScript interface + fake in `src/test-support/` |
+| ARCH-7  | No import cycles.                                                                                                                            | ESLint `import-x/no-cycle`                         |
 
 ## 2.3 Request flows
 
@@ -97,10 +97,14 @@
 src/
   main.ts                 process entrypoint (excluded from unit coverage; covered by the CI smoke job)
   cli.ts                  audit export entrypoint (excluded from unit coverage; covered by the CI CLI smoke step)
-  config.ts               environment schema → Config
+  config/                 environment schema → Config
   logger.ts               pino with redaction
   result.ts               Result<T, E>
   net/                    client address behind a proxy, HTTPS transport pinned to a checked address
+  scopes/                 the one scope registry (names, order, consent text) oauth/ and mcp/ share
+  auth/                   the bearer-token contract (VerifiedToken, TokenVerifier) oauth/ and mcp/ share
+  crypto/                 the secret box: authenticated encryption under keys derived from VAULTGATE_SECRET_KEY
+  vault/                  the VaultClient and VaultConnection interfaces the features depend on
   http/                   app factory, middleware, error mapping, rate limiting
   oauth/                  metadata, clients (cimd, dcr, preregistered), authorize, token, revoke, scopes
   identity/               bootstrap, password (scrypt), totp, recovery codes, sessions, csrf, pages

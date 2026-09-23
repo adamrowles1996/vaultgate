@@ -19,8 +19,8 @@ import { checkHost, checkOrigin, hasQueryStringToken, resolveSourceIp } from './
 import { isToolName, missingScopes, requiredScopes, type ToolName } from './scopes.ts';
 import { type CallContext, createVaultMcpServer } from './server.ts';
 
-import type { TokenVerifier } from './token-verifier.ts';
 import type { AuditSink } from '../audit/event.ts';
+import type { TokenVerifier } from '../auth/token-types.ts';
 import type { Config } from '../config/index.ts';
 import type { Logger } from '../logger.ts';
 import type { VaultClient } from '../vault/client.ts';
@@ -69,19 +69,15 @@ function toAuthInfo(verdict: BearerVerdict): AuthInfo {
 }
 
 function guardMiddleware(config: Config): MiddlewareHandler<McpEnvironment> {
-  return (context, next) => {
+  return async (context, next) => {
     const origin = checkOrigin(context.req.raw.headers, config);
     const host = origin.ok ? checkHost(context.req.raw, config) : origin;
     if (!host.ok) {
-      return Promise.resolve(
-        context.json({ error: 'forbidden', error_description: host.reason }, 403),
-      );
+      return context.json({ error: 'forbidden', error_description: host.reason }, 403);
     }
     if (hasQueryStringToken(context.req.url)) {
       const description = 'send the token in the Authorization header';
-      return Promise.resolve(
-        context.json({ error: 'invalid_request', error_description: description }, 400),
-      );
+      return context.json({ error: 'invalid_request', error_description: description }, 400);
     }
     return next();
   };

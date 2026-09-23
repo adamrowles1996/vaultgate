@@ -6,11 +6,16 @@ type AuthOutcome =
 
 /**
  * Spec §4.7. The OAuth authorize flow calls `authenticate` with whatever
- * session the cookie resolved to and acts only on the outcome (ID-21).
+ * session the cookie resolved to and acts only on the outcome (ID-21). The
+ * local provider answers synchronously; a promise is accepted so an OIDC or
+ * passkey provider can implement the same contract.
  */
 export interface IdentityProvider {
   readonly kind: 'local' | 'oidc' | 'passkey';
-  authenticate(request: Request, session: SessionState | undefined): Promise<AuthOutcome>;
+  authenticate(
+    request: Request,
+    session: SessionState | undefined,
+  ): AuthOutcome | Promise<AuthOutcome>;
 }
 
 /**
@@ -33,10 +38,8 @@ export function createLocalProvider(): IdentityProvider {
   return {
     kind: 'local',
     authenticate: (request, session) =>
-      Promise.resolve(
-        session === undefined
-          ? { kind: 'redirect', location: loginLocation(request) }
-          : { kind: 'authenticated', operatorId: session.operatorId },
-      ),
+      session === undefined
+        ? { kind: 'redirect', location: loginLocation(request) }
+        : { kind: 'authenticated', operatorId: session.operatorId },
   };
 }

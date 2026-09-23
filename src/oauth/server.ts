@@ -25,6 +25,7 @@ import { StoreTokenVerifier } from './token-verifier.ts';
 import { createTokenHandler } from './token.ts';
 
 import type { OAuthAuditSink } from './audit.ts';
+import type { TokenVerifier } from '../auth/token-types.ts';
 import type { Config } from '../config/index.ts';
 import type { Guards } from '../identity/guards.ts';
 import type { Html } from '../identity/pages/template.ts';
@@ -33,7 +34,6 @@ import type { FetchLike, Lookup } from './clients/ssrf-fetch.ts';
 import type { RandomSource } from './credentials.ts';
 import type { ClientRecord } from './repositories/clients.ts';
 import type { ConnectedClient } from './repositories/consents.ts';
-import type { TokenVerifier } from './verified-token.ts';
 import type { DatabaseSync } from 'node:sqlite';
 
 type AuthorizationServerConfig = Pick<

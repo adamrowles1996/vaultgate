@@ -1,7 +1,9 @@
 // cspell:ignore MZXW MZXQ YTBOI fooba foob
 import { describe, expect, it } from 'vitest';
 
-import { base32Decode, base32Encode, randomBase32 } from './base32.ts';
+import { base32Decode } from '../test-support/base32.ts';
+
+import { base32Encode, randomBase32 } from './base32.ts';
 
 const RFC_4648_VECTORS: readonly (readonly [string, string])[] = [
   ['', ''],
@@ -20,7 +22,7 @@ describe('base32', () => {
     );
   });
 
-  it('ID-8 decodes the RFC 4648 §10 vectors, ignoring case and padding', () => {
+  it('ID-8 round-trips the RFC 4648 §10 vectors through the test decoder, ignoring case and padding', () => {
     expect(
       RFC_4648_VECTORS.map(([, encoded]) =>
         base32Decode(encoded.toLowerCase().replaceAll('=', ''))?.toString(),

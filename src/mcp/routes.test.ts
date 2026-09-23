@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { SCOPES } from '../scopes/registry.ts';
 import {
   callTool,
   initializeRequest,
@@ -11,7 +12,7 @@ import { createTestApp, TEST_METADATA_URL, testConfig } from '../test-support/te
 import { CANARIES } from '../test-support/vault-fixture.ts';
 
 import { insufficientScopeChallenge } from './challenges.ts';
-import { SCOPES, TOOL_NAMES } from './scopes.ts';
+import { TOOL_NAMES } from './scopes.ts';
 
 const ALL = [...SCOPES];
 const SOCKET = { incoming: { socket: { remoteAddress: '10.0.0.7' } } };

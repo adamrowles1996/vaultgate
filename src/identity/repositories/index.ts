@@ -11,9 +11,6 @@ import type { RecoveryCodesStore } from './recovery-codes.ts';
 import type { SessionsStore } from './sessions.ts';
 import type { DatabaseSync } from 'node:sqlite';
 
-export type { OperatorRecord } from './operators.ts';
-export type { SessionRecord } from './sessions.ts';
-
 export interface IdentityStores {
   readonly operators: OperatorsStore;
   readonly recoveryCodes: RecoveryCodesStore;

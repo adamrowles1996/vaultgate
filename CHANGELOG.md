@@ -36,10 +36,42 @@ All notable changes to this project are documented here. The format follows
   `invalid_request`, a different one `invalid_grant`. Previously an omitted `client_id` skipped
   the binding check.
 
+### Changed
+
+- One scope registry (`src/scopes/registry.ts`) and one bearer-token contract
+  (`src/auth/token-types.ts`) sit below both the authorization server and the MCP resource
+  server, replacing the duplicated copies and the test that held them in step; the
+  dependency-cruiser layering lists both as foundation modules and no longer needs a type-only
+  door from `oauth/` to `mcp/`. `TokenVerifier.verify` may answer synchronously.
+- `main.ts` builds the ID-18 guards first and composes the authorization server before identity,
+  so the account page's connected-clients renderer is passed in directly instead of through a
+  mutable slot; `createIdentity` takes `guards`. The milestone banner comments are gone from
+  `main.ts` and `src/http/app.ts`.
+- Dead code removed: `RejectAllTokenVerifier`, `UnavailableVaultClient`, `formatScopes`,
+  `commonPasswordCount`, `SCOPES_SUPPORTED` and `PINNED_BW_VERSION` (the Dockerfile and
+  `install.sh` pins are now compared with each other and with the minimum); `base32Decode` and
+  `totp` moved to test support, which is the only place that decodes or generates.
+  `npm run knip` also runs knip in production mode, so an export only a test consumes is reported.
+- `Promise.resolve` wrappers that existed only to satisfy `require-await` are gone from the
+  consent-page handler, the `/mcp` guard middleware, the local identity provider and the
+  store-backed token verifier.
+- The integration suite skips, with the condition in its title, when no `VAULTGATE_TEST_BW_*`
+  credential is set (a partial set still fails), so a bare `vitest run` passes.
+
 ### Docs
 
 - `docs/reviews/`: the independent security review and code review of v0.1.0-rc.4, reproduced
   verbatim.
+- README quick start (version, Compose steps, first run, what the operator password is and is
+  not, the bundled `bw` CLI, stored connections surviving restarts) and a root `llms.txt`.
+- `install.sh` guide shows the download-then-inspect path before the piped one-liner; the nginx
+  snippet explains the `/mcp` read timeout.
+- `VAULTGATE_TRUSTED_PROXY_HOPS` appears in `.env.example` and the systemd `vaultgate.env.example`
+  with its meaning on one line.
+- `src/config.ts` is `src/config/` in the specification, `CONTRIBUTING.md` and the ESLint
+  message; ADR 0006 records `src/cli.ts` as the second coverage exclusion; COMPAT-1 describes
+  where the CLI version is pinned; the source layout lists `scopes/`, `auth/`, `crypto/` and
+  `vault/`.
 
 ## [0.1.0-rc.4] - 2026-09-23
 

@@ -49,6 +49,41 @@ What the design gives you beyond the table:
 - **Boring to operate.** One process, one SQLite file, structured logs, health
   probes, an audit trail. `docker compose up` is a complete installation.
 
+## Quick start
+
+The current version is 0.1.0-rc.4 (`package.json`; releases are tagged on GitHub). On a VM with
+Docker Engine, the Compose plugin, a DNS name pointing at it and ports 80 and 443 reachable from
+the internet:
+
+```bash
+git clone https://github.com/adamrowles1996/vaultgate.git
+cd vaultgate
+cp .env.example .env
+```
+
+Set `VAULTGATE_DOMAIN`, `VAULTGATE_PUBLIC_URL` and `VAULTGATE_VERSION` in `.env`, then:
+
+```bash
+mkdir -p secrets
+head -c 32 /dev/urandom | base64 > secrets/vaultgate_secret_key
+touch secrets/bw_password secrets/bw_client_secret
+chmod 0400 secrets/* && sudo chown 10001 secrets/*
+docker compose up -d
+docker compose logs -f vaultgate
+```
+
+First run: the log prints a one-time `/setup?token=…` URL. Open it and create the operator
+account with an e-mail address, a password and a code from your authenticator (TOTP). That
+password is vaultgate's own operator login; it is not, and never becomes, your Bitwarden master
+password. Sign in, and on the account page connect the vault: server, API key client id and
+secret, and master password. vaultgate stores that connection encrypted under
+`VAULTGATE_SECRET_KEY`, so it survives restarts and upgrades. Then add `https://<host>/mcp` to
+Claude (or Claude Code, Codex, the MCP Inspector) as a remote MCP server and approve the scopes on
+the consent page. The `bw` CLI that vaultgate drives is bundled in the image and installed by
+`install.sh`; nothing else is needed on the host. Walkthrough:
+[`docs/guides/first-run.md`](docs/guides/first-run.md); details and the verification of the
+image: [`docs/guides/install-docker-compose.md`](docs/guides/install-docker-compose.md).
+
 ## How it works
 
 ```text

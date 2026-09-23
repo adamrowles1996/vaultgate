@@ -3,7 +3,8 @@
 //
 // Layers, from the bottom up:
 //   result, config, logger,     foundation: import nothing above themselves
-//   net, crypto
+//   net, crypto, scopes, auth  (scopes: the one scope registry; auth: the
+//                               bearer-token contract both oauth and mcp use)
 //   storage                     no feature knowledge
 //   audit                       the event shape and the store sink every
 //                               feature records through; knows no feature
@@ -42,7 +43,7 @@ export default {
     {
       name: 'foundation-imports-nothing-above-itself',
       severity: 'error',
-      from: { path: '^src/(result|config|logger|net)' },
+      from: { path: '^src/(result|config|logger|net|scopes|auth)' },
       to: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|http)/' },
     },
     {
@@ -70,9 +71,9 @@ export default {
       name: 'oauth-is-independent-of-mcp-and-the-vault',
       severity: 'error',
       comment:
-        'The bearer contract (TokenVerifier, VerifiedToken) is shared as types only; no runtime code crosses.',
+        'The bearer contract (TokenVerifier, VerifiedToken) and the scope registry live in src/auth/ and src/scopes/; nothing crosses directly.',
       from: { path: '^src/oauth/' },
-      to: { path: '^src/(mcp|bitwarden)/', dependencyTypesNot: ['type-only'] },
+      to: { path: '^src/(mcp|bitwarden)/' },
     },
     {
       name: 'identity-is-independent-of-other-features',
