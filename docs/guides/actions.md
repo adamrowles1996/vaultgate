@@ -1,6 +1,7 @@
 # Actions: let an agent use a credential it never sees
 
-The actions layer (specification [13 Actions](../spec/13-actions.md) and
+The actions layer (specification [13 Actions](../spec/13-actions.md),
+[13a Actions in operation](../spec/13a-actions-operations.md) and
 [14 Action connectors](../spec/14-actions-connectors.md), decided in
 [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)) lets an agent _use_ a vault
 credential without receiving it. You define a **target**: where the agent may go, which vault
@@ -249,12 +250,25 @@ and checks every address against the private-range rule; it does not connect.
 (`login.username` by default) and the field holding the **password** (`password` by default).
 Both are `get_secret` selectors, so a hidden custom field (`custom.<name>`) works for either.
 
-**Policy.** `operations` (`read` today; `write` needs `sql_execute`, which arrives with M11's
-second pull request, and a target that asks for it is refused at save until then), **maximum
-rows** (default 500, at most 10 000), the **statement timeout** (the server cancels a statement
-that runs longer; defaults to the call timeout), and the common timeout, output and rate limits.
-`write_classes`, `statement_allowlist` and `schemas` are read by `sql_execute` only and have no
-effect on `sql_query`.
+**Policy.** `operations`: `read` alone for a reporting replica, `read` and `write` for a target
+an agent may change (a target that allows `write` must allow `read` too). Then **maximum rows**
+(default 500, at most 10 000), the **statement timeout** (the server cancels a statement that
+runs longer; defaults to the call timeout and is never longer than it), and the common timeout,
+output and rate limits.
+
+Two more fields matter only to `sql_execute`:
+
+- **Allowed write classes**: `dml` (`INSERT`, `UPDATE`, `DELETE`, `MERGE`) by default; add `ddl`
+  (`CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `GRANT`, `REVOKE`, `DENY`) only for a target whose
+  agent is meant to change the schema.
+- **Allowed statements**: one pattern per line, matched against the statement as the agent wrote
+  it; `*` matches within one line and matching is anchored at both ends, so
+  `UPDATE orders SET status = $1 WHERE id = $2` admits exactly that statement and
+  `DELETE FROM sessions WHERE *` admits any single-line delete from that table. An empty list
+  means no statement restriction, and the classification and the login are then the controls.
+
+**Ask a human to confirm every non-read call** is on for every new target and is what makes
+`sql_execute` safe to grant at all; see "Calling a `sql` target" below.
 
 ### The dedicated login
 
@@ -282,7 +296,35 @@ ALTER ROLE db_datareader ADD MEMBER vaultgate_reader;
 DENY EXECUTE TO vaultgate_reader;
 ```
 
-Store the password in a vault item and point the target's credential mapping at it. Rotating it
+For a target that also allows `write`, grant the least the work needs and nothing more — on the
+tables it is meant to change, in the schemas it is meant to see. PostgreSQL:
+
+```sql
+CREATE ROLE vaultgate_writer LOGIN PASSWORD 'put-a-generated-password-here';
+GRANT CONNECT ON DATABASE reporting TO vaultgate_writer;
+GRANT USAGE ON SCHEMA support TO vaultgate_writer;
+GRANT SELECT, INSERT, UPDATE, DELETE ON support.tickets TO vaultgate_writer;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA support TO vaultgate_writer;
+```
+
+SQL Server:
+
+```sql
+CREATE LOGIN vaultgate_writer WITH PASSWORD = 'put-a-generated-password-here';
+USE reporting;
+CREATE USER vaultgate_writer FOR LOGIN vaultgate_writer;
+GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::support TO vaultgate_writer;
+DENY ALTER, CONTROL ON SCHEMA::support TO vaultgate_writer;
+DENY EXECUTE TO vaultgate_writer;
+```
+
+Give a write target its own login: do not reuse the read one. A login that can only touch the
+tables you named is the control that holds when everything above it is wrong, and it is the
+reason vaultgate has no "allowed schemas" list of its own — it could not tell a schema
+qualifier from a table alias without a SQL parser, and a check that cannot tell them apart
+either refuses ordinary statements or gives you a false sense of safety.
+
+Store each password in a vault item and point the target's credential mapping at it. Rotating it
 in the vault is enough: vaultgate opens one connection per call and holds no pool, so the next
 call uses the new password.
 
@@ -343,6 +385,45 @@ with the server's message (scrubbed, capped at 1 KiB). A login the server reject
 `authentication_failed`, an unreachable or refused server is `connection_failed`, a certificate
 that does not verify is `tls_error`, and a statement the server cancels at the statement timeout
 is `timeout`.
+
+## Changing data through a `sql` target
+
+An agent whose token holds `actions:sql.write`, whose client you granted the target, and whose
+target policy includes the `write` operation calls `sql_execute`:
+
+```json
+{
+  "target": "warehouse",
+  "statement": "UPDATE support.tickets SET status = $1 WHERE id = $2",
+  "params": ["closed", 4711]
+}
+```
+
+Everything in "Calling a `sql` target" applies, with four differences:
+
+1. **The classification must be a write.** The statement's first keyword must be `INSERT`,
+   `UPDATE`, `DELETE` or `MERGE` (`dml`), or — only when **Allowed write classes** includes
+   `ddl` — `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `GRANT`, `REVOKE` or `DENY`. A `SELECT`
+   through `sql_execute` is refused (`policy_denied`, `statement_class`) and belongs in
+   `sql_query`; a `DELETE` through `sql_query` is refused the same way. Neither tool can be
+   talked into doing the other's work, whatever scopes the token holds.
+2. **Then the statement allowlist**, if the target carries one: a statement outside it is
+   `policy_denied` with `detail.reason: "statement_pattern"`.
+3. **A human confirms it**, unless you untick **Ask a human to confirm every non-read call**.
+   The agent's client shows the target, the destination (host, port and database only) and the
+   statement, and asks for one tick. The confirmation lasts two minutes, is bound to this call's
+   exact arguments and to this target at this revision, and cannot be used twice: editing the
+   target, changing a parameter, retrying with another token or answering late all fail
+   (`confirmation_invalid`, `confirmation_expired`, `confirmation_reused`). A client that cannot
+   elicit is refused with `confirmation_unavailable` before the vault is touched — vaultgate
+   never downgrades a confirmed target to an unconfirmed one.
+4. **It runs in its own transaction**, committed when the statement succeeds and rolled back on
+   any error; if the policy timeout elapses the connection is dropped, which rolls it back too.
+   The result is `rows_affected`, the rows the statement returned through `RETURNING` or
+   `OUTPUT` (empty when it returned none) and `duration_ms`.
+
+The statement the agent ran is kept in the call history, scrubbed, whether it was confirmed or
+not, so an unexpected write can be read back on the target's page.
 
 ## Grants
 

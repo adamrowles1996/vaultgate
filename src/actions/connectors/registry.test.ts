@@ -36,9 +36,14 @@ describe('connector registry', () => {
     const everything = actionsEnabled(['http', 'sql', 'ssh', 'winrm', 'browser']);
     const production = await loadConnectors(everything);
     expect(production.kinds).toStrictEqual(['http', 'sql']);
-    expect(production.tools.map((tool) => tool.name)).toStrictEqual(['http_request', 'sql_query']);
+    expect(production.tools.map((tool) => tool.name)).toStrictEqual([
+      'http_request',
+      'sql_query',
+      'sql_execute',
+    ]);
     expect(production.forTool('http_request')?.kind).toBe('http');
     expect(production.forTool('sql_query')?.kind).toBe('sql');
+    expect(production.forTool('sql_execute')?.kind).toBe('sql');
     const withoutHttp = await loadConnectors(actionsEnabled(['winrm', 'ssh']));
     expect(withoutHttp.kinds).toStrictEqual([]);
   });

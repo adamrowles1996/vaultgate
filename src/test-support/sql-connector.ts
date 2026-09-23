@@ -5,6 +5,7 @@
  * driven without the engine.
  */
 import { createSqlConnector, type SqlConnector } from '../actions/connectors/sql/index.ts';
+import { SQL_EXECUTE_TOOL, SQL_QUERY_TOOL } from '../actions/connectors/sql/operation.ts';
 import {
   sqlPolicySchema,
   type SqlDestination,
@@ -79,8 +80,23 @@ A `sql_query` call on the fixture target; `target` inside the arguments names th
 */
 export function sqlInvocation(toolArguments: Readonly<Record<string, unknown>> = {}): Invocation {
   const merged = { target: 'warehouse', statement: 'SELECT 1', ...toolArguments };
-  return { tool: 'sql_query', target: merged.target, arguments: merged };
+  return { tool: SQL_QUERY_TOOL, target: merged.target, arguments: merged };
 }
+
+/**
+A `sql_execute` call on the fixture target.
+*/
+export function sqlWriteInvocation(
+  toolArguments: Readonly<Record<string, unknown>> = {},
+): Invocation {
+  const merged = { target: 'warehouse', statement: 'DELETE FROM t', ...toolArguments };
+  return { tool: SQL_EXECUTE_TOOL, target: merged.target, arguments: merged };
+}
+
+/**
+The policy of a target that allows both operations and, by default, asks a human to confirm writes.
+*/
+export const WRITE_POLICY = { operations: ['read', 'write'], confirm_writes: true } as const;
 
 export function sqlConnectorOver(fake: FakeSessions): SqlConnector {
   return createSqlConnector(fake.sessions);
@@ -111,6 +127,10 @@ export function harnessOverSql(
 }
 
 export interface SqlContextOptions {
+  /**
+  Which of the connector's two tools the context serves; `sql_query` unless told otherwise.
+  */
+  readonly tool?: string;
   readonly engine?: SqlDestination['engine'];
   readonly destination?: Readonly<Record<string, unknown>>;
   readonly policy?: Readonly<Record<string, unknown>>;
@@ -157,6 +177,7 @@ export function sqlRunContext(options: SqlContextOptions = {}): BuiltSqlContext 
       credential,
       policy,
       common: policy,
+      tool: options.tool ?? SQL_QUERY_TOOL,
       injected: support.secrets.injected,
       support: support.support,
       pinned: options.pinned ?? [{ host: SQL_HOST, tls: true, address: PUBLIC_ADDRESS }],

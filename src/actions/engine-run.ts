@@ -210,6 +210,7 @@ export async function runConnector(
   }, documents.common.timeout_ms);
   const context: RunContext<unknown, unknown, unknown> = {
     ...documents,
+    tool: resolved.tool.name,
     injected: credential.injected,
     support,
     pinned,

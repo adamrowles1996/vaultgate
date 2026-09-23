@@ -54,9 +54,11 @@ export interface SqlConnection {
   readonly tls: SqlDestination['tls'];
   readonly caPem: string | undefined;
   /**
-  ACT-85: a read session is opened read-only on the engines that can enforce it.
-  */
-  readonly readOnly: boolean;
+   * ACT-85: a `read` session is opened read-only on the engines that can
+   * enforce it; ACT-25: a `write` session runs its statement in its own
+   * transaction, committed on success and rolled back on any error.
+   */
+  readonly mode: 'read' | 'write';
   readonly connectTimeoutMs: number;
   readonly statementTimeoutMs: number;
   /**

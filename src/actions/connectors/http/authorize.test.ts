@@ -1,9 +1,38 @@
 import { describe, expect, it } from 'vitest';
 
-import { authorize, capabilities, describeOperation, injectedHeaderName } from './authorize.ts';
-import { type HttpCredential, type HttpPolicy, httpPolicySchema } from './schemas.ts';
+import {
+  authorize as authorizeRequest,
+  capabilities,
+  describeOperation,
+  injectedHeaderName,
+  type HttpRequest,
+} from './authorize.ts';
+import {
+  type HttpCredential,
+  type HttpDestination,
+  type HttpPolicy,
+  httpPolicySchema,
+} from './schemas.ts';
 
 import type { HttpOperation } from './operation.ts';
+import type { PolicyDecision } from '../../policy.ts';
+
+const DESTINATION: HttpDestination = { base_url: 'https://api.example.com/v1' };
+
+/**
+The documents and the tool `authorize` judges against; only the policy and the credential vary here.
+*/
+function request(policy: HttpPolicy, credential: HttpCredential): HttpRequest {
+  return { destination: DESTINATION, credential, policy, tool: 'http_request' };
+}
+
+function authorize(
+  policy: HttpPolicy,
+  operation: HttpOperation,
+  credential: HttpCredential,
+): PolicyDecision {
+  return authorizeRequest(request(policy, credential), operation);
+}
 
 const BEARER: HttpCredential = { mode: 'bearer', field: 'password' };
 const KEYED: HttpCredential = { mode: 'header', field: 'password', name: 'x-api-key' };
@@ -150,11 +179,11 @@ describe('authorize', () => {
   });
 
   it('ACT-43 ACT-60 describes the operation as method and path, capped at 1 KiB, classified by method', () => {
-    expect(describeOperation({ method: 'DELETE', path: '/v1/items/7?force=1' })).toStrictEqual({
-      summary: 'DELETE /v1/items/7?force=1',
-      classification: 'DELETE',
-    });
-    const long = describeOperation({ method: 'GET', path: `/${'a'.repeat(2000)}` });
+    const described = request(DEFAULT, BEARER);
+    expect(
+      describeOperation(described, { method: 'DELETE', path: '/v1/items/7?force=1' }),
+    ).toStrictEqual({ summary: 'DELETE /v1/items/7?force=1', classification: 'DELETE' });
+    const long = describeOperation(described, { method: 'GET', path: `/${'a'.repeat(2000)}` });
     expect(long.summary).toHaveLength(1024);
     expect(long.summary.startsWith('GET /aaa')).toBe(true);
   });

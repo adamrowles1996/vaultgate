@@ -1,9 +1,10 @@
 # 14 Action connectors
 
 > **Status: the interface (14.1), the `http` connector (14.2), the `graph` credential adapter
-> (14.3) and the `sql` connector's read half (14.4) have landed (M9, M10, M11); `sql_execute` is
-> M11's second pull request, `ssh` M12, `winrm` M13 and `browser` M15.** The
+> (14.3) and the `sql` connector (14.4) have landed (M9, M10, M11); `ssh` is M12, `winrm` M13
+> and `browser` M15.** The
 > connector contracts of the actions layer ([13 Actions](13-actions.md),
+> [13a Actions in operation](13a-actions-operations.md),
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). A document whose runtime has
 > not landed validates, but a target that uses it is refused at save (and on read) until it does,
 > so no half-implemented mode ever runs. Requirement identifiers continue the `ACT-n` sequence of
@@ -150,8 +151,16 @@ agent must never see the client secret, the refresh token or the access token.
 | `policy`      | Common fields; `operations` (`["read"]` default, or `["read","write"]`); `max_rows` (default 500, max 10 000); `statement_timeout_ms` (default `timeout_ms`); `write_classes` (`["dml"]` default, or `["dml","ddl"]`); `statement_allowlist` (optional patterns, ACT-34, applied to `sql_execute` statements after classification); `schemas` (optional list; a statement naming a schema outside it fails, best-effort, see ACT-38).                  |
 
 - **ACT-84** Dependencies: `pg` for PostgreSQL and `mssql` (the Tedious-based driver) for SQL
-  Server, justified per QG-9 in the M11 pull request (pure JavaScript, no native addon, parameter
-  binding, TLS, per-statement timeouts). Each is imported only inside its sub-module, so a
+  Server, justified per QG-9 in the M11 pull requests (pure JavaScript, no native addon, no
+  install script, parameter binding, TLS, per-statement timeouts). The measured cost, from the
+  lock file: `pg` and everything it needs is 14 packages and about 0.9 MB; `mssql` adds 73
+  packages more and about 69 MB, of which about 44 MB is the `@azure/*` tree (16 packages) that
+  `tedious` declares for the Entra ID authentication modes vaultgate never uses and `require`s
+  at module load whatever the target's authentication is. The cost is accepted because there is
+  no pure-JavaScript TDS client without it — the alternative, `msnodesqlv8`, is a native addon,
+  which QG-9 refuses outright — and because nothing is loaded unless a `sql` call actually runs:
+  the registry imports the connector dynamically (ACT-73) and each session module imports its
+  own driver dynamically inside the call. Each is imported only inside its sub-module, so a
   deployment that never enables `sql` still ships the packages but never loads them.
 - **ACT-85** The documented setup for every `sql` target is a dedicated login: for read targets
   `db_datareader` / a role with `SELECT` only; for write targets the least role that covers the
@@ -163,9 +172,12 @@ agent must never see the client secret, the refresh token or the access token.
   the next call. `mssql` has no connection type outside its pool, so the SQL Server session is a
   pool of exactly one (`min: 0`, `max: 1`) created and closed with the call, which is the same
   thing from the database's point of view.
-- `policy.statement_allowlist` and `policy.schemas` are read by `sql_execute` only; `sql_query`
-  is governed by the classification of ACT-37 and by the login of ACT-85. Both validate on every
-  `sql` target so the document shape does not change when the write half lands.
+- `policy.statement_allowlist` is read by `sql_execute` only; `sql_query` is governed by the
+  classification of ACT-37 and by the login of ACT-85. A `schemas` list was specified here and is
+  withdrawn: deciding whether a qualified name in a statement is a schema or a table alias needs
+  a real parser, and a check that cannot tell them apart either refuses ordinary statements or
+  gives a false assurance. Granting the login access to the schemas you mean (ACT-85) is the
+  control, and both engines can express it; the guide shows how.
 
 ## 14.5 `ssh`
 

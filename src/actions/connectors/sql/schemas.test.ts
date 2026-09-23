@@ -69,9 +69,12 @@ describe('the sql target documents', () => {
       max_rows: 500,
       write_classes: ['dml'],
       statement_allowlist: [],
-      schemas: [],
       timeout_ms: 30_000,
     });
+  });
+
+  it('14.4 drops a policy field this build does not serve, rather than invalidating the target', () => {
+    expect(policy({ schemas: ['reporting'] })).not.toHaveProperty('schemas');
   });
 
   it('14.4 caps max_rows at 10 000', () => {
@@ -133,15 +136,12 @@ describe('the sql save-time checks', () => {
     ]);
   });
 
-  it('13.6.4 refuses the write operation until sql_execute lands', () => {
-    expect(problems({ policy: { operations: ['read', 'write'] } })).toStrictEqual([
-      'policy.operations: write is not available yet; sql_execute arrives with the second M11 pull request',
-    ]);
+  it('14.4 accepts a target that allows read and write', () => {
+    expect(problems({ policy: { operations: ['read', 'write'] } })).toStrictEqual([]);
   });
 
   it('14.4 a target that allows write must allow read as well', () => {
     expect(problems({ policy: { operations: ['write'] } })).toStrictEqual([
-      'policy.operations: write is not available yet; sql_execute arrives with the second M11 pull request',
       'policy.operations: a target that allows write must allow read as well',
     ]);
   });

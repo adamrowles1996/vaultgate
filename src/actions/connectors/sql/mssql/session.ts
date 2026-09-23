@@ -4,14 +4,16 @@
  * the call, ACT-86), opened to the pinned address with the host name kept
  * for TLS through Tedious's `serverName` (ACT-55), bounded by the driver's
  * request timeout and the engine's abort signal, and cancelled on abort.
- * SQL Server has no read-only session, so the classification of ACT-37 and
- * the least-privilege login of ACT-85 are the controls, as the guide says.
- * The driver is loaded through a dynamic import (ACT-73).
+ * SQL Server has no read-only session, so for a read the classification of
+ * ACT-37 and the least-privilege login of ACT-85 are the controls, as the
+ * guide says; a write runs inside a transaction of its own, committed when it
+ * succeeds and rolled back on any error (ACT-25). The driver is loaded
+ * through a dynamic import (ACT-73).
  */
 import { actionErrorOf, type FaultCodes } from '../failures.ts';
 import { toSqlScalar, toSqlString, type SqlRow, type SqlScalar } from '../values.ts';
 
-import type { SqlColumn, SqlConnection, SqlRows, SqlSession } from '../session.ts';
+import type { SqlColumn, SqlConnection, SqlRequest, SqlRows, SqlSession } from '../session.ts';
 
 interface MssqlColumnMeta {
   readonly name: string;
@@ -31,9 +33,20 @@ interface MssqlRequest {
   cancel(): void;
 }
 
+/**
+ACT-25: the driver's own transaction, whose `request` runs on the transaction's connection.
+*/
+interface MssqlTransaction {
+  begin(): Promise<unknown>;
+  commit(): Promise<unknown>;
+  rollback(): Promise<unknown>;
+  request(): MssqlRequest;
+}
+
 export interface MssqlPool {
   connect(): Promise<unknown>;
   request(): MssqlRequest;
+  transaction(): MssqlTransaction;
   close(): Promise<void>;
 }
 
@@ -131,34 +144,84 @@ async function quietly(work: Promise<unknown>): Promise<void> {
   }
 }
 
+/**
+The driver's own request, told to hand rows back as arrays and given the parameters positionally.
+*/
+function prepared(open: () => MssqlRequest, request: SqlRequest): MssqlRequest {
+  const command = open();
+  command.arrayRowMode = true;
+  for (const [index, value] of request.params.entries()) {
+    command.input(`p${index + 1}`, value);
+  }
+  return command;
+}
+
+function toRows(result: MssqlResult, maxRows: number): SqlRows {
+  const columns = columnsOf(result);
+  return {
+    columns,
+    rows: rowsOf(result, columns, maxRows),
+    rowsAffected: result.rowsAffected.reduce((total, count) => total + count, 0),
+  };
+}
+
+/**
+ * ACT-25: a write runs inside the driver's transaction, committed when the
+ * statement succeeds and rolled back on any error, so a statement that fails
+ * half way leaves nothing behind.
+ */
+async function inTransaction(
+  pool: MssqlPool,
+  request: SqlRequest,
+  running: (command: MssqlRequest | undefined) => void,
+): Promise<MssqlResult> {
+  const transaction = pool.transaction();
+  await transaction.begin();
+  const command = prepared(() => transaction.request(), request);
+  running(command);
+  try {
+    const result = await command.query(request.text);
+    await transaction.commit();
+    return result;
+  } catch (error) {
+    await quietly(transaction.rollback());
+    throw error;
+  }
+}
+
 function createSession(pool: MssqlPool, connection: SqlConnection): SqlSession {
   let running: MssqlRequest | undefined;
   const cancel = (): void => {
     running?.cancel();
     void quietly(pool.close());
   };
+  /**
+  ACT-59: a statement that only starts after the abort — the `BEGIN` of a write was still in
+  flight — is cancelled the moment it exists, not left to run on a closing connection.
+  */
+  const remember = (command: MssqlRequest | undefined): void => {
+    running = command;
+    if (connection.signal.aborted) {
+      command?.cancel();
+    }
+  };
   connection.signal.addEventListener('abort', cancel, { once: true });
+  const execute = async (request: SqlRequest): Promise<MssqlResult> => {
+    if (connection.mode === 'write') {
+      return inTransaction(pool, request, remember);
+    }
+    const command = prepared(() => pool.request(), request);
+    remember(command);
+    return command.query(request.text);
+  };
   return {
     async query(request) {
-      const command = pool.request();
-      command.arrayRowMode = true;
-      for (const [index, value] of request.params.entries()) {
-        command.input(`p${index + 1}`, value);
-      }
-      running = command;
       try {
-        const result = await command.query(request.text);
-        const columns = columnsOf(result);
-        const rows: SqlRows = {
-          columns,
-          rows: rowsOf(result, columns, request.maxRows),
-          rowsAffected: result.rowsAffected.reduce((total, count) => total + count, 0),
-        };
-        return rows;
+        return toRows(await execute(request), request.maxRows);
       } catch (error) {
         throw actionErrorOf(error, MSSQL_FAULTS);
       } finally {
-        running = undefined;
+        remember(undefined);
       }
     },
     async close() {

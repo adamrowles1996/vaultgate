@@ -1,10 +1,7 @@
 /**
  * The `sql` connector's target documents (spec §14.4). The schemas are the
  * static half every build carries so the account page can validate and edit
- * targets; the runtime is `./index.ts`. `sql_execute` and the policy fields
- * that only it consults (`write_classes`, `statement_allowlist`, `schemas`)
- * validate now but a target that asks for the `write` operation is refused
- * at save until the tool lands, the way a `graph` mapping is (§14.2).
+ * targets; the runtime is `./index.ts`.
  */
 import { z } from 'zod';
 
@@ -24,10 +21,6 @@ const DEFAULT_ROWS = 500;
 const MIN_TIMEOUT_MS = 1000;
 const MAX_TIMEOUT_MS = 300_000;
 const MAX_PORT = 65_535;
-
-const WRITE_NOT_YET =
-  'policy.operations: write is not available yet; sql_execute arrives with the second M11 ' +
-  'pull request';
 
 export const sqlDestinationSchema = z.strictObject({
   engine: z.enum(SQL_ENGINES),
@@ -65,7 +58,6 @@ export const sqlPolicySchema = commonPolicySchema.extend({
     .min(1)
     .default(['dml']),
   statement_allowlist: z.array(z.string().min(1)).default([]),
-  schemas: z.array(z.string().min(1)).default([]),
 });
 
 export type SqlDestination = z.output<typeof sqlDestinationSchema>;
@@ -105,13 +97,13 @@ function tlsProblems(destination: SqlDestination): readonly string[] {
     : ['destination.ca_pem: applies to the verify-full mode only'];
 }
 
+/**
+A write target is a read target too: `sql_execute` is judged on the same classification as `sql_query`.
+*/
 function operationProblems(policy: SqlPolicy): readonly string[] {
-  if (!policy.operations.includes('write')) {
-    return [];
-  }
-  return policy.operations.includes('read')
-    ? [WRITE_NOT_YET]
-    : [WRITE_NOT_YET, 'policy.operations: a target that allows write must allow read as well'];
+  return policy.operations.includes('write') && !policy.operations.includes('read')
+    ? ['policy.operations: a target that allows write must allow read as well']
+    : [];
 }
 
 export const sqlSchemas: ConnectorSchemas<SqlDestination, SqlCredential, SqlPolicy> = {

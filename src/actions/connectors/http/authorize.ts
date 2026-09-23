@@ -11,7 +11,7 @@ import { encodeBody, requestSubject } from './request.ts';
 
 import type { HttpOperation } from './operation.ts';
 import type { HttpCredential, HttpDestination, HttpPolicy } from './schemas.ts';
-import type { OperationDescription, TargetCapabilities } from '../connector.ts';
+import type { OperationDescription, OperationRequest, TargetCapabilities } from '../connector.ts';
 
 const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS']);
 const SUMMARY_CAP = 1024;
@@ -78,11 +78,10 @@ function areHeadersAllowed(
     );
 }
 
-export function authorize(
-  policy: HttpPolicy,
-  operation: HttpOperation,
-  credential: HttpCredential,
-): PolicyDecision {
+export type HttpRequest = OperationRequest<HttpDestination, HttpCredential, HttpPolicy>;
+
+export function authorize(request: HttpRequest, operation: HttpOperation): PolicyDecision {
+  const { policy, credential } = request;
   if (!policy.allowed_methods.includes(operation.method)) {
     return { allowed: false, reason: 'method' };
   }
@@ -102,7 +101,10 @@ export function authorize(
 /**
 ACT-43: the method and the path as the agent gave them; ACT-60: the method.
 */
-export function describeOperation(operation: HttpOperation): OperationDescription {
+export function describeOperation(
+  _request: HttpRequest,
+  operation: HttpOperation,
+): OperationDescription {
   return {
     summary: `${operation.method} ${operation.path}`.slice(0, SUMMARY_CAP),
     classification: operation.method,

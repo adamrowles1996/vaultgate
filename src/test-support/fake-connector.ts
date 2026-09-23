@@ -22,6 +22,7 @@ import type {
   Connector,
   ConnectorOutput,
   ConnectorTool,
+  OperationRequest,
   RunContext,
   TargetCapabilities,
 } from '../actions/connectors/connector.ts';
@@ -174,7 +175,11 @@ function requestDocument(context: EchoContext, operation: EchoOperation): Record
   };
 }
 
-function authorize(policy: HttpPolicy, operation: EchoOperation): PolicyDecision {
+function authorize(
+  request: OperationRequest<HttpDestination, HttpCredential, HttpPolicy>,
+  operation: EchoOperation,
+): PolicyDecision {
+  const { policy } = request;
   if (!policy.allowed_methods.includes(operation.method)) {
     return { allowed: false, reason: 'method' };
   }
@@ -250,7 +255,7 @@ export function createEchoConnector(overrides: Partial<EchoBehaviour> = {}): Ech
     tools: [echoTool],
     capabilities: (_destination, policy) => capabilities(policy, behaviour.advertise),
     authorize,
-    describe: (operation) => ({
+    describe: (_request, operation) => ({
       summary: `${operation.method} ${operation.path}`,
       classification: operation.method,
     }),

@@ -6,21 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- The account page's `graph` credential fields still carried the pre-M10 help text, telling the
-  operator that "a graph target cannot be saved until the graph adapter arrives in M10" on the
-  very release that ships the adapter. The help now describes the tenant field and keeps the
-  base-URL rule. Found by the M10 live test against the reference deployment.
-
-- A call the policy refuses is now covered by a test asserting it is recorded with the
-  classification it was refused for (ACT-26, ACT-60), so the operator can see what was asked for.
-  The behaviour arrived with the `sql` connector, which moved the connector's `describe` ahead of
-  its `authorize`; nothing asserted it, and the release before it recorded a blank classification
-  on every refusal.
-- The operator guide says that a target's vault item must be one vaultgate has already synced,
-  since a freshly created item is refused until the next scheduled sync.
-
 ### Added
 
 - `sql` connector runtime and `sql_query` (spec 14 §14.4 and spec 13 §13.6.4, M11 first pull
@@ -50,25 +35,65 @@ All notable changes to this project are documented here. The format follows
   the server's message scrubbed and capped at 1 KiB. Contract tests run the connector against
   fake sessions and both real session modules against fake drivers, with the ACT-77 corpus as
   one named test per statement per engine, the ACT-53 canary suite through the engine and a
-  parameterised query through the MCP client SDK. A target whose policy asks for the `write`
-  operation is refused at save until `sql_execute` lands with M11's second pull request.
+  parameterised query through the MCP client SDK.
   Operator guide: `docs/guides/actions.md` ("Creating a `sql` target", "Calling a `sql` target",
   with the `CREATE ROLE`/`CREATE LOGIN` examples); tool reference:
   `docs/guides/tools-and-scopes.md`.
+- `sql_execute` under `actions:sql.write` (spec 13 §13.6.4 and spec 14 §14.4, M11 second pull
+  request; ACT-25, ACT-38, ACT-40, ACT-41, ACT-45…49, ACT-76): the tool is listed for tokens
+  holding `actions:sql.write` on a deployment with `VAULTGATE_ACTIONS_ENABLE_SQL=true`, and a
+  target serves it only when its policy's `operations` include `write`. It takes the same
+  arguments as `sql_query` and is judged by the same tokeniser and classifier, but accepts the
+  opposite classes: `dml` always, `ddl` only when `write_classes` names it, and a `read`
+  statement never — so neither tool can be made to do the other's work whatever scopes the token
+  holds. A target carrying a `statement_allowlist` then has it applied as ACT-34 `command`-kind
+  patterns over the statement as the agent wrote it, refusing anything outside with
+  `policy_denied` and `detail.reason: "statement_pattern"`. Every call is a non-read call, so a
+  target with `confirm_writes` (the default for a new target) obtains a human confirmation
+  through MCP elicitation before the credential is fetched or anything connects. The statement
+  runs in its own transaction — `BEGIN`/`COMMIT` on PostgreSQL, the driver's transaction on SQL
+  Server — rolled back on any error, and on the policy timeout the connection is dropped, which
+  rolls it back too. The result is `rows_affected`, the `columns` and `rows` the statement
+  returned through `RETURNING` or `OUTPUT` (both empty when it returned none, so the shape does
+  not change with the statement), `truncated` and `duration_ms`. `actions_list_targets` now
+  reports `write` for a target whose policy allows it and whose caller holds the scope.
+  The confirmation flow is proven end to end through the real MCP client SDK for this tool:
+  accept, accept without the box ticked, decline, cancel, a client that cannot elicit, a replayed
+  confirmation, an expired one, an edited target, altered arguments and another token.
+  Operator guide: `docs/guides/actions.md` ("Changing data through a `sql` target", with the
+  least-privilege write-login examples for both engines).
 
 ### Changed
 
-- `Connector.authorize` and `Connector.describe` receive the target's destination document as
-  well (spec 14 §14.1): a SQL statement cannot be tokenised without knowing which dialect it is
-  written in, and reading one with the other engine's rules would let a statement separator hide
-  inside what the other engine calls a string. `ConnectorOutput` gains an optional `bytes`, so a
-  connector whose result is not a byte stream (the `sql` rows) still reports `output_bytes` to
-  the `action_calls` row. The `http` connector's implementations are unchanged.
+- **Specification 13 is split in two.** `docs/spec/13-actions.md` keeps 13.1 to 13.9 — what a
+  target is, who may use it, the tools, the policy, the confirmation and the secret handling —
+  and the new `docs/spec/13a-actions-operations.md` holds 13.10 to 13.18: the network rules, the
+  limits, the audit trail, the storage, the configuration, the module layout, the error codes,
+  the non-goals and the verification. The section numbers and the `ACT-n` identifiers are
+  unchanged, so every existing citation still resolves; the seam is the one between the layer's
+  contract and its operation, and the file had reached the repository's 64 KiB size gate.
+- `Connector.authorize` and `Connector.describe` now take one `OperationRequest` — the target's
+  three documents and the tool the agent called — instead of a list of documents. A connector
+  that serves two tools needs the name to judge an operation at all, and this supersedes the
+  appended `destination` parameter added in M11's first pull request.
+- `RunContext` carries the tool name, so the `sql` connector opens a read-only or a
+  transactional session and returns the ACT-24 or the ACT-25 result accordingly.
+- `ConnectorOutput` gains an optional `bytes`, so a connector whose result is not a byte
+  stream (the `sql` rows) still reports `output_bytes` to the `action_calls` row.
 - The `action_calls` classification is recorded for a call the policy refused, not only for a
   call that ran (ACT-26, ACT-60), so an operator reading a target's history sees what a refused
   statement was taken to be.
+- `policy.schemas` is withdrawn from the `sql` policy document (spec 14 §14.4). Deciding whether
+  a qualified name in a statement is a schema or a table alias needs a real parser; a check that
+  cannot tell them apart either refuses ordinary statements or gives a false assurance. Granting
+  the login only the schemas you mean is the control, and the guide now shows how for both
+  engines. A stored `schemas` value is ignored rather than invalidating the target.
 - The certificate and TLS error codes are classified in one place (`src/net/tls-error.ts`) for
   the pinned HTTPS transport and the database drivers alike, instead of once per connector.
+- The measured cost of the `sql` drivers is recorded in the specification itself (ACT-84), not
+  only in a pull-request body: `pg` and everything it needs is 14 packages and about 0.9 MB;
+  `mssql` adds 73 packages and about 69 MB, of which about 44 MB is the `@azure/*` tree that
+  `tedious` requires at module load for Entra ID authentication modes vaultgate never uses.
 
 ### Dependencies
 
@@ -77,6 +102,21 @@ All notable changes to this project are documented here. The format follows
   either. Both are pure JavaScript with no native addon and no install script; `pg-native` is an
   optional peer dependency and is not installed. Added `@types/pg` 8.23.1 and `@types/mssql`
   12.3.0 as development dependencies (type declarations only; neither ships).
+
+### Fixed
+
+- The account page's `graph` credential fields still carried the pre-M10 help text, telling the
+  operator that "a graph target cannot be saved until the graph adapter arrives in M10" on the
+  very release that ships the adapter. The help now describes the tenant field and keeps the
+  base-URL rule. Found by the M10 live test against the reference deployment.
+
+- A call the policy refuses is now covered by a test asserting it is recorded with the
+  classification it was refused for (ACT-26, ACT-60), so the operator can see what was asked for.
+  The behaviour arrived with the `sql` connector, which moved the connector's `describe` ahead of
+  its `authorize`; nothing asserted it, and the release before it recorded a blank classification
+  on every refusal.
+- The operator guide says that a target's vault item must be one vaultgate has already synced,
+  since a freshly created item is refused until the next scheduled sync.
 
 ## [0.1.0-rc.7] - 2026-09-23
 

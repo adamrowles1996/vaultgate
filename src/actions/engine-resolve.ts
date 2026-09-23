@@ -88,13 +88,9 @@ function resolveOperation(
     );
     return refused(new ActionError('invalid_arguments', { problems: problems.join('; ') }));
   }
-  const description = connector.describe(parsed.data, target.documents.destination);
-  const decision = connector.authorize(
-    target.documents.policy,
-    parsed.data,
-    target.documents.credential,
-    target.documents.destination,
-  );
+  const request = { ...target.documents, tool: tool.name };
+  const description = connector.describe(request, parsed.data);
+  const decision = connector.authorize(request, parsed.data);
   return {
     description,
     call: decision.allowed

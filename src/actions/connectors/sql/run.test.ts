@@ -10,7 +10,7 @@ import {
 } from '../../../test-support/sql-connector.ts';
 import { ActionError } from '../../errors.ts';
 
-import { sqlQuerySchema } from './operation.ts';
+import { SQL_EXECUTE_TOOL, sqlOperationSchema } from './operation.ts';
 import { createRun } from './run.ts';
 
 import type { Result } from '../../../result.ts';
@@ -30,7 +30,7 @@ async function run(
 ): Promise<Ran> {
   const fake = fakeSqlSessions(fakeOptions);
   const built = sqlRunContext(options);
-  const operation = sqlQuerySchema.parse({ statement: 'SELECT 1', ...toolArguments });
+  const operation = sqlOperationSchema.parse({ statement: 'SELECT 1', ...toolArguments });
   const outcome = await createRun(fake.sessions)(built.context, operation);
   return { fake, built, outcome };
 }
@@ -45,7 +45,7 @@ describe('running a sql_query', () => {
       port: 5432,
       database: 'reporting',
       username: 'alice@example.com',
-      readOnly: true,
+      mode: 'read',
       tls: 'require',
     });
     expect(ran.fake.closed).toStrictEqual([1]);
@@ -139,7 +139,7 @@ describe('running a sql_query', () => {
         ...built.context,
         credential: { username_from: 'login.username', password_field: 'other' },
       },
-      sqlQuerySchema.parse({ statement: 'SELECT 1' }),
+      sqlOperationSchema.parse({ statement: 'SELECT 1' }),
     );
     expect(unwrapFail(emptied).code).toBe('credential_unavailable');
     expect(fake.opened).toStrictEqual([]);
@@ -177,11 +177,40 @@ describe('running a sql_query', () => {
     const built = sqlRunContext();
     const pending = createRun(fake.sessions)(
       built.context,
-      sqlQuerySchema.parse({ statement: 'SELECT 1' }),
+      sqlOperationSchema.parse({ statement: 'SELECT 1' }),
     );
     built.controller.abort();
     expect(unwrapFail(await pending).code).toBe('timeout');
     expect(fake.closed).toStrictEqual([1]);
+  });
+
+  it('ACT-25 a sql_execute opens a write session and returns the rows it affected', async () => {
+    const ran = await run(
+      { statement: 'UPDATE t SET a = 1 RETURNING id' },
+      { tool: SQL_EXECUTE_TOOL },
+      { answers: [rowsOf(['id'], [[7]])] },
+    );
+    expect(ran.fake.opened[0]).toMatchObject({ mode: 'write' });
+    expect(unwrapOk(ran.outcome).result).toStrictEqual({
+      rows_affected: 1,
+      columns: [{ name: 'id', type: 'text' }],
+      rows: [[7]],
+      truncated: false,
+    });
+  });
+
+  it('ACT-25 a sql_execute that returns no rows still reports what it affected', async () => {
+    const ran = await run(
+      { statement: 'DELETE FROM t' },
+      { tool: SQL_EXECUTE_TOOL },
+      { answers: [{ columns: [], rows: [], rowsAffected: 12 }] },
+    );
+    expect(unwrapOk(ran.outcome).result).toStrictEqual({
+      rows_affected: 12,
+      columns: [],
+      rows: [],
+      truncated: false,
+    });
   });
 
   it('ACT-84 a SQL Server target is run through the SQL Server session factory', async () => {
@@ -190,7 +219,7 @@ describe('running a sql_query', () => {
     const built = sqlRunContext({ engine: 'mssql' });
     await createRun({ postgres: postgres.sessions.postgres, mssql: mssql.sessions.mssql })(
       built.context,
-      sqlQuerySchema.parse({ statement: 'SELECT 1' }),
+      sqlOperationSchema.parse({ statement: 'SELECT 1' }),
     );
     expect(mssql.opened).toHaveLength(1);
     expect(postgres.opened).toStrictEqual([]);
