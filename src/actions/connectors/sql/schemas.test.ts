@@ -136,6 +136,32 @@ describe('the sql save-time checks', () => {
     ]);
   });
 
+  /**
+   * The live test found an `mssql` target named by address accepted at save
+   * time and failing at call time as `connection_failed`, which reads as an
+   * unreachable server. Tedious cannot verify a certificate against an
+   * address at all, so the refusal belongs where the operator can act on it.
+   */
+  it('ACT-57 a SQL Server destination named by address cannot be verified and is refused', () => {
+    expect(problems({ destination: { engine: 'mssql', host: '192.0.2.40' } })).toStrictEqual([
+      'destination.host: SQL Server cannot verify a certificate against an address; name the ' +
+        'host as the certificate names it, or use tls "disable" on an internal target',
+    ]);
+  });
+
+  it('ACT-57 the same SQL Server destination is fine on plain transport', () => {
+    expect(
+      problems({ destination: { engine: 'mssql', host: '192.0.2.40', tls: 'disable' } }),
+    ).toStrictEqual([]);
+  });
+
+  it('ACT-57 PostgreSQL verifies an address against the certificate IP names, so it is accepted', () => {
+    expect(problems({ destination: { host: '192.0.2.40' } })).toStrictEqual([]);
+    expect(problems({ destination: { engine: 'mssql', host: 'db.example.com' } })).toStrictEqual(
+      [],
+    );
+  });
+
   it('14.4 accepts a target that allows read and write', () => {
     expect(problems({ policy: { operations: ['read', 'write'] } })).toStrictEqual([]);
   });

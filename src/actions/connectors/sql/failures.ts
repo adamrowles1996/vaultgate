@@ -18,6 +18,10 @@ export interface DriverFault {
   The `code` of the error and of every error it wraps, outermost first.
   */
   readonly codes: readonly string[];
+  /**
+  The error's own constructor name, or the empty string when the throw was not an `Error` at all.
+  */
+  readonly name: string;
   readonly message: string;
 }
 
@@ -47,12 +51,17 @@ export function faultOf(error: unknown): DriverFault {
     }
     current = wrappedBy(current);
   }
-  return { codes, message: error instanceof Error ? error.message : String(error) };
+  return error instanceof Error
+    ? { codes, name: error.name, message: error.message }
+    : { codes, name: '', message: String(error) };
 }
 
 export type FaultCodes = Readonly<Record<string, ActionErrorCode>>;
 
 /**
+ * An `ActionError` has already been classified — the session raises one of
+ * its own when a value cannot be rendered faithfully — and passes through
+ * unchanged; nothing about it is the driver's to reinterpret.
  * A certificate failure anywhere in the chain is `tls_error` (ACT-57), even
  * when the driver wraps it in a socket error of its own; otherwise the
  * outermost code the table knows wins, so a `mssql` `ESOCKET` around an
@@ -60,6 +69,9 @@ export type FaultCodes = Readonly<Record<string, ActionErrorCode>>;
  * not know is `upstream_error` with the driver's own message.
  */
 export function actionErrorOf(error: unknown, table: FaultCodes): ActionError {
+  if (error instanceof ActionError) {
+    return error;
+  }
   const fault = faultOf(error);
   const tls = fault.codes.find((code) => isTlsErrorCode(code));
   if (tls !== undefined) {

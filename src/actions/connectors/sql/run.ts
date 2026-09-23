@@ -121,12 +121,33 @@ async function closeQuietly(session: SqlSession, logger: Logger): Promise<void> 
   }
 }
 
+/**
+The JavaScript faults; a database reports none of these, so one of them is vaultgate's own bug.
+*/
+const INTERNAL_FAULTS: ReadonlySet<string> = new Set([
+  'EvalError',
+  'RangeError',
+  'ReferenceError',
+  'SyntaxError',
+  'TypeError',
+]);
+
+/**
+ * §13.16: a failure the session did not classify reaches here unclassified.
+ * A JavaScript fault is vaultgate's — answering `upstream_error` would tell
+ * the agent that a destination reported something, when the destination may
+ * never have been contacted — so it is `connector_fault`, whose message says
+ * exactly that. Anything else is the destination's answer after sign-in.
+ */
 function failureOf(error: unknown): ActionError {
-  return error instanceof ActionError
-    ? error
-    : new ActionError('upstream_error', {
-        message: faultOf(error).message.slice(0, MESSAGE_CAP),
-      });
+  if (error instanceof ActionError) {
+    return error;
+  }
+  const fault = faultOf(error);
+  const message = fault.message.slice(0, MESSAGE_CAP);
+  return INTERNAL_FAULTS.has(fault.name)
+    ? new ActionError('connector_fault', { reason: 'internal', message })
+    : new ActionError('upstream_error', { message });
 }
 
 /**

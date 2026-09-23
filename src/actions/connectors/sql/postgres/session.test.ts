@@ -8,7 +8,13 @@ import {
 } from '../../../../test-support/fake-sql-drivers.ts';
 import { rejection } from '../../../../test-support/fake-sql-session.ts';
 
-import { configOf, loadPostgresDriver, openPostgresSession, postgresSession } from './session.ts';
+import {
+  configOf,
+  loadPostgresDriver,
+  openPostgresSession,
+  postgresDriverFrom,
+  postgresSession,
+} from './session.ts';
 
 describe('the postgres client configuration', () => {
   it('ACT-55 connects to the pinned address and keeps the host name for TLS only', () => {
@@ -35,6 +41,32 @@ describe('the postgres client configuration', () => {
 
   it('ACT-57 disable is plain transport, which only an internal target may ask for', () => {
     expect(configOf(connection({ tls: 'disable' })).ssl).toBe(false);
+  });
+
+  /**
+   * The regression test for the shipped defect: a target reached by address
+   * carried its own host into `servername`, and Node refuses an IP literal as
+   * SNI, so the call never reached the handshake.
+   */
+  it('ACT-55 ACT-57 an IP-literal host is verified as an address, with no server name', () => {
+    expect(configOf(connection({ host: '93.184.216.34' })).ssl).toStrictEqual({
+      host: '93.184.216.34',
+      rejectUnauthorized: true,
+    });
+  });
+
+  it('ACT-55 ACT-57 an IPv6-literal host is verified as an address too', () => {
+    expect(configOf(connection({ host: '2606:2800:220:1:248:1893:25c8:1946' })).ssl).toStrictEqual({
+      host: '93.184.216.34',
+      rejectUnauthorized: true,
+    });
+  });
+
+  it('ACT-55 ACT-57 a name-based host keeps the server name for SNI', () => {
+    expect(configOf(connection()).ssl).toStrictEqual({
+      servername: 'db.example.com',
+      rejectUnauthorized: true,
+    });
   });
 });
 
@@ -155,6 +187,18 @@ describe('the postgres session', () => {
     const rows = await session.query({ text: 'SELECT 1', params: [], maxRows: 1 });
     await session.close();
     expect(rows.rowsAffected).toBe(0);
+  });
+
+  /**
+   * `pg` does expose `Client` as a named export, and this proves it against
+   * the namespace Node's loader really offers rather than vitest's interop
+   * proxy, so a dependency bump that moved it would fail here.
+   */
+  it('ACT-84 the client is built from the export Node really offers, not the interop proxy', async () => {
+    const namespace = { ...(await import('pg')) };
+    const built = postgresDriverFrom(namespace)(configOf(connection()));
+    expect(built.query).toBeTypeOf('function');
+    expect(built.end).toBeTypeOf('function');
   });
 
   it('ACT-73 ACT-84 the pg driver is loaded on demand and builds a client that has not connected', async () => {

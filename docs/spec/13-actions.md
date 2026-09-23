@@ -256,7 +256,16 @@ operations, confirm_writes, engine?, unrestricted? }` where `operations` is the 
 - **ACT-24** `sql_query` output: `columns` (array of `{ name, type }`, `type` the engine's type
   name), `rows` (array of arrays of JSON scalars; dates as ISO 8601 strings, binary as base64,
   decimals as strings), `row_count`, `truncated` (rows beyond `max_rows` were dropped),
-  `duration_ms`.
+  `duration_ms`. A decimal string carries the scale the column declares, so a `decimal(10,2)`
+  holding 3.50 is `"3.50"`. On SQL Server that is as exact as the driver allows: Tedious parses
+  `decimal`, `numeric`, `money` and `smallmoney` into a JavaScript double in its own value parser,
+  before `mssql`'s `valueHandler` registry or anything else vaultgate can reach, so a value whose
+  unscaled integer exceeds `Number.MAX_SAFE_INTEGER` has already lost digits. Such a value is
+  refused — `connector_fault` with `detail.reason: "exact_numeric_precision"` and the column name
+  — rather than rendered as a rounded string, because a silently wrong money column is the exact
+  failure this requirement exists to prevent; the guide tells the agent to cast the column to
+  `varchar` in the statement. PostgreSQL's driver hands decimals over as strings and loses
+  nothing.
 - **ACT-25** `sql_execute` output: `rows_affected`, `columns` and `rows` for the rows the
   statement returned (`RETURNING`, `OUTPUT`) — both empty when it returned none, so the shape
   does not change with the statement — `truncated` and `duration_ms`. The statement runs in its

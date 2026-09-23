@@ -3,6 +3,8 @@
  * static half every build carries so the account page can validate and edit
  * targets; the runtime is `./index.ts`.
  */
+import { isIP } from 'node:net';
+
 import { z } from 'zod';
 
 import { commonPolicySchema } from '../../policy.ts';
@@ -98,6 +100,25 @@ function tlsProblems(destination: SqlDestination): readonly string[] {
 }
 
 /**
+ * ACT-57: a TLS destination named by address is verified against the
+ * certificate's IP subject-alternative names, which PostgreSQL's driver
+ * allows and SQL Server's does not: Tedious puts the server name straight
+ * into `tls.connect`, which refuses an IP literal as SNI, and its in-band
+ * TLS path hands the socket no host to verify an address against instead.
+ * There is no configuration that makes it work, so the target is refused at
+ * save time rather than at the first call, where it looks like an unreachable
+ * server.
+ */
+function addressProblems(destination: SqlDestination): readonly string[] {
+  return destination.engine === 'mssql' && destination.tls !== 'disable' && isIP(destination.host)
+    ? [
+        'destination.host: SQL Server cannot verify a certificate against an address; name the ' +
+          'host as the certificate names it, or use tls "disable" on an internal target',
+      ]
+    : [];
+}
+
+/**
 A write target is a read target too: `sql_execute` is judged on the same classification as `sql_query`.
 */
 function operationProblems(policy: SqlPolicy): readonly string[] {
@@ -114,7 +135,11 @@ export const sqlSchemas: ConnectorSchemas<SqlDestination, SqlCredential, SqlPoli
   endpoints,
   credentialFields,
   saveProblems({ destination, policy }) {
-    return [...tlsProblems(destination), ...operationProblems(policy)];
+    return [
+      ...tlsProblems(destination),
+      ...addressProblems(destination),
+      ...operationProblems(policy),
+    ];
   },
   summariseDestination(destination) {
     return `${destination.host}:${portOf(destination)}/${destination.database}`;

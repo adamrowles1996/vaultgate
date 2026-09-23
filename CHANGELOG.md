@@ -53,6 +53,44 @@ All notable changes to this project are documented here. The format follows
 - A connector's loader receives the actions configuration, so the `ssh` runtime can close over
   `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` and refuse every call on an any-command target once the
   deployment withdraws it.
+- The guide now says that vaultgate's `tls: "require"` is not PostgreSQL's `sslmode=require`: it
+  verifies fully against the system trust store, closer to `verify-full`. It also corrects the
+  least-privilege example, which implied that `DENY EXECUTE` in the target database stops
+  `EXEC sp_who`; it does not, because that procedure lives in `master` where `public` may execute
+  it. The classifier is what refuses it, before any connection exists.
+
+### Fixed
+
+- `sql` connector, three defects an M11 live test found in `v0.1.0-rc.8` against a real
+  PostgreSQL 18 and a real SQL Server 2019 (ACT-24, ACT-55, ACT-57, ACT-74, ACT-84).
+  - **SQL Server never worked at all.** `mssql` is CommonJS and `cjs-module-lexer` finds none of
+    its classes, so the ESM namespace Node offers is `default`, `module.exports` and
+    `valueHandler`: `const { ConnectionPool } = await import('mssql')` was `undefined` and every
+    call failed with `ConnectionPool is not a constructor`. Both drivers now come through one
+    checked lookup that takes the class off `default` when the namespace does not carry it, and
+    refuses by name if neither does. The suite injected fakes everywhere, so the one line that
+    touched the real package was never executed; the new tests import the real `mssql` and `pg`
+    and drive the production interop over the namespace Node really offers, opening no
+    connection, and fail if either package changes its export shape.
+  - **A `TypeError` inside the connector no longer blames the destination.** A JavaScript fault
+    is the new `connector_fault` (§13.16), whose message says the call failed inside vaultgate
+    and that the destination may never have been contacted, rather than `upstream_error`'s "the
+    destination reported an error".
+  - **A TLS target whose host is an IP literal.** No server name is sent for an address — SNI has
+    no syntax for one and Node refuses it — and the certificate is verified against its IP
+    subject-alternative names instead, which is the correct verification for an address.
+    PostgreSQL targets reached by address now connect. SQL Server cannot verify an address at all
+    (Tedious puts the server name straight into the handshake and its in-band TLS path leaves
+    nothing else to verify against), so such a target is now a save-time problem naming the two
+    ways out instead of an `ESOCKET` at call time. Pinning is unchanged: the socket still goes
+    only to the address the engine validated.
+  - **SQL Server decimals kept their scale.** A decimal string now carries the scale its column
+    declares, so `decimal(10,2)` 3.50 is `"3.50"` and not `"3.5"`. Tedious builds the double
+    inside its own value parser, before `mssql`'s `valueHandler` registry can see it, so a value
+    whose unscaled integer passes `Number.MAX_SAFE_INTEGER` has already lost digits: rather than
+    return a plausible wrong number — which is what ACT-24 exists to prevent — the call fails with
+    `connector_fault` and `detail.reason: "exact_numeric_precision"`, and the guide says to cast
+    the column to `varchar`.
 
 ## [0.1.0-rc.8] - 2026-09-24
 

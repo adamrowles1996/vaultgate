@@ -8,7 +8,13 @@ import {
 } from '../../../../test-support/fake-sql-drivers.ts';
 import { rejection } from '../../../../test-support/fake-sql-session.ts';
 
-import { configOf, loadMssqlDriver, mssqlSession, openMssqlSession } from './session.ts';
+import {
+  configOf,
+  loadMssqlDriver,
+  mssqlDriverFrom,
+  mssqlSession,
+  openMssqlSession,
+} from './session.ts';
 
 import type { SqlConnection } from '../session.ts';
 
@@ -43,6 +49,23 @@ describe('the SQL Server connection configuration', () => {
 
   it('ACT-57 disable turns encryption off, which only an internal target may ask for', () => {
     expect(configOf(connection({ tls: 'disable' })).options.encrypt).toBe(false);
+  });
+
+  /**
+   * The regression test for the shipped defect: a target reached by address
+   * carried its own host into `serverName`, and Tedious hands that straight to
+   * `tls.connect`, which refuses an IP literal as SNI. Nothing is sent now;
+   * `saveProblems` is what keeps such a target from being saved at all.
+   */
+  it('ACT-55 ACT-57 an IP-literal host sends no TLS server name', () => {
+    expect(configOf(connection({ host: '93.184.216.34' })).options).toStrictEqual({
+      encrypt: true,
+      trustServerCertificate: false,
+    });
+  });
+
+  it('ACT-55 ACT-57 a name-based host keeps the server name for SNI', () => {
+    expect(configOf(connection()).options.serverName).toBe('db.example.com');
   });
 });
 
@@ -204,5 +227,22 @@ describe('the SQL Server session', () => {
     const session = await mssqlSession(connection(), () => Promise.resolve(driverOf(pool)));
     await session.close();
     expect(pool.closed).toStrictEqual([0]);
+  });
+
+  /**
+   * The regression test for the shipped defect: `mssql` is CommonJS and
+   * `ConnectionPool` is not a named export, so the loader has to take it off
+   * `default`. Vitest's interop proxy hides that — it falls through to
+   * `default` on every property read, which is why the test above passed on a
+   * loader that threw `ConnectionPool is not a constructor` on every real
+   * call. Spreading the namespace drops the proxy and leaves the three names
+   * Node's loader really offers, so this drives the production interop over
+   * the production module shape.
+   */
+  it('ACT-84 the driver is built from the export Node really offers, not the interop proxy', async () => {
+    const namespace = { ...(await import('mssql')) };
+    const pool = mssqlDriverFrom(namespace)(configOf(connection()));
+    expect(pool.connect).toBeTypeOf('function');
+    expect(pool.transaction).toBeTypeOf('function');
   });
 });
