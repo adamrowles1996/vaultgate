@@ -14,9 +14,14 @@ added without touching the OAuth layer (see `PLAN.md`).
 - **ID-2** `VAULTGATE_BOOTSTRAP_TOKEN` MAY preset the token (for automated installs). It is
   consumed on first use like a generated one.
 - **ID-3** `GET /setup` without a valid token renders a generic page with no hint of validity.
-  `POST /setup` with a valid token, a display name, a password passing ID-5 and a verified TOTP
-  code creates the operator, invalidates the token, issues 8 recovery codes (shown once), and
-  starts a session.
+  `POST /setup` with a valid token, an e-mail address, a password passing ID-5 and a verified
+  TOTP code creates the operator, invalidates the token, issues 8 recovery codes (shown once),
+  and starts a session. The e-mail address is the operator's login identifier: it is trimmed,
+  lower-cased and shape-checked (exactly one `@`, a non-empty local part, a dot inside the domain,
+  no whitespace, at most 254 characters); nothing is resolved or delivered, so a deployment needs
+  no mail. It is stored lower-cased, unique case-insensitively, and can be changed from the
+  account page (`POST /account/email`, ID-15). It is not a secret: audit events for setup, login
+  and address changes carry it in `details.email`.
 - **ID-4** Once an operator exists, `/setup` answers `404` for every request.
 
 ## 4.2 Password
@@ -33,8 +38,9 @@ added without touching the OAuth layer (see `PLAN.md`).
 
 - **ID-8** RFC 6238 with HMAC-SHA1, 6 digits, 30 s step, implemented on `node:crypto` (no
   dependency) and verified against the RFC 6238 Appendix B test vectors.
-- **ID-9** Enrolment shows an `otpauth://totp/vaultgate:<name>?secret=…&issuer=vaultgate` URI as
-  text together with the base32 key for manual entry. (v1 renders no QR image: a QR encoder would
+- **ID-9** Enrolment shows an `otpauth://totp/vaultgate:<account>?secret=…&issuer=vaultgate` URI
+  as text together with the base32 key for manual entry; `<account>` is the operator's e-mail
+  address, or `operator` at first run, when none has been submitted yet. (v1 renders no QR image: a QR encoder would
   be a dependency, and every authenticator app accepts a manual key. A QR image is a post-1.0
   option once an in-tree encoder is justified.) The secret is 20 random bytes, stored encrypted at rest with a key derived
   from `VAULTGATE_SECRET_KEY` (HKDF, AES-256-GCM), never logged.
@@ -45,17 +51,21 @@ added without touching the OAuth layer (see `PLAN.md`).
 
 ## 4.4 Login
 
-- **ID-12** Two-step form: password, then TOTP or recovery code. Both steps carry a synchroniser
-  token. Failure messages are identical for unknown account, wrong password and wrong code.
+- **ID-12** Two-step form: e-mail address and password, then TOTP or recovery code. Both steps
+  carry a synchroniser token. Failure messages are identical for an unknown or malformed e-mail
+  address, a wrong password and a wrong code, and an unknown address costs the same password
+  work as a wrong password.
 - **ID-13** Rate limiting: after 5 failures within 15 minutes for an IP or the account, further
   attempts are delayed exponentially (1 s, 2 s, 4 s … capped at 60 s) and counted in the audit
-  log. There is no permanent lockout (denial-of-service safety).
+  log. The account is keyed by the submitted e-mail address, lower-cased (`email:<address>`),
+  whether or not it exists; the IP by `ip:<address>`. There is no permanent lockout
+  (denial-of-service safety).
 - **ID-14** Successful login rotates the session id, records IP and user agent, and writes an
   audit event. Sessions live 12 hours absolute, 1 hour idle; both refresh on activity up to the
   absolute limit.
 - **ID-15** Re-authentication (password only) is required within 5 minutes before: revoking a
-  client, regenerating recovery codes, changing the password, rotating TOTP, enabling
-  `vault:write` from the account page.
+  client, regenerating recovery codes, changing the password, changing the e-mail address,
+  rotating TOTP, enabling `vault:write` from the account page.
 
 ## 4.5 Session cookie
 
@@ -92,8 +102,8 @@ interface IdentityProvider {
 ## 4.8 Verification
 
 - **ID-22** Every browser flow in this section (setup → recovery codes → logout → login with TOTP
-  or a recovery code → re-authentication → password change, TOTP rotation, recovery-code
-  regeneration) is exercised in-process through `app.request()` with a cookie jar in
+  or a recovery code → re-authentication → password change, e-mail change, TOTP rotation,
+  recovery-code regeneration, and the ID-26 legacy path) is exercised in-process through `app.request()` with a cookie jar in
   `src/test-support/browser.ts`, so no headless browser is needed in CI (ARCH-5). Pages carry no
   JavaScript, so there is no client-side behaviour a real browser would add.
 
@@ -105,7 +115,7 @@ interface IdentityProvider {
 | `GET /setup`, `POST /setup`                       | First-run bootstrap (ID-1 to ID-4).                                                                                |
 | `GET /login`, `POST /login`, `POST /login/verify` | The two-step login (ID-12).                                                                                        |
 | `POST /logout`                                    | Ends the session (ID-17).                                                                                          |
-| `GET /account`, `POST /account/*`                 | The account page and its ID-15 actions.                                                                            |
+| `GET /account`, `POST /account/*`                 | The account page and its ID-15 actions, including `POST /account/email` (ID-3, ID-26).                             |
 | `GET /static/vaultgate.css`                       | The single stylesheet (ID-19).                                                                                     |
 
 - **ID-24** Any other path answers `404`. When the `Accept` header prefers `text/html` the body is
@@ -113,3 +123,16 @@ interface IdentityProvider {
   the ID-19 policy and `Cache-Control: no-store`; otherwise (JSON accepted, `*/*`, or no `Accept`
   at all) the body is `{"error":"not_found"}`. The `/mcp` endpoint and the `.well-known` metadata
   routes (spec 06) produce their own answers and headers and are not affected.
+
+## 4.10 Accounts created before e-mail identification
+
+- **ID-26** An operator row written before the `operator-email` migration (`operators.email`
+  NULL, see spec 07) is in _legacy mode_ until it sets an address. In legacy mode `GET /login` asks for the password only
+  (the one account is implied; the form reveals nothing beyond the deployment's age), ID-13
+  counts the account by `operator:<id>`, and the ID-12 second step is unchanged. Once signed in,
+  `/account` is replaced by a "Set your e-mail address" page: after re-authentication (ID-15)
+  the only action offered, and the only `POST /account/*` accepted besides
+  `/account/reauthenticate` and `/logout`, is `POST /account/email`. Every other account action
+  answers `403` with a `request.denied` audit event. As soon as an address is set, login asks
+  for e-mail address and password like any other deployment. The audit events of a legacy login
+  carry no `details.email`, because there is none to carry.

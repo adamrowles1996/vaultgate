@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createHarness,
   csrfOf,
-  DISPLAY_NAME,
+  EMAIL,
   pageText,
   PASSWORD,
   setUpOperator,
@@ -98,7 +98,7 @@ describe('POST /login/verify without state', () => {
     const later = harness.browser();
     const csrf = csrfOf(await pageText(later, '/login'));
     later.cookies.set('__Host-vg_session', earlier.cookies.get('__Host-vg_session') ?? '');
-    await later.submit('/login', { csrf, display_name: DISPLAY_NAME, password: PASSWORD });
+    await later.submit('/login', { csrf, email: EMAIL, password: PASSWORD });
     const done = await later.submit('/login/verify', { csrf, code: totpFor(key, harness.now()) });
     const earlierStatus = await statusOf(earlier, '/account');
     const laterStatus = await statusOf(later, '/account');

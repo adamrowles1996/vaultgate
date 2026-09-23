@@ -45,7 +45,7 @@ servers on your behalf.
    dynamic client registration (`POST /oauth/register`); vaultgate also accepts Client ID Metadata
    Documents and pre-registered client ids.
 3. Your browser is sent to `https://<host>/oauth/authorize`. If you are not signed in, vaultgate
-   shows its login page (display name, password, then authenticator or recovery code) and
+   shows its login page (e-mail address, password, then authenticator or recovery code) and
    continues to the consent page afterwards.
 4. You approve on the consent page. vaultgate redirects back to Claude with a one-time
    authorization code; Claude exchanges it, with PKCE, for an access token and a refresh token.

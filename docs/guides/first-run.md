@@ -60,7 +60,7 @@ form asks for:
 
 | Field                        | Rule                                                                                                                 |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Display name                 | Up to 64 characters. It is also the name you sign in with.                                                           |
+| E-mail address               | The address you sign in with. It is trimmed and lower-cased; nothing is sent to it. Change it later from `/account`. |
 | Password                     | 12 to 256 characters, no composition rules. Passwords on a bundled list of the 10 000 most common ones are rejected. |
 | Code from your authenticator | A six-digit TOTP code from the authenticator you enrol in the next step.                                             |
 
@@ -96,10 +96,15 @@ which invalidates the old set.
 Opening the bare address (`https://vault.example.com/`) takes you to the login page, or straight
 to the account page when you are already signed in.
 
-`/login` asks for the display name and password, then for a six-digit authenticator code or a
-recovery code. Failure messages are identical for an unknown name, a wrong password and a wrong
-code. After five failures in fifteen minutes from one address or against the account, further
-attempts are delayed exponentially (1 s, 2 s, 4 s, up to 60 s); there is no permanent lockout.
+`/login` asks for the e-mail address and password, then for a six-digit authenticator code or a
+recovery code. Failure messages are identical for an unknown e-mail address, a wrong password and
+a wrong code. After five failures in fifteen minutes from one address or against the e-mail
+address, further attempts are delayed exponentially (1 s, 2 s, 4 s, up to 60 s); there is no
+permanent lockout.
+
+An account created by a release before 0.1.0-rc.4 has no e-mail address yet. Its login page asks
+for the password only; once signed in, the account page asks you to confirm your password and set
+an address before anything else, and from then on login asks for e-mail address and password.
 
 Sessions last 12 hours (`VAULTGATE_SESSION_TTL`, 15 minutes to 7 days) and expire after an hour
 of inactivity. `/account` shows:
@@ -107,9 +112,9 @@ of inactivity. `/account` shows:
 - the connected OAuth clients, each with a **Disconnect** button (once the authorization server is
   deployed, see [Connect Claude](connect-claude.md));
 - your browser sessions with start time, last activity, address and browser;
-- the **sensitive actions**: change password (signs out every other session), set up a new
-  authenticator, generate new recovery codes. Each first asks you to confirm your password;
-  the confirmation lasts five minutes.
+- the **sensitive actions**: change e-mail address, change password (signs out every other
+  session), set up a new authenticator, generate new recovery codes. Each first asks you to
+  confirm your password; the confirmation lasts five minutes.
 
 ## 6. What to back up
 

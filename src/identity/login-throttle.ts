@@ -1,6 +1,7 @@
 import { type Clock, MS_PER_MINUTE, MS_PER_SECOND } from './primitives.ts';
 
 import type { LoginAttemptsStore } from './repositories/login-attempts.ts';
+import type { OperatorRecord } from './repositories/operators.ts';
 
 const THROTTLE_FREE_FAILURES = 5;
 const THROTTLE_WINDOW_MS = 15 * MS_PER_MINUTE;
@@ -27,8 +28,22 @@ export function ipSubject(ip: string | undefined): string {
   return `ip:${ip ?? 'unknown'}`;
 }
 
+/**
+The account as the login form names it (ID-13): pass the address as `normaliseEmail` returns it.
+*/
+export function emailSubject(email: string): string {
+  return `email:${email}`;
+}
+
+/**
+An account that predates e-mail identification (ID-26) is counted by its id instead.
+*/
 export function operatorSubject(operatorId: string): string {
   return `operator:${operatorId}`;
+}
+
+export function accountSubject(operator: Pick<OperatorRecord, 'id' | 'email'>): string {
+  return operator.email === undefined ? operatorSubject(operator.id) : emailSubject(operator.email);
 }
 
 export function createLoginThrottle(attempts: LoginAttemptsStore, clock: Clock): LoginThrottle {

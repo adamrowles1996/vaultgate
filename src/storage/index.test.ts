@@ -43,6 +43,7 @@ describe('openStore', () => {
     expect(existsSync(join(dataDirectory, 'vaultgate.sqlite'))).toBe(true);
     expect(all(store.db, 'SELECT version FROM schema_migrations', versionSchema)).toStrictEqual([
       { version: 1 },
+      { version: 2 },
     ]);
     expect(lines().map((line) => line['msg'])).toStrictEqual([
       'store ready',
@@ -50,8 +51,8 @@ describe('openStore', () => {
     ]);
     expect(lines()[0]).toMatchObject({
       path: join(dataDirectory, 'vaultgate.sqlite'),
-      applied: [1],
-      version: 1,
+      applied: [1, 2],
+      version: 2,
     });
     vi.advanceTimersByTime(3_600_000);
     expect(lines()).toHaveLength(3);

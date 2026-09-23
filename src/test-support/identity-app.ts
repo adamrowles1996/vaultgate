@@ -137,7 +137,7 @@ export function totpFor(key: string, nowMs: number): string {
 }
 
 export const PASSWORD = 'a perfectly serviceable passphrase';
-export const DISPLAY_NAME = 'Ada';
+export const EMAIL = 'ada@example.com';
 
 export interface OperatorSetup {
   readonly browser: Browser;
@@ -157,7 +157,7 @@ export async function setUpOperator(harness: Harness): Promise<OperatorSetup> {
   const done = await browser.submit('/setup', {
     token: harness.setupToken(),
     csrf: csrfOf(markup),
-    display_name: DISPLAY_NAME,
+    email: EMAIL,
     password: PASSWORD,
     code: totpFor(key, harness.now()),
   });
@@ -165,19 +165,23 @@ export async function setUpOperator(harness: Harness): Promise<OperatorSetup> {
 }
 
 /**
-Signs a fresh browser in with the password and a second-factor code.
+Strips the operator's e-mail address, as a row from before the `operator-email` migration (ID-26).
+*/
+export function makeLegacy(harness: Harness): void {
+  harness.database.exec('UPDATE operators SET email = NULL');
+}
+
+/**
+Signs a fresh browser in: e-mail address (unless legacy) and password, then a second-factor code.
 */
 export async function signIn(harness: Harness, code: string, next?: string): Promise<Browser> {
   const browser = harness.browser();
   const page = await browser.get(next === undefined ? '/login' : `/login?next=${next}`);
   const csrf = csrfOf(await page.text());
   const nextField = next === undefined ? {} : { next };
-  await browser.submit('/login', {
-    csrf,
-    display_name: DISPLAY_NAME,
-    password: PASSWORD,
-    ...nextField,
-  });
+  const isLegacy = harness.stores.operators.findAny()?.email === undefined;
+  const emailField = isLegacy ? {} : { email: EMAIL };
+  await browser.submit('/login', { csrf, ...emailField, password: PASSWORD, ...nextField });
   await browser.submit('/login/verify', { csrf, code, ...nextField });
   return browser;
 }

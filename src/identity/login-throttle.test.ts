@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { openTestDatabase } from '../test-support/database.ts';
 
 import {
+  accountSubject,
   backoffDelayMs,
   createLoginThrottle,
+  emailSubject,
   ipSubject,
   operatorSubject,
 } from './login-throttle.ts';
@@ -38,5 +40,11 @@ describe('createLoginThrottle', () => {
 
   it('ID-13 names unknown addresses without failing', () => {
     expect(ipSubject(undefined)).toBe('ip:unknown');
+  });
+
+  it('ID-13 ID-26 counts an account by its e-mail, or by its id before one is set', () => {
+    expect(emailSubject('ada@example.com')).toBe('email:ada@example.com');
+    expect(accountSubject({ id: 'op-1', email: 'ada@example.com' })).toBe('email:ada@example.com');
+    expect(accountSubject({ id: 'op-1', email: undefined })).toBe('operator:op-1');
   });
 });

@@ -22,15 +22,15 @@
   epoch (`Date.now()`).
 - JSON columns are TEXT holding a serialised document; booleans are INTEGER `0`/`1`.
 
-## 7.2 Schema (v1)
+## 7.2 Schema
 
 | Table                    | Key columns                                                                                                                                                                                                   |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `operators`              | `id`, `display_name`, `password_hash`, `totp_secret_ciphertext`, `totp_last_step`, `created_at`, `password_changed_at`                                                                                        |
+| `operators`              | `id`, `email`, `password_hash`, `totp_secret_ciphertext`, `totp_last_step`, `created_at`, `password_changed_at`, `display_name` (deprecated)                                                                  |
 | `recovery_codes`         | `operator_id`, `code_hash`, `used_at`                                                                                                                                                                         |
 | `bootstrap_tokens`       | `token_hash`, `expires_at`, `consumed_at`                                                                                                                                                                     |
 | `sessions`               | `id_hash`, `operator_id`, `created_at`, `last_seen_at`, `expires_at`, `reauthenticated_at`, `csrf_token`, `ip`, `user_agent`                                                                                  |
-| `login_attempts`         | `subject` (ip or operator id), `attempted_at`, `succeeded`                                                                                                                                                    |
+| `login_attempts`         | `subject` (`ip:…`, `email:…` or, in legacy mode, `operator:…`), `attempted_at`, `succeeded`                                                                                                                   |
 | `oauth_clients`          | `id`, `client_id`, `mode` (`cimd`\|`dcr`\|`preregistered`), `client_name`, `redirect_uris` (JSON), `metadata` (JSON), `created_at`, `revoked_at`                                                              |
 | `cimd_cache`             | `client_id`, `document` (JSON), `fetched_at`, `expires_at`, `etag`                                                                                                                                            |
 | `consents`               | `id`, `operator_id`, `client_id`, `scopes` (JSON), `granted_at`, `revoked_at`                                                                                                                                 |
@@ -40,6 +40,11 @@
 | `audit_events`           | `id`, `at`, `category`, `action`, `outcome`, `operator_id`, `client_id`, `token_prefix`, `item_id`, `field`, `request_id`, `ip`, `duration_ms`, `details` (JSON, secret-free)                                 |
 | `schema_migrations`      | `version`, `applied_at`, `checksum`                                                                                                                                                                           |
 
+- `operators.email` (migration `operator-email`) is the login identifier: stored lower-cased,
+  unique through an index on `lower(email)`, NULL only for a row written before that migration
+  (ID-26). `display_name` is deprecated by the same migration: SQLite cannot relax its NOT NULL
+  without rebuilding a table four others reference, so it stays, new rows write `''` and nothing
+  reads it.
 - **STORE-4** No table stores a raw token, code, session id, password or TOTP secret; hashes or
   ciphertext only.
 - **STORE-5** Indexes exist for every lookup on the request hot path: `tokens(token_hash)`,

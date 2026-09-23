@@ -14,7 +14,7 @@ export interface SetupFormView {
   readonly token: string;
   readonly csrfToken: string;
   readonly enrolment: Enrolment;
-  readonly displayName: string;
+  readonly email: string;
   readonly error: string | undefined;
 }
 
@@ -37,8 +37,15 @@ export function renderSetupForm(view: SetupFormView): string {
       <form method="post" action="/setup">
         ${hidden('token', view.token)} ${hidden('csrf', view.csrfToken)}
         <label
-          >Display name
-          <input name="display_name" required maxlength="64" value="${view.displayName}" />
+          >E-mail address
+          <input
+            name="email"
+            type="email"
+            required
+            maxlength="254"
+            autocomplete="username"
+            value="${view.email}"
+          />
         </label>
         <label
           >Password (12 to 256 characters)

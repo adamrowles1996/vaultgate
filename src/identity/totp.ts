@@ -79,12 +79,17 @@ export interface Enrolment {
   readonly uri: string;
 }
 
+const DEFAULT_ACCOUNT_LABEL = 'operator';
+
 /**
-`otpauth://totp/vaultgate:<name>?secret=…&issuer=vaultgate…` (ID-9) plus the manual key.
-*/
-export function describeEnrolment(displayName: string, secret: Buffer): Enrolment {
+ * `otpauth://totp/vaultgate:<account>?secret=…&issuer=vaultgate…` (ID-9) plus
+ * the manual key. The account label is the operator's e-mail address, or
+ * `operator` while none is known (first-run enrolment happens before the
+ * address is submitted).
+ */
+export function describeEnrolment(account: string | undefined, secret: Buffer): Enrolment {
   const secretBase32 = base32Encode(secret).replaceAll('=', '');
-  const label = encodeURIComponent(`${ISSUER}:${displayName}`);
+  const label = encodeURIComponent(`${ISSUER}:${account ?? DEFAULT_ACCOUNT_LABEL}`);
   const query = new URLSearchParams({
     secret: secretBase32,
     issuer: ISSUER,

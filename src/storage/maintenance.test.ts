@@ -28,13 +28,17 @@ const TOKEN =
 const AUDIT =
   "INSERT INTO audit_events (id, at, category, action, outcome) VALUES (?, ?, 'c', 'a', 'ok')";
 
+const OPERATOR =
+  'INSERT INTO operators (id, email, password_hash, totp_secret_ciphertext, totp_last_step, ' +
+  "created_at, password_changed_at, display_name) VALUES (?, ?, ?, ?, ?, ?, ?, '')";
+
 type Seed = readonly [sql: string, ...values: (string | number | null)[]];
 
 /**
 One row per case: `-keep` rows survive, `-drop` rows are what STORE-6 deletes.
 */
 const SEEDS: readonly Seed[] = [
-  ['INSERT INTO operators VALUES (?, ?, ?, ?, ?, ?, ?)', 'op', 'Op', 'hash', null, null, T, T],
+  [OPERATOR, 'op', 'op@example.com', 'hash', null, null, T, T],
   [
     'INSERT INTO oauth_clients VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     'cl',
