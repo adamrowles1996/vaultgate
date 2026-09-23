@@ -1,5 +1,6 @@
 import type { ItemSecrets } from './vault-fixture.ts';
 import type {
+  CustomFieldSummary,
   ItemPatch,
   ItemSummary,
   NewItem,
@@ -94,12 +95,36 @@ export function secretLookup(secrets: ItemSecrets, field: SecretField): SecretVa
   }
 }
 
+function writtenFields(patch: ItemPatch): Readonly<Record<string, string>> {
+  return Object.fromEntries((patch.customFields ?? []).map((field) => [field.name, field.value]));
+}
+
 export function mergedSecrets(existing: ItemSecrets, patch: ItemPatch): ItemSecrets {
   return {
     ...existing,
     ...(patch.login?.password !== undefined && { password: patch.login.password }),
     ...(patch.notes !== undefined && { notes: patch.notes }),
+    ...(patch.customFields !== undefined && {
+      hiddenFields: { ...existing.hiddenFields, ...writtenFields(patch) },
+    }),
   };
+}
+
+/**
+ * ACT-83: a custom field the item does not carry is created `hidden`. A field
+ * it already carries keeps its summary entry: a hidden value never appears in
+ * a summary, and only the stored secret changes.
+ */
+export function mergedCustomFields(
+  existing: readonly CustomFieldSummary[],
+  patch: ItemPatch,
+): readonly CustomFieldSummary[] {
+  const names = new Set(existing.map((field) => field.name));
+  const added = (patch.customFields ?? []).filter((field) => !names.has(field.name));
+  return [
+    ...existing,
+    ...added.map((field) => ({ name: field.name, kind: 'hidden' as const, value: null })),
+  ];
 }
 
 export function mergedLogin(

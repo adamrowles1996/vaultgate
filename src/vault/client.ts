@@ -125,12 +125,23 @@ export interface NewItem {
   readonly login?: NewLoginFields;
 }
 
+/**
+ * One custom field an update writes (ACT-83). A field the item already has
+ * keeps its kind; a field it does not have is created `hidden`, which is
+ * where a rotated secret belongs.
+ */
+export interface CustomFieldPatch {
+  readonly name: string;
+  readonly value: string;
+}
+
 export interface ItemPatch {
   readonly name?: string;
   readonly folderId?: string | null;
   readonly notes?: string;
   readonly favorite?: boolean;
   readonly login?: NewLoginFields;
+  readonly customFields?: readonly CustomFieldPatch[];
 }
 
 export type VaultErrorCode =

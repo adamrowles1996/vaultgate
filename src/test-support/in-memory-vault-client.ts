@@ -18,6 +18,7 @@ import {
 
 import {
   FIXED_NOW,
+  mergedCustomFields,
   mergedLogin,
   mergedSecrets,
   newLogin,
@@ -182,6 +183,7 @@ export class InMemoryVaultClient implements VaultClient {
       favorite: patch.favorite ?? existing.summary.favorite,
       hasNotes: secrets.notes !== undefined,
       login: mergedLogin(existing.summary.login, patch, secrets),
+      customFields: mergedCustomFields(existing.summary.customFields, patch),
       revisionDate: FIXED_NOW,
     };
     this.#items.set(id, { summary, secrets });
