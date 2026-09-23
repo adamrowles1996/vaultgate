@@ -7,6 +7,7 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 
 import { loadConnectors } from './actions/connectors/registry.ts';
 import { createActionsEngine } from './actions/engine.ts';
+import { createActionsPages } from './actions/pages/index.ts';
 import { StoreAuditSink } from './audit/store-sink.ts';
 import {
   createVaultConnection,
@@ -74,9 +75,11 @@ async function resolveAddresses(hostname: string): Promise<readonly string[]> {
   return entries.map((entry) => entry.address);
 }
 
-// The actions engine exists only when the layer is enabled (ACT-73); without
-// it the MCP surface registers no actions tool and the OAuth layer has no
-// consent-revocation callback to call (ACT-10).
+// The actions engine exists only when the layer is enabled (ACT-73). It is
+// built before the authorization server and identity because both reach it
+// through callbacks the composition wires here: consent revocation drops the
+// client's grants (ACT-10), the account page gains its Actions section (ACT-5)
+// and the MCP surface registers the actions tools.
 const engine = config.actions.enabled
   ? createActionsEngine({
       config: config.actions,
@@ -132,6 +135,20 @@ if (!oauth.ok) {
   store.close();
   process.exit(1);
 }
+const actionsPages =
+  engine === undefined
+    ? undefined
+    : createActionsPages({
+        targets: engine.targets,
+        database: store.db,
+        vault: vault.client,
+        sensitiveAction: (context) => identity.sensitiveAction(context),
+        listClients: (operatorId) =>
+          oauth.value.listConnectedClients(operatorId).map((client) => ({
+            clientId: client.clientId,
+            clientName: client.clientName,
+          })),
+      });
 const identity = createIdentity({
   config,
   database: store.db,
@@ -143,6 +160,7 @@ const identity = createIdentity({
   guards,
   passwordParameters: CURRENT_PARAMETERS,
   connectedClients: oauth.value.renderConnectedClients,
+  accountSections: actionsPages === undefined ? [] : [actionsPages.section],
   vaultConnection,
 });
 identity.bootstrap.ensureToken();
@@ -173,6 +191,7 @@ const app = createApp({
   tokenVerifier: oauth.value.tokenVerifier,
   oauth: oauth.value.routes,
   engine,
+  actionsPages: actionsPages?.routes,
 });
 
 const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (address) => {

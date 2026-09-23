@@ -3,9 +3,13 @@
  * spec §14.7.3 (ACT-8, ACT-10, ACT-96): the registry that opens and drives
  * sessions is M15's; this is the part every earlier milestone needs.
  */
-import { run } from '../storage/query.ts';
+import { z } from 'zod';
+
+import { all, run } from '../storage/query.ts';
 
 import type { DatabaseSync } from 'node:sqlite';
+
+const countRow = z.object({ open: z.number().int() });
 
 export type CloseReason =
   'agent' | 'idle' | 'absolute' | 'revoked' | 'target_changed' | 'operator' | 'shutdown' | 'error';
@@ -30,4 +34,17 @@ export function closeSessions(
     reason,
     value,
   );
+}
+
+/**
+How many sessions on the target are still open (ACT-5's "open sessions" column); summing the one
+aggregate row keeps the type honest without a fallback.
+*/
+export function countOpenSessions(database: DatabaseSync, targetId: string): number {
+  return all(
+    database,
+    'SELECT COUNT(*) AS open FROM action_sessions WHERE target_id = ? AND closed_at IS NULL',
+    countRow,
+    targetId,
+  ).reduce((sum, row) => sum + row.open, 0);
 }

@@ -1,7 +1,7 @@
 # 13 Actions: typed, policy-gated use of vault credentials
 
-> **Status: M9 in progress — engine core and MCP surface landed; pages and the `http`
-> runtime follow.** This section specifies the actions layer decided in
+> **Status: M9 in progress — engine core, MCP surface and account pages landed; the
+> `http` runtime follows.** This section specifies the actions layer decided in
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as milestones
 > M9 to M15 in [`PLAN.md`](../PLAN.md). Landed with M9's first pull request: configuration
 > (13.14), scopes and consent (13.5), storage and maintenance (13.13), targets and grants
@@ -11,8 +11,10 @@
 > `http` connector's document schemas (14.2). Landed with the second: the tool registration,
 > scope gate and listing rules of 13.6.1 (ACT-15, 17, 18), `actions_list_targets` (13.6.2),
 > the elicitation transport of 13.8 on the 2026-07-28 wire (ACT-42, 45, 47 and ACT-48's
-> refusal) and the consent-revocation hook of ACT-10. Not yet: the account pages (13.3.2),
-> the `http` runtime and every other connector (so no connector tool is listed on a
+> refusal) and the consent-revocation hook of ACT-10. Landed with the third: the account
+> pages (13.3.2) with the `actions` export stream on the account page (ACT-62) and the
+> per-target call history (ACT-63, without the "unexpected write" view, which is M14's).
+> Not yet: the `http` runtime and every other connector (so no connector tool is listed on a
 > deployment until its runtime lands), and ACT-48's in-band fallback for the 2025 wire (M14):
 > until then a client on that wire, whose capabilities the stateless handler never sees, is
 > refused a confirmed target with `confirmation_unavailable`. The per-connector contracts are
@@ -619,7 +621,7 @@ src/actions/
   limits.ts            per-target and per-client buckets and in-flight counters (ACT-59)
   sessions.ts          closing action_sessions on the revocation paths; the browser session registry is M15
   audit.ts             the actions.* audit events (ACT-7)
-  pages/               account-page section (ACT-5, 6), composed by src/http/ (planned)
+  pages/               the account-page section, the target and create pages and their routes (ACT-5, 6), composed by src/http/
   connectors/
     connector.ts       the connector interface (14.1)
     registry.ts        schemas of every connector; runtimes loaded for enabled connectors only (ACT-73)
@@ -634,8 +636,10 @@ src/actions/
 - **ACT-70** Dependency-cruiser gains a layer: `src/actions/` MAY import `result`, `config`,
   `logger`, `net`, `crypto`, `scopes`, `vault`, `storage` and `audit`; it MUST NOT import
   `identity/`, `oauth/`, `mcp/`, `bitwarden/` or `http/` except type-only imports from
-  `identity/` (the guard and session types its pages need, injected by composition) and from
-  `mcp/` (the `Tool` shape). `src/mcp/tools/actions.ts` imports the engine's public interface;
+  `identity/` (the guard and session types its pages need, injected by composition), the
+  escaping template primitives of `identity/pages/template.ts` (the one HTML path of ID-19,
+  which know nothing of identity and which the OAuth pages share the same way) and type-only
+  imports from `mcp/` (the `Tool` shape). `src/mcp/tools/actions.ts` imports the engine's public interface;
   `src/http/` composes the pages; the revocation paths of `oauth/` reach sessions through a
   callback the composition layer wires, never by import. `identity/`, `oauth/` and `bitwarden/`
   never import `actions/`.

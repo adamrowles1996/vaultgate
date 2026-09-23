@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requestId } from 'hono/request-id';
 
 import {
+  type AccountSectionRenderer,
   type ConnectedClientsRenderer,
   createGuards,
   createIdentity,
@@ -69,6 +70,10 @@ export interface HarnessOptions {
   The account page's connected-clients section, supplied by the OAuth harness.
   */
   readonly connectedClients?: ConnectedClientsRenderer;
+  /**
+  Further account-page sections (the actions targets, ACT-5).
+  */
+  readonly accountSections?: readonly AccountSectionRenderer[];
   /**
   The vault as the account page sees it; a fresh unconfigured fake by default.
   */
@@ -148,6 +153,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     guards,
     passwordParameters: FAST_SCRYPT,
     connectedClients: options.connectedClients,
+    accountSections: options.accountSections,
     vaultConnection: vault,
   });
   const app = new Hono<IdentityEnvironment>();

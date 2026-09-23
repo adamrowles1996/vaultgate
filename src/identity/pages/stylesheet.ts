@@ -31,6 +31,7 @@ label {
   font-weight: 600;
 }
 input,
+textarea,
 button {
   font: inherit;
   padding: 0.5rem 0.75rem;
@@ -86,6 +87,7 @@ main {
 }
 input,
 select,
+textarea,
 pre {
   box-sizing: border-box;
   max-width: 100%;

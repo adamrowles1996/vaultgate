@@ -142,13 +142,26 @@ export const ACTION_CALL_FORMATS: Readonly<Record<ExportFormat, LineFormat<Store
   lineFormats(FIELDS, (call) => ({ ...call }));
 
 /**
+The account page reads one target's calls (ACT-63); the export reads them all.
+*/
+export interface CallFilter {
+  readonly targetId?: string | undefined;
+}
+
+/**
 One page of calls in the window, newest first, for the account page's views (ACT-63).
 */
 export function listActionCalls(
   database: DatabaseSync,
   options: PageOptions,
+  filter: CallFilter = {},
 ): Page<StoredActionCall> {
-  return listPage(database, SOURCE, options);
+  return listPage(
+    database,
+    SOURCE,
+    options,
+    filter.targetId === undefined ? undefined : { column: 'target_id', value: filter.targetId },
+  );
 }
 
 /**

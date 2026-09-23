@@ -30,7 +30,9 @@ describe('actions layering', () => {
       "from: { path: '^src/actions/' },\n      to: { path: '^src/(oauth|bitwarden|http)/' },",
     );
     expect(CRUISER).toContain(
-      "from: { path: '^src/actions/' },\n      to: { path: '^src/(identity|mcp)/', dependencyTypesNot: ['type-only'] },",
+      "from: { path: '^src/actions/' },\n      to: {\n        path: '^src/(identity|mcp)/',\n" +
+        '        pathNot: [String.raw`^src/identity/pages/template\\.ts$`],\n' +
+        "        dependencyTypesNot: ['type-only'],\n      },",
     );
     expect(CRUISER).toContain(
       "from: { path: '^src/(identity|oauth|bitwarden)/' },\n      to: { path: '^src/actions/' },",

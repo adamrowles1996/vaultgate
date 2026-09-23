@@ -170,10 +170,11 @@ defines a target (an API, a database, a server, a Windows host or a website, plu
 that signs in to it, an allowlist policy and the clients allowed to use it), and the agent calls
 a connector tool by target name. Specification: [13 Actions](../spec/13-actions.md),
 [14 Action connectors](../spec/14-actions-connectors.md) and
-[ADR 0007](../adr/0007-typed-actions-with-operator-policy.md). The engine, the scopes and the MCP
-tool surface below exist today; the account pages and the connector runtimes land with the
-remaining M9 to M15 milestones in [`PLAN.md`](../PLAN.md), and until a connector's runtime lands
-its tool is not listed on any deployment.
+[ADR 0007](../adr/0007-typed-actions-with-operator-policy.md). The engine, the scopes, the MCP
+tool surface below and the operator pages (the account page's Actions section, described in the
+[Actions guide](actions.md)) exist today; the connector runtimes land with the remaining M9 to
+M15 milestones in [`PLAN.md`](../PLAN.md), and until a connector's runtime lands its tool is not
+listed on any deployment.
 
 ### Actions scopes
 

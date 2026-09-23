@@ -47,6 +47,10 @@ export interface TargetsService {
   grant(id: string, clientId: string, operatorId: string): TargetResult;
   revokeGrant(id: string, clientId: string, operatorId: string): TargetResult;
   /**
+  ACT-5's "close sessions": every open session on the target, recorded as `sessions_closed` (ACT-7).
+  */
+  closeSessions(id: string, operatorId: string): TargetResult;
+  /**
   ACT-10: wired by composition into the OAuth consent revocation path; revokes the client's grants and closes its sessions.
   */
   onConsentRevoked(clientId: string): { readonly grants: number; readonly sessions: number };
@@ -94,6 +98,26 @@ function revokeTargetGrant(
   });
 }
 
+function closeTargetSessions(
+  context: TargetsContext,
+  id: string,
+  operatorId: string,
+): TargetResult {
+  return withTarget(context, id, (row) => {
+    const at = context.now();
+    transaction(context.database, () => {
+      const sessions = closeSessions(context.database, { targetId: id }, 'operator', at);
+      recordTargetEvent(context, {
+        action: 'sessions_closed',
+        row,
+        operatorId,
+        details: { sessions },
+      });
+    });
+    return ok(summariseTarget(context.repo, row));
+  });
+}
+
 export function createTargetsService(dependencies: TargetsServiceDependencies): TargetsService {
   const { database, audit, now, newId, ...checks } = dependencies;
   const repo = createTargetsRepo(database);
@@ -111,6 +135,7 @@ export function createTargetsService(dependencies: TargetsServiceDependencies): 
     remove: (id, operatorId) => removeTarget(context, id, operatorId),
     grant: (id, clientId, operatorId) => grantTarget(context, id, clientId, operatorId),
     revokeGrant: (id, clientId, operatorId) => revokeTargetGrant(context, id, clientId, operatorId),
+    closeSessions: (id, operatorId) => closeTargetSessions(context, id, operatorId),
     onConsentRevoked(clientId) {
       const at = now();
       return transaction(database, () => ({

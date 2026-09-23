@@ -207,3 +207,19 @@ describe('POST /oauth/revoke', () => {
     expect(revokedClients).toStrictEqual([CLIENT_ID]);
   });
 });
+
+describe('consent revocation and the actions layer', () => {
+  it('ACT-10 tells the wired callback the client id of every revoked consent, and nothing for an unknown one', () => {
+    const revokedClients: string[] = [];
+    const harness = createOAuthHarness({
+      onConsentRevoked: (clientId) => {
+        revokedClients.push(clientId);
+      },
+    });
+    issueFamily(harness, 'fam-1', 50);
+    expect(harness.server.revokeConsent(OPERATOR_ID, 'nope')).toBeUndefined();
+    expect(harness.server.revokeConsent(OPERATOR_ID, 'consent-1')).toBe(2);
+    expect(harness.server.revokeConsent(OPERATOR_ID, 'consent-1')).toBeUndefined();
+    expect(revokedClients).toStrictEqual([CLIENT_ID]);
+  });
+});

@@ -66,7 +66,7 @@ added without touching the OAuth layer (see `PLAN.md`).
 - **ID-15** Re-authentication (password only) is required within 5 minutes before: revoking a
   client, regenerating recovery codes, changing the password, changing the e-mail address,
   rotating TOTP, enabling `vault:write` from the account page, changing the vault connection
-  (ID-25).
+  (ID-25), exporting the audit log (OPS-5) and every change to an actions target (ACT-5).
 
 ## 4.5 Session cookie
 

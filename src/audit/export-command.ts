@@ -136,6 +136,16 @@ export function parseExportArguments(argv: readonly string[]): Result<ExportRequ
 }
 
 /**
+The requested stream's lines over the window, newest first (the account page download).
+*/
+export function exportLines(
+  database: DatabaseSync,
+  request: ExportRequest,
+): ReadableStream<string> {
+  return STREAMS[request.stream].lines(database, request, request.format);
+}
+
+/**
  * Streams the export to `output` with back-pressure and leaves `output`
  * open (it may be `process.stdout`). No database means no store has been
  * created yet, which exports as empty: the CSV header alone, or nothing.
@@ -145,10 +155,9 @@ export async function writeAuditExport(
   request: ExportRequest,
   output: NodeJS.WritableStream,
 ): Promise<void> {
-  const stream = STREAMS[request.stream];
   const lines =
     database === undefined
-      ? stream.header(request.format)
-      : stream.lines(database, request, request.format);
+      ? STREAMS[request.stream].header(request.format)
+      : exportLines(database, request);
   await pipeline(lines, output, { end: false });
 }

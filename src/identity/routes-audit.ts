@@ -1,6 +1,5 @@
-import { type ExportRequest, parseExportRequest } from '../audit/export-command.ts';
+import { exportLines, type ExportRequest, parseExportRequest } from '../audit/export-command.ts';
 import { FORMATS } from '../audit/format.ts';
-import { exportAuditEvents } from '../audit/query.ts';
 
 import { type IdentityContext, type IdentityEnvironment, readForm } from './browser.ts';
 import { renderAccount } from './pages/account.ts';
@@ -18,7 +17,8 @@ function stamp(instant: number): string {
 
 function attachment(request: ExportRequest): Record<string, string> {
   const format = FORMATS[request.format];
-  const name = `vaultgate-audit-${stamp(request.from)}-${stamp(request.to)}.${format.extension}`;
+  const window = `${stamp(request.from)}-${stamp(request.to)}`;
+  const name = `vaultgate-${request.stream}-${window}.${format.extension}`;
   return {
     'Content-Type': format.contentType,
     'Content-Disposition': `attachment; filename="${name}"`,
@@ -26,9 +26,10 @@ function attachment(request: ExportRequest): Record<string, string> {
 }
 
 /**
- * OPS-5: the export behind the account page form. Same gate as every other
- * sensitive action (session, synchroniser token, re-authentication within
- * five minutes), then the requested window streams back as a download.
+ * OPS-5, ACT-62: the export behind the account page form, the audit events
+ * or the action calls. Same gate as every other sensitive action (session,
+ * synchroniser token, re-authentication within five minutes), then the
+ * requested window streams back as a download.
  */
 async function exportAudit(context: IdentityContext, services: IdentityServices) {
   const form = await readForm(context);
@@ -40,17 +41,23 @@ async function exportAudit(context: IdentityContext, services: IdentityServices)
     from: form.get('from'),
     to: form.get('to'),
     format: form.get('format'),
+    stream: form.get('stream'),
   });
   if (!request.ok) {
     const view = await accountView(services, authenticated, { error: request.error.message });
     return context.html(renderAccount(view), 400);
   }
-  const { from, to, format } = request.value;
+  const { from, to, format, stream } = request.value;
   services.audit.record({
     ...auditEvent(context, services, 'audit.exported', authenticated.operator.id),
-    details: { format, from: new Date(from).toISOString(), to: new Date(to).toISOString() },
+    details: {
+      format,
+      stream,
+      from: new Date(from).toISOString(),
+      to: new Date(to).toISOString(),
+    },
   });
-  const lines = exportAuditEvents(services.database, request.value, format);
+  const lines = exportLines(services.database, request.value);
   return context.body(lines.pipeThrough(new TextEncoderStream()), 200, attachment(request.value));
 }
 

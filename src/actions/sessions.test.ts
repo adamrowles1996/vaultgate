@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { all, run } from '../storage/query.ts';
 import { openTestDatabase } from '../test-support/database.ts';
 
-import { closeSessions } from './sessions.ts';
+import { closeSessions, countOpenSessions } from './sessions.ts';
 
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -56,5 +56,16 @@ describe('closeSessions', () => {
         .map((row) => row.id_hash),
     ).toStrictEqual(['s1', 's3']);
     expect(closeSessions(database, { clientId: 'c1' }, 'revoked', 8)).toBe(0);
+  });
+});
+
+describe('countOpenSessions', () => {
+  it('ACT-5 counts the open sessions of one target only', () => {
+    const database = seeded();
+    expect(countOpenSessions(database, 't1')).toBe(2);
+    expect(countOpenSessions(database, 't2')).toBe(1);
+    expect(countOpenSessions(database, 'none')).toBe(0);
+    closeSessions(database, { targetId: 't1' }, 'operator', 9);
+    expect(countOpenSessions(database, 't1')).toBe(0);
   });
 });
