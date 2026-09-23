@@ -14,7 +14,13 @@ import { CREATE_PATH, renderCreatePage } from './create-page.ts';
 import { documentsFromForm, type FormValues } from './form-values.ts';
 import { formFor } from './forms.ts';
 import { targetPath } from './section.ts';
-import { DESCRIPTION_FIELD, INTERNAL_FIELD, ITEM_ID_FIELD, NAME_FIELD } from './target-form.ts';
+import {
+  CONNECTOR_FIELD,
+  DESCRIPTION_FIELD,
+  INTERNAL_FIELD,
+  ITEM_ID_FIELD,
+  NAME_FIELD,
+} from './target-form.ts';
 import { renderTargetPage } from './target-page.ts';
 import { registerTargetWrites } from './target-writes.ts';
 import { type ActionsPagesDependencies, createValues, targetPageView, viewerOf } from './view.ts';
@@ -32,8 +38,6 @@ const NOTICES: Readonly<Record<string, string>> = {
   'grant-revoked': 'Grant removed and the client’s sessions on this target closed.',
   'sessions-closed': 'Every open session on this target was closed.',
 };
-
-export const CONNECTOR_FIELD = 'connector';
 
 function loginRedirect(context: IdentityContext): Response {
   const url = new URL(context.req.url);

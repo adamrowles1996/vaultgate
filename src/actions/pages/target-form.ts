@@ -18,6 +18,7 @@ import { renderFields } from './form-render.ts';
 import type { ConnectorForm } from './descriptors.ts';
 import type { FormValues } from './form-values.ts';
 
+export const CONNECTOR_FIELD = 'connector';
 export const NAME_FIELD = 'name';
 export const DESCRIPTION_FIELD = 'description';
 export const INTERNAL_FIELD = 'internal';
@@ -99,9 +100,19 @@ export function renderProblems(problems: readonly string[]): Html {
     </ul>`;
 }
 
+/**
+ * The connector is fixed at creation (ACT-1) and the create route reads it
+ * from the submission, so the create form carries it; the edit form does not,
+ * because the route takes the target's own connector.
+ */
+function connectorField(view: TargetFormView): Html {
+  return when(view.isNew, () => hidden(CONNECTOR_FIELD, view.form.kind));
+}
+
 export function renderTargetForm(view: TargetFormView): Html {
   return html`<form method="post" action="${view.action}">
-    ${hidden('csrf', view.csrfToken)} ${commonFields(view)} ${renderFields(view.form, view.values)}
+    ${hidden('csrf', view.csrfToken)} ${connectorField(view)} ${commonFields(view)}
+    ${renderFields(view.form, view.values)}
     <button type="submit">${view.submitLabel}</button>
   </form>`;
 }
