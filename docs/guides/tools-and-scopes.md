@@ -163,6 +163,20 @@ Bitwarden. **There is no permanent delete tool.**
 
 `name` in; `folder` (`id`, `name`) out. Use `list_folders` first to avoid duplicates.
 
+## Actions (planned)
+
+A future, off-by-default layer lets an agent _use_ a credential without receiving it: the
+operator defines a target (an API, a database, a server, a Windows host or a website plus the
+vault item that signs in to it, an allowlist policy and the clients allowed to use it), and the
+agent calls `http_request`, `sql_query`, `sql_execute`, `ssh_run`, `winrm_run` or the
+`browser_*` tools by target name. Each connector has its own `actions:*` scope, marked risky at
+consent; write and shell calls carry MCP `destructiveHint` annotations and can require a per-call
+confirmation through MCP elicitation; every injected value is scrubbed from every result. Nothing
+of this exists yet: see [13 Actions](../spec/13-actions.md),
+[14 Action connectors](../spec/14-actions-connectors.md) and
+[ADR 0007](../adr/0007-typed-actions-with-operator-policy.md); milestones M9 to M15 in
+[`PLAN.md`](../PLAN.md).
+
 ## Secret-handling rules, in plain words
 
 - **One door.** Only `get_secret` returns a secret value, one field of one item per call, and it
@@ -180,7 +194,8 @@ Bitwarden. **There is no permanent delete tool.**
   material, so that call needs `vault:reveal` too.
 - **Nothing is executed.** There is no tool that runs a command, reads a file or fetches a URL.
   An agent that wants to use a secret in a command has to reveal it, which is audited, and run
-  the command itself.
+  the command itself. (The planned actions layer above will change this for operator-defined
+  targets only, behind its own switches and scopes.)
 - **Audit, not content.** Each tool call is recorded with the client, the token id, the tool, the
   outcome, the item id and (for `get_secret`) the field name, the duration and the source address.
   Arguments and results are never recorded, and the `password` input of the write tools is

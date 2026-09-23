@@ -119,6 +119,97 @@ Exit: a real deployment from the button reaches the setup page on the generated
 
 Exit: `v1.0.0`.
 
+### Post-1.0: the actions layer (spec 13, 14; ADR 0007)
+
+Milestones M9 to M15 deliver the typed actions layer after `v1.0.0`. Every milestone ships
+behind `VAULTGATE_ENABLE_ACTIONS` (and its connector switch) so a release between them changes
+nothing for a deployment that has not opted in. Each milestone lands contract tests against
+fakes (ACT-75) and records a live test against the maintainer's own systems in its pull request.
+
+### M9 Actions core and `http` (ACT-1…80)
+
+1. `feat(actions)`: the `src/actions/` layer and its dependency-cruiser rules, migration
+   `004-actions`, target and grant repositories with per-connector zod schemas, the six
+   `actions:*` scopes in the registry (advertised only when enabled), the engine's resolution
+   order, pattern matcher, rate limits, scrubber, `action_calls` audit and export stream.
+2. `feat(actions)`: account-page Actions section (targets, grants, sessions, call history) behind
+   re-authentication; `actions_list_targets`.
+3. `feat(actions)`: the `http` connector with `bearer`, `basic`, `header` and `query` injection,
+   pinned transport, redirect policy; `http_request`.
+
+Exit: a `vault:read`-only token sees no actions tool; an `actions:http` token calls a granted
+target through a fake and a canary credential never appears in any result, log or audit row;
+a live call reaches an HTTPS API of the maintainer's with a vault-held API key.
+
+### M10 `graph` credential adapter (ACT-81…83)
+
+1. `feat(actions)`: client-credentials and refresh-token exchange server-side, in-memory token
+   cache keyed by target revision, one retry on `401`, refresh-token write-back to the vault with
+   its audit event.
+
+Exit: contract tests against a fake token endpoint cover both grants, expiry, rotation and a
+failed write-back; a live `GET /v1.0/me` (refresh grant) and `GET /v1.0/users` (client
+credentials) succeed against the maintainer's Microsoft 365 tenant.
+
+### M11 `sql`, read then write (ACT-23…26, 36…38, 84…86)
+
+1. `feat(actions)`: tokeniser and classifier with the per-engine corpus (ACT-77); `sql_query`
+   over `pg` and `mssql` with read-only sessions where the engine allows; `actions:sql.read`.
+2. `feat(actions)`: `sql_execute` with `write_classes`, `statement_allowlist`, per-statement
+   transaction; `actions:sql.write`; the elicitation flow of 13.8 (first write tool to need it),
+   including the no-elicitation refusal and every `ElicitResult` outcome (ACT-76).
+
+Exit: every corpus entry is a named test; a `sql.read` token cannot reach `sql_execute`; a
+confirmed target refuses a client without elicitation; live queries run against the
+maintainer's SQL Server and PostgreSQL databases with dedicated read-only logins.
+
+### M12 `ssh` (ACT-27, 28, 87, 88)
+
+1. `feat(actions)`: `ssh2` connector with pinned host key, key and password auth, exec channel
+   without PTY or forwarding, command allowlist, `any_command` behind the deployment switch;
+   `ssh_run`; `actions:ssh`.
+
+Exit: host-key mismatch fails before authentication in the contract suite; a live `uptime` runs
+on a Linux host of the maintainer's under a one-pattern allowlist.
+
+### M13 `winrm` (ACT-89, 90)
+
+1. `spike(actions)`: evaluate the npm WinRM clients per QG-9 against a hand-written WS-Management
+   client on `node:https`; record the decision in this plan.
+2. `feat(actions)`: the chosen client, `cmd` and `powershell` shells, certificate pinning, shell
+   lifecycle with `Signal` on timeout; `winrm_run`; `actions:winrm`.
+
+Exit: the contract suite drives the five SOAP operations against a fake; a live
+`Get-ComputerInfo` runs on a Windows host of the maintainer's over HTTPS with a pinned
+certificate.
+
+### M14 Policy UI polish and elicitation hardening (ACT-5…7, 41…49, 63)
+
+1. `feat(actions)`: per-target call history and the "unexpected write" view, grant management
+   from the connected-clients list, form validation messages for every policy field, a
+   `confirm_writes` default-on for new writable targets.
+2. `feat(actions)`: the older-protocol in-band elicitation fallback (ACT-48), a confirmation
+   message rendering test per connector, and the compatibility-suite evidence of which clients
+   render form-mode elicitation (12.2).
+
+Exit: every ACT id in sections 13 and 14 up to ACT-90 is cited by a test or marked
+documentation-only; the guides (`tools-and-scopes.md`, a new `actions.md`) describe the layer.
+
+### M15 `browser` (ACT-29…33, 91…102)
+
+1. `build(docker)`: the optional `browser` Compose profile with the pinned Playwright image,
+   internal network, seccomp, capability, filesystem and resource limits; the Azure template's
+   `deployBrowserSidecar` parameter and second container.
+2. `feat(actions)`: `playwright-core` over CDP, per-session contexts, the sign-in sequence with
+   URI match and TOTP, origin interception, download and pop-up policy, snapshot and screenshot
+   masking, the session registry with every close path; the six `browser_*` tools;
+   `actions:browser`.
+
+Exit: the fixture-site contract suite passes (ACT-102) including the marker-cookie invariant;
+sessions close on token, consent and grant revocation and on target edit in the in-process
+suite; a live sign-in to two of the maintainer's own web applications through the Compose
+sidecar produces a scrubbed snapshot and a masked screenshot, recorded in the pull request.
+
 ### Post-1.0 candidates
 
 - Passkey (WebAuthn) operator login.
@@ -126,17 +217,20 @@ Exit: `v1.0.0`.
 - PostgreSQL store for multi-replica deployments.
 - Prometheus metrics.
 - Organisation collections filtering and per-client item allowlists.
+- Actions follow-ups: `http_get` with `readOnlyHint: true`, Graph national clouds, NTLM/Kerberos
+  for WinRM, further connectors only with a policy model as tight as spec 14.
 
 ## Test environments
 
 Provided by the maintainer (details are kept out of this repository):
 
-| Environment                                                                             | Used by                                    |
-| --------------------------------------------------------------------------------------- | ------------------------------------------ |
-| A dedicated test account on a self-hosted Vaultwarden instance, with a personal API key | M5 integration job, M8 compatibility suite |
-| An Azure subscription for template deployments                                          | M7 `what-if` and real deployments          |
-| A Proxmox host for VM and container deployments                                         | M6 Compose and `install.sh` verification   |
-| A public hostname for the reference deployment                                          | M6 onwards (to be assigned)                |
+| Environment                                                                                                                                                 | Used by                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| A dedicated test account on a self-hosted Vaultwarden instance, with a personal API key                                                                     | M5 integration job, M8 compatibility suite |
+| An Azure subscription for template deployments                                                                                                              | M7 `what-if` and real deployments          |
+| A Proxmox host for VM and container deployments                                                                                                             | M6 Compose and `install.sh` verification   |
+| A public hostname for the reference deployment                                                                                                              | M6 onwards (to be assigned)                |
+| The maintainer's own systems: an HTTPS API, a Microsoft 365 tenant, SQL Server and PostgreSQL databases, a Linux host, a Windows host, two web applications | M9 to M15 live tests (ACT-75), never in CI |
 
 Open decision: the default `VAULTGATE_ACCESS_TOKEN_TTL` for hosted agents (1 h proposed), due by
 M3.
@@ -150,3 +244,5 @@ M3.
 | SQLite on Azure Files                                     | Single replica, rollback journal, exclusive locking; documented; PostgreSQL store post-1.0.                              |
 | Hosted clients change registration behaviour (DCR → CIMD) | Both supported; compatibility suite per release.                                                                         |
 | Scope creep toward organisation administration            | Non-goals are written down; requests go to post-1.0 candidates.                                                          |
+| The actions layer widens the attack surface (ADR 0007)    | Off by default per connector; typed connectors only; contract tests with canaries per connector; threat model T24…T34.   |
+| Browser sidecar image carries Chromium's CVE stream       | Sidecar is optional and separate from the core image; pinned tag with Dependabot updates; dropped capabilities, seccomp. |

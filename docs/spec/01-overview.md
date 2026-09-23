@@ -36,9 +36,12 @@ through a managed, loopback-only `bw serve` process.
 2. **Secrets leave the server only through one door.** Exactly one tool
    (`get_secret`) returns secret material, it requires its own scope, and
    every call is audit-logged. Every other tool returns metadata.
-3. **No remote code execution, ever.** vaultgate exposes no tool that runs a
+3. **No arbitrary remote code execution.** vaultgate exposes no tool that runs a
    command, evaluates an expression, reads a file or makes an arbitrary HTTP
-   request. Lint rules confine process spawning to one module.
+   request, and nothing ever executes on the vaultgate host. Lint rules confine
+   process spawning to one module. The planned actions layer (section 13,
+   ADR 0007) is the one opt-in exception: typed operations at operator-defined
+   targets, under the operator's allowlists, with the credential never returned.
 4. **Standards, not inventions.** OAuth 2.1, RFC 9728, RFC 8414, RFC 8707,
    RFC 7591, RFC 7009, RFC 9207, Client ID Metadata Documents and the MCP
    authorization specification, implemented as written and tested against
