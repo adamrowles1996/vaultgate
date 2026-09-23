@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The account page's create-target form carried no `connector` field, while `POST /account/actions`
+  reads the connector from the submission, so creating a target from a browser answered `404` and
+  no target could be created through the operator pages at all (spec 13 §13.3.2, ACT-2, ACT-6).
+  The create form now carries the connector as a hidden field, and the create-page test submits
+  exactly the controls the rendered form carries rather than a hand-written field set, so a field
+  the form forgets to render fails the suite. Found by the M9 live test against both reference
+  deployments on v0.1.0-rc.6.
+
 ## [0.1.0-rc.6] - 2026-09-23
 
 ### Added

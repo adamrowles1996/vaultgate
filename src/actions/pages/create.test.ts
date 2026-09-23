@@ -24,6 +24,29 @@ const VALID = {
   'policy.timeout_ms': '5000',
 };
 
+const HIDDEN_INPUT = /<input type="hidden" name="([^"]+)" value="([^"]*)"/gu;
+const CHECKED_BOX = /name="([^"]+)" type="checkbox" checked/gu;
+const SELECTED_OPTION = /<select name="([^"]+)"[\s\S]*?<option value="([^"]*)" selected/gu;
+
+/**
+ * What a browser would send from the rendered form: its hidden fields, the
+ * boxes the page renders as checked and the selected option of each select.
+ * A field the form forgets to render is a field the route never receives.
+ */
+function submittedByBrowser(markup: string): readonly (readonly [string, string])[] {
+  const fields: [string, string][] = [];
+  for (const [, name = '', value = ''] of markup.matchAll(HIDDEN_INPUT)) {
+    fields.push([name, value]);
+  }
+  for (const [, name = ''] of markup.matchAll(CHECKED_BOX)) {
+    fields.push([name, 'on']);
+  }
+  for (const [, name = '', value = ''] of markup.matchAll(SELECTED_OPTION)) {
+    fields.push([name, value]);
+  }
+  return fields;
+}
+
 function operatorId(harness: PagesHarness): string {
   return harness.identity.stores.operators.findAny()?.id ?? '';
 }
@@ -68,6 +91,32 @@ describe('GET /account/actions/new', () => {
     expect(markup).toContain('Default 262 144 (256 KiB), at most 1 048 576 (1 MiB)');
     expect(markup).toContain('cannot be saved until the graph adapter arrives in M10');
     expect(markup).toContain('name="credential.refresh_token_field"');
+  });
+
+  it('ACT-2 ACT-6 posts what the rendered form carries: a submission of exactly its controls creates the target', async () => {
+    const harness = createPagesHarness();
+    const { browser } = await signedInOperator(harness);
+    const markup = await pageText(browser, '/account/actions/new?connector=http');
+    // Every control a browser would send: the hidden fields, the text inputs
+    // and selects filled in, the checkboxes the page renders as checked.
+    const submitted: Record<string, string> = {
+      ...Object.fromEntries(submittedByBrowser(markup)),
+      name: 'crm',
+      description: 'The CRM API',
+      'credential.item_id': 'item-login',
+      'destination.base_url': 'https://crm.example.com/api',
+      'credential.field': 'password',
+      'policy.allowed_paths': '/v1/**',
+    };
+    expect(submitted['connector']).toBe('http');
+    const response = await browser.submit('/account/actions', submitted);
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe('/account/actions/id-1?notice=created');
+    expect(harness.actions.engine.targets.get('id-1')).toMatchObject({
+      name: 'crm',
+      connector: 'http',
+      destination: { base_url: 'https://crm.example.com/api' },
+    });
   });
 });
 
