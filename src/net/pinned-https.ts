@@ -1,21 +1,31 @@
+import { request as httpRequest } from 'node:http';
 import { request as httpsRequest, type RequestOptions } from 'node:https';
 import { isIP, type LookupFunction } from 'node:net';
 import { Readable } from 'node:stream';
 
 import type { IncomingHttpHeaders } from 'node:http';
 
+export type PinnedMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
+
 /**
  * One outbound request whose TCP connection is pinned to an address the
- * caller has already validated (OAUTH-8, T6). The URL's host name still
- * names the TLS server (SNI, certificate check) and the `Host` header; only
- * the socket address is fixed, so no second DNS resolution can redirect the
- * connection to a different address.
+ * caller has already validated (OAUTH-8, ACT-55, T6). The URL's host name
+ * still names the TLS server (SNI, certificate check) and the `Host`
+ * header; only the socket address is fixed, so no second DNS resolution can
+ * redirect the connection to a different address. The scheme picks the
+ * transport: `https:` verifies the certificate against the system store with
+ * no insecure option (ACT-57); `http:` is plain `node:http` to the pinned
+ * address, which only an `internal` action target may name.
  */
 export interface PinnedRequest {
   readonly url: string;
   readonly address: string;
-  readonly method: 'GET';
+  readonly method: PinnedMethod;
   readonly headers: Readonly<Record<string, string>>;
+  readonly body?: Buffer | string | undefined;
+  /**
+  Aborting it fails the request, and any body read still in progress, with an `AbortError`.
+  */
   readonly signal: AbortSignal;
 }
 
@@ -31,17 +41,25 @@ export interface ResponseMessage extends Readable {
 
 interface InFlight {
   once(event: 'error', listener: (error: Error) => void): unknown;
-  end(): unknown;
+  end(body?: Buffer | string): unknown;
 }
 
 /**
-`https.request`, injected so the transport is tested without a socket.
+`https.request` or `http.request`, injected so the transport is tested without a socket.
 */
 export type RequestFunction = (
   url: string,
   options: RequestOptions,
   callback: (message: ResponseMessage) => void,
 ) => InFlight;
+
+/**
+One request function per scheme.
+*/
+export interface RequestFunctions {
+  readonly https: RequestFunction;
+  readonly http: RequestFunction;
+}
 
 /**
 Statuses whose response carries no body (Fetch: "null body status").
@@ -88,13 +106,16 @@ function toResponse(message: ResponseMessage): Response {
 }
 
 /**
- * The production transport behind the SSRF-safe fetcher: `node:https` with
- * the connection pinned to `request.address`. Redirects are never followed
- * here; the caller re-validates and re-pins every hop.
+ * The production transport behind the SSRF-safe CIMD fetcher and the `http`
+ * connector: `node:https` (or `node:http` for a plain URL) with the
+ * connection pinned to `request.address`. Redirects are never followed
+ * here; the caller decides what a redirect means.
  */
-export function createPinnedHttpsFetch(request: RequestFunction = httpsRequest): PinnedFetch {
+export function createPinnedHttpsFetch(requests: Partial<RequestFunctions> = {}): PinnedFetch {
+  const functions: RequestFunctions = { https: httpsRequest, http: httpRequest, ...requests };
   return (pinned) =>
     new Promise((resolve, reject) => {
+      const request = new URL(pinned.url).protocol === 'http:' ? functions.http : functions.https;
       const inFlight = request(
         pinned.url,
         {
@@ -112,6 +133,32 @@ export function createPinnedHttpsFetch(request: RequestFunction = httpsRequest):
         },
       );
       inFlight.once('error', reject);
-      inFlight.end();
+      inFlight.end(pinned.body);
     });
+}
+
+/**
+ * Reads at most `limit` bytes of a response body and cancels the rest, so a
+ * destination cannot make the caller buffer more than it asked for (ACT-52:
+ * the caller passes its cap plus the guard band). A body of exactly `limit`
+ * bytes may be cancelled after its last chunk, which costs nothing.
+ */
+export async function readBodyCapped(response: Response, limit: number): Promise<Buffer> {
+  if (response.body === null) {
+    return Buffer.alloc(0);
+  }
+  // Node types the body stream as `ReadableStream<any>`; Fetch guarantees bytes.
+  const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  while (received < limit) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return Buffer.concat(chunks);
+    }
+    chunks.push(value);
+    received += value.byteLength;
+  }
+  await reader.cancel();
+  return Buffer.concat(chunks).subarray(0, limit);
 }

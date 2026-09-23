@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createPinnedHttpsFetch,
   type PinnedRequest,
+  readBodyCapped,
   type RequestFunction,
   type ResponseMessage,
 } from './pinned-https.ts';
@@ -48,6 +49,7 @@ interface Recorded {
   readonly options: RequestOptions;
   readonly lookup: LookupAnswer;
   readonly ended: boolean;
+  readonly body: Buffer | string | undefined;
 }
 
 function answering(reply: () => ResponseMessage | Error): {
@@ -57,14 +59,20 @@ function answering(reply: () => ResponseMessage | Error): {
   const calls: Recorded[] = [];
   const request: RequestFunction = (url, options, callback) => {
     const listeners: ((error: Error) => void)[] = [];
-    const call = { url, options, lookup: askLookup(options, new URL(url).hostname), ended: false };
+    const call = {
+      url,
+      options,
+      lookup: askLookup(options, new URL(url).hostname),
+      ended: false,
+      body: undefined,
+    };
     calls.push(call);
     return {
       once: (_event, listener) => {
         listeners.push(listener);
       },
-      end: () => {
-        calls[calls.length - 1] = { ...call, ended: true };
+      end: (body) => {
+        calls[calls.length - 1] = { ...call, ended: true, body };
         const outcome = reply();
         if (outcome instanceof Error) {
           for (const listener of listeners) {
@@ -95,7 +103,7 @@ describe('createPinnedHttpsFetch', () => {
     const { request, calls } = answering(() =>
       message(['{"a":', '1}'], 200, { 'content-type': 'application/json' }),
     );
-    const response = await createPinnedHttpsFetch(request)(pinned());
+    const response = await createPinnedHttpsFetch({ https: request })(pinned());
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('application/json');
     expect(await response.text()).toBe('{"a":1}');
@@ -104,6 +112,7 @@ describe('createPinnedHttpsFetch', () => {
     expect(call?.url).toBe('https://agent.example.com/client.json');
     expect(call?.ended).toBe(true);
     expect(call?.options).toMatchObject({ method: 'GET', headers: { Accept: 'application/json' } });
+    expect(call?.body).toBeUndefined();
     expect(call?.options.signal).toBeInstanceOf(AbortSignal);
     expect(call?.lookup).toStrictEqual({
       single: [null, PUBLIC, 4],
@@ -113,7 +122,7 @@ describe('createPinnedHttpsFetch', () => {
 
   it('OAUTH-8 pins an IPv6 address with its family', async () => {
     const { request, calls } = answering(() => message([], 200));
-    await createPinnedHttpsFetch(request)(pinned({ address: PUBLIC_V6 }));
+    await createPinnedHttpsFetch({ https: request })(pinned({ address: PUBLIC_V6 }));
     expect(calls[0]?.lookup).toStrictEqual({
       single: [null, PUBLIC_V6, 6],
       all: [null, [{ address: PUBLIC_V6, family: 6 }]],
@@ -123,7 +132,7 @@ describe('createPinnedHttpsFetch', () => {
   it('OAUTH-8 exposes every header, including repeated ones', async () => {
     const headers = { location: '/next', 'set-cookie': ['a=1', 'b=2'], 'x-none': undefined };
     const { request } = answering(() => message([], 302, headers));
-    const response = await createPinnedHttpsFetch(request)(pinned());
+    const response = await createPinnedHttpsFetch({ https: request })(pinned());
     expect(response.status).toBe(302);
     expect(response.headers.get('location')).toBe('/next');
     expect(response.headers.getSetCookie()).toStrictEqual(['a=1', 'b=2']);
@@ -134,7 +143,7 @@ describe('createPinnedHttpsFetch', () => {
     const source = message(['ignored'], 204);
     const resume = vi.spyOn(source, 'resume');
     const { request } = answering(() => source);
-    const response = await createPinnedHttpsFetch(request)(pinned());
+    const response = await createPinnedHttpsFetch({ https: request })(pinned());
     expect(response.status).toBe(204);
     expect(response.body).toBeNull();
     expect(resume).toHaveBeenCalledTimes(1);
@@ -142,14 +151,90 @@ describe('createPinnedHttpsFetch', () => {
 
   it('OAUTH-8 rejects on a transport error or an unusable status', async () => {
     const failing = answering(() => new Error('ECONNRESET'));
-    await expect(createPinnedHttpsFetch(failing.request)(pinned())).rejects.toThrow('ECONNRESET');
+    await expect(createPinnedHttpsFetch({ https: failing.request })(pinned())).rejects.toThrow(
+      'ECONNRESET',
+    );
     const noStatus = answering(() => message([], undefined));
-    await expect(createPinnedHttpsFetch(noStatus.request)(pinned())).rejects.toThrow(
+    await expect(createPinnedHttpsFetch({ https: noStatus.request })(pinned())).rejects.toThrow(
       'the response could not be read',
     );
   });
 
   it('OAUTH-8 defaults to node:https', () => {
     expect(typeof createPinnedHttpsFetch()).toBe('function');
+  });
+
+  it('ACT-80 sends any method with a body, pinned the same way', async () => {
+    const { request, calls } = answering(() => message(['{"id":1}'], 201));
+    const body = Buffer.from('{"name":"x"}', 'utf8');
+    const response = await createPinnedHttpsFetch({ https: request })(
+      pinned({
+        url: 'https://api.example.com/v1/items',
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(calls[0]).toMatchObject({
+      url: 'https://api.example.com/v1/items',
+      options: { method: 'POST', headers: { 'content-type': 'application/json' } },
+      body,
+      lookup: { single: [null, PUBLIC, 4] },
+    });
+  });
+
+  it('ACT-55 ACT-57 uses node:http for a plain URL and node:https for everything else', async () => {
+    const plain = answering(() => message(['plain'], 200));
+    const secure = answering(() => message(['secure'], 200));
+    const fetch = createPinnedHttpsFetch({ https: secure.request, http: plain.request });
+    const overPlain = await fetch(
+      pinned({ url: 'http://intranet.example/api', address: '10.0.0.8' }),
+    );
+    expect(await overPlain.text()).toBe('plain');
+    expect(plain.calls.map((call) => call.url)).toStrictEqual(['http://intranet.example/api']);
+    expect(plain.calls[0]?.lookup.single).toStrictEqual([null, '10.0.0.8', 4]);
+    expect(secure.calls).toStrictEqual([]);
+    const overTls = await fetch(pinned());
+    expect(await overTls.text()).toBe('secure');
+    expect(plain.calls).toHaveLength(1);
+    expect(secure.calls).toHaveLength(1);
+  });
+});
+
+function streamed(chunks: readonly string[]): Response {
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(new TextEncoder().encode(chunk));
+        }
+        controller.close();
+      },
+    }),
+  );
+}
+
+describe('readBodyCapped', () => {
+  it('ACT-52 returns a whole body under the limit and nothing for a null body', async () => {
+    const whole = await readBodyCapped(streamed(['ab', 'cd']), 10);
+    expect(whole.toString('utf8')).toBe('abcd');
+    const none = await readBodyCapped(new Response(null, { status: 204 }), 10);
+    expect(none.length).toBe(0);
+  });
+
+  it('ACT-52 stops reading at the limit, cuts the last chunk and cancels the rest', async () => {
+    let isCancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new TextEncoder().encode('0123456789'));
+      },
+      cancel() {
+        isCancelled = true;
+      },
+    });
+    const read = await readBodyCapped(new Response(body), 25);
+    expect(read.toString('utf8')).toBe('0123456789012345678901234');
+    expect(isCancelled).toBe(true);
   });
 });
