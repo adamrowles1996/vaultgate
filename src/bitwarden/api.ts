@@ -3,8 +3,8 @@
  * validation, one `Result`. Error mapping follows spec §05.4 and VAULT-14:
  * a message handed back never repeats what `bw serve` said, because that
  * text can name items, files or accounts. Every call is bounded (VAULT-16):
- * a `bw serve` that stops answering yields `vault_unavailable`, never a
- * request that hangs with nothing logged.
+ * a `bw serve` that stops answering yields `vault_unavailable` with a message
+ * that says so, never a request that hangs with nothing logged.
  */
 import { fail, ok, type Result } from '../result.ts';
 import { VaultError, type VaultErrorCode } from '../vault/client.ts';
@@ -39,6 +39,13 @@ export interface ApiRequest<T> {
 The same bound as a one-shot CLI command; a sync of a large vault fits comfortably.
 */
 export const CALL_TIMEOUT_MS = 60_000;
+
+/**
+ * The message for a call vaultgate itself aborted at `CALL_TIMEOUT_MS`, kept
+ * apart from the one for a refused or reset connection so a log line tells a
+ * `bw serve` that stalled from one that is gone. The code is the same.
+ */
+export const TIMED_OUT_MESSAGE = `the vault did not answer within ${CALL_TIMEOUT_MS / 1000} s`;
 
 const NOT_FOUND = /not found/i;
 const UNAVAILABLE = /locked|not logged in/i;
@@ -88,9 +95,9 @@ export class BwServeApi {
   }
 
   /**
-  The response body, or `undefined` when the call failed or outlived `CALL_TIMEOUT_MS`.
+  The response body, or `vault_unavailable` when the call failed or outlived `CALL_TIMEOUT_MS`.
   */
-  async #send(endpoint: string, request: ApiRequest<unknown>): Promise<string | undefined> {
+  async #send(endpoint: string, request: ApiRequest<unknown>): Promise<Result<string, VaultError>> {
     const headers: Record<string, string> = { accept: 'application/json' };
     const controller = new AbortController();
     const init: RequestInit = { method: request.method, headers, signal: controller.signal };
@@ -106,9 +113,13 @@ export class BwServeApi {
     });
     try {
       const response = await this.#fetch(`${endpoint}${request.path}`, init);
-      return await response.text();
+      return ok(await response.text());
     } catch {
-      return undefined;
+      return fail(
+        controller.signal.aborted
+          ? new VaultError('vault_unavailable', TIMED_OUT_MESSAGE)
+          : vaultError('vault_unavailable'),
+      );
     } finally {
       deadline.cancel();
     }
@@ -120,10 +131,10 @@ export class BwServeApi {
       return fail(vaultError('vault_unavailable'));
     }
     const body = await this.#send(endpoint, request);
-    if (body === undefined) {
-      return fail(vaultError('vault_unavailable'));
+    if (!body.ok) {
+      return body;
     }
-    const envelope = envelopeSchema.safeParse(parseJson(body));
+    const envelope = envelopeSchema.safeParse(parseJson(body.value));
     if (!envelope.success) {
       return fail(vaultError('vault_protocol_error'));
     }

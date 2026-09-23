@@ -19,13 +19,22 @@ import {
 } from '../test-support/integration-environment.ts';
 import { unwrapOk } from '../test-support/result.ts';
 
+import { CALL_TIMEOUT_MS } from './api.ts';
 import { systemClock } from './clock.ts';
 import { startVaultSupervisor } from './index.ts';
 import { BwCli, spawnChild } from './serve-process.ts';
 
 import type { VaultSupervisor } from './supervisor.ts';
 
-const READY_TIMEOUT_MS = 90_000;
+/**
+ * How long `beforeAll` waits for readiness. A first attempt can spend
+ * `CALL_TIMEOUT_MS` on `/unlock` alone (VAULT-16) before the restart loop
+ * stops the child and starts the same generation again a second later
+ * (VAULT-6), and each one-shot CLI command costs a few seconds, so the
+ * deadline covers one such failed attempt and a clean second one. The
+ * integration project's `hookTimeout` in `vitest.config.ts` sits above it.
+ */
+const READY_TIMEOUT_MS = 2 * CALL_TIMEOUT_MS + 30_000;
 const POLL_MS = 500;
 
 const configured = readIntegrationEnvironment();
@@ -52,13 +61,24 @@ function start(integration: IntegrationEnvironment): Running {
     }),
   ).config;
   const environment = { PATH: integration.path, HOME: integration.home };
-  const supervisor = startVaultSupervisor(config, createLogger('warn'), { environment });
+  // `info` so a run shows when the CLI logged in, synced and became ready;
+  // none of those lines carries a secret (VAULT-14, VAULT-15).
+  const supervisor = startVaultSupervisor(config, createLogger('info'), { environment });
   return { integration, dataDirectory, environment, supervisor };
 }
 
+/**
+Polls `isReady()` on the real clock; the hook fails with the reason rather than letting the first test find `false`.
+*/
 async function untilReady(supervisor: VaultSupervisor): Promise<void> {
-  const deadline = Date.now() + READY_TIMEOUT_MS;
-  while (!supervisor.isReady() && Date.now() < deadline) {
+  const startedAt = Date.now();
+  while (!supervisor.isReady()) {
+    if (Date.now() - startedAt >= READY_TIMEOUT_MS) {
+      throw new Error(
+        `the vault backend was not ready within ${READY_TIMEOUT_MS} ms; ` +
+          'each failed start is a "vault backend start failed" line above',
+      );
+    }
     await wait(POLL_MS);
   }
 }

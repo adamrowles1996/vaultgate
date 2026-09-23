@@ -5,7 +5,13 @@ import { ManualClock } from '../test-support/manual-clock.ts';
 import { unwrapFail, unwrapOk } from '../test-support/result.ts';
 import { VaultError } from '../vault/client.ts';
 
-import { BwServeApi, CALL_TIMEOUT_MS, type FetchFunction, vaultError } from './api.ts';
+import {
+  BwServeApi,
+  CALL_TIMEOUT_MS,
+  type FetchFunction,
+  TIMED_OUT_MESSAGE,
+  vaultError,
+} from './api.ts';
 
 const ENDPOINT = 'http://127.0.0.1:4242';
 const schema = z.object({ value: z.number() });
@@ -86,7 +92,9 @@ describe('BwServeApi', () => {
     expect(signals[0]?.aborted).toBe(false);
     await clock.advance(1);
     expect(signals[0]?.aborted).toBe(true);
-    expect(unwrapFail(await pending).code).toBe('vault_unavailable');
+    const error = unwrapFail(await pending);
+    expect(error.code).toBe('vault_unavailable');
+    expect(error.message).toBe(TIMED_OUT_MESSAGE);
     expect(clock.pending()).toBe(0);
   });
 
@@ -107,6 +115,7 @@ describe('BwServeApi', () => {
     const { api } = respondingWith(new Error('ECONNREFUSED 127.0.0.1:4242 /var/lib/vaultgate'));
     const error = unwrapFail(await api.call({ method: 'GET', path: '/status', schema }));
     expect(error.code).toBe('vault_unavailable');
+    expect(error.message).toBe('the vault is locked or not reachable');
     expect(error.message).not.toContain('ECONNREFUSED');
     expect(error.message).not.toContain('/var/lib');
   });
