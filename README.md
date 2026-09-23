@@ -41,7 +41,10 @@ What the design gives you beyond the table:
   scoped, revocable tokens.
 - **One door for secrets.** A single tool returns secret values, one field of one item per call,
   behind its own scope, with every call audited. Every other tool returns metadata.
-- **No remote code execution.** There is no "run this command" tool. Ever.
+- **No remote code execution.** There is no "run this command" tool. A planned, off-by-default
+  actions layer ([ADR 0007](docs/adr/0007-typed-actions-with-operator-policy.md),
+  [spec 13](docs/spec/13-actions.md)) will let an agent use a credential against a target you
+  define, under your allowlist, without ever seeing it; nothing runs on the vaultgate host.
 - **Standards as written.** OAuth 2.1, PKCE, RFC 9728 / 8414 / 8707 / 7591 /
   7009 / 9207 and Client ID Metadata Documents, per the MCP authorization
   specification (2026-07-28).

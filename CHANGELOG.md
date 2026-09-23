@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Docs
+
+- ADR 0007 and spec sections 13 (Actions) and 14 (Action connectors) specify a planned,
+  off-by-default actions layer: operator-defined targets, six `actions:*` scopes, typed tools
+  (`http_request` with a Microsoft Graph adapter, `sql_query`/`sql_execute`, `ssh_run`,
+  `winrm_run`, `browser_*` over a Chromium sidecar), operator allowlist policy, MCP tool
+  annotations, per-call confirmation through MCP elicitation, scrubbing of every injected value,
+  `action_*` tables and audit. ADR 0004 is marked amended by 0007; the threat model gains
+  T24…T34 and the residual risks of the layer; `PLAN.md` gains M9…M15 with exit criteria; the
+  tools guide, README and section 01 principle 3 note the layer as planned. No code changes.
+
 ### Fixed
 
 - VAULT-16: a `bw serve` call that vaultgate aborted at the 60 s bound carried the same message

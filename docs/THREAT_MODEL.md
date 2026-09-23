@@ -12,6 +12,16 @@
 | Audit log                               | Forensic integrity.                                                                                                                                                                                   |
 | Vault contents in transit               | Leak to an agent beyond its scope.                                                                                                                                                                    |
 
+Planned with the actions layer (spec 13, 14; ADR 0007):
+
+| Asset                                           | Impact if compromised                                                                                                                                                   |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Action targets (destinations, policies, grants) | A permissive target is a standing capability: whoever can use it can do what its policy allows at its destination. Operator-only, re-auth gated, audited (ACT-2, 5, 7). |
+| Injected values in flight                       | The credential of one call, in vaultgate memory and the connector transport. Never returned, scrubbed everywhere, zeroed after the call (ACT-50…53).                    |
+| Graph access and refresh tokens                 | Access to the tenant's Graph scope. In memory only, cached per target revision; the refresh token lives in the vault (ACT-82, 83).                                      |
+| Browser sessions (signed-in Chromium contexts)  | Anything the logged-in user can do on the allowed origins for the session's lifetime. Bound to one client, TTL-bounded, closed on every revocation path (ACT-96).       |
+| Destination data returned to agents             | Query results, page content and command output. Leaving the destination is the feature; caps and audit bound it (ACT-52, 60).                                           |
+
 ## Trust boundaries
 
 1. Internet ↔ reverse proxy / ingress (TLS terminates here).
@@ -21,6 +31,10 @@
 5. vaultgate ↔ SQLite file and `bw` app-data on disk.
 6. Operator's browser ↔ vaultgate (cookie session).
 7. Agent ↔ vaultgate (bearer token).
+8. Planned: vaultgate ↔ action destinations (HTTPS, TLS to databases, SSH, WS-Management; pinned
+   addresses, the operator's allowlists).
+9. Planned: vaultgate ↔ browser sidecar (CDP on an internal network) and sidecar ↔ websites
+   (the sidecar resolves names itself; origin confinement and network placement are the controls).
 
 ## Attackers
 
@@ -31,6 +45,14 @@
 | **Phishing operator**              | Tricks the operator into approving a consent for an attacker-controlled client.                    |
 | **Host-local attacker**            | Reads files or connects to loopback ports on the host. Out of scope beyond documented mitigations. |
 | **Malicious dependency**           | Supply-chain compromise of an npm package or GitHub Action.                                        |
+
+Planned with the actions layer:
+
+| Attacker                              | Capabilities                                                                                                                                                            |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Prompt-injected agent with grants** | A granted agent steered by content it read (a web page, a ticket, a query result) into using a target for the attacker's ends. Holds every capability the grant allows. |
+| **Hostile destination**               | A site, API or host the operator configured that has since been compromised: returns content crafted to inject the agent, echoes credentials, or attacks the browser.   |
+| **Compromised operator session**      | Holds an operator cookie (not the password) and tries to create or widen a target.                                                                                      |
 
 ## Threats and mitigations
 
@@ -51,7 +73,7 @@
 | T13 | Secrets leaking through logs or errors                                          | Redaction backstop, error masking, canary tests, audit payloads secret-free (OPS-1, MCP-9, 13)                                                                                                               |
 | T14 | Agent exfiltrating the whole vault                                              | Search cap 50, secrets only via `get_secret` per field, per-token rate limit, full audit (MCP-5, 9, 13)                                                                                                      |
 | T15 | Prompt-injected agent writing malicious items                                   | `vault:write` off by default; no permanent delete; audit; operator revocation (OAUTH-16, MCP-15)                                                                                                             |
-| T16 | Remote code execution through a tool                                            | No such tool exists; `child_process` lint-confined; tool schemas closed (ARCH-2, MCP-9)                                                                                                                      |
+| T16 | Remote code execution through a tool                                            | No such tool exists; `child_process` lint-confined; tool schemas closed (ARCH-2, MCP-9). The planned actions layer executes only at operator-defined targets (T24…T31)                                       |
 | T17 | DNS rebinding to a loopback-bound dev instance                                  | Host and Origin validation on `/mcp` (MCP-3)                                                                                                                                                                 |
 | T18 | Host-local attacker reading the SQLite file                                     | Hashes/ciphertext only (STORE-4, STORE-9); file mode 0600; container read-only rootfs; the vault credentials need the key as well (see residual risks)                                                       |
 | T23 | Operator-page change of the vault connection to an attacker's account or server | Re-authentication (ID-15), same-origin and synchroniser-token checks (ID-18), `https://` or `bitwarden.eu` only, audit event per attempt (ID-25); the old session is retired, never left logged in (VAULT-8) |
@@ -59,6 +81,22 @@
 | T20 | Supply-chain compromise                                                         | Exact pins, lockfile, SHA-pinned actions, harden-runner, dependency review, CodeQL, Scorecard, signed images with SBOM and provenance (QG-4…10)                                                              |
 | T21 | Denial of service by bulk DCR, token or revocation requests                     | Per-IP limits and body caps (OAUTH-11, 28, 29, MCP-4); every limiter holds at most 10 000 keys                                                                                                               |
 | T22 | Stale CIMD document after a client rotates redirect URIs                        | Bounded cache TTL; forced refetch on redirect mismatch (OAUTH-10)                                                                                                                                            |
+
+Planned with the actions layer (spec 13, 14):
+
+| ID  | Threat                                                                                    | Mitigation (spec ids)                                                                                                                                                                                                                                                                                                                                                           |
+| --- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T24 | Prompt-injected agent using a granted target for the attacker                             | Layer and connectors off by default (ACT-14, 67); risky scopes, none implied (ACT-12, 13); per-client grants (ACT-9); read-only policies by default and method, path, statement, command and origin allowlists (ACT-34…40); write annotations so clients prompt (ACT-18); per-call elicitation on confirmed targets (ACT-41…49); every call audited with arguments (ACT-60, 61) |
+| T25 | Exfiltration of destination data through tool results                                     | Accepted: returning results is the feature. Output caps and truncation (ACT-52), row caps, per-target and per-client rate limits (ACT-59), audit of output size (ACT-60), operator review views (ACT-63)                                                                                                                                                                        |
+| T26 | Standing credentials on the host                                                          | Unchanged from T18/T19: targets hold vault item ids and field names only (ACT-64); the credential is fetched per call and zeroed (ACT-50); the vault stays the only secret store                                                                                                                                                                                                |
+| T27 | SSRF through an `http` target (redirects, DNS rebinding, reaching `bw serve` or metadata) | Path confined under `base_url` (ACT-20); redirects off by default, re-validated and origin-bound when on (ACT-22); one resolution, pinned connect (ACT-55); private ranges refused unless `internal`, loopback and link-local refused always (ACT-56); operator-typed destinations only (ACT-2)                                                                                 |
+| T28 | SQL injection or privilege escalation through `sql_execute`                               | Parameterised only, no interpolation path (ACT-23); single-statement, comment-aware classification with a deny keyword set (ACT-36…38); separate write scope and policy (ACT-12, 14.4); least-privilege login documented and read-only sessions where the engine allows (ACT-85); transaction per statement (ACT-25)                                                            |
+| T29 | Compromised operator session creating or widening a permissive target                     | Re-authentication within 5 minutes for every target write (ACT-5, ID-15); ID-18 checks; any-command needs a deployment switch (ACT-88); every change audited with field names (ACT-7); sessions and confirmations invalidated on edit (ACT-45, 96)                                                                                                                              |
+| T30 | Browser session walk-off: a granted session navigated or scripted to other origins        | Top-level navigation intercepted and confined to the exact origin list (ACT-98); pop-ups closed, downloads disabled, permissions denied; IP-literal private sub-resources aborted; sidecar on an internal network with no private routes (ACT-92, 98); session bound to one client and target, TTL-bounded, closed on edit (ACT-96, 97)                                         |
+| T31 | Secrets leaking through snapshots or screenshots                                          | Password inputs never rendered with a value (ACT-31, 100); session scrub list with the password and TOTP code (ACT-95); DOM masking before capture, refusal when masking cannot be applied (ACT-100); screenshots off by default (14.7); canary suite over snapshots and pre-capture DOM (ACT-53, 102); nothing stored (ACT-60)                                                 |
+| T32 | "Anything the logged-in user can do": a browser grant is a shell-equivalent trust         | Stated as such at consent (ACT-13) and in the guides; `act` operations opt-in per target, elicitation per click or typed text on confirmed targets (ACT-40, 41); one session per client by default, 15 min idle, 1 h absolute (ACT-96); login performed by vaultgate, never by the agent, credential typed only into the item's own site (ACT-94)                               |
+| T33 | Hostile destination attacking the connector (Chromium exploit, malformed protocol data)   | Browser in a sidecar with dropped capabilities, seccomp, read-only rootfs, memory and pid limits, no published port, and nothing else on its network (ACT-91, 92); zod-validated protocol responses in every connector; per-call connections and timeouts (ACT-58, 59)                                                                                                          |
+| T34 | Hostile destination echoing an injected value back to the agent                           | Scrubbing of every value and encoded variant in every output, header, error detail and elicitation message, with a guard band at the cap (ACT-51, 52); canary contract tests per connector (ACT-53)                                                                                                                                                                             |
 
 ## Residual risks (accepted, documented)
 
@@ -74,3 +112,26 @@
   are the controls. Running vaultgate with `--network host` in Docker is unsupported.
 - A hosted agent product's own token storage is outside this model; short access-token TTL and
   revocation limit the blast radius.
+
+Planned with the actions layer:
+
+- A granted target is a decision: vaultgate enforces the operator's policy, not the operator's
+  judgement. A write target with `confirm_writes: false`, an any-command target, or a browser
+  target with `act` and no confirmation is a standing delegation to whichever client holds the
+  grant, and a prompt-injected agent will use it as the attacker directs. The controls make the
+  delegation narrow, visible and reviewable; they do not make it safe.
+- Data an agent legitimately reads leaves the destination and enters the agent's context, logs
+  and, for hosted agents, the vendor's infrastructure. Caps bound the volume, not the sensitivity.
+- The scrubber matches the values vaultgate injected and their encodings; a destination that
+  transforms a credential in a way the scrubber does not model (a hash, a cipher, an
+  application-specific encoding) could echo the transformed form. The canary suite covers the
+  documented variants only.
+- The browser sidecar sees the typed password and TOTP code and holds the signed-in cookies for
+  the session's lifetime; a Chromium compromise by a hostile page inside an allowed origin could
+  read them. The sidecar's isolation and the per-session context bound this to the session's
+  origins and lifetime, and the core image never shares that surface.
+- Chromium resolves names itself, so a name inside an allowed origin's page that rebinds to a
+  private address is not caught by vaultgate; the sidecar's network placement is the control, and
+  an operator who widens that network has removed it.
+- SQL statement classification is defence in depth, not a parser for every dialect; the
+  least-privilege login it sits behind is the control the guide insists on.
