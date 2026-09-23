@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.8] - 2026-09-24
+
 ### Added
 
 - `sql` connector runtime and `sql_query` (spec 14 §14.4 and spec 13 §13.6.4, M11 first pull
@@ -601,7 +603,8 @@ field `display_name` is gone; send `email` instead.
   over a read-only store, with a CI smoke step (`scripts/cli-smoke.sh`) that exports an empty
   store from both the build and the source.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.7...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.8...HEAD
+[0.1.0-rc.8]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.7...v0.1.0-rc.8
 [0.1.0-rc.7]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.6...v0.1.0-rc.7
 [0.1.0-rc.6]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.5...v0.1.0-rc.6
 [0.1.0-rc.5]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.4...v0.1.0-rc.5
