@@ -54,6 +54,7 @@ export interface TestConfigOverrides {
   readonly VAULTGATE_ENABLE_WRITE_SCOPE?: string;
   readonly VAULTGATE_ALLOWED_ORIGINS?: string;
   readonly VAULTGATE_TRUST_PROXY?: string;
+  readonly VAULTGATE_TRUSTED_PROXY_HOPS?: string;
   readonly VAULTGATE_PUBLIC_URL?: string;
 }
 

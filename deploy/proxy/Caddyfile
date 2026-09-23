@@ -11,6 +11,10 @@
   encode zstd gzip
 
   reverse_proxy vaultgate:8080 {
+    # X-Forwarded-For is the address Caddy accepted the connection from, never
+    # a value the client sent (OPS-6). Caddy drops X-Forwarded-* from untrusted
+    # clients anyway; this makes the overwrite explicit.
+    header_up X-Forwarded-For {remote_host}
     # Never buffer: /mcp may stream server-sent events for a long time.
     flush_interval -1
   }

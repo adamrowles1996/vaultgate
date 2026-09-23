@@ -73,6 +73,7 @@ export interface AuthorizationServer {
  */
 const LIMITS = {
   token: { limit: 60, windowMs: MINUTE_MS },
+  revoke: { limit: 60, windowMs: MINUTE_MS },
   register: { limit: 10, windowMs: HOUR_MS },
   authorize: { limit: 30, windowMs: MINUTE_MS },
   cimd: { limit: 30, windowMs: MINUTE_MS },
@@ -146,7 +147,10 @@ export function createAuthorizationServer(
       ...shared,
       rateLimiter: createRateLimiter({ ...LIMITS.token, now }),
     }),
-    revoke: createRevokeHandler(shared),
+    revoke: createRevokeHandler({
+      ...shared,
+      rateLimiter: createRateLimiter({ ...LIMITS.revoke, now }),
+    }),
     authorize: createAuthorizeHandler(authorize),
     consentPage: createConsentPageHandler(authorize),
     consentDecision: createConsentDecisionHandler(authorize),

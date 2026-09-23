@@ -18,7 +18,7 @@ Every start follows the same order (spec §2.3.3):
    With credentials it checks `bw --version`, logs in with the API key if the CLI is not yet
    logged in, starts `bw serve` on a loopback port, unlocks it with the master password and runs a
    first sync; this takes a few seconds to a minute. Without any, it waits for the account page
-   (step 6 below) and `/readyz` says `configured: false`.
+   (step 6 below), whose Vault connection section says so.
 5. Listen on `VAULTGATE_HOST:VAULTGATE_PORT`. The listener comes up before the vault is ready;
    `/readyz` reports the difference.
 
@@ -172,21 +172,23 @@ subdirectory per credential generation. It is rebuilt by login and sync and need
 
 Two unauthenticated probes, neither revealing a version or configuration:
 
-| Probe      | Answer                                                                                                                                                                           |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/healthz` | `{"status":"ok"}` as soon as the process listens. Container health checks use it.                                                                                                |
-| `/readyz`  | `{"status":"ok","vault":{"ready":true,"configured":true,"lastSyncAt":"…"}}` when everything is ready; otherwise `503` with `{"status":"unavailable","failing":[…],"vault":{…}}`. |
+| Probe      | Answer                                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------------- |
+| `/healthz` | `{"status":"ok"}` as soon as the process listens. Container health checks use it.                          |
+| `/readyz`  | `{"status":"ok"}` when everything is ready; otherwise `503` with `{"status":"unavailable","failing":[…]}`. |
 
 `failing` names the components that are not ready:
 
 - `store`: the database is not open. This does not happen after a successful start; if you see
   it, read the log for a migration or filesystem error.
 - `vault`: `bw serve` is not running and unlocked. Normal for the first seconds after start;
-  persistent when something is wrong, or, with `vault.configured` `false`, simply not connected
-  yet (section 6).
+  persistent when something is wrong, or simply not connected yet (section 6).
 
-`vault.lastSyncAt` is the time of the last successful sync since start-up, or `null` before the
-first one; a failed sync does not change `ready`.
+The vault detail is not public. With your operator session cookie (a browser that is signed in,
+or `curl -b` with it) `/readyz` also carries `vault`: `configured` is `false` while nothing is
+connected, and `lastSyncAt` is the time of the last successful sync since start-up, or `null`
+before the first one; a failed sync does not change `ready`. The account page's Vault connection
+section shows the same.
 
 While `vault` is failing, MCP tool calls return the error code `vault_unavailable` rather than a
 result. The vault does not need to be ready for the setup, login and account pages.

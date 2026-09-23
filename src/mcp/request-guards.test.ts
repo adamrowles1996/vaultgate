@@ -88,12 +88,28 @@ describe('request guards', () => {
     expect(resolveSourceIp(requestWith({}), undefined, config)).toBe('unknown');
   });
 
-  it('OPS-6 honours the first X-Forwarded-For entry only behind a trusted proxy', () => {
+  it('OPS-6 honours the X-Forwarded-For entry the trusted proxy wrote, never one the client wrote', () => {
     const config = testConfig({ VAULTGATE_TRUST_PROXY: 'true' });
     const bindings = { incoming: { socket: { remoteAddress: '10.0.0.7' } } };
     expect(
-      resolveSourceIp(requestWith({ 'x-forwarded-for': '1.2.3.4, 10.0.0.1' }), bindings, config),
+      resolveSourceIp(requestWith({ 'x-forwarded-for': '6.6.6.6, 1.2.3.4' }), bindings, config),
     ).toBe('1.2.3.4');
     expect(resolveSourceIp(requestWith({}), bindings, config)).toBe('10.0.0.7');
+    expect(resolveSourceIp(requestWith({ 'x-forwarded-for': 'not-an-ip' }), bindings, config)).toBe(
+      '10.0.0.7',
+    );
+    expect(
+      resolveSourceIp(requestWith({ 'x-forwarded-for': 'not-an-ip' }), undefined, config),
+    ).toBe('unknown');
+  });
+
+  it('OPS-6 counts VAULTGATE_TRUSTED_PROXY_HOPS entries from the right', () => {
+    const config = testConfig({ VAULTGATE_TRUST_PROXY: 'true', VAULTGATE_TRUSTED_PROXY_HOPS: '2' });
+    const bindings = { incoming: { socket: { remoteAddress: '10.0.0.7' } } };
+    const request = requestWith({ 'x-forwarded-for': '6.6.6.6, 1.2.3.4, 192.0.2.10' });
+    expect(resolveSourceIp(request, bindings, config)).toBe('1.2.3.4');
+    expect(resolveSourceIp(requestWith({ 'x-forwarded-for': '1.2.3.4' }), bindings, config)).toBe(
+      '10.0.0.7',
+    );
   });
 });

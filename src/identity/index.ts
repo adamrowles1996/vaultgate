@@ -27,7 +27,10 @@ import type { DatabaseSync } from 'node:sqlite';
 export type { IdentityVariables } from './context.ts';
 export type { ConnectedClientsRenderer } from './services.ts';
 export { CURRENT_PARAMETERS } from './password.ts';
-type IdentityConfig = Pick<Config, 'publicUrl' | 'trustProxy' | 'sessionTtlMs' | 'secrets'>;
+type IdentityConfig = Pick<
+  Config,
+  'publicUrl' | 'trustProxy' | 'trustedProxyHops' | 'sessionTtlMs' | 'secrets'
+>;
 
 export interface IdentityDependencies {
   readonly config: IdentityConfig;
@@ -68,6 +71,15 @@ export interface Identity {
   readonly guards: Guards;
 }
 
+function guardsFor(
+  config: IdentityConfig,
+  clientAddress: ClientAddressResolver,
+  audit: AuditSink,
+): Guards {
+  const { publicUrl, trustProxy, trustedProxyHops } = config;
+  return createGuards({ publicUrl, trustProxy, trustedProxyHops, clientAddress, audit });
+}
+
 /**
  * Wires spec 04 together over an open, migrated database. Entropy, the
  * clock, the backoff sleep and the socket-address lookup are injected so the
@@ -82,12 +94,7 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     );
   }
   const stores = createIdentityStores(database);
-  const guards = createGuards({
-    publicUrl: config.publicUrl,
-    trustProxy: config.trustProxy,
-    clientAddress,
-    audit,
-  });
+  const guards = guardsFor(config, clientAddress, audit);
   const bootstrap = createBootstrap({
     operators: stores.operators,
     bootstrapTokens: stores.bootstrapTokens,

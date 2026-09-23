@@ -41,6 +41,7 @@
 | Store                | SQLite connection, migrations, repositories, retention jobs                                          | `src/storage/`                   |
 | Audit                | Append-only audit events, export                                                                     | `src/audit/`                     |
 | Config and logging   | Environment validation, structured logs with redaction                                               | `src/config.ts`, `src/logger.ts` |
+| Network              | Proxy-aware client address, HTTPS transport pinned to a checked address                              | `src/net/`                       |
 
 ## 2.2 Module boundaries (enforced)
 
@@ -99,6 +100,7 @@ src/
   config.ts               environment schema → Config
   logger.ts               pino with redaction
   result.ts               Result<T, E>
+  net/                    client address behind a proxy, HTTPS transport pinned to a checked address
   http/                   app factory, middleware, error mapping, rate limiting
   oauth/                  metadata, clients (cimd, dcr, preregistered), authorize, token, revoke, scopes
   identity/               bootstrap, password (scrypt), totp, recovery codes, sessions, csrf, pages

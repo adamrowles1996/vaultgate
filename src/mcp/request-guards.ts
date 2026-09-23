@@ -4,9 +4,14 @@
  */
 import { z } from 'zod';
 
+import { resolveClientIp } from '../net/client-ip.ts';
+
 import type { Config } from '../config/index.ts';
 
-export type GuardConfig = Pick<Config, 'publicUrl' | 'allowedOrigins' | 'trustProxy'>;
+export type GuardConfig = Pick<
+  Config,
+  'publicUrl' | 'allowedOrigins' | 'trustProxy' | 'trustedProxyHops'
+>;
 
 export type GuardVerdict = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
@@ -52,15 +57,11 @@ const incomingSchema = z.object({ socket: socketSchema });
 const socketBindings = z.object({ incoming: incomingSchema });
 
 /**
-OPS-6: the socket address, or the first forwarded address only behind a trusted proxy.
+OPS-6: the socket address, or behind a trusted proxy the `X-Forwarded-For` entry it wrote.
 */
 export function resolveSourceIp(request: Request, bindings: unknown, config: GuardConfig): string {
-  const forwarded = config.trustProxy
-    ? firstForwarded(request.headers.get('x-forwarded-for'))
-    : undefined;
-  if (forwarded !== undefined) {
-    return forwarded;
-  }
   const parsed = socketBindings.safeParse(bindings);
-  return parsed.success ? parsed.data.incoming.socket.remoteAddress : 'unknown';
+  const socketAddress = parsed.success ? parsed.data.incoming.socket.remoteAddress : undefined;
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  return resolveClientIp({ forwardedFor, socketAddress }, config) ?? 'unknown';
 }

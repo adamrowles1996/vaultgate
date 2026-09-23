@@ -1,5 +1,4 @@
 import { fail, ok, type Result } from '../result.ts';
-import { transaction } from '../storage/query.ts';
 
 import {
   auditPrefix,
@@ -11,42 +10,22 @@ import { OAuthError, respondRateLimited, respondWithOAuthError } from './errors.
 import { type FormFields, readForm, requireField } from './form.ts';
 import { canonicalResource } from './metadata.ts';
 import { isCodeVerifierFor } from './pkce.ts';
-import { enabledScopes, isScopeSubset, parseScopeParameter } from './scopes.ts';
-import { type IssuedPair, issueTokenPair, type TokenIssuerOptions } from './token-issuance.ts';
+import { type IssuedPair, issueTokenPair } from './token-issuance.ts';
+import { refresh } from './token-refresh.ts';
+import {
+  invalidGrant,
+  isConsentActive,
+  issuer,
+  type TokenEndpointDependencies,
+} from './token-shared.ts';
 
-import type { OAuthAuditAction, OAuthAuditSink } from './audit.ts';
-import type { RateLimiter } from './rate-limit.ts';
+import type { OAuthAuditAction } from './audit.ts';
 import type { AuthorizationCodeRecord } from './repositories/authorization-codes.ts';
-import type { OAuthRepos } from './repositories/index.ts';
-import type { TokenRecord } from './repositories/tokens.ts';
-import type { ClientIpResolver, OAuthHandler } from './request-context.ts';
+import type { OAuthHandler } from './request-context.ts';
+
+export type { TokenEndpointDependencies } from './token-shared.ts';
 
 const MAX_FORM_BYTES = 16 * 1024;
-
-export interface TokenEndpointDependencies extends Omit<TokenIssuerOptions, 'tokens'> {
-  readonly publicUrl: string;
-  readonly enableWriteScope: boolean;
-  readonly repos: OAuthRepos;
-  readonly audit: OAuthAuditSink;
-  /**
-  60 per minute per ip (OAUTH-28).
-  */
-  readonly rateLimiter: RateLimiter;
-  readonly clientIp: ClientIpResolver;
-}
-
-function invalidGrant(description: string): OAuthError {
-  return new OAuthError('invalid_grant', description);
-}
-
-function issuer(dependencies: TokenEndpointDependencies): TokenIssuerOptions {
-  return { ...dependencies, tokens: dependencies.repos.tokens };
-}
-
-function isConsentActive(dependencies: TokenEndpointDependencies, consentId: string): boolean {
-  const consent = dependencies.repos.consents.findById(consentId);
-  return consent !== undefined && consent.revokedAt === undefined;
-}
 
 interface CodeRequest {
   readonly code: string;
@@ -147,98 +126,6 @@ function redeemCode(
       refreshExpiresAt: undefined,
     }),
   );
-}
-
-function replayed(
-  dependencies: TokenEndpointDependencies,
-  record: TokenRecord,
-  presented: string,
-): OAuthError {
-  const revoked = dependencies.repos.tokens.revokeFamily(record.familyId, dependencies.now());
-  dependencies.audit.record({
-    category: 'oauth',
-    action: 'token_revoked',
-    outcome: 'ok',
-    clientId: record.clientId,
-    tokenPrefix: auditPrefix(presented),
-    details: { reason: 'refresh token replay', revoked },
-  });
-  return invalidGrant('the refresh token has already been used');
-}
-
-/**
- * A refresh token is unexpired and, when the client names itself, its own.
- */
-function isUsableBy(record: TokenRecord, clientId: string | undefined, at: number): boolean {
-  return record.expiresAt > at && (clientId === undefined || clientId === record.clientId);
-}
-
-function liveRefreshToken(
-  dependencies: TokenEndpointDependencies,
-  form: FormFields,
-): Result<TokenRecord, OAuthError> {
-  const presented = requireField(form, 'refresh_token');
-  if (!presented.ok) {
-    return presented;
-  }
-  const record = hasCredentialPrefix(presented.value, CREDENTIAL_PREFIX.refreshToken)
-    ? dependencies.repos.tokens.findByHash(hashCredential(presented.value))
-    : undefined;
-  if (record?.kind !== 'refresh' || record.revokedAt !== undefined) {
-    return fail(invalidGrant('the refresh token is invalid'));
-  }
-  if (record.replacedById !== undefined) {
-    return fail(replayed(dependencies, record, presented.value));
-  }
-  if (!isUsableBy(record, form.get('client_id'), dependencies.now())) {
-    return fail(invalidGrant('the refresh token is invalid'));
-  }
-  return isConsentActive(dependencies, record.consentId)
-    ? ok(record)
-    : fail(invalidGrant('consent has been revoked'));
-}
-
-/**
- * OAUTH-25: rotate within the family, never widen scope, revoke the family
- * on replay.
- */
-function refresh(
-  dependencies: TokenEndpointDependencies,
-  form: FormFields,
-): Result<IssuedPair, OAuthError> {
-  const live = liveRefreshToken(dependencies, form);
-  if (!live.ok) {
-    return live;
-  }
-  const record = live.value;
-  const resource = form.get('resource');
-  if (resource !== undefined && resource !== record.resource) {
-    return fail(new OAuthError('invalid_target', 'resource does not match the refresh token'));
-  }
-  const scopes = parseScopeParameter(form.get('scope'), enabledScopes(dependencies));
-  if (!scopes.ok) {
-    return fail(new OAuthError('invalid_scope', scopes.error.message));
-  }
-  const requested = form.has('scope') ? scopes.value : record.scopes;
-  if (!isScopeSubset(requested, record.scopes)) {
-    return fail(new OAuthError('invalid_scope', 'scope cannot be widened on refresh'));
-  }
-  return transaction(dependencies.repos.db, () => {
-    const pair = issueTokenPair(issuer(dependencies), {
-      clientId: record.clientId,
-      consentId: record.consentId,
-      familyId: record.familyId,
-      parentId: record.id,
-      scopes: requested,
-      resource: record.resource,
-      refreshExpiresAt: record.expiresAt,
-    });
-    if (!dependencies.repos.tokens.markReplaced(record.id, pair.refreshTokenId)) {
-      dependencies.repos.tokens.revokeFamily(record.familyId, dependencies.now());
-      return fail(invalidGrant('the refresh token has already been used'));
-    }
-    return ok(pair);
-  });
 }
 
 function grant(

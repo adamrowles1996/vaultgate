@@ -3,7 +3,13 @@ import { isIP } from 'node:net';
 import { fail, ok, type Result } from '../../result.ts';
 import { isPublicAddress } from '../ip-ranges.ts';
 
-export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
+import type { PinnedFetch } from '../../net/pinned-https.ts';
+
+/**
+ * The transport: connects to the address the fetcher validated, never to a
+ * fresh resolution of the host name. Injected (QG-2).
+ */
+export type FetchLike = PinnedFetch;
 
 /**
  * Resolves a host name to every address it maps to. Injected (QG-2).
@@ -55,15 +61,20 @@ async function resolveAll(hostname: string, lookup: Lookup): Promise<readonly st
 }
 
 /**
- * OAUTH-8: every address a host resolves to must be public before a
- * connection is attempted. A host with no addresses is rejected too.
+ * OAUTH-8 / T6: every address a host resolves to must be public before a
+ * connection is attempted, and the connection is then pinned to the first
+ * of them, so a name that changes its answer between the check and the
+ * connect (DNS rebinding) gains nothing. A host with no addresses is
+ * rejected too.
  */
-async function assertPublicHost(url: URL, lookup: Lookup): Promise<void> {
+async function pinnedAddress(url: URL, lookup: Lookup): Promise<string> {
   const literal = literalAddress(url.hostname);
   const addresses = isIP(literal) === 0 ? await resolveAll(url.hostname, lookup) : [literal];
-  if (addresses.length === 0 || addresses.some((address) => !isPublicAddress(address))) {
+  const [first] = addresses;
+  if (first === undefined || addresses.some((address) => !isPublicAddress(address))) {
     throw new SafeFetchError(`host "${url.hostname}" does not resolve to a public address`);
   }
+  return first;
 }
 
 async function readCapped(response: Response, maxBytes: number): Promise<string> {
@@ -87,12 +98,13 @@ async function readCapped(response: Response, maxBytes: number): Promise<string>
 }
 
 async function fetchOnce(url: URL, options: SafeFetchOptions): Promise<Response> {
-  await assertPublicHost(url, options.lookup);
+  const address = await pinnedAddress(url, options.lookup);
   try {
-    return await options.fetch(url.href, {
+    return await options.fetch({
+      url: url.href,
+      address,
       method: 'GET',
       headers: { Accept: 'application/json' },
-      redirect: 'manual',
       signal: AbortSignal.timeout(options.timeoutMs),
     });
   } catch (error) {
@@ -126,8 +138,8 @@ async function follow(url: URL, options: SafeFetchOptions): Promise<SafeFetchRes
 }
 
 /**
- * The SSRF-safe fetcher (OAUTH-8, T6): https only, every hop DNS-checked,
- * bounded redirects, timeout and body size.
+ * The SSRF-safe fetcher (OAUTH-8, T6): https only, every hop DNS-checked and
+ * connected to the checked address, bounded redirects, timeout and body size.
  */
 export async function safeFetch(
   text: string,

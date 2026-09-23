@@ -24,6 +24,7 @@ const SECRET_KEY = Buffer.alloc(32, 9);
 export interface HarnessOptions {
   readonly publicUrl?: string;
   readonly trustProxy?: boolean;
+  readonly trustedProxyHops?: number;
   readonly bootstrapToken?: string;
   /**
   The account page's connected-clients section, supplied by the OAuth harness.
@@ -65,6 +66,7 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     config: {
       publicUrl,
       trustProxy: options.trustProxy ?? false,
+      trustedProxyHops: options.trustedProxyHops ?? 1,
       sessionTtlMs: 12 * 3_600_000,
       secrets: {
         secretKey: SECRET_KEY,

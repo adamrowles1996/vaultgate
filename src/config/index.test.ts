@@ -34,6 +34,17 @@ function load(environment: Record<string, string | undefined>): ReturnType<typeo
 }
 
 describe('loadConfig', () => {
+  it('OPS-6 reads VAULTGATE_TRUSTED_PROXY_HOPS as an integer between 1 and 10', () => {
+    const { config } = unwrapOk(load({ ...REQUIRED, VAULTGATE_TRUSTED_PROXY_HOPS: '3' }));
+    expect(config.trustedProxyHops).toBe(3);
+    for (const value of ['0', '11', '1.5', 'two']) {
+      const error = unwrapFail(load({ ...REQUIRED, VAULTGATE_TRUSTED_PROXY_HOPS: value }));
+      expect(error.issues.map((issue) => issue.split(':', 1)[0])).toStrictEqual([
+        'VAULTGATE_TRUSTED_PROXY_HOPS',
+      ]);
+    }
+  });
+
   it('produces loopback-safe defaults from the required variables alone', () => {
     const { config, warnings } = unwrapOk(load(REQUIRED));
     expect(warnings).toStrictEqual([]);
@@ -42,6 +53,7 @@ describe('loadConfig', () => {
       host: '127.0.0.1',
       port: 8080,
       trustProxy: false,
+      trustedProxyHops: 1,
       allowedOrigins: [],
       dataDir: './data',
       enableWriteScope: false,
@@ -69,6 +81,7 @@ describe('loadConfig', () => {
         VAULTGATE_HOST: '0.0.0.0',
         VAULTGATE_PORT: '9443',
         VAULTGATE_TRUST_PROXY: 'true',
+        VAULTGATE_TRUSTED_PROXY_HOPS: '2',
         VAULTGATE_ALLOWED_ORIGINS: 'https://claude.ai, https://ide.example',
         VAULTGATE_DATA_DIR: '/var/lib/vaultgate',
         VAULTGATE_SECRET_KEY_FILE: '/run/secrets/key',
@@ -100,6 +113,7 @@ describe('loadConfig', () => {
       host: '0.0.0.0',
       port: 9443,
       trustProxy: true,
+      trustedProxyHops: 2,
       allowedOrigins: ['https://claude.ai', 'https://ide.example'],
       dataDir: '/var/lib/vaultgate',
       enableWriteScope: true,

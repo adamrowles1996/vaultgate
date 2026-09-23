@@ -234,7 +234,7 @@ describe('POST /mcp audit', () => {
       proxied.app,
       'list_folders',
       {},
-      { token, env: SOCKET, headers: { 'x-forwarded-for': '203.0.113.9, 10.0.0.1' } },
+      { token, env: SOCKET, headers: { 'x-forwarded-for': '10.0.0.1, 203.0.113.9' } },
     );
     expect(proxied.audit.events[0]?.ip).toBe('203.0.113.9');
   });

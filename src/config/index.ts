@@ -38,6 +38,10 @@ export interface Config {
   readonly host: string;
   readonly port: number;
   readonly trustProxy: boolean;
+  /**
+  Trusted proxies in front of the listener; meaningful only with `trustProxy`.
+  */
+  readonly trustedProxyHops: number;
   readonly allowedOrigins: readonly string[];
   readonly dataDir: string;
   readonly enableWriteScope: boolean;
@@ -80,6 +84,7 @@ function toConfig(data: ParsedEnvironment): Config {
     host: data.VAULTGATE_HOST,
     port: data.VAULTGATE_PORT,
     trustProxy: data.VAULTGATE_TRUST_PROXY,
+    trustedProxyHops: data.VAULTGATE_TRUSTED_PROXY_HOPS,
     allowedOrigins: data.VAULTGATE_ALLOWED_ORIGINS,
     dataDir: data.VAULTGATE_DATA_DIR,
     enableWriteScope: data.VAULTGATE_ENABLE_WRITE_SCOPE,

@@ -6,6 +6,36 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- OAUTH-8, T6: the CIMD fetcher no longer resolves a host name twice. It validates every
+  address the name maps to, then connects to that address through a `node:https` transport
+  (`src/net/pinned-https.ts`) whose `lookup` answers with the validated address only, so a name
+  that changes its answer between check and connect (DNS rebinding) gains nothing; the name still
+  selects the TLS server and the `Host` header, and every redirect hop is resolved and pinned
+  afresh. No dependency was added.
+- OPS-6: behind a trusted proxy the client address is the `X-Forwarded-For` entry
+  `VAULTGATE_TRUSTED_PROXY_HOPS` (new, default `1`, `1`–`10`) from the right, the one the proxy
+  wrote, instead of the leftmost entry, which any client could set. Everything to its left is
+  ignored, an entry that is not an IP literal falls back to the socket address, and both the
+  identity guards and `/mcp` share the one helper (`src/net/client-ip.ts`). The shipped Caddy and
+  nginx snippets overwrite the inbound header rather than appending to it.
+- §10.4: anonymous `/oauth/authorize` requests are rate limited by client address, not by the
+  client-chosen `vg_authz` cookie, so rotating the cookie no longer buys a fresh allowance; a
+  signed-in browser is still limited by its session. Every in-memory limiter now holds at most
+  10 000 keys, evicting the least recently used, and prunes a few cold entries per call instead
+  of scanning every entry.
+- OAUTH-29: `POST /oauth/revoke` is rate limited like the token endpoint (60 requests per IP per
+  minute, `429` with `Retry-After`).
+- OPS-4: `/readyz` no longer discloses whether vault credentials are configured or when the vault
+  last synced to anonymous callers. The public answer is `status` and `failing`; the `vault`
+  detail is included only when an operator session cookie accompanies the request, and the
+  account page shows the same.
+- OAUTH-25: `grant_type=refresh_token` requires `client_id` (OAuth 2.1 §3.2.2) and binds the
+  refresh token to it exactly as the code grant does; a missing `client_id` is
+  `invalid_request`, a different one `invalid_grant`. Previously an omitted `client_id` skipped
+  the binding check.
+
 ### Docs
 
 - `docs/reviews/`: the independent security review and code review of v0.1.0-rc.4, reproduced

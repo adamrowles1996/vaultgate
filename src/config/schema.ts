@@ -17,6 +17,8 @@ const MIN_PORT = 1;
 const MAX_PORT = 65_535;
 const DEFAULT_PORT = 8080;
 const MIN_BOOTSTRAP_TOKEN_LENGTH = 16;
+const MIN_PROXY_HOPS = 1;
+const MAX_PROXY_HOPS = 10;
 const MAX_AUDIT_RETENTION_DAYS = 3650;
 const DEFAULT_AUDIT_RETENTION_DAYS = 365;
 
@@ -29,6 +31,13 @@ export const environmentSchema = z.object({
   VAULTGATE_HOST: z.string().min(1).default('127.0.0.1'),
   VAULTGATE_PORT: z.coerce.number().int().min(MIN_PORT).max(MAX_PORT).default(DEFAULT_PORT),
   VAULTGATE_TRUST_PROXY: booleanSchema('false'),
+  // Which X-Forwarded-For entry is the client, counted from the right (OPS-6).
+  VAULTGATE_TRUSTED_PROXY_HOPS: z.coerce
+    .number()
+    .int()
+    .min(MIN_PROXY_HOPS)
+    .max(MAX_PROXY_HOPS)
+    .default(MIN_PROXY_HOPS),
   VAULTGATE_ALLOWED_ORIGINS: originListSchema,
   VAULTGATE_DATA_DIR: z.string().min(1).default('./data'),
   VAULTGATE_SECRET_KEY: secretKeySchema,

@@ -55,7 +55,10 @@ Three mechanisms, resolved in this order when a `client_id` is presented:
   loopback port exception, which is applied only to loopback literals).
 - **OAUTH-8** CIMD fetches MUST use the SSRF-safe fetcher: `https` only, DNS resolved and checked
   against private/link-local/loopback/multicast ranges before connecting and after each redirect,
-  at most 2 redirects, 4 s timeout, 64 KiB body cap, `Accept: application/json`.
+  with the connection pinned to the validated address (the transport never resolves the name
+  again, so a name that changes its answer between check and connect gains nothing; the name
+  still selects the TLS server and the `Host` header), at most 2 redirects, 4 s timeout, 64 KiB
+  body cap, `Accept: application/json`.
 - **OAUTH-9** A fetched CIMD MUST have `client_id` exactly equal to the URL, `client_name`,
   `redirect_uris` (non-empty, each passing OAUTH-6). Optional fields are validated when present and
   the document is otherwise passed through untouched.
@@ -110,6 +113,9 @@ Three mechanisms, resolved in this order when a `client_id` is presented:
   new access and refresh token are issued in the same family, `replaced_by` is recorded.
   Presenting an already-used refresh token revokes the whole family (RFC 9700 §4.14) and returns
   `invalid_grant`. Scopes cannot be widened on refresh; a narrower `scope` is honoured.
+  `client_id` is required (OAuth 2.1 §3.2.2: a public client always names itself) and MUST be
+  the client the token was issued to: a missing `client_id` is `invalid_request`, a different one
+  `invalid_grant`, exactly as on the code grant.
 - **OAUTH-26** The token response is `{access_token, token_type:"Bearer", expires_in, refresh_token,
 scope, resource}` with `Cache-Control: no-store`.
 - **OAUTH-27** Error responses follow RFC 6749 §5.2 (`invalid_request`, `invalid_client`,
@@ -123,7 +129,8 @@ scope, resource}` with `Cache-Control: no-store`.
 
 - **OAUTH-29** `POST /oauth/revoke` accepts `token` and optional `token_type_hint`, always answers
   `200 {}` (RFC 7009 §2.2), and revokes: an access token (itself), a refresh token (its family and
-  all access tokens issued from it).
+  all access tokens issued from it). It is rate limited like the token endpoint (60 requests per
+  IP per minute, `429` with `Retry-After`).
 - **OAUTH-30** The operator's account page lists connected clients with last-used time and can
   revoke a client's consent (`POST /oauth/consents/<id>/revoke`, guarded like every account
   action), which revokes all of its tokens.

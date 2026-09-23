@@ -20,6 +20,7 @@ import {
 } from './identity/index.ts';
 import { EMPTY } from './identity/pages/template.ts';
 import { createLogger } from './logger.ts';
+import { createPinnedHttpsFetch } from './net/pinned-https.ts';
 import { createAuthorizationServer } from './oauth/server.ts';
 import { openStore } from './storage/index.ts';
 
@@ -103,7 +104,7 @@ const oauth = createAuthorizationServer({
   guards: identity.guards,
   audit: auditSink, // -- audit --
   logger,
-  fetch: (url, init) => fetch(url, init),
+  fetch: createPinnedHttpsFetch(), // -- OAUTH-8: pinned to the checked address --
   lookup: async (hostname) => {
     const entries = await lookup(hostname, { all: true });
     return entries.map((entry) => entry.address);
