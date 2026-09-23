@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.adamrowles1996/vaultgate",
+  "title": "vaultgate",
+  "description": "Self-hosted remote MCP server for Bitwarden and Vaultwarden with OAuth 2.1; agents hold tokens only",
+  "websiteUrl": "https://github.com/adamrowles1996/vaultgate#readme",
+  "repository": {
+    "url": "https://github.com/adamrowles1996/vaultgate",
+    "source": "github",
+    "id": "1381045619"
+  },
+  "version": "0.1.0-rc.3",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{host}/mcp",
+      "variables": {
+        "host": {
+          "description": "Hostname of your own vaultgate deployment, for example vaultgate.example.com. vaultgate is self-hosted: there is no shared public endpoint, and every operator's URL is different.",
+          "isRequired": true
+        }
+      }
+    }
+  ]
+}
