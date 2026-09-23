@@ -3,7 +3,7 @@
  * and §02.3.1. Parameter order is part of the contract because clients and
  * tests match on the literal string.
  */
-import type { Scope } from './scopes.ts';
+import type { Scope } from '../scopes/registry.ts';
 
 const DISCOVERY_SCOPE: Scope = 'vault:read';
 

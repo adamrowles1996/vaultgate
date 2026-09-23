@@ -5,12 +5,13 @@
  */
 import { type CallToolResult, McpServer } from '@modelcontextprotocol/server';
 
-import { type Scope, toolsAllowedBy } from './scopes.ts';
+import { toolsAllowedBy } from './scopes.ts';
 import { ALL_TOOLS } from './tools/index.ts';
 
 import type { AuditEvent, AuditSink } from '../audit/event.ts';
+import type { VerifiedToken } from '../auth/token-types.ts';
 import type { Result } from '../result.ts';
-import type { VerifiedToken } from './token-verifier.ts';
+import type { Scope } from '../scopes/registry.ts';
 import type { VaultClient } from '../vault/client.ts';
 import type { Tool, ToolFailure } from './tools/definition.ts';
 

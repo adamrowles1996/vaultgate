@@ -1,56 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { enabledScopes } from '../scopes/registry.ts';
 import { unwrapFail, unwrapOk } from '../test-support/result.ts';
 
-import {
-  DEFAULT_SCOPES,
-  enabledScopes,
-  formatScopes,
-  isScope,
-  isScopeSubset,
-  parseScopeParameter,
-  SCOPE_DEFINITIONS,
-  scopeDefinition,
-  SCOPES_SUPPORTED,
-} from './scopes.ts';
-
-describe('scope registry', () => {
-  it('OAUTH-1 OAUTH-2 lists the four scopes in the documented order', () => {
-    expect(SCOPES_SUPPORTED).toStrictEqual([
-      'vault:read',
-      'vault:reveal',
-      'vault:generate',
-      'vault:write',
-    ]);
-  });
-
-  it('OAUTH-4 never lists offline_access', () => {
-    expect(isScope('offline_access')).toBe(false);
-  });
-
-  it('OAUTH-36 marks vault:reveal and vault:write as risky with an explanation each', () => {
-    expect(
-      SCOPE_DEFINITIONS.filter((definition) => definition.risky).map((d) => d.scope),
-    ).toStrictEqual(['vault:reveal', 'vault:write']);
-    expect(SCOPE_DEFINITIONS.every((definition) => definition.explanation.length > 0)).toBe(true);
-    expect(scopeDefinition('vault:generate').risky).toBe(false);
-  });
-
-  it('throws for a scope outside the registry', () => {
-    expect(() => scopeDefinition('vault:admin' as never)).toThrow('not in the registry');
-  });
-});
-
-describe('enabledScopes', () => {
-  it('OAUTH-16 excludes vault:write unless the operator enabled it', () => {
-    expect(enabledScopes({ enableWriteScope: false })).toStrictEqual([
-      'vault:read',
-      'vault:reveal',
-      'vault:generate',
-    ]);
-    expect(enabledScopes({ enableWriteScope: true })).toStrictEqual(SCOPES_SUPPORTED);
-  });
-});
+import { DEFAULT_SCOPES, isScopeSubset, parseScopeParameter } from './scopes.ts';
 
 describe('parseScopeParameter', () => {
   const enabled = enabledScopes({ enableWriteScope: false });
@@ -84,11 +37,5 @@ describe('isScopeSubset', () => {
     expect(isScopeSubset(['vault:read'], ['vault:read', 'vault:reveal'])).toBe(true);
     expect(isScopeSubset(['vault:reveal'], ['vault:read'])).toBe(false);
     expect(isScopeSubset([], ['vault:read'])).toBe(true);
-  });
-});
-
-describe('formatScopes', () => {
-  it('joins with single spaces (RFC 6749 §3.3)', () => {
-    expect(formatScopes(['vault:read', 'vault:generate'])).toBe('vault:read vault:generate');
   });
 });

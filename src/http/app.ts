@@ -5,11 +5,11 @@ import { secureHeaders } from 'hono/secure-headers';
 import { createMetadataApp } from '../mcp/metadata.ts';
 import { createMcpRoutes } from '../mcp/routes.ts';
 
-import type { AuditSink } from '../audit/event.ts'; // -- audit --
+import type { AuditSink } from '../audit/event.ts';
+import type { TokenVerifier } from '../auth/token-types.ts';
 import type { Config } from '../config/index.ts';
 import type { Identity, IdentityVariables } from '../identity/index.ts';
 import type { Logger } from '../logger.ts';
-import type { TokenVerifier } from '../mcp/token-verifier.ts';
 import type { VaultClient } from '../vault/client.ts';
 
 interface AppEnvironment {
@@ -55,9 +55,10 @@ export interface AppDependencies {
   Injected clock for rate limits and audit timestamps; defaults to the wall clock.
   */
   readonly now?: () => number;
-  // -- oauth: the authorization server's routes (spec §03), mounted at the root
+  /**
+  The authorization server's routes (spec §03), mounted at the root when supplied.
+  */
   readonly oauth?: Hono<AppEnvironment> | undefined;
-  // -- end oauth ------------------------------------------------------------
 }
 
 /**
@@ -70,20 +71,19 @@ export function createApp(dependencies: AppDependencies): App {
   const app = new Hono<AppEnvironment>();
 
   app.use(requestId());
-  // -- identity: HSTS per ID-20 --
+  // HSTS per ID-20, only over https.
   app.use(
     secureHeaders({
       strictTransportSecurity: identity.cookiePolicy.isSecure && STRICT_TRANSPORT_SECURITY,
     }),
   );
-  // -- end identity --
 
   app.get('/healthz', (context) => context.json({ status: 'ok' }));
 
-  // -- identity: operator session, setup, login and account pages (spec §04) --
+  // The session middleware comes before every route that can see the operator:
+  // /readyz (vault detail is for a signed-in operator only, OPS-4), the
+  // operator pages (spec §04), consent and /mcp.
   app.use(identity.attachSession);
-  // -- storage / vault: readiness names what is not ready; the vault detail
-  // is for a signed-in operator only (OPS-4) ---------------------------------
   app.get('/readyz', (context) => {
     const { ready, failing, vault } = readiness();
     const detail = context.get('session') === undefined ? {} : { vault };
@@ -91,11 +91,9 @@ export function createApp(dependencies: AppDependencies): App {
       ? context.json({ status: 'ok', ...detail })
       : context.json({ status: 'unavailable', failing: [...failing], ...detail }, 503);
   });
-  // -- end storage / vault -----------------------------------------------------
   app.route('/', identity.routes);
-  // -- end identity --
 
-  // -- MCP resource server (spec §06) ------------------------------------
+  // The MCP resource server (spec §06): protected resource metadata and /mcp.
   app.route('/', createMetadataApp(config));
   app.route(
     '/',
@@ -108,17 +106,13 @@ export function createApp(dependencies: AppDependencies): App {
       now: dependencies.now ?? Date.now,
     }),
   );
-  // -- end MCP resource server --------------------------------------------
 
-  // -- oauth: after the session middleware, so consent sees the operator ----
   if (dependencies.oauth !== undefined) {
     app.route('/', dependencies.oauth);
   }
-  // -- end oauth ------------------------------------------------------------
 
-  // -- identity: JSON for API clients, a page under ID-19 for a browser (ID-24) --
+  // 404: JSON for API clients, a page under ID-19 for a browser (ID-24).
   app.notFound(identity.notFound);
-  // -- end identity --
   app.onError((error, context) => {
     logger.error({ err: error, requestId: context.get('requestId') }, 'unhandled request error');
     return context.json({ error: 'internal_error' }, 500);

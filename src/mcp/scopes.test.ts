@@ -1,15 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { SCOPES_SUPPORTED as OAUTH_SCOPES } from '../oauth/scopes.ts';
+import { enabledScopes, SCOPES } from '../scopes/registry.ts';
 
 import {
   effectiveScopes,
-  enabledScopes,
   isToolName,
   missingScopes,
   requiredScopes,
-  SCOPE_DEFINITIONS,
-  SCOPES,
   TOOL_NAMES,
   TOOL_SCOPES,
   toolsAllowedBy,
@@ -18,33 +15,6 @@ import {
 const byName = (a: string, b: string): number => a.localeCompare(b);
 
 describe('scopes', () => {
-  it('OAUTH-1 OAUTH-2 lists the scopes in the one order both metadata documents advertise', () => {
-    expect([...SCOPES]).toStrictEqual([
-      'vault:read',
-      'vault:reveal',
-      'vault:generate',
-      'vault:write',
-    ]);
-    expect([...OAUTH_SCOPES]).toStrictEqual([...SCOPES]);
-  });
-
-  it('OAUTH-36 defines every scope once with a description and marks reveal and write as risky', () => {
-    expect(SCOPE_DEFINITIONS.map((definition) => definition.scope)).toStrictEqual([...SCOPES]);
-    expect(
-      SCOPE_DEFINITIONS.filter((definition) => definition.risk).map((d) => d.scope),
-    ).toStrictEqual(['vault:reveal', 'vault:write']);
-    expect(SCOPE_DEFINITIONS.every((definition) => definition.description.length > 20)).toBe(true);
-  });
-
-  it('OAUTH-16 enables vault:write only when the operator opts in', () => {
-    expect(enabledScopes({ enableWriteScope: false })).toStrictEqual([
-      'vault:read',
-      'vault:reveal',
-      'vault:generate',
-    ]);
-    expect(enabledScopes({ enableWriteScope: true })).toStrictEqual([...SCOPES]);
-  });
-
   it('§6.2 maps every tool to exactly one scope', () => {
     expect(Object.keys(TOOL_SCOPES).toSorted(byName)).toStrictEqual(TOOL_NAMES.toSorted(byName));
     expect(isToolName('get_secret')).toBe(true);

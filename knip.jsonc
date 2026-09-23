@@ -1,7 +1,14 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["scripts/*.mjs", "src/cli.ts"],
-  "project": ["src/**/*.ts", "scripts/**/*.mjs"],
+  // `!` marks a production entry: `knip --production` (the second half of `npm run knip`)
+  // ignores tests and test-support, so an export that only a test consumes is reported.
+  // The default run passes --no-config-hints because it already finds src/main.ts through
+  // the `dev` script and would call the marker redundant; production mode needs it.
+  "entry": ["scripts/*.mjs", "src/cli.ts!", "src/main.ts!"],
+  "project": ["src/**/*.ts!", "!src/test-support/**", "scripts/**/*.mjs"],
+  // A module may export a symbol it also uses itself so a unit test can reach it directly;
+  // that is the unit-test surface, not dead code. An export nothing uses is still reported.
+  "ignoreExportsUsedInFile": true,
   // Non-npm linters installed by mise (.mise.toml), invoked from package.json scripts.
   "ignoreBinaries": [
     "actionlint",

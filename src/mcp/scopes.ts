@@ -1,51 +1,13 @@
 /**
- * Scope registry (spec §03.8) and the tool → scope map (spec §06.2).
+ * The tool → scope map (spec §06.2) over the registry in
+ * `src/scopes/registry.ts`.
  *
  * No scope implies another (OAUTH-36); a tool needs exactly the scopes
  * listed here, and `create_item`/`update_item` with an explicit password
  * additionally need `vault:reveal` because the agent is handling secret
  * material.
  */
-import type { Config } from '../config/index.ts';
-
-export const SCOPES = ['vault:read', 'vault:reveal', 'vault:generate', 'vault:write'] as const;
-
-export type Scope = (typeof SCOPES)[number];
-
-export interface ScopeDefinition {
-  readonly scope: Scope;
-  /**
-  One-line explanation shown on the consent page (OAUTH-36).
-  */
-  readonly description: string;
-  /**
-  Marked scopes get a prominent risk warning on the consent page (OAUTH-36).
-  */
-  readonly risk: boolean;
-}
-
-export const SCOPE_DEFINITIONS: readonly ScopeDefinition[] = [
-  {
-    scope: 'vault:read',
-    description: 'Search and list items, folders and collections; item summaries without secrets.',
-    risk: false,
-  },
-  {
-    scope: 'vault:reveal',
-    description: 'Reveal one secret field at a time: passwords, TOTP codes, notes, hidden fields.',
-    risk: true,
-  },
-  {
-    scope: 'vault:generate',
-    description: 'Generate random passwords and passphrases; nothing is stored.',
-    risk: false,
-  },
-  {
-    scope: 'vault:write',
-    description: 'Create, update and trash items; create folders.',
-    risk: true,
-  },
-];
+import type { Scope } from '../scopes/registry.ts';
 
 export const TOOL_NAMES = [
   'vault_status',
@@ -81,13 +43,6 @@ export const TOOL_SCOPES: Readonly<Record<ToolName, Scope>> = {
 
 export function isToolName(value: string): value is ToolName {
   return (TOOL_NAMES as readonly string[]).includes(value);
-}
-
-/**
-The scopes an operator has enabled: `vault:write` only by explicit opt-in (OAUTH-16).
-*/
-export function enabledScopes(config: Pick<Config, 'enableWriteScope'>): readonly Scope[] {
-  return SCOPES.filter((scope) => scope !== 'vault:write' || config.enableWriteScope);
 }
 
 function hasExplicitPassword(input: unknown): boolean {

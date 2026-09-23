@@ -24,7 +24,7 @@ NODE_MAJOR=26
 VERSION="${VAULTGATE_VERSION:-}"
 OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
 
-# Bitwarden CLI pin. Keep equal to the Dockerfile and src/bitwarden/versions.ts (COMPAT-1).
+# Bitwarden CLI pin. Keep equal to the Dockerfile; src/bitwarden/versions.test.ts checks it (COMPAT-1).
 # The release publishes no checksum file; these digests were computed from the assets.
 BW_VERSION="2026.9.0"
 BW_SHA256_AMD64="580c1deec8345b19dbac7f8b02babb6cc4fe250c69c567e29061f727f1e40768"

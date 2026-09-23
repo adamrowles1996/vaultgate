@@ -30,7 +30,7 @@
     "dev": "node --watch --env-file-if-exists=.env src/main.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "knip": "knip",
+    "knip": "knip --no-config-hints && knip --production",
     "lint": "npm run lint:code && npm run lint:workflows && npm run lint:shell && npm run lint:docker && npm run lint:markdown && npm run lint:spelling && npm run lint:dependencies && npm run lint:lockfile && npm run lint:manifest && npm run lint:editorconfig && npm run lint:secrets",
     "lint:code": "eslint . --max-warnings=0",
     "lint:code:fix": "eslint . --fix",

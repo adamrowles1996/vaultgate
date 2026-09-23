@@ -1,11 +1,10 @@
 /**
  * The bearer-token contract between the OAuth authorization server and the
- * MCP resource server (spec §03.7). The resource server only ever sees the
- * verified shape below; the store-backed verifier lives with the OAuth
- * module and this file ships a verifier that accepts nothing, used until it
- * is wired.
+ * MCP resource server (spec §03.7), held once below both features: the
+ * resource server only ever sees the verified shape, and the store-backed
+ * verifier that produces it lives with the OAuth module.
  */
-import { fail, type Result } from '../result.ts';
+import type { Result } from '../result.ts';
 
 export interface VerifiedToken {
   /**
@@ -41,19 +40,11 @@ export class TokenRejection extends Error {
   }
 }
 
-export interface TokenVerifier {
-  verify(token: string): Promise<Result<VerifiedToken, TokenRejection>>;
-}
+export type TokenVerification = Result<VerifiedToken, TokenRejection>;
 
-/**
- * Accepts no token at all. Wired in `main.ts` until the OAuth authorization
- * server provides the store-backed verifier, so a half-configured deployment
- * fails closed (OAUTH-34).
- */
-export class RejectAllTokenVerifier implements TokenVerifier {
-  verify(): Promise<Result<VerifiedToken, TokenRejection>> {
-    return Promise.resolve(
-      fail(new TokenRejection('unknown', 'no authorization server is configured')),
-    );
-  }
+export interface TokenVerifier {
+  /**
+  The store-backed verifier answers synchronously; a promise is accepted so a remote one can implement the same contract.
+  */
+  verify(token: string): TokenVerification | Promise<TokenVerification>;
 }

@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
 import { fail, ok, type Result } from '../result.ts';
+import { enabledScopes, type Scope } from '../scopes/registry.ts';
 
 import { OAuthError } from './errors.ts';
 import { readQuery, type FormFields } from './form.ts';
 import { canonicalResource } from './metadata.ts';
 import { CODE_CHALLENGE_METHOD, isValidCodeChallenge } from './pkce.ts';
 import { isRegisteredRedirect, redirectHost, validateRedirectUri } from './redirect-uri.ts';
-import { enabledScopes, parseScopeParameter, type Scope } from './scopes.ts';
+import { parseScopeParameter } from './scopes.ts';
 
 import type { ClientResolver, ResolvedClient } from './clients/resolve.ts';
 

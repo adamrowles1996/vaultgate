@@ -17,8 +17,8 @@ import { OAuthError } from './errors.ts';
 import { type FormFields, readForm, requireField } from './form.ts';
 
 import type { OAuthContext, OAuthHandler } from './request-context.ts';
-import type { Scope } from './scopes.ts';
 import type { SessionState } from '../identity/session-manager.ts';
+import type { Scope } from '../scopes/registry.ts';
 
 const MAX_FORM_BYTES = 16 * 1024;
 

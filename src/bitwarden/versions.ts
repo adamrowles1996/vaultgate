@@ -1,12 +1,12 @@
 /**
  * Bitwarden CLI version policy (VAULT-2, COMPAT-1).
  *
- * `PINNED_BW_VERSION` is the release baked into the container image and
- * fetched by `install.sh`; a test keeps the three in step. `MINIMUM_BW_VERSION`
- * is the oldest release whose `bw serve` API matches the schemas in
- * `types.ts`; anything older is refused at start-up.
+ * `MINIMUM_BW_VERSION` is the oldest release whose `bw serve` API matches
+ * the schemas in `types.ts`; anything older is refused at start-up. The
+ * release baked into the container image and fetched by `install.sh` is
+ * pinned in those two files; `versions.test.ts` keeps them equal and at or
+ * above the minimum.
  */
-export const PINNED_BW_VERSION = '2026.9.0';
 export const MINIMUM_BW_VERSION = '2025.1.0';
 
 export interface SemanticVersion {

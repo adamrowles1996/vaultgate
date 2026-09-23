@@ -21,11 +21,3 @@ export function isCommonPassword(text: string): boolean {
   holder.entries ??= load();
   return holder.entries.has(text.toLowerCase());
 }
-
-/**
-Number of bundled entries, exposed so a test can prove the archive decoded.
-*/
-export function commonPasswordCount(): number {
-  holder.entries ??= load();
-  return holder.entries.size;
-}

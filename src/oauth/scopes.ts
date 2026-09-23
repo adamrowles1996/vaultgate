@@ -1,73 +1,11 @@
-import { fail, ok, type Result } from '../result.ts';
-
-export type Scope = 'vault:read' | 'vault:reveal' | 'vault:generate' | 'vault:write';
-
-export interface ScopeDefinition {
-  readonly scope: Scope;
-  /**
-  One-line explanation shown on the consent page (OAUTH-36).
-  */
-  readonly explanation: string;
-  /**
-  Marked prominently on the consent page (OAUTH-36).
-  */
-  readonly risky: boolean;
-}
-
 /**
- * The registry, in the order the metadata documents list it (OAUTH-1,
- * OAUTH-2): the same order as `SCOPES` in `src/mcp/scopes.ts`, which the
- * layering rules keep this module from importing at runtime; the scope
- * tests hold the two in step. No scope implies another (OAUTH-36).
+ * The authorization server's view of the registry in `src/scopes/registry.ts`:
+ * parsing the RFC 6749 §3.3 `scope` parameter and comparing grants.
  */
-export const SCOPE_DEFINITIONS: readonly ScopeDefinition[] = [
-  {
-    scope: 'vault:read',
-    explanation:
-      'Search and list items, folders and collections; see item details without secrets.',
-    risky: false,
-  },
-  {
-    scope: 'vault:reveal',
-    explanation: 'Reveal passwords, TOTP codes, secure notes and hidden fields.',
-    risky: true,
-  },
-  {
-    scope: 'vault:generate',
-    explanation: 'Generate passwords and passphrases.',
-    risky: false,
-  },
-  {
-    scope: 'vault:write',
-    explanation: 'Create, update and trash items and folders.',
-    risky: true,
-  },
-];
-
-export const SCOPES_SUPPORTED: readonly Scope[] = SCOPE_DEFINITIONS.map(({ scope }) => scope);
+import { fail, ok, type Result } from '../result.ts';
+import { isScope, type Scope } from '../scopes/registry.ts';
 
 export const DEFAULT_SCOPES: readonly Scope[] = ['vault:read'];
-
-const SCOPE_SET: ReadonlySet<string> = new Set(SCOPES_SUPPORTED);
-
-export function isScope(text: string): text is Scope {
-  return SCOPE_SET.has(text);
-}
-
-export function scopeDefinition(scope: Scope): ScopeDefinition {
-  const definition = SCOPE_DEFINITIONS.find((candidate) => candidate.scope === scope);
-  if (definition === undefined) {
-    throw new Error(`scope "${scope}" is not in the registry`);
-  }
-  return definition;
-}
-
-/**
- * OAUTH-16: `vault:write` may be requested only when the operator enabled it.
- */
-export function enabledScopes(config: { readonly enableWriteScope: boolean }): readonly Scope[] {
-  return SCOPES_SUPPORTED.filter((scope) => scope !== 'vault:write' || config.enableWriteScope);
-}
 
 export class ScopeError extends Error {
   readonly scope: string;
@@ -105,8 +43,4 @@ export function parseScopeParameter(
 
 export function isScopeSubset(requested: readonly string[], granted: readonly string[]): boolean {
   return requested.every((scope) => granted.includes(scope));
-}
-
-export function formatScopes(scopes: readonly Scope[]): string {
-  return scopes.join(' ');
 }

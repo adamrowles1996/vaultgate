@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 
-import { TokenRejection, type TokenVerifier, type VerifiedToken } from '../mcp/token-verifier.ts';
-import { fail, ok, type Result } from '../result.ts';
+import {
+  TokenRejection,
+  type TokenVerification,
+  type TokenVerifier,
+  type VerifiedToken,
+} from '../auth/token-types.ts';
+import { fail, ok } from '../result.ts';
 
 export interface IssueOptions {
   readonly scopes: readonly string[];
@@ -37,7 +42,7 @@ export class InMemoryTokenVerifier implements TokenVerifier {
     this.#now = options.now;
   }
 
-  #verify(token: string): Result<VerifiedToken, TokenRejection> {
+  verify(token: string): TokenVerification {
     if (!token.startsWith('vg_at_')) {
       return fail(new TokenRejection('malformed', 'not a vaultgate access token'));
     }
@@ -73,9 +78,5 @@ export class InMemoryTokenVerifier implements TokenVerifier {
 
   revoke(token: string): void {
     this.#revoked.add(token);
-  }
-
-  verify(token: string): Promise<Result<VerifiedToken, TokenRejection>> {
-    return Promise.resolve(this.#verify(token));
   }
 }

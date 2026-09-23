@@ -1,16 +1,22 @@
 import { Hono } from 'hono';
 import { requestId } from 'hono/request-id';
 
-import { base32Decode } from '../identity/base32.ts';
-import { type ConnectedClientsRenderer, createIdentity, type Identity } from '../identity/index.ts';
+import {
+  type ConnectedClientsRenderer,
+  createGuards,
+  createIdentity,
+  type Guards,
+  type Identity,
+} from '../identity/index.ts';
 import { createIdentityStores, type IdentityStores } from '../identity/repositories/index.ts';
-import { totp } from '../identity/totp.ts';
 
+import { base32Decode } from './base32.ts';
 import { type Browser, createBrowser } from './browser.ts';
 import { openTestDatabase } from './database.ts';
 import { FakeVaultConnection } from './fake-vault-connection.ts';
 import { sequentialRandom } from './identity.ts';
 import { captureLogger } from './logging.ts';
+import { totp } from './totp.ts';
 
 import type { AuditEvent } from '../audit/event.ts';
 import type { IdentityEnvironment } from '../identity/browser.ts';
@@ -21,11 +27,44 @@ const PUBLIC_URL = 'https://vault.example.com';
 const FAST_SCRYPT = { cost: 2 ** 4, blockSize: 8, parallelism: 1 };
 const SECRET_KEY = Buffer.alloc(32, 9);
 
+export const CLIENT_IP = '203.0.113.7';
+
+export interface HarnessClock {
+  readonly now: () => number;
+  readonly advance: (ms: number) => void;
+}
+
+function settableClock(): HarnessClock {
+  let now = START;
+  return {
+    now: () => now,
+    advance: (ms) => {
+      now += ms;
+    },
+  };
+}
+
 export interface HarnessOptions {
   readonly publicUrl?: string;
   readonly trustProxy?: boolean;
   readonly trustedProxyHops?: number;
   readonly bootstrapToken?: string;
+  /**
+  An open, migrated database to share with another feature; a fresh in-memory one by default.
+  */
+  readonly database?: DatabaseSync;
+  /**
+  Where identity (and the guards) record audit events; a fresh list by default.
+  */
+  readonly audits?: AuditEvent[];
+  /**
+  ID-18 guards shared with the OAuth harness; built over `audits` by default.
+  */
+  readonly guards?: Guards;
+  /**
+  A clock shared with another feature; the harness's own settable clock by default.
+  */
+  readonly clock?: HarnessClock;
   /**
   The account page's connected-clients section, supplied by the OAuth harness.
   */
@@ -39,6 +78,7 @@ export interface HarnessOptions {
 export interface Harness {
   readonly app: Hono<IdentityEnvironment>;
   readonly identity: Identity;
+  readonly guards: Guards;
   readonly database: DatabaseSync;
   readonly stores: IdentityStores;
   readonly audits: AuditEvent[];
@@ -54,19 +94,36 @@ export interface Harness {
   readonly setupToken: () => string;
 }
 
+export function harnessGuards(
+  options: Pick<HarnessOptions, 'publicUrl' | 'trustProxy' | 'trustedProxyHops'>,
+  audits: AuditEvent[],
+): Guards {
+  return createGuards({
+    publicUrl: options.publicUrl ?? PUBLIC_URL,
+    trustProxy: options.trustProxy ?? false,
+    trustedProxyHops: options.trustedProxyHops ?? 1,
+    clientAddress: () => CLIENT_IP,
+    audit: {
+      record: (event) => {
+        audits.push(event);
+      },
+    },
+  });
+}
+
 export function createHarness(options: HarnessOptions = {}): Harness {
   const publicUrl = options.publicUrl ?? PUBLIC_URL;
-  const database = openTestDatabase();
+  const database = options.database ?? openTestDatabase();
   const { logger, lines } = captureLogger();
-  const audits: AuditEvent[] = [];
+  const audits = options.audits ?? [];
+  const guards = options.guards ?? harnessGuards(options, audits);
   const delays: number[] = [];
   const vault = options.vault ?? new FakeVaultConnection();
-  let now = START;
+  const clock = options.clock ?? settableClock();
   const identity = createIdentity({
     config: {
       publicUrl,
       trustProxy: options.trustProxy ?? false,
-      trustedProxyHops: options.trustedProxyHops ?? 1,
       sessionTtlMs: 12 * 3_600_000,
       secrets: {
         secretKey: SECRET_KEY,
@@ -83,12 +140,12 @@ export function createHarness(options: HarnessOptions = {}): Harness {
       },
     },
     random: sequentialRandom(),
-    clock: () => now,
+    clock: clock.now,
     delay: (ms) => {
       delays.push(ms);
       return Promise.resolve();
     },
-    clientAddress: () => '203.0.113.7',
+    guards,
     passwordParameters: FAST_SCRYPT,
     connectedClients: options.connectedClients,
     vaultConnection: vault,
@@ -100,16 +157,15 @@ export function createHarness(options: HarnessOptions = {}): Harness {
   return {
     app,
     identity,
+    guards,
     database,
     stores: createIdentityStores(database),
     audits,
     delays,
     vault,
     logged: lines,
-    now: () => now,
-    advance: (ms) => {
-      now += ms;
-    },
+    now: clock.now,
+    advance: clock.advance,
     browser: () => createBrowser(app, publicUrl),
     setupToken: () => {
       const line = lines().find((entry) => String(entry['msg']).includes('/setup?token='));

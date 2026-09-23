@@ -2,7 +2,6 @@ import { createSecretBox, STATE_COOKIE_INFO, TOTP_SECRET_INFO } from '../crypto/
 
 import { type Bootstrap, createBootstrap } from './bootstrap.ts';
 import { attachSession } from './browser.ts';
-import { createGuards, type Guards } from './guards.ts';
 import { createLoginThrottle } from './login-throttle.ts';
 import { notFound } from './not-found.ts';
 import { EMPTY } from './pages/template.ts';
@@ -13,7 +12,8 @@ import { createSessionManager } from './session-manager.ts';
 import { cookiePolicyFor, type CookiePolicy } from './sessions.ts';
 import { createStateCodec } from './state-cookie.ts';
 
-import type { ClientAddressResolver, IdentityEnvironment } from './context.ts';
+import type { IdentityEnvironment } from './context.ts';
+import type { Guards } from './guards.ts';
 import type { ScryptParameters } from './password.ts';
 import type { Clock, Delay, RandomSource } from './primitives.ts';
 import type { ConnectedClientsRenderer, IdentityServices } from './services.ts';
@@ -26,11 +26,10 @@ import type { DatabaseSync } from 'node:sqlite';
 
 export type { IdentityVariables } from './context.ts';
 export type { ConnectedClientsRenderer } from './services.ts';
+export { createGuards, type Guards } from './guards.ts';
 export { CURRENT_PARAMETERS } from './password.ts';
-type IdentityConfig = Pick<
-  Config,
-  'publicUrl' | 'trustProxy' | 'trustedProxyHops' | 'sessionTtlMs' | 'secrets'
->;
+
+type IdentityConfig = Pick<Config, 'publicUrl' | 'trustProxy' | 'sessionTtlMs' | 'secrets'>;
 
 export interface IdentityDependencies {
   readonly config: IdentityConfig;
@@ -40,10 +39,14 @@ export interface IdentityDependencies {
   readonly random: RandomSource;
   readonly clock: Clock;
   readonly delay: Delay;
-  readonly clientAddress: ClientAddressResolver;
+  /**
+  ID-18 origin and synchroniser-token checks, built by the composition layer (`createGuards`)
+  because the OAuth authorization server shares them.
+  */
+  readonly guards: Guards;
   readonly passwordParameters: ScryptParameters;
   /**
-  The account page's connected-clients section; empty until the OAuth layer supplies it.
+  The account page's connected-clients section, supplied by the OAuth layer; empty without one.
   */
   readonly connectedClients?: ConnectedClientsRenderer | undefined;
   /**
@@ -65,19 +68,6 @@ export interface Identity {
   readonly provider: IdentityProvider;
   readonly bootstrap: Bootstrap;
   readonly cookiePolicy: CookiePolicy;
-  /**
-  Origin and synchroniser-token checks for state-changing browser routes outside this module.
-  */
-  readonly guards: Guards;
-}
-
-function guardsFor(
-  config: IdentityConfig,
-  clientAddress: ClientAddressResolver,
-  audit: AuditSink,
-): Guards {
-  const { publicUrl, trustProxy, trustedProxyHops } = config;
-  return createGuards({ publicUrl, trustProxy, trustedProxyHops, clientAddress, audit });
 }
 
 /**
@@ -86,7 +76,7 @@ function guardsFor(
  * whole module is testable in-process (ADR 0006).
  */
 export function createIdentity(dependencies: IdentityDependencies): Identity {
-  const { config, database, logger, audit, random, clock, delay, clientAddress } = dependencies;
+  const { config, database, logger, audit, random, clock, delay, guards } = dependencies;
   const cookiePolicy = cookiePolicyFor(config.publicUrl);
   if (!cookiePolicy.isSecure) {
     logger.warn(
@@ -94,7 +84,6 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     );
   }
   const stores = createIdentityStores(database);
-  const guards = guardsFor(config, clientAddress, audit);
   const bootstrap = createBootstrap({
     operators: stores.operators,
     bootstrapTokens: stores.bootstrapTokens,
@@ -137,6 +126,5 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     provider: createLocalProvider(),
     bootstrap,
     cookiePolicy,
-    guards,
   };
 }

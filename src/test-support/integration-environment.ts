@@ -1,7 +1,8 @@
 /**
- * The only place the integration suite reads its environment. Every variable
- * is required: a missing one fails the run loudly rather than skipping it,
- * so a mis-configured job can never pass by doing nothing.
+ * The only place the integration suite reads its environment. With none of
+ * the `VAULTGATE_TEST_BW_*` credentials set the suite skips, so a bare
+ * `vitest run` still passes; a partial set is a mis-configured job and fails
+ * loudly rather than passing by doing nothing.
  */
 export interface IntegrationEnvironment {
   readonly path: string | undefined;
@@ -19,8 +20,14 @@ const REQUIRED = [
   'VAULTGATE_TEST_BW_PASSWORD',
 ] as const;
 
-export function readIntegrationEnvironment(): IntegrationEnvironment {
+/**
+`undefined` when no credential is set; throws when only some are.
+*/
+export function readIntegrationEnvironment(): IntegrationEnvironment | undefined {
   const missing = REQUIRED.filter((name) => (process.env[name] ?? '') === '');
+  if (missing.length === REQUIRED.length) {
+    return undefined;
+  }
   if (missing.length > 0) {
     throw new Error(`integration test needs ${missing.join(', ')}`);
   }

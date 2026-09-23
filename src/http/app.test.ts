@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { CONTENT_SECURITY_POLICY } from '../identity/browser.ts';
-import { SCOPES } from '../mcp/scopes.ts';
+import { SCOPES } from '../scopes/registry.ts';
 import { createHarness, setUpOperator } from '../test-support/identity-app.ts';
 import { callTool, initializeRequest, postJsonRpc } from '../test-support/mcp-client.ts';
 import {

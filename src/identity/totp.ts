@@ -27,15 +27,11 @@ export function hotp(secret: Buffer, counter: number, digits = TOTP_DIGITS): str
   return String(binary % 10 ** digits).padStart(digits, '0');
 }
 
-function totpStep(timeMs: number, stepSeconds = TOTP_STEP_SECONDS): number {
-  return Math.floor(timeMs / MS_PER_SECOND / stepSeconds);
-}
-
 /**
-RFC 6238 TOTP (ID-8): six digits, 30 s step, HMAC-SHA1.
+RFC 6238 (ID-8): the 30 s step a time falls in.
 */
-export function totp(secret: Buffer, timeMs: number, digits = TOTP_DIGITS): string {
-  return hotp(secret, totpStep(timeMs), digits);
+export function totpStep(timeMs: number): number {
+  return Math.floor(timeMs / MS_PER_SECOND / TOTP_STEP_SECONDS);
 }
 
 export interface TotpVerification {

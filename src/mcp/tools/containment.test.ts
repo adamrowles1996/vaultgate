@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { SCOPES } from '../../scopes/registry.ts';
 import { callTool } from '../../test-support/mcp-client.ts';
 import { createTestApp } from '../../test-support/test-app.ts';
 import { CANARIES, CANARY } from '../../test-support/vault-fixture.ts';
-import { SCOPES, TOOL_NAMES } from '../scopes.ts';
+import { TOOL_NAMES } from '../scopes.ts';
 
 /**
 Arguments that make every tool touch the canary items.

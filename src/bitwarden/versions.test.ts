@@ -2,17 +2,14 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  compareVersions,
-  formatVersion,
-  MINIMUM_BW_VERSION,
-  parseVersion,
-  PINNED_BW_VERSION,
-} from './versions.ts';
+import { compareVersions, formatVersion, MINIMUM_BW_VERSION, parseVersion } from './versions.ts';
 
 function pinnedIn(file: string, pattern: RegExp): string | undefined {
   return pattern.exec(readFileSync(file, 'utf8'))?.groups?.['version'];
 }
+
+const DOCKERFILE_PIN = pinnedIn('Dockerfile', /^ARG BW_VERSION=(?<version>\S+)$/m);
+const INSTALL_SH_PIN = pinnedIn('install.sh', /^BW_VERSION="(?<version>[^"]+)"$/m);
 
 describe('parseVersion', () => {
   it('reads major.minor.patch from bw --version output', () => {
@@ -44,17 +41,14 @@ describe('formatVersion', () => {
 });
 
 describe('version policy', () => {
-  it('COMPAT-1 pins the same CLI version as the Dockerfile', () => {
-    expect(pinnedIn('Dockerfile', /^ARG BW_VERSION=(?<version>\S+)$/m)).toBe(PINNED_BW_VERSION);
-  });
-
-  it('COMPAT-1 pins the same CLI version as install.sh', () => {
-    expect(pinnedIn('install.sh', /^BW_VERSION="(?<version>[^"]+)"$/m)).toBe(PINNED_BW_VERSION);
+  it('COMPAT-1 pins the same CLI version in the Dockerfile and install.sh', () => {
+    expect(DOCKERFILE_PIN).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(INSTALL_SH_PIN).toBe(DOCKERFILE_PIN);
   });
 
   it('VAULT-2 keeps the minimum at or below the pinned version', () => {
     const minimum = parseVersion(MINIMUM_BW_VERSION);
-    const pinned = parseVersion(PINNED_BW_VERSION);
+    const pinned = parseVersion(DOCKERFILE_PIN ?? '');
     expect(minimum).toBeDefined();
     expect(pinned).toBeDefined();
     expect(compareVersions(minimum!, pinned!)).toBeLessThanOrEqual(0);

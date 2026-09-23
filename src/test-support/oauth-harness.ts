@@ -1,15 +1,18 @@
 import { type Config, loadConfig } from '../config/index.ts';
 import { type App, createApp } from '../http/app.ts';
-import { EMPTY } from '../identity/pages/template.ts';
 import { createSessionManager } from '../identity/session-manager.ts';
 import { createOAuthRepos, type OAuthRepos } from '../oauth/repositories/index.ts';
 import { type AuthorizationServer, createAuthorizationServer } from '../oauth/server.ts';
 import { run } from '../storage/query.ts';
 
 import { type Browser as CookieBrowser, createBrowser } from './browser.ts';
+import { openTestDatabase } from './database.ts';
 import {
+  CLIENT_IP,
   createHarness as createIdentityHarness,
   type Harness as IdentityHarness,
+  type HarnessClock,
+  harnessGuards,
 } from './identity-app.ts';
 import { sequentialRandom } from './identity.ts';
 import { InMemoryVaultClient } from './in-memory-vault-client.ts';
@@ -19,13 +22,11 @@ import { READY } from './test-app.ts';
 
 import type { AuditEvent } from '../audit/event.ts';
 import type { PreregisteredClient } from '../config/primitives.ts';
-import type { ConnectedClientsRenderer } from '../identity/index.ts';
 import type { SessionState } from '../identity/session-manager.ts';
 
 export const PUBLIC_URL = 'https://vault.example.com';
 export const RESOURCE = `${PUBLIC_URL}/mcp`;
 export const OPERATOR_ID = 'operator-1';
-const CLIENT_IP = '203.0.113.7';
 const PUBLIC_ADDRESS = '93.184.216.34';
 const SESSION_TTL_MS = 12 * 3_600_000;
 
@@ -137,31 +138,31 @@ function ensureOperator(identity: IdentityHarness, operatorId: string): void {
  */
 export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
   const config = harnessConfig(options);
-  const accountSlot: { render: ConnectedClientsRenderer } = { render: () => EMPTY };
-  const identity = createIdentityHarness({
-    publicUrl: config.publicUrl,
-    trustProxy: config.trustProxy,
-    trustedProxyHops: config.trustedProxyHops,
-    connectedClients: (session) => accountSlot.render(session),
-  });
+  // Same order as main.ts: the store and the ID-18 guards first, then the
+  // authorization server over them, then identity with the server's
+  // connected-clients renderer.
+  const database = openTestDatabase();
+  const audits: AuditEvent[] = [];
+  const guards = harnessGuards(config, audits);
+  let now = Date.parse('2026-09-22T12:00:00Z');
+  const clock: HarnessClock = {
+    now: () => now,
+    advance: (ms) => {
+      now += ms;
+    },
+  };
   let counter = 0;
   const audit: AuditEvent[] = [];
   const mcpAudit: AuditEvent[] = [];
   const cimd = new Map<string, () => Response>();
   const fetchedUrls: string[] = [];
   const { logger, lines } = captureLogger();
-  const sessions = createSessionManager({
-    sessions: identity.stores.sessions,
-    random: sequentialRandom(),
-    clock: identity.now,
-    absoluteTtlMs: SESSION_TTL_MS,
-  });
 
   const server = unwrapOk(
     createAuthorizationServer({
       config,
-      db: identity.database,
-      guards: identity.identity.guards,
+      db: database,
+      guards,
       audit: {
         record: (event) => {
           audit.push(event);
@@ -176,7 +177,7 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
         );
       },
       lookup: options.lookup ?? (() => Promise.resolve([PUBLIC_ADDRESS])),
-      now: identity.now,
+      now: clock.now,
       random: (bytes) => {
         counter += 1;
         const buffer = Buffer.alloc(bytes);
@@ -186,7 +187,21 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
       newId: () => `id-${(counter += 1)}`,
     }),
   );
-  accountSlot.render = server.renderConnectedClients;
+  const identity = createIdentityHarness({
+    publicUrl: config.publicUrl,
+    trustProxy: config.trustProxy,
+    database,
+    audits,
+    guards,
+    clock,
+    connectedClients: server.renderConnectedClients,
+  });
+  const sessions = createSessionManager({
+    sessions: identity.stores.sessions,
+    random: sequentialRandom(),
+    clock: clock.now,
+    absoluteTtlMs: SESSION_TTL_MS,
+  });
   const app = createApp({
     config,
     logger,

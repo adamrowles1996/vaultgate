@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { openTestDatabase } from '../../test-support/database.ts';
 
-import { createIdentityStores, type OperatorRecord, type SessionRecord } from './index.ts';
+import { createIdentityStores } from './index.ts';
+
+import type { OperatorRecord } from './operators.ts';
+import type { SessionRecord } from './sessions.ts';
 
 const OPERATOR: OperatorRecord = {
   id: 'op-1',

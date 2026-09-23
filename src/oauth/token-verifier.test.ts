@@ -69,9 +69,9 @@ function setup(overrides: Partial<TokenRecord> = {}, consentRevokedAt?: number):
 }
 
 describe('StoreTokenVerifier', () => {
-  it('OAUTH-32 accepts a live token and returns the verified shape', async () => {
+  it('OAUTH-32 accepts a live token and returns the verified shape', () => {
     const { verifier, token } = setup();
-    const verified = unwrapOk(await verifier.verify(token));
+    const verified = unwrapOk(verifier.verify(token));
     expect(verified).toStrictEqual({
       tokenId: hashCredential(token).slice(0, 12),
       clientId: 'client-a',
@@ -83,7 +83,7 @@ describe('StoreTokenVerifier', () => {
     });
   });
 
-  it('OAUTH-34 rejects anything without the vg_at_ prefix as malformed', async () => {
+  it('OAUTH-34 rejects anything without the vg_at_ prefix as malformed', () => {
     const { verifier } = setup();
     for (const candidate of [
       '',
@@ -92,60 +92,60 @@ describe('StoreTokenVerifier', () => {
       'eyJhbGciOiJSUzI1NiJ9.e30.sig',
       'Bearer x',
     ]) {
-      expect(unwrapFail(await verifier.verify(candidate)).reason).toBe('malformed');
+      expect(unwrapFail(verifier.verify(candidate)).reason).toBe('malformed');
     }
   });
 
-  it('OAUTH-32 rejects an unknown token', async () => {
+  it('OAUTH-32 rejects an unknown token', () => {
     const { verifier } = setup();
     const unknown = mintCredential(CREDENTIAL_PREFIX.accessToken, (bytes) =>
       Buffer.alloc(bytes, 1),
     );
-    expect(unwrapFail(await verifier.verify(unknown)).reason).toBe('unknown');
+    expect(unwrapFail(verifier.verify(unknown)).reason).toBe('unknown');
   });
 
-  it('OAUTH-32 rejects a refresh token presented as a bearer', async () => {
+  it('OAUTH-32 rejects a refresh token presented as a bearer', () => {
     const { verifier, token } = setup({ kind: 'refresh' });
-    expect(unwrapFail(await verifier.verify(token)).reason).toBe('unknown');
+    expect(unwrapFail(verifier.verify(token)).reason).toBe('unknown');
   });
 
-  it('OAUTH-32 rejects a revoked token', async () => {
+  it('OAUTH-32 rejects a revoked token', () => {
     const { verifier, token } = setup({ revokedAt: 5 });
-    expect(unwrapFail(await verifier.verify(token)).reason).toBe('revoked');
+    expect(unwrapFail(verifier.verify(token)).reason).toBe('revoked');
   });
 
-  it('OAUTH-32 rejects an expired token', async () => {
+  it('OAUTH-32 rejects an expired token', () => {
     const { verifier, token, advance } = setup();
     advance(3_600_000);
-    expect(unwrapFail(await verifier.verify(token)).reason).toBe('expired');
+    expect(unwrapFail(verifier.verify(token)).reason).toBe('expired');
   });
 
-  it('OAUTH-32 rejects a token issued for another resource', async () => {
+  it('OAUTH-32 rejects a token issued for another resource', () => {
     const { verifier, token } = setup({ resource: 'https://other.example.com/mcp' });
-    const rejection = unwrapFail(await verifier.verify(token));
+    const rejection = unwrapFail(verifier.verify(token));
     expect(rejection.reason).toBe('unknown');
     expect(rejection.message).toBe('token issued for another resource');
   });
 
-  it('OAUTH-30 rejects a token whose consent was revoked', async () => {
+  it('OAUTH-30 rejects a token whose consent was revoked', () => {
     const { verifier, token } = setup({}, 7);
-    expect(unwrapFail(await verifier.verify(token)).message).toBe('consent revoked');
+    expect(unwrapFail(verifier.verify(token)).message).toBe('consent revoked');
   });
 
-  it('OAUTH-35 updates last_used_at at most once per minute', async () => {
+  it('OAUTH-35 updates last_used_at at most once per minute', () => {
     const { verifier, token, repos, advance } = setup();
     const hash = hashCredential(token);
-    await verifier.verify(token);
+    verifier.verify(token);
     expect(repos.tokens.findByHash(hash)?.lastUsedAt).toBe(1_000_000);
     advance(30_000);
-    await verifier.verify(token);
+    verifier.verify(token);
     expect(repos.tokens.findByHash(hash)?.lastUsedAt).toBe(1_000_000);
     advance(30_000);
-    await verifier.verify(token);
+    verifier.verify(token);
     expect(repos.tokens.findByHash(hash)?.lastUsedAt).toBe(1_060_000);
   });
 
-  it('falls back to the client id when the client row has no name', async () => {
+  it('falls back to the client id when the client row has no name', () => {
     const { verifier, token, repos } = setup();
     repos.clients.upsert({
       id: 'c',
@@ -157,6 +157,6 @@ describe('StoreTokenVerifier', () => {
       createdAt: 0,
       revokedAt: undefined,
     });
-    expect(unwrapOk(await verifier.verify(token)).clientName).toBe('client-a');
+    expect(unwrapOk(verifier.verify(token)).clientName).toBe('client-a');
   });
 });

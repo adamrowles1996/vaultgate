@@ -6,7 +6,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
-import { SCOPES } from './scopes.ts';
+import { SCOPES } from '../scopes/registry.ts';
 
 import type { Config } from '../config/index.ts';
 
