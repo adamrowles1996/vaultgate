@@ -39,6 +39,10 @@ export interface AccountView {
   Filled by the OAuth layer with the connected clients; empty until then.
   */
   readonly connectedClients: Html;
+  /**
+  Sections other layers add (the actions targets, ACT-5); rendered after the vault connection.
+  */
+  readonly extraSections: readonly Html[];
   readonly vault: VaultConnectionStatus;
   /**
   The non-secret vault fields to show again after a failed submission.
@@ -129,7 +133,7 @@ export function renderAccount(view: AccountView): string {
         )}
         ${when(view.isReauthenticated, () => sensitiveActions(view, email))}
       </section>
-      ${vaultConnectionSection(view)} ${auditExportSection(view)}`,
+      ${vaultConnectionSection(view)} ${view.extraSections} ${auditExportSection(view)}`,
   );
 }
 

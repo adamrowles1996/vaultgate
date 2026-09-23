@@ -74,6 +74,7 @@ export async function accountView(
     notice: options.notice,
     error: options.error,
     connectedClients: services.connectedClients(session),
+    extraSections: services.accountSections.map((render) => render(session)),
     vault: await services.vaultConnection.status(),
     vaultForm: options.vaultForm ?? EMPTY_VAULT_FORM,
   };
@@ -119,6 +120,35 @@ export function requireReauthenticated(
   return authenticated.session.isReauthenticated
     ? authenticated
     : services.guards.deny(context, 're-authentication required');
+}
+
+/**
+What a sensitive POST served outside this module learns once its gate has passed.
+*/
+export interface SensitiveActionContext {
+  readonly session: SessionState;
+  readonly operatorId: string;
+  readonly form: Form;
+}
+
+/**
+ * ID-18 and ID-15 as one gate for a sensitive `POST /account/*` served by
+ * another layer (the actions pages, ACT-5): the form is read here so the
+ * caller never handles a request body before the checks; a `Response` is the
+ * 403 the guards already audited.
+ */
+export type SensitiveAction = (
+  context: IdentityContext,
+) => Promise<SensitiveActionContext | Response>;
+
+export function sensitiveAction(services: IdentityServices): SensitiveAction {
+  return async (context) => {
+    const form = await readForm(context);
+    const authenticated = requireReauthenticated(context, services, form);
+    return authenticated instanceof Response
+      ? authenticated
+      : { session: authenticated.session, operatorId: authenticated.operator.id, form };
+  };
 }
 
 export function auditEvent(

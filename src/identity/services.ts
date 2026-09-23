@@ -21,6 +21,13 @@ import type { DatabaseSync } from 'node:sqlite';
 export type ConnectedClientsRenderer = (session: SessionState) => Html;
 
 /**
+ * Renders a further section of the account page for the signed-in operator:
+ * the actions layer's targets (ACT-5), supplied by the composition layer only
+ * when that layer is enabled, so identity never knows it exists.
+ */
+export type AccountSectionRenderer = (session: SessionState) => Html;
+
+/**
 Everything a route handler needs, assembled once by `createIdentity`.
 */
 export interface IdentityServices {
@@ -40,6 +47,10 @@ export interface IdentityServices {
   readonly passwordParameters: ScryptParameters;
   readonly absoluteSessionTtlMs: number;
   readonly connectedClients: ConnectedClientsRenderer;
+  /**
+  The account page's extra sections (ACT-5), in order; none by default.
+  */
+  readonly accountSections: readonly AccountSectionRenderer[];
   /**
   The vault backend as the account page sees it (ID-25); supplied by the composition layer.
   */

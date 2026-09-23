@@ -6,6 +6,7 @@
  */
 import { z } from 'zod';
 
+import { type CallRow, recordCall } from '../actions/calls.ts';
 import { all, run } from '../storage/query.ts';
 
 import { DEFAULT_TARGET, OPERATOR_ID } from './actions-fixtures.ts';
@@ -76,4 +77,35 @@ export function fixtureTargetRow(overrides: Partial<TargetRow> = {}): TargetRow 
     updatedBy: OPERATOR_ID,
     ...overrides,
   };
+}
+
+/**
+A completed `action_calls` row on the fixture target, as the engine writes one (ACT-60).
+*/
+export function insertCallRow(database: DatabaseSync, overrides: Partial<CallRow> = {}): void {
+  const row: CallRow = {
+    id: 'call-1',
+    at: 0,
+    targetId: 'row-1',
+    targetName: DEFAULT_TARGET.name,
+    connector: 'http',
+    revision: 1,
+    tool: 'http_request',
+    sessionIdHash: undefined,
+    clientId: 'vg_c_agent',
+    tokenPrefix: 'aabbccdd0011',
+    operation: 'read',
+    classification: 'GET',
+    arguments: { target: DEFAULT_TARGET.name, method: 'GET', path: '/v1/me' },
+    outputBytes: 12,
+    outputTruncated: false,
+    durationMs: 3,
+    outcome: 'ok',
+    elicitation: 'not_required',
+    confirmationNonce: undefined,
+    requestId: 'req-1',
+    ip: '203.0.113.9',
+    ...overrides,
+  };
+  recordCall(database, row);
 }

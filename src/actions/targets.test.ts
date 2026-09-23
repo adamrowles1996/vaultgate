@@ -90,3 +90,31 @@ describe('grants', () => {
     expect(targets.onConsentRevoked(CLIENT_ID)).toStrictEqual({ grants: 0, sessions: 0 });
   });
 });
+
+describe('close sessions', () => {
+  it('ACT-5 ACT-7 closes every open session of the target as the operator and records the count', async () => {
+    const harness = createActionsHarness();
+    const { targets } = harness.engine;
+    const created = await createHttpTarget(harness);
+    openSession(harness.database, 'session-1', created.id, CLIENT_ID);
+    openSession(harness.database, 'session-2', created.id, OTHER_CLIENT_ID);
+    harness.audit.length = 0;
+    expect(unwrapOk(targets.closeSessions(created.id, OPERATOR_ID)).name).toBe('api');
+    expect(sessionRows(harness.database)).toStrictEqual([
+      { id_hash: 'session-1', close_reason: 'operator' },
+      { id_hash: 'session-2', close_reason: 'operator' },
+    ]);
+    expect(harness.audit).toStrictEqual([
+      {
+        category: 'actions',
+        action: 'sessions_closed',
+        outcome: 'ok',
+        operatorId: OPERATOR_ID,
+        clientId: undefined,
+        details: { target: 'api', connector: 'http', sessions: 2 },
+      },
+    ]);
+    const unknown = targets.closeSessions('nope', OPERATOR_ID);
+    expect(unwrapFail(unknown).problems).toStrictEqual(['id: no such target']);
+  });
+});

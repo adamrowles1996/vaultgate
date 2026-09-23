@@ -95,9 +95,13 @@ export default {
       name: 'actions-imports-identity-and-mcp-types-only',
       severity: 'error',
       comment:
-        'ACT-70: the guard and session types its pages need and the Tool shape are injected by composition; only type-only imports cross.',
+        'ACT-70: the guard and session types its pages need and the Tool shape are injected by composition; only type-only imports cross, plus the escaping template primitives every page renderer shares (ID-19).',
       from: { path: '^src/actions/' },
-      to: { path: '^src/(identity|mcp)/', dependencyTypesNot: ['type-only'] },
+      to: {
+        path: '^src/(identity|mcp)/',
+        pathNot: [String.raw`^src/identity/pages/template\.ts$`],
+        dependencyTypesNot: ['type-only'],
+      },
     },
     {
       name: 'features-never-import-actions',

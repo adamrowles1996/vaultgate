@@ -64,6 +64,10 @@ export interface AppDependencies {
   The actions engine (spec §13), present only when the layer is enabled (ACT-73).
   */
   readonly engine?: ActionsEngine | undefined;
+  /**
+  The actions layer's account pages (spec §13.3.2), mounted beside the identity routes when the layer is enabled.
+  */
+  readonly actionsPages?: Hono<AppEnvironment> | undefined;
 }
 
 /**
@@ -97,6 +101,9 @@ export function createApp(dependencies: AppDependencies): App {
       : context.json({ status: 'unavailable', failing: [...failing], ...detail }, 503);
   });
   app.route('/', identity.routes);
+  if (dependencies.actionsPages !== undefined) {
+    app.route('/', dependencies.actionsPages);
+  }
 
   // The MCP resource server (spec §06): protected resource metadata and /mcp.
   app.route('/', createMetadataApp(config));

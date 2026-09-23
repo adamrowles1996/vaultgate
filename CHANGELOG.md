@@ -8,6 +8,23 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Account-page Actions section (spec 13 §13.3.2, M9 third pull request; ACT-5, ACT-6, ACT-8,
+  ACT-9, ACT-49, ACT-62, ACT-63 basic): present only with `VAULTGATE_ENABLE_ACTIONS=true`, it
+  lists every target with its connector, destination summary, state (a stored row that fails its
+  schema is marked `target_invalid` with the reason, ACT-1), grants, last call and open sessions,
+  and links to a page per target and to a create form per connector. The forms are drawn from
+  per-connector field descriptors over the connector's zod schemas (`http` now: base URL,
+  `internal`, the vault item id with its name shown once saved, the injection mode and its
+  fields including the `graph` adapter document, the policy allowlists one pattern per line, the
+  common limits with their defaults and ceilings; `confirm_writes` is on for every new target);
+  a rejected save re-renders with every problem and the submitted values. Edit, enable,
+  disable, delete, grant management among the clients holding a consent, "close sessions" and
+  the last 50 calls live on the target's page; every write is `POST /account/actions/*` behind
+  the ID-18 checks and the five-minute re-authentication window, and every change goes through
+  the targets service so its `actions.*` event is recorded (`sessions_closed` is new). The
+  account-page audit export offers the `actions` stream beside `audit`. Operator guide:
+  `docs/guides/actions.md`.
+
 - Actions engine core (spec 13, M9 first pull request; ACT-1…ACT-74 as far as the engine
   enforces them), off by default behind `VAULTGATE_ENABLE_ACTIONS` with one switch per connector
   (`VAULTGATE_ACTIONS_ENABLE_{HTTP,SQL,SSH,WINRM,BROWSER}`, `VAULTGATE_ACTIONS_BROWSER_CDP_URL`,

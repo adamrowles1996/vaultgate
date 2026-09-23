@@ -8,7 +8,7 @@
 import { all } from '../storage/query.ts';
 
 import type { LineFormat } from './format.ts';
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type { z } from 'zod';
 
 /**
@@ -30,6 +30,14 @@ export interface KeysetCursor {
 export interface PageOptions extends AuditRange {
   readonly limit: number;
   readonly cursor?: KeysetCursor | undefined;
+}
+
+/**
+One equality the rows must satisfy besides the window (the account page reads one target's calls, ACT-63).
+*/
+export interface PageFilter {
+  readonly column: string;
+  readonly value: string;
 }
 
 export interface Page<Record> {
@@ -63,14 +71,23 @@ export function listPage<Row extends KeysetCursor, Record>(
   database: DatabaseSync,
   source: KeysetSource<Row, Record>,
   options: PageOptions,
+  filter?: PageFilter,
 ): Page<Record> {
   const { from, to, limit, cursor } = options;
-  const keyset = cursor === undefined ? '' : ' AND (at < ?4 OR (at = ?4 AND id < ?5))';
+  const conditions = ['at >= ?', 'at < ?'];
+  const parameters: SQLInputValue[] = [from, to];
+  if (cursor !== undefined) {
+    conditions.push('(at < ? OR (at = ? AND id < ?))');
+    parameters.push(cursor.at, cursor.at, cursor.id);
+  }
+  if (filter !== undefined) {
+    conditions.push(`${filter.column} = ?`);
+    parameters.push(filter.value);
+  }
   const sql =
-    `SELECT ${source.columns} FROM ${source.table} WHERE at >= ?1 AND at < ?2${keyset} ` +
-    'ORDER BY at DESC, id DESC LIMIT ?3';
-  const parameters = cursor === undefined ? [] : [cursor.at, cursor.id];
-  const rows = all(database, sql, source.rowSchema, from, to, limit + 1, ...parameters);
+    `SELECT ${source.columns} FROM ${source.table} WHERE ${conditions.join(' AND ')} ` +
+    'ORDER BY at DESC, id DESC LIMIT ?';
+  const rows = all(database, sql, source.rowSchema, ...parameters, limit + 1);
   const last = rows.length > limit ? rows[limit - 1] : undefined;
   return {
     records: rows.slice(0, limit).map((row) => source.toRecord(row)),

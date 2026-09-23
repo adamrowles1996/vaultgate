@@ -55,11 +55,15 @@ export interface HarnessOptions {
   /**
   Answers per host name; anything else resolves to one public address.
   */
-  readonly addresses?: Readonly<Record<string, readonly string[]>>;
+  readonly addresses?: Readonly<Record<string, readonly string[]>> | undefined;
   /**
   Where the engine's audit events go; an app test shares the app's trail.
   */
   readonly audit?: AuditEvent[];
+  /**
+  An open, migrated database shared with the identity harness (the account pages); a fresh one by default.
+  */
+  readonly database?: DatabaseSync;
 }
 
 /**
@@ -76,7 +80,7 @@ export function insertClient(database: DatabaseSync, clientId: string): void {
 }
 
 export function createActionsHarness(options: HarnessOptions = {}): ActionsHarness {
-  const database = openTestDatabase();
+  const database = options.database ?? openTestDatabase();
   insertClient(database, CLIENT_ID);
   insertClient(database, OTHER_CLIENT_ID);
   const vault = options.vault ?? new InMemoryVaultClient();

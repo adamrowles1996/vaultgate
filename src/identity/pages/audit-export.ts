@@ -23,14 +23,22 @@ function exportForm(csrfToken: string): Html {
         <option value="csv">CSV</option>
       </select>
     </label>
-    <button type="submit">Download audit log</button>
+    <label
+      >Log
+      <select name="stream">
+        <option value="audit">Audit events</option>
+        <option value="actions">Action calls</option>
+      </select>
+    </label>
+    <button type="submit">Download</button>
   </form>`;
 }
 
 /**
- * The account page's audit export (OPS-5). Like the other sensitive actions
- * it needs a fresh password confirmation (ID-15); until then the section
- * says so instead of offering the form.
+ * The account page's audit export (OPS-5): the audit events or, as a second
+ * stream over the same window, the actions layer's call trail (ACT-62). Like
+ * the other sensitive actions it needs a fresh password confirmation (ID-15);
+ * until then the section says so instead of offering the form.
  */
 export function auditExportSection(view: AuditExportView): Html {
   return html`<section>

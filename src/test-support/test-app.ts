@@ -111,6 +111,10 @@ export interface TestAppOptions {
   A trail to share with the engine, so one array holds every event of a call.
   */
   readonly audit?: AuditEvent[];
+  /**
+  The actions layer's account pages, mounted when given (ACT-5).
+  */
+  readonly actionsPages?: App | undefined;
 }
 
 export function createTestApp(options: TestAppOptions = {}): TestApp {
@@ -139,6 +143,7 @@ export function createTestApp(options: TestAppOptions = {}): TestApp {
     auditSink: audit,
     ...(options.withClock !== false && { now: () => clock.now() }),
     ...(options.engine !== undefined && { engine: options.engine }),
+    actionsPages: options.actionsPages,
   });
   return { app, config, vault, verifier, audit, clock, logged: () => chunks.join('') };
 }

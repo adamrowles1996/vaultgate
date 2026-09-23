@@ -26,8 +26,9 @@
 ## 10.3 Audit export
 
 - **OPS-5** The operator account page offers audit export as JSON Lines or CSV for a date range,
-  gated by re-authentication (ID-15). The same export is available as
-  `node dist/cli.js audit export --from --to` for scripted retention. The window is half-open
+  gated by re-authentication (ID-15), of the audit events or, when the actions layer is in use,
+  of the `action_calls` trail (ACT-62). The same export is available as
+  `node dist/cli.js audit export --from --to [--stream audit|actions]` for scripted retention. The window is half-open
   (`from` inclusive, `to` exclusive, ISO 8601, UTC), rows are newest first, CSV follows RFC 4180
   with a header row, and the CLI opens the store read-only under the server's configuration (a
   store that was never created exports as empty). On a network filesystem the server holds the

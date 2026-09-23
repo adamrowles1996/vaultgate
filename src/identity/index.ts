@@ -7,6 +7,7 @@ import { notFound } from './not-found.ts';
 import { EMPTY } from './pages/template.ts';
 import { createLocalProvider, type IdentityProvider } from './provider.ts';
 import { createIdentityStores } from './repositories/index.ts';
+import { type SensitiveAction, sensitiveAction } from './routes-account.ts';
 import { createIdentityRoutes } from './routes.ts';
 import { createSessionManager } from './session-manager.ts';
 import { cookiePolicyFor, type CookiePolicy } from './sessions.ts';
@@ -16,7 +17,11 @@ import type { IdentityEnvironment } from './context.ts';
 import type { Guards } from './guards.ts';
 import type { ScryptParameters } from './password.ts';
 import type { Clock, Delay, RandomSource } from './primitives.ts';
-import type { ConnectedClientsRenderer, IdentityServices } from './services.ts';
+import type {
+  AccountSectionRenderer,
+  ConnectedClientsRenderer,
+  IdentityServices,
+} from './services.ts';
 import type { AuditSink } from '../audit/event.ts';
 import type { Config } from '../config/index.ts';
 import type { Logger } from '../logger.ts';
@@ -24,8 +29,10 @@ import type { VaultConnection } from '../vault/connection.ts';
 import type { Hono, MiddlewareHandler, NotFoundHandler } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
 
-export type { IdentityVariables } from './context.ts';
-export type { ConnectedClientsRenderer } from './services.ts';
+export type { IdentityContext, IdentityEnvironment, IdentityVariables } from './context.ts';
+export type { SensitiveAction, SensitiveActionContext } from './routes-account.ts';
+export type { AccountSectionRenderer, ConnectedClientsRenderer } from './services.ts';
+export type { SessionState } from './session-manager.ts';
 export { createGuards, type Guards } from './guards.ts';
 export { CURRENT_PARAMETERS } from './password.ts';
 
@@ -50,6 +57,10 @@ export interface IdentityDependencies {
   */
   readonly connectedClients?: ConnectedClientsRenderer | undefined;
   /**
+  Further account-page sections (the actions targets, ACT-5); none by default.
+  */
+  readonly accountSections?: readonly AccountSectionRenderer[] | undefined;
+  /**
   Status and changes of the vault connection for the account page (ID-25).
   */
   readonly vaultConnection: VaultConnection;
@@ -68,6 +79,10 @@ export interface Identity {
   readonly provider: IdentityProvider;
   readonly bootstrap: Bootstrap;
   readonly cookiePolicy: CookiePolicy;
+  /**
+  The ID-18 and ID-15 gate for a sensitive `POST /account/*` another layer serves (ACT-5).
+  */
+  readonly sensitiveAction: SensitiveAction;
 }
 
 /**
@@ -117,6 +132,7 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     passwordParameters: dependencies.passwordParameters,
     absoluteSessionTtlMs: config.sessionTtlMs,
     connectedClients: dependencies.connectedClients ?? (() => EMPTY),
+    accountSections: dependencies.accountSections ?? [],
     vaultConnection: dependencies.vaultConnection,
   };
   return {
@@ -126,5 +142,6 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     provider: createLocalProvider(),
     bootstrap,
     cookiePolicy,
+    sensitiveAction: sensitiveAction(services),
   };
 }
