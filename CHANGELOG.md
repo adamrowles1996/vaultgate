@@ -8,6 +8,32 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `http` connector runtime and `http_request` (spec 14 §14.2 and spec 13 §13.6.3, M9 fourth pull
+  request; ACT-20, ACT-21, ACT-22, ACT-79, ACT-80): the tool is listed on a deployment with
+  `VAULTGATE_ENABLE_ACTIONS=true` and `VAULTGATE_ACTIONS_ENABLE_HTTP=true` for tokens holding
+  `actions:http`. An `http_request` names a granted target and gives a method, a path with an
+  optional query string, up to 32 headers and a string or JSON body; the policy decision is pure
+  (method, normalised path and query against `allowed_paths`, header allowlist with
+  `Authorization`, `Cookie`, `Host`, `Content-Length`, `User-Agent`, `Transfer-Encoding`,
+  `Proxy-*` and the credential's own header always refused, body size), the credential is placed
+  by its mapping (`bearer`, `basic`, `header` with a prefix, or `query` URL-encoded after the
+  agent's query and only with `allow_query_credentials`), and the request goes through the
+  pinned transport with `User-Agent: vaultgate/<version>`, the policy timeout and a body read
+  capped at `max_output_bytes` plus the scrub guard band. Redirects are returned as results
+  unless `follow_redirects` is on, then at most two hops and only under `base_url` (the same
+  origin, so the same pinned address, never a second resolution), with Fetch's method rules.
+  The result carries the status, the policy's response headers, the body as text or as base64
+  (`body_encoding`) when the media type is not textual or the bytes are not UTF-8, the bytes
+  received, `truncated` and `duration_ms`; a non-2xx status, `401` included, is a normal result,
+  and only an unreachable destination is an error (`connection_failed`, `tls_error`, `timeout`,
+  `destination_refused`, with the error code as the only detail). Contract tests run the
+  connector against a fake transport for every policy reason, error code, redirect case, the cap
+  with a value straddling the cut, the timeout and each injection mode, plus the ACT-53 canary
+  suite through the engine and a confirmed `POST` through the MCP client SDK. A `graph` mapping
+  is refused at save with "the graph adapter arrives in M10", and a stored target is validated
+  against the connector's save-time rules again on read, so no half-implemented mode can run.
+  Operator guide: `docs/guides/actions.md` ("Calling an `http` target"); tool reference:
+  `docs/guides/tools-and-scopes.md`.
 - Account-page Actions section (spec 13 §13.3.2, M9 third pull request; ACT-5, ACT-6, ACT-8,
   ACT-9, ACT-49, ACT-62, ACT-63 basic): present only with `VAULTGATE_ENABLE_ACTIONS=true`, it
   lists every target with its connector, destination summary, state (a stored row that fails its
@@ -66,6 +92,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The pinned transport (`src/net/pinned-https.ts`) serves every method, a request body, and
+  plain `http://` through `node:http` beside `https://`, still connecting only to the address the
+  caller validated; `createPinnedHttpsFetch` takes `{ https, http }` request functions and
+  `readBodyCapped` reads a response up to a limit and cancels the rest. The CIMD fetcher's
+  behaviour is unchanged.
+- The connector interface's `authorize` receives the credential document as a third argument,
+  so a connector can refuse the header its mapping injects (ACT-22). `validateTarget` runs the
+  connector's pure save-time problems again on read (ACT-1), marking such a row `invalid`.
+- One version source: `src/version.ts` reads `package.json`, and both the MCP `initialize`
+  response (previously a hand-kept `0.1.0`) and the actions `User-Agent` report it.
 - One in-memory limiter module, `src/net/rate-limit.ts`, serves the authorization server, the
   MCP endpoint and the actions engine; `src/oauth/rate-limit.ts` and `src/mcp/rate-limit.ts` are
   gone. A token bucket now remembers the budget it was taken under, so a key with its own limit
@@ -137,6 +173,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The pinned transport (`src/net/pinned-https.ts`) serves every method, a request body, and
+  plain `http://` through `node:http` beside `https://`, still connecting only to the address the
+  caller validated; `createPinnedHttpsFetch` takes `{ https, http }` request functions and
+  `readBodyCapped` reads a response up to a limit and cancels the rest. The CIMD fetcher's
+  behaviour is unchanged.
+- The connector interface's `authorize` receives the credential document as a third argument,
+  so a connector can refuse the header its mapping injects (ACT-22). `validateTarget` runs the
+  connector's pure save-time problems again on read (ACT-1), marking such a row `invalid`.
+- One version source: `src/version.ts` reads `package.json`, and both the MCP `initialize`
+  response (previously a hand-kept `0.1.0`) and the actions `User-Agent` report it.
 - One scope registry (`src/scopes/registry.ts`) and one bearer-token contract
   (`src/auth/token-types.ts`) sit below both the authorization server and the MCP resource
   server, replacing the duplicated copies and the test that held them in step; the
@@ -195,6 +241,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The pinned transport (`src/net/pinned-https.ts`) serves every method, a request body, and
+  plain `http://` through `node:http` beside `https://`, still connecting only to the address the
+  caller validated; `createPinnedHttpsFetch` takes `{ https, http }` request functions and
+  `readBodyCapped` reads a response up to a limit and cancels the rest. The CIMD fetcher's
+  behaviour is unchanged.
+- The connector interface's `authorize` receives the credential document as a third argument,
+  so a connector can refuse the header its mapping injects (ACT-22). `validateTarget` runs the
+  connector's pure save-time problems again on read (ACT-1), marking such a row `invalid`.
+- One version source: `src/version.ts` reads `package.json`, and both the MCP `initialize`
+  response (previously a hand-kept `0.1.0`) and the actions `User-Agent` report it.
 - ID-3, ID-12: the operator is identified by e-mail address instead of a display name. Setup asks
   for e-mail address, password and authenticator code; login asks for e-mail address and
   password, then the second factor. The address is trimmed, lower-cased and shape-checked only

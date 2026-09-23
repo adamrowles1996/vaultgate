@@ -19,6 +19,7 @@ describe('actions layering', () => {
       'connectors/connector.ts',
       'connectors/registry.ts',
       'connectors/http/schemas.ts',
+      'connectors/http/index.ts',
     ];
     expect(files.filter((file) => !existsSync(join(ROOT, 'src', 'actions', file)))).toStrictEqual(
       [],

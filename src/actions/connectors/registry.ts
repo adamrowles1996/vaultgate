@@ -15,10 +15,15 @@ export type ConnectorLoader = () => Promise<AnyConnector>;
 
 /**
  * One line per connector milestone (M9: `http`, M11: `sql`, M12: `ssh`,
- * M13: `winrm`, M15: `browser`). No runtime has landed yet, so production
- * loads nothing and the engine's registry is empty; tests inject a fake.
+ * M13: `winrm`, M15: `browser`); a connector without a line has no runtime
+ * in this build and its targets answer `connector_disabled`.
  */
-export const CONNECTOR_LOADERS: Partial<Readonly<Record<ConnectorKind, ConnectorLoader>>> = {};
+export const CONNECTOR_LOADERS: Partial<Readonly<Record<ConnectorKind, ConnectorLoader>>> = {
+  http: async () => {
+    const { httpConnector } = await import('./http/index.ts');
+    return httpConnector;
+  },
+};
 
 const CONNECTOR_SCHEMAS: Partial<Readonly<Record<ConnectorKind, AnyConnectorSchemas>>> = {
   http: httpSchemas,

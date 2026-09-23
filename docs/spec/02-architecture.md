@@ -41,7 +41,7 @@
 | Store                | SQLite connection, migrations, repositories, retention jobs                                                                     | `src/storage/`                 |
 | Audit                | Append-only audit events, export                                                                                                | `src/audit/`                   |
 | Config and logging   | Environment validation, structured logs with redaction                                                                          | `src/config/`, `src/logger.ts` |
-| Network              | Proxy-aware client address, address classes, rate limiters, HTTPS transport pinned to a checked address                         | `src/net/`                     |
+| Network              | Proxy-aware client address, address classes, rate limiters, HTTP(S) transport pinned to a checked address                       | `src/net/`                     |
 | Actions              | Operator-defined targets and the engine that runs typed operations at them with vault credentials (spec 13, 14; off by default) | `src/actions/`                 |
 
 ## 2.2 Module boundaries (enforced)
@@ -101,7 +101,7 @@ src/
   config/                 environment schema → Config
   logger.ts               pino with redaction
   result.ts               Result<T, E>
-  net/                    client address behind a proxy, address classes, rate limiters, HTTPS transport pinned to a checked address
+  net/                    client address behind a proxy, address classes, rate limiters, HTTP(S) transport pinned to a checked address
   scopes/                 the one scope registry (names, order, consent text) oauth/ and mcp/ share
   auth/                   the bearer-token contract (VerifiedToken, TokenVerifier) oauth/ and mcp/ share
   crypto/                 the secret box: authenticated encryption under keys derived from VAULTGATE_SECRET_KEY

@@ -23,6 +23,7 @@ import {
 } from './test-app.ts';
 
 import type { EchoConnector } from './fake-connector.ts';
+import type { AnyConnector } from '../actions/connectors/connector.ts';
 import type { AuditEvent } from '../audit/event.ts';
 import type { App } from '../http/app.ts';
 
@@ -37,6 +38,7 @@ export interface ActionsApp extends TestApp {
 export interface ActionsAppOptions {
   readonly config?: TestConfigOverrides;
   readonly connector?: EchoConnector;
+  readonly runtime?: AnyConnector;
 }
 
 /**
@@ -53,6 +55,7 @@ export function createActionsApp(options: ActionsAppOptions = {}): ActionsApp {
     config: config.actions,
     audit,
     ...(options.connector !== undefined && { connector: options.connector }),
+    ...(options.runtime !== undefined && { runtime: options.runtime }),
   });
   const app = createTestApp({ config, engine: harness.engine, audit });
   return {

@@ -6,6 +6,8 @@
  */
 import { type CallToolResult, McpServer } from '@modelcontextprotocol/server';
 
+import { VERSION } from '../version.ts';
+
 import { toolsAllowedBy } from './scopes.ts';
 import { registerActionsTools } from './tools/actions.ts';
 import { failureResult, type Tool, type ToolFailure } from './tools/definition.ts';
@@ -18,11 +20,6 @@ import type { VerifiedToken } from '../auth/token-types.ts';
 import type { Result } from '../result.ts';
 import type { Scope } from '../scopes/registry.ts';
 import type { VaultClient } from '../vault/client.ts';
-
-/**
-Reported to clients in `initialize`; bumped with the package.
-*/
-const SERVER_VERSION = '0.1.0';
 
 const INSTRUCTIONS =
   'vaultgate exposes one Bitwarden vault. Read tools return metadata only; get_secret is the ' +
@@ -106,7 +103,7 @@ export function createVaultMcpServer(
   context: CallContext,
 ): McpServer {
   const server = new McpServer(
-    { name: 'vaultgate', version: SERVER_VERSION },
+    { name: 'vaultgate', version: VERSION },
     { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
   );
   const allowed = toolsAllowedBy(context.scopes);

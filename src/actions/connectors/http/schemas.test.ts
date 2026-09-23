@@ -208,16 +208,19 @@ describe('httpSchemas', () => {
     ]);
   });
 
-  it('ACT-81 ACT-79 ACT-35 reports save-time problems: graph off graph.microsoft.com, query mode without allow_query_credentials, and a path pattern that is not a normalised path', () => {
+  it('ACT-81 ACT-79 ACT-35 reports save-time problems: graph before its M10 adapter and off graph.microsoft.com, query mode without allow_query_credentials, and a path pattern that is not a normalised path', () => {
     expect(httpSchemas.saveProblems(documents())).toStrictEqual([]);
     expect(httpSchemas.saveProblems(documents({ credential: GRAPH }))).toStrictEqual([
+      'credential.mapping: the graph mode is not available yet; the graph adapter arrives in M10',
       'credential.mapping: the graph mode requires base_url https://graph.microsoft.com',
     ]);
     expect(
       httpSchemas.saveProblems(
         documents({ destination: { base_url: 'https://graph.microsoft.com' }, credential: GRAPH }),
       ),
-    ).toStrictEqual([]);
+    ).toStrictEqual([
+      'credential.mapping: the graph mode is not available yet; the graph adapter arrives in M10',
+    ]);
     const query: HttpCredential = { mode: 'query', field: 'password', name: 'key' };
     expect(httpSchemas.saveProblems(documents({ credential: query }))).toStrictEqual([
       'credential.mapping: the query mode requires policy.allow_query_credentials',

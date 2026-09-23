@@ -77,7 +77,11 @@ function resolveOperation(
     );
     return fail(new ActionError('invalid_arguments', { problems: problems.join('; ') }));
   }
-  const decision = connector.authorize(target.documents.policy, parsed.data);
+  const decision = connector.authorize(
+    target.documents.policy,
+    parsed.data,
+    target.documents.credential,
+  );
   if (!decision.allowed) {
     return fail(new ActionError('policy_denied', { reason: decision.reason }));
   }
