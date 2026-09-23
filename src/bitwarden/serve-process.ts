@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { fail, ok, type Result } from '../result.ts';
 
 import { type Clock, sleep } from './clock.ts';
+import { OutputTail } from './serve-output.ts';
 import { statusTemplateSchema, type StatusTemplate } from './types.ts';
 import {
   compareVersions,
@@ -71,6 +72,10 @@ export interface ServeHandle {
   Settles when the child has exited, however that happened.
   */
   readonly exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
+  /**
+  The scrubbed tail of what the child wrote to stdout and stderr (VAULT-6).
+  */
+  output(): string;
   /**
   `SIGTERM`, then `SIGKILL` after five seconds (VAULT-7).
   */
@@ -238,8 +243,8 @@ export class BwCli {
       ['serve', '--hostname', '127.0.0.1', '--port', String(port)],
       this.#environment,
     );
-    child.stdout?.resume();
-    child.stderr?.resume();
+    const output = new OutputTail();
+    output.attach(child.stdout, child.stderr);
     const { promise: exited, resolve } = Promise.withResolvers<{
       code: number | null;
       signal: NodeJS.Signals | null;
@@ -254,6 +259,7 @@ export class BwCli {
     return {
       endpoint: `http://127.0.0.1:${port}`,
       exited,
+      output: () => output.text(),
       stop: async () => {
         child.kill('SIGTERM');
         const grace = sleep(clock, STOP_GRACE_MS);

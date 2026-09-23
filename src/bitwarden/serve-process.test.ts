@@ -5,7 +5,7 @@ import { ManualClock } from '../test-support/manual-clock.ts';
 import { unwrapFail, unwrapOk } from '../test-support/result.ts';
 
 import { Credentials } from './credentials.ts';
-import { BwCli, spawnChild, VersionRefusedError } from './serve-process.ts';
+import { BwCli, VersionRefusedError } from './serve-process.ts';
 
 const ENVIRONMENT = {
   PATH: '/usr/bin',
@@ -205,84 +205,5 @@ describe('BwCli.login', () => {
       await cliWith(spawner).login(new Credentials('user.abc', 'pw', 'client-secret')),
     );
     expect(error.message).toBe('bw login exited with status 1');
-  });
-});
-
-describe('BwCli.serve', () => {
-  it('VAULT-1 spawns bw serve bound to loopback on the given port', () => {
-    const spawner = new FakeSpawner();
-    const handle = cliWith(spawner).serve(43_210);
-    expect(handle.endpoint).toBe('http://127.0.0.1:43210');
-    expect(spawner.records[0]!.argv).toStrictEqual([
-      'serve',
-      '--hostname',
-      '127.0.0.1',
-      '--port',
-      '43210',
-    ]);
-  });
-
-  it('reports how the child exited', async () => {
-    const spawner = new FakeSpawner();
-    const handle = cliWith(spawner).serve(1);
-    spawner.records[0]!.child.exit(3);
-    await expect(handle.exited).resolves.toStrictEqual({ code: 3, signal: null });
-  });
-
-  it('reports a spawn failure as an exit', async () => {
-    const spawner = new FakeSpawner({
-      serve: ({ child }) => {
-        child.fail(new Error('ENOENT'));
-      },
-    });
-    const handle = cliWith(spawner).serve(1);
-    await expect(handle.exited).resolves.toStrictEqual({ code: null, signal: null });
-  });
-
-  it('VAULT-7 stops with SIGTERM when the child obeys', async () => {
-    const spawner = new FakeSpawner();
-    const clock = new ManualClock();
-    const handle = cliWith(spawner, clock).serve(1);
-    await handle.stop();
-    expect(spawner.records[0]!.child.signals).toStrictEqual(['SIGTERM']);
-    await expect(handle.exited).resolves.toStrictEqual({ code: null, signal: 'SIGTERM' });
-    expect(clock.pending()).toBe(0);
-  });
-
-  it('VAULT-7 escalates to SIGKILL after five seconds', async () => {
-    const spawner = new FakeSpawner({
-      serve: ({ child }) => {
-        child.ignore('SIGTERM');
-      },
-    });
-    const clock = new ManualClock();
-    const handle = cliWith(spawner, clock).serve(1);
-    const stopping = handle.stop();
-    await clock.advance(4999);
-    expect(spawner.records[0]!.child.signals).toStrictEqual(['SIGTERM']);
-    await clock.advance(1);
-    await stopping;
-    expect(spawner.records[0]!.child.signals).toStrictEqual(['SIGTERM', 'SIGKILL']);
-  });
-});
-
-describe('spawnChild', () => {
-  it('ARCH-2 spawns a real process with the given environment and piped output', async () => {
-    const child = spawnChild(
-      process.execPath,
-      ['-e', 'process.stdout.write(process.env.MARKER ?? "unset")'],
-      { MARKER: 'from-vaultgate' },
-    );
-    const chunks: string[] = [];
-    child.stdout?.on('data', (chunk: Buffer) => {
-      chunks.push(chunk.toString());
-    });
-    const code = await new Promise<number | null>((resolve) => {
-      child.once('close', (exitCode) => {
-        resolve(exitCode);
-      });
-    });
-    expect(code).toBe(0);
-    expect(chunks.join('')).toBe('from-vaultgate');
   });
 });

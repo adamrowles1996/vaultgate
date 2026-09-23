@@ -6,7 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- VAULT-6: a `bw serve` that died after the vault was ready reset the failure count on every
+  restart, so a child crashing on each scheduled sync restarted every few seconds with
+  `attempt: 1` and never reached the backoff or the `error`-level escalation. The count is now
+  cleared only after five minutes of readiness; an earlier exit is one more consecutive failure.
+- VAULT-6: the child's stdout and stderr were discarded, so the reason for an exit was never
+  logged. The last 40 lines (at most 4 KiB) are kept and logged on `bw serve exited` with the
+  exit code, signal and uptime, after session keys (`BW_SESSION=…`, long base64 tokens) and
+  password assignments are redacted.
+- VAULT-9: successful syncs, the initial one included, are logged at `info` as `vault synced` with
+  their duration, and `/readyz` reports `vault: { ready, lastSyncAt }` beside `failing`; the
+  status semantics are unchanged.
+- VAULT-17: a `/sync` answered without its JSON envelope while `bw serve` is still running is
+  retried once after 2 s before it is reported, and a sync that fails because the child exited is
+  not counted as a second failure.
 
 ## [0.1.0-rc.2] - 2026-09-23
 

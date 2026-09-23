@@ -2,14 +2,18 @@
  * What the supervisor is given and what it falls back to, kept apart from the
  * lifecycle so the state machine in `supervisor.ts` stays readable.
  */
+import { ok, type Result } from '../result.ts';
+
 import { systemClock } from './clock.ts';
 import { allocateLoopbackPort } from './ports.ts';
 import { spawnChild } from './serve-process.ts';
 
 import type { FetchFunction } from './api.ts';
 import type { Clock } from './clock.ts';
-import type { SpawnFunction } from './serve-process.ts';
+import type { Credentials } from './credentials.ts';
+import type { BwCli, SpawnFunction } from './serve-process.ts';
 import type { Environment } from '../config/index.ts';
+import type { Logger } from '../logger.ts';
 import type { VaultError } from '../vault/client.ts';
 
 export interface VaultSupervisorDependencies {
@@ -49,6 +53,14 @@ export function resolveDependencies(
 const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 60_000;
 
+/**
+ * How long `bw serve` must stay ready before its next exit starts the failure
+ * count afresh (VAULT-6). A child that dies sooner, however it got there, is
+ * one more consecutive failure, so a crash loop after a successful unlock
+ * reaches the backoff and the error-level escalation like any other.
+ */
+export const MIN_HEALTHY_UPTIME_MS = 5 * 60_000;
+
 export function backoffMs(consecutiveFailures: number): number {
   return Math.min(INITIAL_BACKOFF_MS * 2 ** Math.max(consecutiveFailures - 1, 0), MAX_BACKOFF_MS);
 }
@@ -68,4 +80,30 @@ export const SERVE_SETTLE_POLL_MS = 250;
  */
 export function isServeSettling(error: VaultError, spawnedAt: number, now: number): boolean {
   return error.code === 'vault_protocol_error' && now - spawnedAt < SERVE_SETTLE_MS;
+}
+
+/**
+Logs in when the CLI reports `unauthenticated`, configuring the server first (VAULT-3, 4).
+*/
+export async function ensureLoggedIn(
+  cli: BwCli,
+  server: string | undefined,
+  credentials: Credentials,
+  logger: Logger,
+): Promise<Result<void>> {
+  const status = await cli.status();
+  if (!status.ok) {
+    return status;
+  }
+  if (status.value.status !== 'unauthenticated') {
+    return ok(undefined);
+  }
+  if (server !== undefined) {
+    const configured = await cli.configureServer(server);
+    if (!configured.ok) {
+      return configured;
+    }
+  }
+  logger.info('logging in to bitwarden with the api key');
+  return cli.login(credentials);
 }

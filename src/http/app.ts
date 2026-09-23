@@ -24,12 +24,22 @@ const STRICT_TRANSPORT_SECURITY = 'max-age=31536000; includeSubDomains';
 export type App = Hono<AppEnvironment>;
 
 /**
+The vault's detail on `/readyz`: whether it serves and when it last synced (VAULT-9).
+*/
+interface VaultReadiness {
+  readonly ready: boolean;
+  readonly lastSyncAt: string | null;
+}
+
+/**
  * What `/readyz` reports (spec §10.2): `failing` names each component that is
- * not ready, so an operator can tell a locked vault from a broken store.
+ * not ready, so an operator can tell a locked vault from a broken store, and
+ * `vault` carries the one detail worth polling, the time of the last sync.
  */
 export interface Readiness {
   readonly ready: boolean;
   readonly failing: readonly string[];
+  readonly vault: VaultReadiness;
 }
 
 export interface AppDependencies {
@@ -70,10 +80,10 @@ export function createApp(dependencies: AppDependencies): App {
   app.get('/healthz', (context) => context.json({ status: 'ok' }));
   // -- storage: readiness reflects the store; later milestones add bw serve --
   app.get('/readyz', (context) => {
-    const { ready, failing } = readiness();
+    const { ready, failing, vault } = readiness();
     return ready
-      ? context.json({ status: 'ok' })
-      : context.json({ status: 'unavailable', failing: [...failing] }, 503);
+      ? context.json({ status: 'ok', vault })
+      : context.json({ status: 'unavailable', failing: [...failing], vault }, 503);
   });
   // -- end storage --
 

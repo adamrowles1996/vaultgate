@@ -126,10 +126,10 @@ and sync and needs no backup. See [Backup and restore](backup-and-restore.md).
 
 Two unauthenticated probes, neither revealing a version or configuration:
 
-| Probe      | Answer                                                                                                     |
-| ---------- | ---------------------------------------------------------------------------------------------------------- |
-| `/healthz` | `{"status":"ok"}` as soon as the process listens. Container health checks use it.                          |
-| `/readyz`  | `{"status":"ok"}` when everything is ready; otherwise `503` with `{"status":"unavailable","failing":[…]}`. |
+| Probe      | Answer                                                                                                                                                         |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/healthz` | `{"status":"ok"}` as soon as the process listens. Container health checks use it.                                                                              |
+| `/readyz`  | `{"status":"ok","vault":{"ready":true,"lastSyncAt":"…"}}` when everything is ready; otherwise `503` with `{"status":"unavailable","failing":[…],"vault":{…}}`. |
 
 `failing` names the components that are not ready:
 
@@ -137,6 +137,9 @@ Two unauthenticated probes, neither revealing a version or configuration:
   it, read the log for a migration or filesystem error.
 - `vault`: `bw serve` is not running and unlocked. Normal for the first seconds after start;
   persistent when something is wrong.
+
+`vault.lastSyncAt` is the time of the last successful sync since start-up, or `null` before the
+first one; a failed sync does not change `ready`.
 
 While `vault` is failing, MCP tool calls return the error code `vault_unavailable` rather than a
 result. The vault does not need to be ready for the setup, login and account pages.
@@ -146,17 +149,20 @@ result. The vault does not need to be ready for the setup, login and account pag
 The supervisor retries with exponential backoff (1 s doubling to 60 s), so the log shows what it
 is retrying. Look for these lines:
 
-| Log message                                   | Meaning                                                                                                                                                                                          |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bitwarden cli version`                       | `bw --version` worked; the version is logged.                                                                                                                                                    |
-| `bitwarden cli refused`                       | The CLI is older than the minimum (2025.1.0). Retrying cannot help, so the loop stops: install a newer CLI and restart.                                                                          |
-| `vault backend start failed`                  | One attempt failed; `err` says why: the binary was not found (`VAULTGATE_BW_BIN`), login was rejected (API key), unlock was rejected (master password) or `bw serve` did not answer within 30 s. |
-| `bw serve is still settling; retrying unlock` | Debug level. A freshly started `bw serve` answered `/unlock` with something other than its JSON envelope; the unlock is retried every 250 ms for up to 10 s before it counts as a failure.       |
-| `vault backend unavailable`                   | The same, at `error` level after ten consecutive failures.                                                                                                                                       |
-| `logging in to bitwarden with the api key`    | The CLI reported `unauthenticated`, so `bw login --apikey` runs (after `bw config server` when `VAULTGATE_BW_SERVER` is set).                                                                    |
-| `initial vault sync failed`                   | Login and unlock worked but the first sync did not. Readiness is unaffected; reads serve from the cached vault and the sync is retried on the schedule.                                          |
-| `vault ready`                                 | Unlocked. `/readyz` turns `200`.                                                                                                                                                                 |
-| `bw serve exited`                             | The child died; it is restarted with backoff.                                                                                                                                                    |
+| Log message                                          | Meaning                                                                                                                                                                                          |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bitwarden cli version`                              | `bw --version` worked; the version is logged.                                                                                                                                                    |
+| `bitwarden cli refused`                              | The CLI is older than the minimum (2025.1.0). Retrying cannot help, so the loop stops: install a newer CLI and restart.                                                                          |
+| `vault backend start failed`                         | One attempt failed; `err` says why: the binary was not found (`VAULTGATE_BW_BIN`), login was rejected (API key), unlock was rejected (master password) or `bw serve` did not answer within 30 s. |
+| `bw serve is still settling; retrying unlock`        | Debug level. A freshly started `bw serve` answered `/unlock` with something other than its JSON envelope; the unlock is retried every 250 ms for up to 10 s before it counts as a failure.       |
+| `vault backend unavailable`                          | The same, at `error` level after ten consecutive failures.                                                                                                                                       |
+| `logging in to bitwarden with the api key`           | The CLI reported `unauthenticated`, so `bw login --apikey` runs (after `bw config server` when `VAULTGATE_BW_SERVER` is set).                                                                    |
+| `initial vault sync failed`                          | Login and unlock worked but the first sync did not. Readiness is unaffected; reads serve from the cached vault and the sync is retried on the schedule.                                          |
+| `vault synced`                                       | A sync succeeded; `kind` says whether it was the `initial` or a `scheduled` one and `durationMs` how long it took.                                                                               |
+| `vault sync failed`                                  | A scheduled sync failed; `err` says why. Readiness is unaffected and the next sync runs on schedule.                                                                                             |
+| `vault sync answered without its envelope; retrying` | Debug level. `/sync` answered with something other than its JSON envelope while `bw serve` was still running; it is retried once after 2 s before being reported.                                |
+| `vault ready`                                        | Unlocked. `/readyz` turns `200`.                                                                                                                                                                 |
+| `bw serve exited`                                    | The child died; it is restarted with backoff. `code`, `signal` and `uptimeMs` say how and after how long, and `output` holds the last lines it wrote (session keys and passwords redacted).      |
 
 Typical causes: a wrong `VAULTGATE_BW_SERVER` for an EU or self-hosted account, a client secret
 that was pasted with a trailing space, a master password that has since been changed, or a
@@ -164,7 +170,10 @@ Vaultwarden account that does not yet exist. Rotating the master password in Bit
 updating `VAULTGATE_BW_PASSWORD` (or its file) and restarting; nothing else changes.
 
 After the vault is ready it is synced every `VAULTGATE_BW_SYNC_INTERVAL` (default 15 minutes,
-1 minute to 24 hours). A failed sync is logged as a warning and does not affect readiness.
+1 minute to 24 hours). A failed sync is logged as a warning and does not affect readiness. A
+`bw serve` that dies shortly after becoming ready, for instance on every scheduled sync, counts
+towards the same backoff and escalation as a failed start; only five minutes of readiness clear
+the count.
 
 ## Next
 

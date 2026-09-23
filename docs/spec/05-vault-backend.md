@@ -32,7 +32,14 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
   can fix it. A fresh `bw serve` accepts connections a moment before its command handlers are
   ready, so for the first 10 s after it is spawned a `POST /unlock` answered with something other
   than the JSON envelope (a protocol error) is retried every 250 ms rather than counted as a
-  failed attempt; after that window it is a failed attempt like any other.
+  failed attempt; after that window it is a failed attempt like any other. An exit after the
+  vault was ready is one more consecutive failure unless the child had been ready for at least
+  5 minutes, in which case the count starts afresh at 1; so a child that dies on every scheduled
+  sync reaches the backoff and the `error`-level escalation like any other failure. The
+  `bw serve exited` log line carries the exit code, signal, uptime and the last 40 lines
+  (at most 4 KiB) the child wrote to stdout and stderr, with anything resembling a session key
+  (`BW_SESSION=…`, tokens of 40 or more base64 characters) or a password assignment redacted
+  before it is logged (VAULT-14).
 - **VAULT-7** On `SIGTERM`/`SIGINT` vaultgate calls `POST /lock`, then sends `SIGTERM` to the
   child and waits up to 5 s before `SIGKILL`, logging `vault locked` and `bw serve stopped` as each
   step completes.
@@ -41,12 +48,20 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 ## 5.2 Synchronisation
 
 - **VAULT-9** `POST /sync` runs after unlock and then every `VAULTGATE_BW_SYNC_INTERVAL` (default
-  15 minutes, minimum 1 minute). A sync failure, including the initial one, is logged and does not
-  affect readiness; the cached vault continues to serve reads.
+  15 minutes, minimum 1 minute). Each successful sync, the initial one included, is logged at
+  `info` as `vault synced` with its duration. A sync failure, including the initial one, is
+  logged and does not affect readiness; the cached vault continues to serve reads. The supervisor
+  records the time of the last successful sync and the error code of the last failed one, and
+  `/readyz` reports the former (spec §10.2).
 - **VAULT-10** Write tools trigger no sync; they poll `GET /object/item/<id>` every 100 ms until
   the new `revisionDate` (or, for trash, the `deletedDate`) is visible, bounded to 5 s, so a
   read-after-write is consistent. If the bound elapses the write has still succeeded, so the last
   observed item is returned rather than an error.
+- **VAULT-17** A `POST /sync` answered with something other than the JSON envelope (a protocol
+  error) while `bw serve` is still running is retried once after 2 s before it is reported as a
+  failed sync; a server-side sync can complete even when the reply is malformed. A protocol error
+  from a sync is never treated as a failed start or restart (VAULT-6): only the child's exit is,
+  and a sync that fails because the child exited is not counted a second time.
 
 ## 5.3 Vault client
 

@@ -3,11 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { SCOPES } from '../mcp/scopes.ts';
 import { createHarness, setUpOperator } from '../test-support/identity-app.ts';
 import { callTool, initializeRequest, postJsonRpc } from '../test-support/mcp-client.ts';
-import { createTestApp, type TestApp, testConfig } from '../test-support/test-app.ts';
+import { createTestApp, READY, type TestApp, testConfig } from '../test-support/test-app.ts';
 
 import type { Readiness } from './app.ts';
-
-const READY: Readiness = { ready: true, failing: [] };
 
 function appWithLogSink(readiness: () => Readiness = () => READY): TestApp {
   return createTestApp({ readiness });
@@ -25,14 +23,22 @@ describe('createApp', () => {
     const { app } = appWithLogSink();
     const response = await app.request('/readyz');
     expect(response.status).toBe(200);
-    expect(await response.json()).toStrictEqual({ status: 'ok' });
+    expect(await response.json()).toStrictEqual({
+      status: 'ok',
+      vault: { ready: true, lastSyncAt: '2026-09-22T12:00:00.000Z' },
+    });
   });
 
   it('OPS-4 answers 503 naming the failing components when not ready', async () => {
-    const { app } = appWithLogSink(() => ({ ready: false, failing: ['store'] }));
+    const vault = { ready: false, lastSyncAt: null };
+    const { app } = appWithLogSink(() => ({ ready: false, failing: ['store', 'vault'], vault }));
     const response = await app.request('/readyz');
     expect(response.status).toBe(503);
-    expect(await response.json()).toStrictEqual({ status: 'unavailable', failing: ['store'] });
+    expect(await response.json()).toStrictEqual({
+      status: 'unavailable',
+      failing: ['store', 'vault'],
+      vault: { ready: false, lastSyncAt: null },
+    });
   });
 
   it('sets a request id and hardening headers on every response', async () => {

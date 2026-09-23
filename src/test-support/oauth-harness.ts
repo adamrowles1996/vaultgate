@@ -15,6 +15,7 @@ import { sequentialRandom } from './identity.ts';
 import { InMemoryVaultClient } from './in-memory-vault-client.ts';
 import { captureLogger } from './logging.ts';
 import { unwrapOk } from './result.ts';
+import { READY } from './test-app.ts';
 
 import type { AuditEvent } from '../audit/event.ts';
 import type { PreregisteredClient } from '../config/primitives.ts';
@@ -188,7 +189,7 @@ export function createOAuthHarness(options: HarnessOptions = {}): OAuthHarness {
   const app = createApp({
     config,
     logger,
-    readiness: () => ({ ready: true, failing: [] }),
+    readiness: () => READY,
     identity: identity.identity,
     vaultClient: new InMemoryVaultClient(),
     tokenVerifier: server.tokenVerifier,
