@@ -1,8 +1,7 @@
 /**
  * The `http` connector's form (spec §14.2, §14.3): one descriptor per field
- * of its three documents, in the order the operator reads them. The `graph`
- * mode's fields validate now (ACT-81) but a graph target is refused at save
- * until its adapter lands with M10, which the help says.
+ * of its three documents, in the order the operator reads them, including
+ * the `graph` adapter's (ACT-81), whose exchange vaultgate performs itself.
  */
 import { HTTP_METHODS } from '../connectors/http/schemas.ts';
 
@@ -85,8 +84,8 @@ const credential: readonly FieldDescriptor[] = [
     kind: 'text',
     when: { field: 'mode', values: GRAPH },
     help:
-      'The graph fields are validated now, but a graph target cannot be saved until the graph ' +
-      'adapter arrives in M10. The base URL must be https://graph.microsoft.com.',
+      'The directory the application belongs to: a tenant id or a verified domain name. ' +
+      'The base URL must be https://graph.microsoft.com.',
   },
   {
     document: 'credential',
