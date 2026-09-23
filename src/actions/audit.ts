@@ -16,7 +16,11 @@ export type ActionsAuditAction =
   | 'target_disabled'
   | 'grant_added'
   | 'grant_removed'
-  | 'sessions_closed';
+  | 'sessions_closed'
+  /**
+  ACT-83: a credential the layer rotated in the vault; the item and field, never the value.
+  */
+  | 'credential_rotated';
 
 export interface ActionsAuditEvent extends AuditEvent {
   readonly category: 'actions';

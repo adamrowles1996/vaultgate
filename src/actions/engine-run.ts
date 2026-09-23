@@ -10,16 +10,16 @@ import { parseFieldSelector } from '../vault/fields.ts';
 
 import { pinEndpoint } from './destination.ts';
 import { ActionError } from './errors.ts';
-import {
-  createInjectedValues,
-  createScrubber,
-  type InjectedEntry,
-  type InjectedValues,
-  type Scrubber,
-} from './scrub.ts';
+import { createSecretHolder, type SecretHolder } from './secrets.ts';
 
-import type { ConnectorOutput, PinnedEndpoint, RunContext } from './connectors/connector.ts';
+import type {
+  ConnectorOutput,
+  PinnedEndpoint,
+  RunContext,
+  RunSupport,
+} from './connectors/connector.ts';
 import type { ResolvedCall } from './engine-resolve.ts';
+import type { InjectedEntry, Scrubber } from './scrub.ts';
 import type { Logger } from '../logger.ts';
 import type { Lookup } from '../net/ip-ranges.ts';
 import type { SecretField, VaultClient } from '../vault/client.ts';
@@ -41,10 +41,10 @@ export interface RunOutput {
   readonly outputTruncated: boolean;
 }
 
-export interface Credential {
-  readonly injected: InjectedValues;
-  readonly scrub: Scrubber;
-}
+/**
+The secrets of one call: what the mapping named, plus anything the run adds (ACT-82, ACT-83).
+*/
+export type Credential = SecretHolder;
 
 /**
 A fetched value, or the reason it could not be fetched (logged for the operator, never sent to the agent).
@@ -107,10 +107,7 @@ export async function fetchCredential(
       entries.push({ field: field.name, value: Buffer.from(fetched.value, 'utf8') });
     }
   }
-  return ok({
-    injected: createInjectedValues(entries, username),
-    scrub: createScrubber(entries, username),
-  });
+  return ok(createSecretHolder(entries, username));
 }
 
 /**
@@ -181,16 +178,25 @@ async function attempt(
 }
 
 /**
+What one connector run is given: the resolved call, its secrets, its pinned addresses and the engine's support.
+*/
+export interface ConnectorCall {
+  readonly resolved: ResolvedCall;
+  readonly credential: Credential;
+  readonly pinned: readonly PinnedEndpoint[];
+  readonly support: RunSupport;
+}
+
+/**
  * Runs the connector with the injected values and the pinned addresses,
  * under an `AbortSignal` that fires at the policy timeout; a connector that
  * outlives it is abandoned and the call is `timeout` (ACT-59).
  */
 export async function runConnector(
   dependencies: Pick<RunDependencies, 'logger' | 'now' | 'schedule'>,
-  resolved: ResolvedCall,
-  credential: Credential,
-  pinned: readonly PinnedEndpoint[],
+  call: ConnectorCall,
 ): Promise<Result<RunOutput, ActionError>> {
+  const { resolved, credential, pinned, support } = call;
   const { documents } = resolved.target;
   const { now } = dependencies;
   const controller = new AbortController();
@@ -205,11 +211,16 @@ export async function runConnector(
   const context: RunContext<unknown, unknown, unknown> = {
     ...documents,
     injected: credential.injected,
+    support,
     pinned,
     signal: controller.signal,
     outputLimit: {
       maxBytes: documents.common.max_output_bytes,
-      guardBytes: credential.scrub.guardBytes,
+      // Read when the body is read, so a value the run itself obtained
+      // (ACT-82) widens the guard band before the cut (ACT-52).
+      get guardBytes() {
+        return credential.scrub.guardBytes;
+      },
     },
     logger: dependencies.logger,
   };

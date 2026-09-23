@@ -1,24 +1,17 @@
 # 13 Actions: typed, policy-gated use of vault credentials
 
-> **Status: M9 landed — engine core, MCP surface, account pages and the `http` runtime; the
-> `graph` adapter is M10.** This section specifies the actions layer decided in
+> **Status: M9 and M10 landed.** This section specifies the actions layer decided in
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as milestones
-> M9 to M15 in [`PLAN.md`](../PLAN.md). Landed with M9's first pull request: configuration
-> (13.14), scopes and consent (13.5), storage and maintenance (13.13), targets and grants
-> (13.3, 13.4), policy patterns (13.7.1), confirmation state (13.8), secret handling (13.9),
-> limits (13.11), the engine in `src/actions/` with the resolution order of ACT-16, the
-> `action_calls` trail and its export stream (13.12), the layering rules (13.15) and the
-> `http` connector's document schemas (14.2). Landed with the second: the tool registration,
-> scope gate and listing rules of 13.6.1 (ACT-15, 17, 18), `actions_list_targets` (13.6.2),
-> the elicitation transport of 13.8 on the 2026-07-28 wire (ACT-42, 45, 47 and ACT-48's
-> refusal) and the consent-revocation hook of ACT-10. Landed with the third: the account
-> pages (13.3.2) with the `actions` export stream on the account page (ACT-62) and the
-> per-target call history (ACT-63, without the "unexpected write" view, which is M14's).
-> Landed with the fourth: the `http` runtime (14.2; ACT-20…22, 79, 80) and `http_request`.
-> Not yet: the `graph` adapter (14.3, M10; a `graph` mapping is refused at save and on read), the other connectors (no tool is listed until its runtime lands),
-> and ACT-48's in-band fallback for the 2025 wire (M14):
-> until then a client on that wire, whose capabilities the stateless handler never sees, is
-> refused a confirmed target with `confirmation_unavailable`. The per-connector contracts are
+> M9 to M15 in [`PLAN.md`](../PLAN.md). Landed with M9: everything this section specifies
+> except what "not yet" names below — configuration, scopes and consent, storage, targets and
+> grants, policy patterns, confirmation and its elicitation transport on the 2026-07-28 wire,
+> secret handling, limits, the engine with the resolution order of ACT-16, the `action_calls`
+> trail and its export stream, the tool surface of 13.6, the account pages of 13.3.2 and the
+> `http` connector (14.2) with `http_request`. Landed with M10: the `graph` credential adapter
+> (14.3; ACT-81…83). Not yet: the other connectors (no tool is listed until its runtime lands),
+> ACT-63's "unexpected write" view (M14), and ACT-48's in-band fallback for the 2025 wire
+> (M14): until then a client on that wire, whose capabilities the stateless handler never sees,
+> is refused a confirmed target with `confirmation_unavailable`. The per-connector contracts are
 > in [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence continues there.
 
 ## 13.1 Purpose
@@ -118,7 +111,8 @@ Design rules, in priority order:
   `actions.target_disabled`, `actions.grant_added`, `actions.grant_removed` or
   `actions.sessions_closed` with the target name, connector, the operator id and, for updates,
   the list of changed field names (never values; the `credential` document is reported as
-  `credential` only).
+  `credential` only). `actions.credential_rotated` (ACT-83) is the one event here with no
+  operator: the target, the item and the field, never the value.
 - **ACT-8** Deleting a target deletes its grants, closes its sessions and keeps its
   `action_calls` rows (the audit trail outlives the target; rows carry the name and connector
   redundantly for that reason).
@@ -457,8 +451,10 @@ args_sha256, issued_at, expires_at }` and `expires_at` is `issued_at + 120 000`.
   the call (after policy, rate limit and confirmation), held in memory only for the call, and
   overwritten with zeros when the call ends (`Buffer.fill(0)`; string copies a connector library
   or the browser sidecar makes are outside vaultgate's control and are the reason connectors are
-  separate sub-modules with the smallest possible surface). Nothing about them is cached, except
-  the adapter token of ACT-82 and the scrub list a browser session keeps for its lifetime (14.7).
+  separate sub-modules with the smallest possible surface). A value the run itself obtains joins
+  the same holder and is zeroed with it. Nothing about them is cached, except the adapter token
+  of ACT-82, which lives in the adapter's own in-process cache, and the scrub list a browser
+  session keeps for its lifetime (14.7).
 - **ACT-51** Before any connector output, error text, snapshot or elicitation message leaves the
   engine, the scrubber replaces every occurrence of every injected value and of each of its
   encoded variants with `[redacted:<field>]`. The variants are: the raw value;
@@ -628,7 +624,9 @@ src/actions/
   policy.ts            pattern matcher (ACT-34), HTTP subject normalisation (ACT-35), common policy fields, PolicyDecision (ACT-39)
   destination.ts       the private-range rule and the pinned address (ACT-55, 56)
   confirm.ts           requestState mint/verify (ACT-44…46), ElicitResult handling, the ACT-42 document
-  scrub.ts             injected values (ACT-50), variant generation and replacement (ACT-51, 52)
+  scrub.ts             variant generation and replacement (ACT-51, 52)
+  secrets.ts           the secrets one call holds, its run's own included (ACT-50, 82)
+  run-support.ts       what the engine lends a run: a second host, a captured secret, the ACT-83 rotation
   limits.ts            per-target and per-client buckets and in-flight counters (ACT-59)
   sessions.ts          closing action_sessions on the revocation paths; the browser session registry is M15
   audit.ts             the actions.* audit events (ACT-7)
@@ -637,7 +635,7 @@ src/actions/
     connector.ts       the connector interface (14.1)
     registry.ts        schemas of every connector; runtimes loaded for enabled connectors only (ACT-73)
     http/              the runtime (M9): schemas (14.2), the tool (ACT-20, 21), authorize (pure), request, response, run, index
-    graph/             token exchange, cache, refresh-token write-back (planned)
+    graph/             the 14.3 adapter: document, token exchange, cache, write-back
     sql/               tokeniser and classifier; mssql/ and postgres/ drivers (planned)
     ssh/               ssh2 client wrapper, host-key pinning (planned)
     winrm/             WS-Management client, shell lifecycle (planned)

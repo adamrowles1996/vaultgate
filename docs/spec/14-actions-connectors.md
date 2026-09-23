@@ -1,12 +1,12 @@
 # 14 Action connectors
 
-> **Status: the interface (14.1) and the `http` connector (14.2) landed with M9; the `graph`
-> adapter (14.3) is M10, `sql` M11, `ssh` M12, `winrm` M13 and `browser` M15.** The connector
-> contracts of the actions layer ([13 Actions](13-actions.md),
-> [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). The `graph` document of 14.3
-> validates today, but a target that uses it is refused at save (and on read) until its runtime
-> lands, so no half-implemented mode ever runs. Requirement identifiers continue the `ACT-n`
-> sequence of section 13.
+> **Status: the interface (14.1), the `http` connector (14.2) and the `graph` credential adapter
+> (14.3) have landed (M9, M10); `sql` is M11, `ssh` M12, `winrm` M13 and `browser` M15.** The
+> connector contracts of the actions layer ([13 Actions](13-actions.md),
+> [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). A document whose runtime has
+> not landed validates, but a target that uses it is refused at save (and on read) until it does,
+> so no half-implemented mode ever runs. Requirement identifiers continue the `ACT-n` sequence of
+> section 13.
 
 ## 14.1 Connector interface
 
@@ -96,24 +96,36 @@ The adapter exists because Microsoft Graph is the API the maintainer's agents ca
 because a bearer token obtained by OAuth is a credential vaultgate must own end to end: the
 agent must never see the client secret, the refresh token or the access token.
 
-- **ACT-81** `credential.mode = "graph"` is valid only when `base_url` is `https://graph.microsoft.com`
-  (national clouds are a post-M15 candidate). The adapter document holds `tenant_id`, `client_id`,
-  `grant` (`client_credentials` \| `refresh_token`), `scope` (default
-  `https://graph.microsoft.com/.default`), `secret_field` (the vault field holding the client
-  secret) and, for `refresh_token`, `refresh_token_field` (the vault field holding the refresh
-  token; a hidden custom field is the expected home).
+- **ACT-81** `credential.mode = "graph"` is valid only when `base_url` is on the
+  `https://graph.microsoft.com` origin exactly (a path prefix under it, such as `/v1.0`, is
+  allowed; national clouds are another origin and are a post-M15 candidate). The adapter document
+  holds `tenant_id` (a GUID or a domain name, validated by shape because it is placed in a URL
+  path), `client_id` (a GUID), `grant` (`client_credentials` \| `refresh_token`), `scope`
+  (default `https://graph.microsoft.com/.default`), `secret_field` (the vault field holding the
+  client secret) and, for `refresh_token`, `refresh_token_field` (the vault field holding the
+  refresh token; a hidden custom field is the expected home).
 - **ACT-82** Before the request, the adapter obtains an access token from
   `https://login.microsoftonline.com/<tenant_id>/oauth2/v2.0/token` with the chosen grant, through
-  the pinned transport. The token is cached in process memory keyed by target id and `revision`
-  until 60 s before its `expires_in`, is never stored, is never logged, and is an injected value
-  for scrubbing (ACT-51). A `401` from Graph invalidates the cache and the request is retried once
-  with a fresh token.
+  the pinned transport; that host is resolved and validated by the ACT-55 and ACT-56 rules each
+  time a token is exchanged (a call served from the cache exchanges nothing and so resolves
+  nothing). The token endpoint's response is validated against a schema before a field is read
+  (T33). The token is cached in process memory keyed by target id and `revision` until 60 s
+  before its `expires_in`, is never stored, is never logged, and is an injected value for
+  scrubbing (ACT-51). A `401` from Graph invalidates the cache and the request is retried once
+  with a fresh token; a `401` on that attempt is the result. The token endpoint's own failures
+  map to `authentication_failed` for `invalid_client` and `invalid_grant` (the OAuth error code
+  is the only `detail`; the AADSTS description quotes the request and is not scrub-safe),
+  `connection_failed`, `tls_error` or `timeout` for a transport failure, and `upstream_error`
+  otherwise.
 - **ACT-83** When the token endpoint returns a new `refresh_token` (Microsoft rotates them), the
   adapter writes it back to `refresh_token_field` of the vault item through `VaultClient` and
-  records `actions.credential_rotated` (target name, item id, field name; never the value). This
-  is the only path by which the actions layer writes to the vault, it needs no agent scope, and a
-  failed write-back fails the call with `credential_rotation_failed` so the operator learns before
-  the old token expires.
+  records `actions.credential_rotated` (target name, item id, field name; never the value). The
+  write-back happens **before** the Graph request, and a failed one fails the call with
+  `credential_rotation_failed` so the operator learns before the old token expires. This is the
+  only path by which the actions layer writes to the vault and it needs no agent scope; the
+  fields it can write are the ones `ItemPatch` expresses (a custom field, the login password, the
+  notes), and any other selector is `credential_rotation_failed` with `detail.reason`
+  `unwritable_field`.
 
 ## 14.4 `sql`
 

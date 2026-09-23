@@ -13,9 +13,9 @@ export interface InjectedEntry {
 }
 
 /**
- * The secret holder of one call: owns the buffers, exposes them to a
- * connector only for the duration of `run`, and zeroes them in `dispose`,
- * which the engine calls in `finally` (ACT-50).
+ * What one call's secrets look like to a connector: the values are readable
+ * only for the duration of `run`, and the engine zeroes them in `dispose`
+ * afterwards (ACT-50). `src/actions/secrets.ts` owns the implementation.
  */
 export interface InjectedValues {
   readonly fields: readonly string[];
@@ -25,23 +25,6 @@ export interface InjectedValues {
   readonly username: string | undefined;
   value(field: string): Buffer | undefined;
   dispose(): void;
-}
-
-export function createInjectedValues(
-  entries: readonly InjectedEntry[],
-  username: string | undefined,
-): InjectedValues {
-  const values = new Map(entries.map((entry) => [entry.field, entry.value]));
-  return {
-    fields: entries.map((entry) => entry.field),
-    username,
-    value: (field) => values.get(field),
-    dispose() {
-      for (const value of values.values()) {
-        value.fill(0);
-      }
-    },
-  };
 }
 
 export interface CappedText {

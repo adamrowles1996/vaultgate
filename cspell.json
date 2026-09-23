@@ -23,6 +23,7 @@
     "/%2F[A-Za-z]+/g"
   ],
   "words": [
+    "AADSTS",
     "actionlint",
     "adamrowles",
     "apikey",
@@ -45,6 +46,7 @@
     "Conn",
     "conninfo",
     "containerapp",
+    "contoso",
     "cosign",
     "Cowork",
     "datareader",
@@ -86,6 +88,7 @@
     "markdownlint",
     "maxlength",
     "metricsz",
+    "microsoftonline",
     "modelcontextprotocol",
     "Nemo",
     "Nix",
@@ -94,6 +97,7 @@
     "nologin",
     "NOREVEAL",
     "nosniff",
+    "onmicrosoft",
     "OPENQUERY",
     "OPENROWSET",
     "oras",

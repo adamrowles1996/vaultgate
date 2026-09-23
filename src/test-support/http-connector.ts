@@ -14,7 +14,6 @@ import {
   type HttpPolicy,
   httpPolicySchema,
 } from '../actions/connectors/http/schemas.ts';
-import { createInjectedValues, createScrubber, type InjectedEntry } from '../actions/scrub.ts';
 import { all } from '../storage/query.ts';
 
 import {
@@ -24,12 +23,14 @@ import {
   PUBLIC_ADDRESS,
 } from './actions-fixtures.ts';
 import { captureLogger } from './logging.ts';
+import { type RecordedSupport, recordedSupport, type SupportOptions } from './run-support.ts';
 import { CANARY } from './vault-fixture.ts';
 
 import type { ConnectorOutput } from '../actions/connectors/connector.ts';
 import type { HttpOperation } from '../actions/connectors/http/operation.ts';
 import type { HttpRunContext } from '../actions/connectors/http/run.ts';
 import type { ActionError } from '../actions/errors.ts';
+import type { InjectedEntry } from '../actions/scrub.ts';
 import type { PinnedFetch, PinnedRequest } from '../net/pinned-https.ts';
 import type { Result } from '../result.ts';
 
@@ -40,8 +41,15 @@ export interface FakeTransport {
   readonly requests: PinnedRequest[];
 }
 
+/**
+A request that never answers, as the real transport behaves: an already-aborted signal fails at once.
+*/
 function untilAborted(signal: AbortSignal): Promise<never> {
   return new Promise((_resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason as Error);
+      return;
+    }
     signal.addEventListener('abort', () => {
       reject(signal.reason as Error);
     });
@@ -106,11 +114,15 @@ export function echoResponse(request: PinnedRequest, status = 200): Response {
   });
 }
 
-export interface ContextOptions {
+export interface ContextOptions extends SupportOptions {
   readonly baseUrl?: string;
   readonly credential?: HttpCredential;
   readonly policy?: Readonly<Record<string, unknown>>;
   readonly secret?: string;
+  /**
+  The refresh token the vault holds, for a `graph` mapping that names a refresh-token field.
+  */
+  readonly refreshToken?: string;
   readonly username?: string | undefined;
   readonly pinned?: HttpRunContext['pinned'];
 }
@@ -119,6 +131,25 @@ export interface BuiltContext {
   readonly context: HttpRunContext;
   readonly controller: AbortController;
   readonly logged: () => readonly Record<string, unknown>[];
+  readonly support: RecordedSupport;
+}
+
+/**
+The vault values a mapping names: the secret it injects, plus a `graph` refresh token.
+*/
+function credentialEntries(options: ContextOptions, credential: HttpCredential): InjectedEntry[] {
+  const value = Buffer.from(options.secret ?? CANARY.password, 'utf8');
+  if (credential.mode !== 'graph') {
+    return [{ field: credential.field, value }];
+  }
+  const entries: InjectedEntry[] = [{ field: credential.secret_field, value }];
+  if (credential.refresh_token_field !== undefined) {
+    entries.push({
+      field: credential.refresh_token_field,
+      value: Buffer.from(options.refreshToken ?? CANARY.hiddenField, 'utf8'),
+    });
+  }
+  return entries;
 }
 
 /**
@@ -130,11 +161,12 @@ export function httpRunContext(options: ContextOptions = {}): BuiltContext {
   };
   const credential = options.credential ?? { mode: 'bearer', field: 'password' };
   const policy: HttpPolicy = httpPolicySchema.parse({ allowed_paths: ['/**'], ...options.policy });
-  const field = credential.mode === 'graph' ? credential.secret_field : credential.field;
-  const entries: InjectedEntry[] = [
-    { field, value: Buffer.from(options.secret ?? CANARY.password, 'utf8') },
-  ];
   const username = 'username' in options ? options.username : 'alice@example.com';
+  const support = recordedSupport({
+    ...options,
+    entries: credentialEntries(options, credential),
+    username,
+  });
   const controller = new AbortController();
   const { logger, lines } = captureLogger();
   const context: HttpRunContext = {
@@ -142,25 +174,28 @@ export function httpRunContext(options: ContextOptions = {}): BuiltContext {
     credential,
     policy,
     common: policy,
-    injected: createInjectedValues(entries, username),
+    injected: support.secrets.injected,
+    support: support.support,
     pinned: options.pinned ?? [
       { host: new URL(destination.base_url).hostname, tls: true, address: PUBLIC_ADDRESS },
     ],
     signal: controller.signal,
     outputLimit: {
       maxBytes: policy.max_output_bytes,
-      guardBytes: createScrubber(entries, username).guardBytes,
+      get guardBytes() {
+        return support.secrets.scrub.guardBytes;
+      },
     },
     logger,
   };
-  return { context, controller, logged: lines };
+  return { context, controller, logged: lines, support };
 }
 
 /**
-The real connector over a fake transport; `version` fixed so the User-Agent is predictable.
+The real connector over a fake transport; `version` and the clock fixed so every request is predictable.
 */
-export function httpConnectorOver(fake: FakeTransport): HttpConnector {
-  return createHttpConnector({ transport: fake.transport, version: '9.9.9' });
+export function httpConnectorOver(fake: FakeTransport, now: () => number = () => 0): HttpConnector {
+  return createHttpConnector({ transport: fake.transport, version: '9.9.9', now });
 }
 
 export function textResponse(

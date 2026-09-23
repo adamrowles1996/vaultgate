@@ -17,6 +17,7 @@ import {
 import { fetchCredential, pinDestination, runConnector } from './engine-run.ts';
 import { ActionError } from './errors.ts';
 import { type ActionLimits, createActionLimits } from './limits.ts';
+import { createRunSupport } from './run-support.ts';
 import { createTargetsService, type TargetsService } from './targets.ts';
 
 import type { Caller } from './caller.ts';
@@ -99,7 +100,13 @@ async function execute(
       error: recordFailure(context, { ...known, nonce: undefined }, reservation),
     };
   }
-  const output = await runConnector(context, resolved, credential.value, pinned.value);
+  const support = createRunSupport(context, resolved.target.row, credential.value);
+  const output = await runConnector(context, {
+    resolved,
+    credential: credential.value,
+    pinned: pinned.value,
+    support,
+  });
   if (!output.ok) {
     const error = new ActionError(
       output.error.code,

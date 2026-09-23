@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createInjectedValues, createScrubber, redactionMarker, scrubVariants } from './scrub.ts';
+import { createScrubber, redactionMarker, scrubVariants } from './scrub.ts';
 
 const SECRET = 'p@ss word/+=';
 
@@ -111,9 +111,8 @@ describe('createScrubber', () => {
 
   it('ACT-50 keeps working after the injected buffers have been zeroed', () => {
     const value = Buffer.from(SECRET);
-    const injected = createInjectedValues([{ field: 'password', value }], undefined);
     const scrubber = createScrubber([{ field: 'password', value }], undefined);
-    injected.dispose();
+    value.fill(0);
     expect(scrubber.text(SECRET)).toBe('[redacted:password]');
   });
 
@@ -121,18 +120,5 @@ describe('createScrubber', () => {
     const scrubber = createScrubber([], undefined);
     expect(scrubber.guardBytes).toBe(0);
     expect(scrubber.text('anything')).toBe('anything');
-  });
-});
-
-describe('createInjectedValues', () => {
-  it('ACT-50 exposes the buffers by field and zeroes every one on dispose', () => {
-    const password = Buffer.from('hunter2');
-    const injected = createInjectedValues([{ field: 'password', value: password }], 'alice');
-    expect(injected.fields).toStrictEqual(['password']);
-    expect(injected.username).toBe('alice');
-    expect(injected.value('password')).toBe(password);
-    expect(injected.value('totp')).toBeUndefined();
-    injected.dispose();
-    expect(password.equals(Buffer.alloc(7, 0))).toBe(true);
   });
 });

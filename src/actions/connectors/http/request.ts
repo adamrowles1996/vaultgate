@@ -30,6 +30,11 @@ export interface OutgoingRequest {
 }
 
 /**
+A credential whose value the mapping names a vault field for; every mode but `graph`.
+*/
+export type MappedCredential = Exclude<HttpCredential, { mode: 'graph' }>;
+
+/**
 Where the credential goes: one header, or one query parameter (ACT-79).
 */
 export type Injection =
@@ -103,13 +108,20 @@ function basicInjection(
   return ok({ kind: 'header', name: 'authorization', value: `Basic ${pair}` });
 }
 
+/**
+ACT-79, and the injection point of a `graph` access token once the adapter has one (ACT-82).
+*/
+export function bearerInjection(value: string): Injection {
+  return { kind: 'header', name: 'authorization', value: `Bearer ${value}` };
+}
+
 function prefixedInjection(
   credential: Extract<HttpCredential, { mode: 'bearer' | 'header' | 'query' }>,
   value: string,
 ): Injection {
   switch (credential.mode) {
     case 'bearer': {
-      return { kind: 'header', name: 'authorization', value: `Bearer ${value}` };
+      return bearerInjection(value);
     }
     case 'header': {
       return { kind: 'header', name: credential.name, value: `${credential.prefix ?? ''}${value}` };
@@ -122,17 +134,14 @@ function prefixedInjection(
 
 /**
  * ACT-79: the value in its injection point, or `credential_unavailable`
- * when the call holds no value for it. `graph` has no runtime until M10
- * and is refused at save (and again on read), so it never reaches here
- * through the engine.
+ * when the call holds no value for it. The `graph` mode is not here: its
+ * value is an access token the adapter obtains during the run (ACT-82), and
+ * `run` puts it in `bearerInjection` itself.
  */
 export function credentialInjection(
-  credential: HttpCredential,
+  credential: MappedCredential,
   injected: InjectedValues,
 ): Result<Injection, ActionError> {
-  if (credential.mode === 'graph') {
-    return fail(new ActionError('credential_unavailable'));
-  }
   const value = injected.value(credential.field)?.toString('utf8');
   if (value === undefined) {
     return fail(new ActionError('credential_unavailable'));
