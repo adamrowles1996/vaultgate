@@ -37,6 +37,20 @@ field `display_name` is gone; send `email` instead.
   answered with a short HTML page under the ID-19 policy; API clients (JSON accepted, `*/*`, or no
   `Accept`) still receive the JSON body. `/mcp` and the well-known routes are unchanged.
 
+### Docs
+
+- The README "Why" section leads with the claim the design rests on, that the agent never holds
+  your credentials, and compares vaultgate with the official `bitwarden/mcp-server`, warden-mcp's
+  remote mode and the typical community servers on where it runs, who holds the master password,
+  client authorization, consent and scopes, revocation and audit trail. `docs/comparison.md` is
+  the long form with dated verification notes and the cases where the official stdio server is
+  the better choice. `docs/adoption.md` lists the registries, channels and app stores with the
+  submission mechanics of each.
+- `server.json` is the MCP Registry listing (`io.github.adamrowles1996/vaultgate`, a
+  `streamable-http` remote at `https://{host}/mcp` with `host` as a variable, because every
+  operator's URL is different). `docs/guides/publishing.md` explains `mcp-publisher`. Nothing is
+  published automatically.
+
 ## [0.1.0-rc.3] - 2026-09-23
 
 ### Fixed

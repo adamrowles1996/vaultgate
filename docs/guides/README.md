@@ -27,9 +27,10 @@ relies on.
 
 ## Operate
 
-| Guide                                       | What it covers                                                               |
-| ------------------------------------------- | ---------------------------------------------------------------------------- |
-| [Backup and restore](backup-and-restore.md) | What to back up (the database and `VAULTGATE_SECRET_KEY`), how, and restore. |
-| [Upgrading](upgrading.md)                   | In-place upgrades per install method, migrations, rolling back.              |
-| [Security model](security-model.md)         | The threat model in plain language; token lifetimes; what to do on a leak.   |
-| [FAQ](faq.md)                               | Short answers to the questions that come up first.                           |
+| Guide                                           | What it covers                                                                |
+| ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| [Backup and restore](backup-and-restore.md)     | What to back up (the database and `VAULTGATE_SECRET_KEY`), how, and restore.  |
+| [Upgrading](upgrading.md)                       | In-place upgrades per install method, migrations, rolling back.               |
+| [Security model](security-model.md)             | The threat model in plain language; token lifetimes; what to do on a leak.    |
+| [FAQ](faq.md)                                   | Short answers to the questions that come up first.                            |
+| [Publishing to the MCP Registry](publishing.md) | `server.json`, `mcp-publisher`, the GitHub namespace, versioning per release. |

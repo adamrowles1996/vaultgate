@@ -18,20 +18,31 @@ master password.
 
 ## Why
 
-Hosted agents connect to remote MCP servers over HTTPS with OAuth; they cannot
-run a local process next to your vault. Bitwarden's official MCP server is
-stdio-only and, correctly, says it must never be hosted publicly. vaultgate is
-the authorization layer that makes remote access safe:
+**The agent never holds your credentials.** A hosted agent (Claude, Claude Cowork, Claude Code,
+Codex) holds a short-lived, scoped, revocable OAuth 2.1 access token; the master password and API
+key live only in the vaultgate process on your host. Hosted agents reach MCP servers over HTTPS
+and cannot run a process next to your vault, and the other Bitwarden MCP servers are built for
+exactly that local process:
 
-- **Agents hold tokens, not credentials.** Short-lived, scoped, audience-bound,
-  revocable OAuth 2.1 access tokens. The master password lives only in the
-  vaultgate process.
-- **One door for secrets.** A single tool returns secret values, behind its own
-  scope, with every call audited. Every other tool returns metadata.
+| Server                                                                                                                                                                         | Where it runs                                                  | Who holds the master password / API key                                                                        | Client authorization                                                                                                                               | Consent and scopes                                                                                      | Revocation                                                                                           | Audit trail                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [Official `bitwarden/mcp-server`](https://github.com/bitwarden/mcp-server)                                                                                                     | Local, stdio; its README says it must never be hosted publicly | Your machine: the `bw` CLI session (`BW_SESSION`) in the client's configuration, or an OS password dialog      | None; whoever launches the process                                                                                                                 | None; every tool is available to the launching client                                                   | Lock the vault or end the `bw` session                                                               | Not described                                                                    |
+| [warden-mcp](https://github.com/icoretech/warden-mcp), remote mode                                                                                                             | A long-running HTTP service you host                           | The client, which sends them as `X-BW-Password`, `X-BW-ClientId` and `X-BW-ClientSecret` headers on every call | None built in ("no built-in authentication layer in v1")                                                                                           | None; `READONLY` and `NOREVEAL` switches apply to every client alike                                    | Rotate the Bitwarden credentials                                                                     | Not described                                                                    |
+| Typical community servers, e.g. [vaultwarden-mcp](https://github.com/rmangaha/vaultwarden-mcp), [bitwarden-mcp-server](https://github.com/giuliolibrando/bitwarden-mcp-server) | Local stdio, or a plain HTTP port                              | The server process, from environment variables holding the e-mail address and master password                  | None                                                                                                                                               | None                                                                                                    | Rotate the Bitwarden credentials                                                                     | Not described                                                                    |
+| vaultgate                                                                                                                                                                      | Your host, reachable over HTTPS by hosted agents               | The vaultgate process only; the agent holds an opaque token                                                    | Built-in OAuth 2.1 authorization server: operator login with TOTP, PKCE, RFC 9728 / 8414 / 8707 / 7591 / 7009 / 9207, Client ID Metadata Documents | Per-client consent page; `vault:read`, `vault:reveal`, `vault:generate`, `vault:write` (off by default) | Per client or per token from the account page; refresh tokens rotate and a replay revokes the family | Every tool call, login, consent, token issue, refresh and revocation, exportable |
+
+"Not described" means the project's README does not document one. Dated verification notes with
+links, and when the official stdio server is the better choice: [`docs/comparison.md`](docs/comparison.md).
+
+What the design gives you beyond the table:
+
+- **One door for secrets.** A single tool returns secret values, one field of one item per call,
+  behind its own scope, with every call audited. Every other tool returns metadata.
 - **No remote code execution.** There is no "run this command" tool. Ever.
 - **Standards as written.** OAuth 2.1, PKCE, RFC 9728 / 8414 / 8707 / 7591 /
   7009 / 9207 and Client ID Metadata Documents, per the MCP authorization
   specification (2026-07-28).
+- **Any Bitwarden.** bitwarden.com, bitwarden.eu, self-hosted Bitwarden and Vaultwarden.
 - **Boring to operate.** One process, one SQLite file, structured logs, health
   probes, an audit trail. `docker compose up` is a complete installation.
 
@@ -76,6 +87,9 @@ plus `vaultgate-<version>.tgz` and its `.sha256` for the script install.
 | [`docs/spec/`](docs/spec/README.md)            | The normative specification, one file per concern                                                                                                                |
 | [`docs/PLAN.md`](docs/PLAN.md)                 | Milestones, exit criteria, risks                                                                                                                                 |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | Assets, attackers, mitigations, residual risks                                                                                                                   |
+| [`docs/comparison.md`](docs/comparison.md)     | How vaultgate differs from the other Bitwarden MCP servers, with dated verification notes                                                                        |
+| [`docs/adoption.md`](docs/adoption.md)         | Listings, channels and app-store definitions, with the submission mechanics for each                                                                             |
+| [`server.json`](server.json)                   | The MCP Registry listing; how to publish it: [`docs/guides/publishing.md`](docs/guides/publishing.md)                                                            |
 | [`docs/adr/`](docs/adr/README.md)              | Architecture decision records                                                                                                                                    |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development workflow and quality gates                                                                                                                           |
 | [`SECURITY.md`](SECURITY.md)                   | Reporting vulnerabilities                                                                                                                                        |
