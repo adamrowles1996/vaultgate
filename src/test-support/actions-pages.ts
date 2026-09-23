@@ -7,6 +7,7 @@
  */
 import { createActionsPages } from '../actions/pages/index.ts';
 
+import { actionsEnabled } from './actions-config.ts';
 import { type ActionsHarness, createActionsHarness } from './actions-fixtures.ts';
 import { type Browser, createBrowser } from './browser.ts';
 import { openTestDatabase } from './database.ts';
@@ -45,11 +46,20 @@ export interface PagesHarnessOptions {
   DNS answers per host name for the ACT-3 check; anything else resolves to one public address.
   */
   readonly addresses?: Readonly<Record<string, readonly string[]>>;
+  /**
+  ACT-88: `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND`, which the `ssh` form's unrestricted box needs.
+  */
+  readonly allowAnyCommand?: boolean;
 }
 
 export function createPagesHarness(options: PagesHarnessOptions = {}): PagesHarness {
   const database = openTestDatabase();
-  const actions = createActionsHarness({ database, addresses: options.addresses });
+  const isAnyCommandAllowed = options.allowAnyCommand ?? false;
+  const actions = createActionsHarness({
+    database,
+    addresses: options.addresses,
+    config: actionsEnabled(['http', 'sql', 'ssh'], { allowAnyCommand: isAnyCommandAllowed }),
+  });
   const clients: ClientChoice[] = [];
   const pages =
     options.enabled === false
@@ -60,6 +70,7 @@ export function createPagesHarness(options: PagesHarnessOptions = {}): PagesHarn
           vault: actions.vault,
           sensitiveAction: (context) => identity.identity.sensitiveAction(context),
           listClients: () => clients,
+          switches: { allowAnyCommand: isAnyCommandAllowed },
         });
   const identity = createIdentityHarness({
     database,

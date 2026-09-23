@@ -52,6 +52,10 @@ export interface CallItem {
 export interface TargetPageView {
   readonly csrfToken: string;
   readonly isReauthenticated: boolean;
+  /**
+  ACT-88: the target's policy allows any command; the page says so on every visit.
+  */
+  readonly isUnrestricted: boolean;
   readonly notice: string | undefined;
   readonly error: string | undefined;
   readonly problems: readonly string[];
@@ -85,6 +89,13 @@ const CALL_COLUMNS = [
 ] as const;
 
 const REAUTHENTICATION_ANCHOR = '/account#sensitive-actions';
+
+/**
+ACT-88: the standing warning an any-command target carries, shown whether or not it is being edited.
+*/
+const UNRESTRICTED_WARNING =
+  'This target allows any command: a granted client can run anything its login can, and every ' +
+  'call is audited with the full command.';
 
 function statusRow(label: string, value: string | Html): Html {
   return html`<tr>
@@ -239,7 +250,9 @@ export function renderTargetPage(view: TargetPageView): string {
   return document(
     `Target ${view.target.name}`,
     html`<h2>Target <code>${view.target.name}</code></h2>
-      ${errorBanner(view.error)} ${noticeBanner(view.notice)}
+      ${errorBanner(view.error)}
+      ${when(view.isUnrestricted, () => errorBanner(UNRESTRICTED_WARNING))}
+      ${noticeBanner(view.notice)}
       <p><a href="/account#actions">Back to the account page</a></p>
       <p>${view.target.description}</p>
       ${statusTable(view)}

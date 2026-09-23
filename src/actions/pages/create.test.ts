@@ -236,7 +236,11 @@ describe('POST /account/actions', () => {
   it('ACT-2 answers 404 for a connector this build cannot create', async () => {
     const harness = createPagesHarness();
     const { browser, csrf } = await signedInOperator(harness);
-    const response = await browser.submit('/account/actions', { csrf, ...VALID, connector: 'ssh' });
+    const response = await browser.submit('/account/actions', {
+      csrf,
+      ...VALID,
+      connector: 'winrm',
+    });
     expect(response.status).toBe(404);
     expect(harness.actions.engine.targets.list()).toStrictEqual([]);
   });

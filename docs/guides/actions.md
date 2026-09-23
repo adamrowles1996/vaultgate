@@ -10,9 +10,10 @@ and describes an operation; vaultgate fetches the credential, performs the opera
 policy, scrubs the result of every injected value and returns it.
 
 This guide is for the operator. It covers what exists today: the layer's switches, the account
-page that manages targets, the `http` and `sql` connectors' target forms, and what an agent does
-with those targets through `http_request` and `sql_query`. The other connectors (`ssh`, `winrm`,
-`browser`) land with their milestones; until then their targets cannot be created.
+page that manages targets, the `http`, `sql` and `ssh` connectors' target forms, and what an
+agent does with those targets through `http_request`, `sql_query`, `sql_execute` and `ssh_run`.
+The other connectors (`winrm`, `browser`) land with their milestones; until then their targets
+cannot be created.
 
 ## Enabling the layer
 
@@ -22,6 +23,7 @@ The layer is off unless the deployment says otherwise, and each connector has it
 VAULTGATE_ENABLE_ACTIONS=true
 VAULTGATE_ACTIONS_ENABLE_HTTP=true
 VAULTGATE_ACTIONS_ENABLE_SQL=true
+VAULTGATE_ACTIONS_ENABLE_SSH=true
 ```
 
 Restart after changing them. With the master switch off nothing changes: no `actions:*` scope
@@ -424,6 +426,126 @@ Everything in "Calling a `sql` target" applies, with four differences:
 
 The statement the agent ran is kept in the call history, scrubbed, whether it was confirmed or
 not, so an unexpected write can be read back on the target's page.
+
+## Creating an `ssh` target
+
+Follow **Create an ssh target**. An `ssh` target is the sharpest tool here: a granted client can
+run a command on a real server. Two things carry most of the safety — the account it signs in as,
+and the list of commands it may run — and neither is something vaultgate can choose for you.
+
+**Destination.** The `host`, the `port` (22 by default), the **login name** the command runs as,
+and the **host key**.
+
+There is no trust-on-first-use and no way to skip the host-key check: a server presenting any
+other key fails the call with `host_key_mismatch`, during the key exchange, before the
+credential is offered. Read the key off the server the first time, over a channel you trust:
+
+```bash
+ssh-keyscan -t ed25519 build.example.com
+# build.example.com ssh-ed25519 <the base64 public key>
+```
+
+Paste that line into **Host key** — with or without the host in front, with or without the
+comment at the end. `ssh-keygen -lf` prints the same key as a fingerprint
+(`SHA256:` followed by a base64 digest), and the field takes that form too. The safest source is the server itself:
+`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, read over your existing administrative
+access, rather than `ssh-keyscan` from a host that may be answered by somebody else. Rotating the
+server's key means editing the target, which bumps its revision and voids any open confirmation.
+
+vaultgate offers the library's modern algorithms with `ssh-rsa` (the SHA-1 signature algorithm)
+removed, so a server that can only do `ssh-rsa` cannot be reached; `rsa-sha2-256` and
+`rsa-sha2-512` on the same RSA host key are fine.
+
+**Credential mapping.** The vault item id, and either a key or a password.
+
+- **key** (the better choice) reads the private key from the item's `sshKey.privateKey` — a
+  Bitwarden **SSH key** item — and, when the key has one, a passphrase from a field you name
+  (a hidden custom field, `custom.key-passphrase`, is the usual place). Put the matching public
+  key in the server account's `authorized_keys`, ideally with `restrict` and a `from=` clause.
+- **password** reads the password field of a login item. Use it only where a key cannot be
+  installed.
+
+The login name is part of the destination, not the vault item, so one key item can serve several
+targets.
+
+**Policy.** Either **allowed commands** — one glob pattern per line, matched against the whole
+command, where `*` matches any run of characters except a newline — or **allow any command**.
+Exactly one of the two: a target with neither allows nothing, and a target with both is refused.
+
+```text
+uptime
+systemctl status nginx
+journalctl -u nginx --since * --no-pager
+```
+
+Patterns are matched against the exact command the agent sends, anchored at both ends and
+case-sensitively. A pattern that would match everything (`*`) is refused at save: saying
+"anything" is a separate, deliberate decision.
+
+### Giving the target its own user
+
+The login is the control. Give each `ssh` target a dedicated account with the least privilege the
+work needs, no sudo unless a specific command needs it, and a key restricted to it:
+
+```bash
+sudo useradd --create-home --shell /bin/bash vaultgate
+sudo -u vaultgate mkdir -p ~vaultgate/.ssh
+# in ~vaultgate/.ssh/authorized_keys, one line:
+restrict,from="203.0.113.9" ssh-ed25519 <the base64 public key> vaultgate
+```
+
+`restrict` turns off port forwarding, agent forwarding, X11 and the pseudo-terminal, which
+vaultgate never asks for anyway; `from=` limits the key to the address vaultgate calls from. If a
+target genuinely needs one privileged command, grant that one command in `sudoers` with
+`NOPASSWD` and nothing else, and allow exactly that command in the policy.
+
+### Why "allow any command" needs the deployment's consent
+
+An any-command target is a shell: whatever that login can do, a granted client can do. The
+account page only offers the box when the deployment sets
+
+```bash
+VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND=true
+```
+
+so turning a target into a shell takes both a deployment change and an operator action. Such a
+target carries a standing warning on its page, is reported to agents as `unrestricted: true`, and
+has the full command of every call written to the audit trail. Turning the switch off later does
+not quietly leave it working: every call is refused with `policy_denied` and agents stop seeing
+the target at all. Leave `confirm_writes` on for these, so each call needs a human's approval.
+
+## Calling an `ssh` target
+
+An agent whose token holds `actions:ssh` and whose client you granted the target calls `ssh_run`:
+
+```json
+{
+  "target": "build-host",
+  "command": "systemctl status nginx"
+}
+```
+
+`command` is at most 16 KiB, may not contain a NUL byte, and may not contain a newline or
+carriage return unless the target is an any-command one; an optional `stdin` (at most 64 KiB) is
+written to the command and closed, so a command that reads until end of file finishes.
+
+The command is matched against the allowlist **before anything connects**; a command no pattern
+matches is `policy_denied` with `detail.reason: "command"`. Then one connection is opened to the
+address the host name resolved to, the presented host key is checked against the pinned one, the
+credential is offered (and only the one method the mapping names: no agent, no
+keyboard-interactive fallback), and one exec channel runs the command with no pseudo-terminal, no
+X11, no environment of vaultgate's making and no port forwarding. There is no session: nothing —
+no working directory, no variable, no background process — survives to the next call, and the
+connection is closed when the call ends.
+
+Out: `exit_code` (`null` when the command was signalled rather than exiting), `stdout` and
+`stderr` captured separately and each cut at the target's **maximum output**, `truncated` and
+`duration_ms`. A non-zero exit code is a result, not an error. Errors are reserved for the
+connection: `host_key_mismatch`, `authentication_failed`, `connection_failed`, `timeout` (the
+policy timeout, which also sends `KILL` to the remote command) and `upstream_error` for a
+channel the server refused or broke. Every injected value, in every encoding, is replaced by
+`[redacted:<field>]` before anything leaves the engine — including the audit trail, so a command
+that echoes the private key is stored redacted.
 
 ## Grants
 

@@ -76,6 +76,17 @@ function scrubbedArguments(facts: CallFacts): unknown {
     : facts.scrub.deep(facts.invocation.arguments);
 }
 
+/**
+ACT-61: the classification can be the agent's own text (the command of an any-command `ssh` target).
+*/
+function scrubbedClassification(facts: CallFacts): string | undefined {
+  const classification = facts.description?.classification;
+  const scrub = facts.scrub;
+  return classification === undefined || scrub === undefined
+    ? classification
+    : scrub.text(classification);
+}
+
 function scrubbedError(facts: CallFacts, error: ActionError): ActionError {
   return facts.scrub === undefined || error.detail === undefined
     ? error
@@ -100,7 +111,7 @@ function insertRow(
     clientId: facts.caller.clientId,
     tokenPrefix: facts.caller.tokenPrefix,
     operation: facts.resolved?.decision.operation,
-    classification: facts.description?.classification,
+    classification: scrubbedClassification(facts),
     arguments: scrubbedArguments(facts),
     outputBytes: ending.output.bytes,
     outputTruncated: ending.output.truncated,

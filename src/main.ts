@@ -148,6 +148,7 @@ const actionsPages =
             clientId: client.clientId,
             clientName: client.clientName,
           })),
+        switches: { allowAnyCommand: config.actions.allowAnyCommand },
       });
 const identity = createIdentity({
   config,

@@ -65,6 +65,7 @@
     "mssql": "12.7.2",
     "pg": "8.23.0",
     "pino": "10.3.1",
+    "ssh2": "1.17.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
@@ -74,6 +75,7 @@
     "@types/mssql": "12.3.0",
     "@types/node": "26.6.2",
     "@types/pg": "8.23.1",
+    "@types/ssh2": "1.15.6",
     "@vitest/coverage-v8": "5.0.1",
     "@vitest/eslint-plugin": "1.6.27",
     "cspell": "10.3.3",
@@ -102,5 +104,9 @@
   },
   "engines": {
     "node": ">=26.0.0"
+  },
+  "allowScripts": {
+    "cpu-features": false,
+    "ssh2": false
   }
 }
