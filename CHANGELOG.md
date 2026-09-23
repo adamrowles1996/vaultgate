@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.0-rc.2] - 2026-09-23
+
 ### Fixed
 
 - Azure template: `VAULTGATE_ENABLE_WRITE_SCOPE` is rendered as `true`/`false` (ARM `string()` produced
@@ -113,5 +117,6 @@ All notable changes to this project are documented here. The format follows
   over a read-only store, with a CI smoke step (`scripts/cli-smoke.sh`) that exports an empty
   store from both the build and the source.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.1...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.2...HEAD
+[0.1.0-rc.2]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.1...v0.1.0-rc.2
 [0.1.0-rc.1]: https://github.com/adamrowles1996/vaultgate/releases/tag/v0.1.0-rc.1
