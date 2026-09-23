@@ -1,7 +1,7 @@
 # 13 Actions: typed, policy-gated use of vault credentials
 
-> **Status: M9 in progress — engine core, MCP surface and account pages landed; the
-> `http` runtime follows.** This section specifies the actions layer decided in
+> **Status: M9 landed — engine core, MCP surface, account pages and the `http` runtime; the
+> `graph` adapter is M10.** This section specifies the actions layer decided in
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as milestones
 > M9 to M15 in [`PLAN.md`](../PLAN.md). Landed with M9's first pull request: configuration
 > (13.14), scopes and consent (13.5), storage and maintenance (13.13), targets and grants
@@ -14,8 +14,9 @@
 > refusal) and the consent-revocation hook of ACT-10. Landed with the third: the account
 > pages (13.3.2) with the `actions` export stream on the account page (ACT-62) and the
 > per-target call history (ACT-63, without the "unexpected write" view, which is M14's).
-> Not yet: the `http` runtime and every other connector (so no connector tool is listed on a
-> deployment until its runtime lands), and ACT-48's in-band fallback for the 2025 wire (M14):
+> Landed with the fourth: the `http` runtime (14.2; ACT-20…22, 79, 80) and `http_request`.
+> Not yet: the `graph` adapter (14.3, M10; a `graph` mapping is refused at save and on read), the other connectors (no tool is listed until its runtime lands),
+> and ACT-48's in-band fallback for the 2025 wire (M14):
 > until then a client on that wire, whose capabilities the stateless handler never sees, is
 > refused a confirmed target with `confirmation_unavailable`. The per-connector contracts are
 > in [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence continues there.
@@ -223,21 +224,32 @@ operations, confirm_writes, engine?, unrestricted? }` where `operations` is the 
 
 - **ACT-20** Input: `target`; `method` (one of `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`,
   `OPTIONS`); `path` (string starting with `/`, ≤ 2 KiB, may carry a query string; no scheme, no
-  host, no `..` segment, no fragment); `headers` (object of string → string, ≤ 32 entries, names
-  matched case-insensitively against the policy allowlist); `body` (string ≤ `max_body_bytes`, or
-  a JSON value which is serialised with `Content-Type: application/json` when the agent sets no
-  content type). `path` is appended to the destination's `base_url`; the resolved URL MUST stay
-  under `base_url` after normalisation or the call fails `policy_denied` (`reason: path`).
+  host, no `..` or empty segment, no fragment, no whitespace, backslash or control character);
+  `headers`
+  (object of string → string, ≤ 32 entries, names matched case-insensitively against the policy
+  allowlist); `body` (string ≤ `max_body_bytes`, or a JSON object or array serialised with
+  `Content-Type: application/json` when the agent sets no content type). `path` is appended to
+  the destination's `base_url` (its prefix, then the ACT-35 subject); the resolved URL
+  MUST stay under `base_url` after normalisation (the built URL is checked, so `//host`
+  cannot move the host) or the call fails `policy_denied` (`reason: path`).
 - **ACT-21** Output: `status` (integer), `headers` (only the names in the policy's
   `response_headers` list, default `content-type`, `content-length`, `location`, `retry-after`),
-  `body` (text; binary bodies are returned base64 with `body_encoding: "base64"`), `bytes` (size
-  before the cap), `truncated`, `duration_ms`. A non-2xx status is a normal result, not an error;
-  connection and TLS failures are errors.
-- **ACT-22** The agent cannot set `Authorization`, `Cookie`, `Host`, `Proxy-*`, `Transfer-Encoding`
-  or any header the credential mapping injects; such a header fails `policy_denied`
-  (`reason: header`). Redirects are not followed unless `policy.follow_redirects` is `true`, and
-  then at most 2 hops, each re-validated by 13.10 and required to stay under `base_url`; the
-  injected credential is re-applied only on hops that stay under `base_url`.
+  `body` (text when the media type is textual — `text/*`, JSON, XML, JavaScript, form-encoded
+  or absent — and the bytes are valid UTF-8; otherwise base64 with `body_encoding: "base64"`,
+  cut to fit the cap), `bytes` (received: the whole body unless
+  `truncated`), `truncated`, `duration_ms`. A non-2xx status is a normal result, not an error:
+  a `401` is never `authentication_failed`; connection and TLS failures are errors whose
+  `detail.reason` names the error code (ACT-74).
+- **ACT-22** The agent cannot set `Authorization`, `Cookie`, `Host`, `Content-Length`,
+  `User-Agent`, `Proxy-*`, `Transfer-Encoding` or any header the credential mapping injects
+  (`authorize` gets the credential document, 14.1); such a header fails
+  `policy_denied` (`reason: header`) whatever `allowed_request_headers` says. Redirects are not
+  followed unless `policy.follow_redirects` is `true`, and then at most 2 hops, each required to
+  stay under `base_url`: the same origin, so a hop connects to the address the call already
+  validated (13.10) and the name is never resolved again (ACT-55); the credential is re-applied
+  only on such hops. A redirect not followed (policy off, leaving `base_url`, a third hop) is
+  the result, `location` included. 301, 302 and 303 turn a
+  `POST` (303: all but `HEAD`) into a body-less `GET`; 307 and 308 keep method and body.
 
 ### 13.6.4 `sql_query` and `sql_execute`
 
@@ -594,8 +606,7 @@ Migration `004-actions` adds four tables (conventions of 07.1):
 
 - **ACT-69** The engine and connectors live in `src/actions/` with this layout, every file under
   300 lines (11.1). Where one concern outgrew a file it is split by cohesion, never by line
-  count; the names below are the modules as they exist (M9's first pull request) or are
-  planned for a later milestone (marked so):
+  count; the names below are the modules as they exist (M9) or are planned (marked so):
 
 ```text
 src/actions/
@@ -625,7 +636,7 @@ src/actions/
   connectors/
     connector.ts       the connector interface (14.1)
     registry.ts        schemas of every connector; runtimes loaded for enabled connectors only (ACT-73)
-    http/              document schemas now; request builder, injection modes, pinned transport use (planned)
+    http/              the runtime (M9): schemas (14.2), the tool (ACT-20, 21), authorize (pure), request, response, run, index
     graph/             token exchange, cache, refresh-token write-back (planned)
     sql/               tokeniser and classifier; mssql/ and postgres/ drivers (planned)
     ssh/               ssh2 client wrapper, host-key pinning (planned)

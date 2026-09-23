@@ -9,10 +9,9 @@ and describes an operation; vaultgate fetches the credential, performs the opera
 policy, scrubs the result of every injected value and returns it.
 
 This guide is for the operator. It covers what exists today: the layer's switches, the account
-page that manages targets, and the `http` connector's target form. An agent can already list
-its targets with `actions_list_targets`; the connector tool that calls one (`http_request`
-first) lands with the connector's runtime, so until then a target is configured, audited and
-reviewable, but not yet callable.
+page that manages targets, the `http` connector's target form, and what an agent does with an
+`http` target through `http_request`. The other connectors (`sql`, `ssh`, `winrm`, `browser`)
+land with their milestones; until then their targets cannot be created.
 
 ## Enabling the layer
 
@@ -61,19 +60,20 @@ every address against the private-range rule; it does not connect.
 **Credential mapping.** The **vault item id** (find it with `search_items` or in the Bitwarden
 web vault's URL) and how the secret is injected:
 
-| Mode     | What is sent                                                                              | Fields                                                                                                               |
-| -------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `bearer` | `Authorization: Bearer <value>`                                                           | the secret field                                                                                                     |
-| `basic`  | `Authorization: Basic base64(username:value)`                                             | the secret field; the username field (`login.username` unless said otherwise)                                        |
-| `header` | `<name>: <prefix><value>`                                                                 | the secret field, the header name, an optional prefix                                                                |
-| `query`  | `<name>=<value>` appended to the query string                                             | the secret field, the parameter name; the policy must allow query credentials                                        |
-| `graph`  | A Microsoft Graph access token obtained server-side (client credentials or refresh token) | tenant id, application id, grant, scope, the client secret field and, for the refresh grant, the refresh token field |
+| Mode     | What is sent                                                                              | Fields                                                                                                                                                       |
+| -------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `bearer` | `Authorization: Bearer <value>`                                                           | the secret field                                                                                                                                             |
+| `basic`  | `Authorization: Basic base64(username:value)`                                             | the secret field; the username field (`login.username` unless said otherwise)                                                                                |
+| `header` | `<name>: <prefix><value>`                                                                 | the secret field, the header name, an optional prefix                                                                                                        |
+| `query`  | `<name>=<url-encoded value>` appended to the query string, after the agent's own query    | the secret field, the parameter name, an optional prefix; the policy must allow query credentials                                                            |
+| `graph`  | A Microsoft Graph access token obtained server-side (client credentials or refresh token) | tenant id, application id, grant, scope, the client secret field and, for the refresh grant, the refresh token field; **not yet: refused at save until M10** |
 
 A secret field is a `get_secret` selector: `password`, `totp`, `notes`, `custom.<name>` for a
 hidden custom field, `card.number`, `card.code`, `identity.<field>` or `sshKey.privateKey`. Saving
 checks that the item exists and carries every mapped field (through the vault's metadata; no
 secret is read), and the target's page then shows the item's name beside its id. The `graph`
-fields are validated now; the token exchange itself lands with the next milestone.
+fields are validated now, but a `graph` target is refused at save (and marked invalid on read)
+until the adapter lands with M10, so nothing half-implemented can run.
 
 Nothing in these forms is a secret: the row holds the item id and field _names_. The vault
 stays the only secret store.
@@ -86,11 +86,14 @@ stays the only secret store.
   character is literal and matching is anchored at both ends, so `/v1/users/*` allows one level
   under `/v1/users/` and `/**` allows the whole API. A pattern must start with `/`, must not
   climb above the base URL and must be written in normalised form (the form tells you how).
-- **Allowed request headers** and **returned response headers**, one name per line. An agent can
-  never set `Authorization`, `Cookie`, `Host` or a header the credential mapping injects.
-- **Maximum request body**, **follow redirects** (at most two hops, each kept under the base
-  URL) and **allow the credential in the query string** (needed by the `query` mode; query
-  strings reach proxy and server logs, so prefer a header mode).
+- **Allowed request headers** and **returned response headers**, one name per line. Whatever
+  the list says, an agent can never set `Authorization`, `Cookie`, `Host`, `Content-Length`,
+  `User-Agent`, `Transfer-Encoding`, a `Proxy-*` header or the header the credential mapping
+  injects. The defaults (`accept`, `content-type`, `if-none-match` in; `content-type`,
+  `content-length`, `location`, `retry-after` out) suit most JSON APIs.
+- **Maximum request body**, **follow redirects** (off by default; at most two hops, each kept
+  under the base URL, see below) and **allow the credential in the query string** (needed by the
+  `query` mode; query strings reach proxy and server logs, so prefer a header mode).
 - The common limits every connector shares: **timeout** (default 30 s, at most 300 s),
   **maximum output** (default 256 KiB, at most 1 MiB; longer output is truncated) and **calls per
   minute** (default 60, at most 600).
@@ -100,6 +103,78 @@ stays the only secret store.
   are content to delegate to whichever client holds a grant.
 
 A rejected save comes back with every problem listed and the values you typed.
+
+## Calling an `http` target
+
+An agent whose token holds `actions:http` and whose client you granted the target calls
+`http_request` with the target's `name`, a `method`, a `path` and optionally `headers` and a
+`body`:
+
+```json
+{
+  "target": "billing-api",
+  "method": "POST",
+  "path": "/v1/invoices?dry_run=true",
+  "headers": { "Accept": "application/json" },
+  "body": { "customer": "c_123", "amount": 1200 }
+}
+```
+
+What vaultgate does with it, in order:
+
+1. **Policy first, no I/O.** The method must be in **Allowed methods**; the path plus query,
+   normalised (percent-decoded unreserved characters, dot segments removed), must match one of
+   **Allowed paths** and stay under the base URL; every header name must be on the allowlist
+   and none of the forbidden ones; the body (a string, or a JSON object or array serialised as
+   `application/json` unless the agent set a content type) must fit **Maximum request body**.
+   A refusal is `policy_denied` with `detail.reason` (`method`, `path`, `header`, `body_size`)
+   and is audited as such. A malformed argument (a path with `..` or an empty segment `//`, a
+   header name that is not a token, more than 32 headers) is `invalid_arguments`. The URL that
+   is actually built is checked against the base URL as well, so a protocol-relative path can
+   never move the request to another host.
+2. **Read or write.** `GET`, `HEAD` and `OPTIONS` are read calls; every other method is a
+   non-read call and, on a target that asks a human to confirm, waits for the confirmation
+   before the credential is fetched.
+3. **The credential, from the vault, for this call only.** Fetched after the policy decision
+   and the confirmation, placed in its injection point and zeroed when the call ends.
+4. **One pinned connection.** The base URL's host is resolved once, every address checked
+   against the private-range rule, and the request goes to that address with the host name kept
+   for TLS (SNI and certificate verification against the system store; there is no way to skip
+   it, a failure is `tls_error`) and `Host`. An **internal** target with an `http://` base URL is
+   reached in plain HTTP, to the pinned address, the same way. Every request carries
+   `User-Agent: vaultgate/<version>`.
+5. **Redirects.** Off by default: a `3xx` comes back as the result with its `location` (when
+   the policy returns that header). With **follow redirects** on, at most two hops are followed
+   and only while they stay under the base URL (same origin and path prefix), which means the
+   same pinned address; the credential is sent again on such a hop. A hop that would leave the
+   base URL, or a third hop, is returned as it is. `301`, `302` and `303` turn a `POST` into a
+   `GET` without the body; `307` and `308` keep method and body.
+6. **The result.** `status`; the response `headers` the policy returns, lower-cased; the `body`
+   as text when its media type is textual (`text/*`, JSON, XML, JavaScript, form-encoded, or
+   none) and it is valid UTF-8, otherwise base64 with `body_encoding: "base64"`; `bytes`
+   received; `truncated` when the body was cut at **Maximum output** (with a guard band, so a
+   credential straddling the cut is still scrubbed); `duration_ms`. Every injected value, in
+   every encoding, is replaced by `[redacted:<field>]` in the body, the headers and the audit
+   row before anything leaves the engine.
+
+A non-2xx status is a normal result: a `401` or `403` means the destination refused the
+request and is reported as such, never as `authentication_failed`, so the agent (and you, in
+the call history) see what the API said. Only a destination that could not be reached is an
+error: `connection_failed` (refused, reset, unresolvable), `tls_error` (certificate or
+handshake), `timeout` (the policy timeout elapsed and the request was aborted) or
+`destination_refused` (the host resolved to an address the private-range rule refuses), each
+with `detail.reason` naming the error code and never an address.
+
+**When to use the `query` mode.** Only for an API that accepts a key nowhere else. The value
+travels in the URL, which proxies and servers log; vaultgate sends it URL-encoded after the
+agent's own query and scrubs that encoding from every result, but the destination's logs are
+outside its control. Prefer `bearer`, `basic` or `header`, and tick **allow the credential in
+the query string** only on the target that needs it.
+
+**When to set `internal`.** Only for a base URL that resolves to a private address (an intranet
+API). It is the only way to use an `http://` base URL, and it never allows loopback or
+link-local: `bw serve` listens on loopback, and an `http` target reaching it would turn a token
+into the whole vault.
 
 ## Grants
 
@@ -135,10 +210,12 @@ row is scrubbed of the value and its encoded forms before it leaves the engine.
 
 ## If something is wrong
 
-| Symptom                                | Where to look                                                                                           |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| The section is missing                 | `VAULTGATE_ENABLE_ACTIONS` is not `true`; the start-up log line `configuration loaded` shows the value. |
-| A target is marked `target_invalid`    | Its page lists the validation problem; edit and save, or delete it.                                     |
-| Saving says the item has no such field | The mapping names a field the item does not carry; check the item with `get_item`.                      |
-| Saving refuses the destination         | The host resolves to a private address without **Internal destination**, or to loopback or link-local.  |
-| A call fails `credential_unavailable`  | The vault is locked or the item or field is gone; the target's page shows the item's state.             |
+| Symptom                                         | Where to look                                                                                                                                               |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The section is missing                          | `VAULTGATE_ENABLE_ACTIONS` is not `true`; the start-up log line `configuration loaded` shows the value.                                                     |
+| A target is marked `target_invalid`             | Its page lists the validation problem; edit and save, or delete it.                                                                                         |
+| Saving says the item has no such field          | The mapping names a field the item does not carry; check the item with `get_item`.                                                                          |
+| Saving refuses the destination                  | The host resolves to a private address without **Internal destination**, or to loopback or link-local.                                                      |
+| A call fails `credential_unavailable`           | The vault is locked or the item or field is gone; the target's page shows the item's state.                                                                 |
+| A call fails `tls_error` or `connection_failed` | `detail.reason` names the error code (`CERT_HAS_EXPIRED`, `ECONNREFUSED`, …); check the destination's certificate and reachability from the vaultgate host. |
+| A call fails `policy_denied`                    | `detail.reason` says which allowlist refused it; the call history shows the arguments.                                                                      |

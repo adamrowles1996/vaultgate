@@ -19,6 +19,7 @@ import { unwrapOk } from './result.ts';
 
 import type { Caller } from '../actions/caller.ts';
 import type { ConfirmationRequest } from '../actions/confirm.ts';
+import type { AnyConnector } from '../actions/connectors/connector.ts';
 import type { Invocation } from '../actions/engine-resolve.ts';
 import type { ActionError } from '../actions/errors.ts';
 import type { TargetSummary } from '../actions/targets.ts';
@@ -47,6 +48,10 @@ export interface ActionsHarness {
 export interface HarnessOptions {
   readonly config?: ActionsConfig;
   readonly connector?: EchoConnector;
+  /**
+  A runtime to load instead of the echo connector (the real `http` connector over a fake transport).
+  */
+  readonly runtime?: AnyConnector;
   /**
   `false` leaves the runtime registry empty (a connector enabled but not loaded, ACT-67).
   */
@@ -99,7 +104,9 @@ export function createActionsHarness(options: HarnessOptions = {}): ActionsHarne
     config: options.config ?? actionsEnabled(['http']),
     database,
     vault,
-    connectors: connectorRegistry(options.loadRuntime === false ? [] : [connector]),
+    connectors: connectorRegistry(
+      options.loadRuntime === false ? [] : [options.runtime ?? connector],
+    ),
     lookup,
     audit: {
       record: (event) => {

@@ -17,13 +17,14 @@ relies on.
 
 ## Connect an agent
 
-| Guide                                             | What it covers                                                           |
-| ------------------------------------------------- | ------------------------------------------------------------------------ |
-| [Connect Claude](connect-claude.md)               | A custom connector in Claude web, desktop and Cowork; consent; revoking. |
-| [Connect Claude Code](connect-claude-code.md)     | `claude mcp add --transport http …` and the in-session login.            |
-| [Connect Codex](connect-codex.md)                 | `codex mcp add … --url …`, `codex mcp login` and `config.toml`.          |
-| [Connect MCP Inspector](connect-mcp-inspector.md) | The Inspector's OAuth flow, its loopback callback, CLI mode.             |
-| [Tools and scopes](tools-and-scopes.md)           | Every tool, its scope, inputs, outputs, and the secret-handling rules.   |
+| Guide                                             | What it covers                                                              |
+| ------------------------------------------------- | --------------------------------------------------------------------------- |
+| [Connect Claude](connect-claude.md)               | A custom connector in Claude web, desktop and Cowork; consent; revoking.    |
+| [Connect Claude Code](connect-claude-code.md)     | `claude mcp add --transport http …` and the in-session login.               |
+| [Connect Codex](connect-codex.md)                 | `codex mcp add … --url …`, `codex mcp login` and `config.toml`.             |
+| [Connect MCP Inspector](connect-mcp-inspector.md) | The Inspector's OAuth flow, its loopback callback, CLI mode.                |
+| [Tools and scopes](tools-and-scopes.md)           | Every tool, its scope, inputs, outputs, and the secret-handling rules.      |
+| [Actions](actions.md)                             | Targets, grants and policy for the actions layer; calling an `http` target. |
 
 ## Operate
 

@@ -1,9 +1,10 @@
 /**
  * The `http` connector's target documents (spec §14.2) with the `graph`
  * credential adapter document of §14.3 (ACT-81) as a credential mode. The
- * runtime (request builder, injection, pinned transport) lands with M9's
- * third pull request and the Graph exchange with M10; these schemas are here
- * first because the account page validates and edits targets with them.
+ * schemas are the static half every build carries so the account page can
+ * validate and edit targets; the runtime is `./index.ts`. The `graph`
+ * document validates, but a target that uses it is refused at save until
+ * the adapter (the token exchange of ACT-82, ACT-83) lands with M10.
  */
 import { z } from 'zod';
 
@@ -15,6 +16,8 @@ export const HTTP_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'O
 
 const GRAPH_BASE_URL = 'https://graph.microsoft.com';
 const GRAPH_DEFAULT_SCOPE = 'https://graph.microsoft.com/.default';
+const GRAPH_NOT_YET =
+  'credential.mapping: the graph mode is not available yet; the graph adapter arrives in M10';
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const DEFAULT_BODY_BYTES = 256 * 1024;
 
@@ -158,8 +161,11 @@ export const httpSchemas: ConnectorSchemas<HttpDestination, HttpCredential, Http
   credentialFields,
   saveProblems({ destination, credential, policy }) {
     const problems: string[] = [];
-    if (credential.mode === 'graph' && destination.base_url !== GRAPH_BASE_URL) {
-      problems.push(`credential.mapping: the graph mode requires base_url ${GRAPH_BASE_URL}`);
+    if (credential.mode === 'graph') {
+      problems.push(GRAPH_NOT_YET);
+      if (destination.base_url !== GRAPH_BASE_URL) {
+        problems.push(`credential.mapping: the graph mode requires base_url ${GRAPH_BASE_URL}`);
+      }
     }
     if (credential.mode === 'query' && !policy.allow_query_credentials) {
       problems.push('credential.mapping: the query mode requires policy.allow_query_credentials');

@@ -172,9 +172,9 @@ a connector tool by target name. Specification: [13 Actions](../spec/13-actions.
 [14 Action connectors](../spec/14-actions-connectors.md) and
 [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md). The engine, the scopes, the MCP
 tool surface below and the operator pages (the account page's Actions section, described in the
-[Actions guide](actions.md)) exist today; the connector runtimes land with the remaining M9 to
-M15 milestones in [`PLAN.md`](../PLAN.md), and until a connector's runtime lands its tool is not
-listed on any deployment.
+[Actions guide](actions.md)) exist today, and so does the `http` connector with `http_request`
+(M9); the other connector runtimes land with M10 to M15 in [`PLAN.md`](../PLAN.md), and until a
+connector's runtime lands its tool is not listed on any deployment.
 
 ### Actions scopes
 
@@ -183,14 +183,14 @@ advertised and effective only when `VAULTGATE_ENABLE_ACTIONS=true` _and_ its con
 is on (`VAULTGATE_ACTIONS_ENABLE_HTTP`, `_SQL`, `_SSH`, `_WINRM`, `_BROWSER`); turning a switch
 off takes effect for every existing token at once, exactly as for `vault:write`.
 
-| Scope               | Grants                                                       | Tools                        |
-| ------------------- | ------------------------------------------------------------ | ---------------------------- |
-| `actions:http`      | HTTP requests to granted `http` targets, signed by vaultgate | `http_request` (M9, pending) |
-| `actions:sql.read`  | Read-only queries against granted `sql` targets              | `sql_query` (M11)            |
-| `actions:sql.write` | Data changes on granted `sql` targets whose policy allows it | `sql_execute` (M11)          |
-| `actions:ssh`       | One allowlisted command on a granted `ssh` target            | `ssh_run` (M12)              |
-| `actions:winrm`     | One allowlisted command on a granted `winrm` target          | `winrm_run` (M13)            |
-| `actions:browser`   | A signed-in browser session confined to allowed origins      | `browser_*` (M15)            |
+| Scope               | Grants                                                       | Tools               |
+| ------------------- | ------------------------------------------------------------ | ------------------- |
+| `actions:http`      | HTTP requests to granted `http` targets, signed by vaultgate | `http_request`      |
+| `actions:sql.read`  | Read-only queries against granted `sql` targets              | `sql_query` (M11)   |
+| `actions:sql.write` | Data changes on granted `sql` targets whose policy allows it | `sql_execute` (M11) |
+| `actions:ssh`       | One allowlisted command on a granted `ssh` target            | `ssh_run` (M12)     |
+| `actions:winrm`     | One allowlisted command on a granted `winrm` target          | `winrm_run` (M13)   |
+| `actions:browser`   | A signed-in browser session confined to allowed origins      | `browser_*` (M15)   |
 
 A token holding any of these also gets `actions_list_targets`. Calling it without one is
 answered `403` with a challenge that lists every enabled actions scope as an any-of set
@@ -207,6 +207,31 @@ will ask a human for confirmation first), `engine` (`mssql` or `postgres`, `sql`
 and `unrestricted: true` for a shell target that accepts any command. Disabled targets, targets
 of a switched-off connector and targets the client is not granted do not appear. There is no
 place in the result for a destination address, a credential field name or a policy pattern.
+
+### `http_request` (`actions:http`)
+
+`target` (a name from `actions_list_targets`), `method` (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`,
+`DELETE` or `OPTIONS`), `path` (starting with `/`, at most 2 KiB, with an optional query string;
+no scheme, host, fragment, `..` or empty segment), optional `headers` (at most 32) and an optional
+`body` (a string, or a JSON object or array sent as `application/json` unless a content type
+is given) in. The path is appended to the target's base URL and must stay under it; the method,
+the path and query, every header name and the body size are checked against the target policy
+before anything is sent (`policy_denied` with `detail.reason`), and `Authorization`, `Cookie`,
+`Host`, `Content-Length`, `User-Agent`, `Transfer-Encoding`, `Proxy-*` and the header the
+credential occupies can never be set. vaultgate adds the credential where the operator mapped
+it (bearer, basic, a named header, or a query parameter) and `User-Agent: vaultgate/<version>`,
+connects once to the address it resolved and validated, and follows at most two redirects, only
+under the base URL and only when the policy allows it; any other redirect is returned as it is.
+
+Out: `status`, `headers` (only the names the policy returns, lower-cased), `body` (text, or
+base64 with `body_encoding: "base64"` when the media type is not textual or the bytes are not
+UTF-8), `bytes` received, `truncated` (cut at the target's output limit) and `duration_ms`. A
+non-2xx status is a normal result: a `401` or `403` is reported as the status it is, never as
+`authentication_failed`. Errors are reserved for a destination that could not be reached:
+`connection_failed`, `tls_error`, `timeout` and `destination_refused`, with `detail.reason`
+naming the error code only. Every injected value, in every encoding, is replaced by
+`[redacted:<field>]` before the result leaves the engine. Every method but `GET`, `HEAD` and
+`OPTIONS` is a write: the operator may require a human confirmation for it (see below).
 
 ### Connector tools
 

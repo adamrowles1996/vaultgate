@@ -1,10 +1,12 @@
 # 14 Action connectors
 
-> **Status: planned; the interface (14.1) and the `http` document schemas (14.2, with the
-> `graph` adapter document of 14.3) landed with M9's first pull request.** The connector
+> **Status: the interface (14.1) and the `http` connector (14.2) landed with M9; the `graph`
+> adapter (14.3) is M10, `sql` M11, `ssh` M12, `winrm` M13 and `browser` M15.** The connector
 > contracts of the actions layer ([13 Actions](13-actions.md),
-> [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). No connector runtime exists
-> yet. Requirement identifiers continue the `ACT-n` sequence of section 13.
+> [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). The `graph` document of 14.3
+> validates today, but a target that uses it is refused at save (and on read) until its runtime
+> lands, so no half-implemented mode ever runs. Requirement identifiers continue the `ACT-n`
+> sequence of section 13.
 
 ## 14.1 Connector interface
 
@@ -38,8 +40,8 @@ interface Connector<Destination, Credential, Policy, Operation> extends Connecto
   readonly tools: readonly ConnectorTool<Operation>[];
   /** What `actions_list_targets` may say about a target before the scope filter (ACT-19). */
   capabilities(destination: Destination, policy: Policy): TargetCapabilities;
-  /** Pure: classifies and checks the operation against the policy; no I/O. */
-  authorize(policy: Policy, operation: Operation): PolicyDecision;
+  /** Pure: classifies and checks the operation against the policy; no I/O. The credential document names the injection point the operation may not touch (ACT-22). */
+  authorize(policy: Policy, operation: Operation, credential: Credential): PolicyDecision;
   /** The ACT-43 operation summary and the ACT-60 classification. */
   describe(operation: Operation): OperationDescription;
   /** Runs one operation with the injected values; output is raw, the engine scrubs it. */
@@ -75,12 +77,18 @@ repeat them.
 
 - **ACT-79** Injection modes: `bearer` sets `Authorization: Bearer <value>`; `basic` sets
   `Authorization: Basic base64(username:value)`; `header` sets `<name>: <prefix><value>`; `query`
-  appends `<name>=<url-encoded value>` to the query string (allowed only when `policy` sets
-  `allow_query_credentials: true`, because query strings reach proxy and server logs). `graph` is
-  14.3.
-- **ACT-80** Requests go through the pinned transport of `src/net/pinned-https.ts` (OAUTH-8) with
-  `User-Agent: vaultgate/<version>`, the policy timeout, and a response body cap of
-  `max_output_bytes` plus the guard band of ACT-52.
+  appends `<name>=<url-encoded value>` to the query string, after any query the agent gave, with
+  `<prefix><value>` encoded by `encodeURIComponent`, one of the ACT-51 scrub variants (allowed
+  only when `policy` sets `allow_query_credentials: true`, because query strings reach proxy and
+  server logs). `graph` is 14.3.
+- **ACT-80** Requests go through the pinned transport of `src/net/pinned-https.ts` (OAUTH-8),
+  which has two schemes: `https:` verifies the certificate against the system store with no
+  insecure option (ACT-57), and plain `node:http` serves an `http://` `base_url`, which only an
+  `internal` target may have; both connect to the pinned address with the host name kept for
+  SNI, the certificate check and `Host`. Every request carries `User-Agent: vaultgate/<version>`
+  (the `package.json` version), the policy timeout as its `AbortSignal`, and its response body
+  is read up to `max_output_bytes` plus the guard band of ACT-52, after which the stream is
+  cancelled.
 
 ## 14.3 `graph` credential adapter
 

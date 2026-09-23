@@ -136,8 +136,12 @@ export function parseTargetDocuments(
 }
 
 /**
-A stored row as the engine and the pages see it: valid with its parsed documents, or invalid with the reasons.
-*/
+ * A stored row as the engine and the pages see it: valid with its parsed
+ * documents, or invalid with the reasons. The connector's pure save-time
+ * rules run again here (ACT-1: validated on write and again on read), so a
+ * row that a later build refuses to save, such as a `graph` mapping before
+ * its adapter exists, refuses every call with `target_invalid` too.
+ */
 export function validateTarget(row: TargetRow): ValidatedTarget {
   const parsed = parseTargetDocuments(row.connector, {
     destination: row.destination,
@@ -148,5 +152,8 @@ export function validateTarget(row: TargetRow): ValidatedTarget {
     return { state: 'invalid', row, problems: parsed.error.problems };
   }
   const { schemas, ...documents } = parsed.value;
-  return { state: 'valid', row, documents, schemas };
+  const problems = schemas.saveProblems(documents);
+  return problems.length > 0
+    ? { state: 'invalid', row, problems }
+    : { state: 'valid', row, documents, schemas };
 }

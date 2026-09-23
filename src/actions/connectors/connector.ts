@@ -175,9 +175,11 @@ export interface Connector<Destination, Credential, Policy, Operation> extends C
   readonly tools: readonly ConnectorTool<Operation>[];
   capabilities(destination: Destination, policy: Policy): TargetCapabilities;
   /**
-  Pure: classifies and checks the operation against the policy; no I/O (ACT-78).
-  */
-  authorize(policy: Policy, operation: Operation): PolicyDecision;
+   * Pure: classifies and checks the operation against the policy; no I/O
+   * (ACT-78). The credential document says which injection point the
+   * mapping owns, so an operation that would set it is refused (ACT-22).
+   */
+  authorize(policy: Policy, operation: Operation, credential: Credential): PolicyDecision;
   describe(operation: Operation): OperationDescription;
   /**
   Runs one operation with the injected values; output is raw, the engine scrubs it.

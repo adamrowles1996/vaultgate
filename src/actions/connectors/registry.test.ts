@@ -31,11 +31,15 @@ describe('connector registry', () => {
     expect(loaded).toStrictEqual(['http']);
   });
 
-  it('ACT-73 ships no connector runtime yet, so production loads nothing', async () => {
-    expect(CONNECTOR_LOADERS).toStrictEqual({});
+  it('ACT-73 ACT-72 loads the http runtime in production when its switch is on, and no other connector before its milestone', async () => {
+    expect(Object.keys(CONNECTOR_LOADERS)).toStrictEqual(['http']);
     const everything = actionsEnabled(['http', 'sql', 'ssh', 'winrm', 'browser']);
     const production = await loadConnectors(everything);
-    expect(production.kinds).toStrictEqual([]);
+    expect(production.kinds).toStrictEqual(['http']);
+    expect(production.tools.map((tool) => tool.name)).toStrictEqual(['http_request']);
+    expect(production.forTool('http_request')?.kind).toBe('http');
+    const withoutHttp = await loadConnectors(actionsEnabled(['sql', 'ssh']));
+    expect(withoutHttp.kinds).toStrictEqual([]);
   });
 
   it('14.1 knows the http schemas in every build and no other connector before its milestone', () => {
