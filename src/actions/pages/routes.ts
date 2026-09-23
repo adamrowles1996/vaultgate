@@ -44,9 +44,12 @@ function loginRedirect(context: IdentityContext): Response {
   return context.redirect(`/login?next=${encodeURIComponent(url.pathname + url.search)}`, 303);
 }
 
-function editableForm(kind: string | undefined): ConnectorForm | undefined {
+function editableForm(
+  dependencies: ActionsPagesDependencies,
+  kind: string | undefined,
+): ConnectorForm | undefined {
   const known = CONNECTOR_KINDS.find((candidate) => candidate === kind);
-  return known === undefined ? undefined : formFor(known);
+  return known === undefined ? undefined : formFor(known, dependencies.switches);
 }
 
 function text(values: FormValues, name: string): string {
@@ -74,12 +77,15 @@ export function targetInputFromForm(
     : changes;
 }
 
-function showCreate(context: IdentityContext): Response | Promise<Response> {
+function showCreate(
+  context: IdentityContext,
+  dependencies: ActionsPagesDependencies,
+): Response | Promise<Response> {
   const session = context.get('session');
   if (session === undefined) {
     return loginRedirect(context);
   }
-  const form = editableForm(context.req.query(CONNECTOR_FIELD));
+  const form = editableForm(dependencies, context.req.query(CONNECTOR_FIELD));
   if (form === undefined) {
     return context.notFound();
   }
@@ -102,7 +108,7 @@ async function create(
   if (gate instanceof Response) {
     return gate;
   }
-  const form = editableForm(gate.form.get(CONNECTOR_FIELD));
+  const form = editableForm(dependencies, gate.form.get(CONNECTOR_FIELD));
   if (form === undefined) {
     return context.notFound();
   }
@@ -148,7 +154,7 @@ function editable(
   id: string,
 ): { readonly target: TargetSummary; readonly form: ConnectorForm } | undefined {
   const target = dependencies.targets.get(id);
-  const form = target === undefined ? undefined : formFor(target.connector);
+  const form = target === undefined ? undefined : formFor(target.connector, dependencies.switches);
   return target === undefined || form === undefined ? undefined : { target, form };
 }
 
@@ -183,7 +189,7 @@ export function createActionsRoutes(
   dependencies: ActionsPagesDependencies,
 ): Hono<IdentityEnvironment> {
   const app = new Hono<IdentityEnvironment>();
-  app.get(`${CREATE_PATH}/new`, (context) => showCreate(context));
+  app.get(`${CREATE_PATH}/new`, (context) => showCreate(context, dependencies));
   app.post(CREATE_PATH, (context) => create(context, dependencies));
   app.get(`${CREATE_PATH}/:id`, (context) =>
     showTarget(context, dependencies, context.req.param('id')),

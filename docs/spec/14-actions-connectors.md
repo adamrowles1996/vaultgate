@@ -1,8 +1,8 @@
 # 14 Action connectors
 
 > **Status: the interface (14.1), the `http` connector (14.2), the `graph` credential adapter
-> (14.3) and the `sql` connector (14.4) have landed (M9, M10, M11); `ssh` is M12, `winrm` M13
-> and `browser` M15.** The
+> (14.3), the `sql` connector (14.4) and the `ssh` connector (14.5) have landed (M9, M10, M11,
+> M12); `winrm` is M13 and `browser` M15.** The
 > connector contracts of the actions layer ([13 Actions](13-actions.md),
 > [13a Actions in operation](13a-actions-operations.md),
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). A document whose runtime has
@@ -187,14 +187,26 @@ agent must never see the client secret, the refresh token or the access token.
 | `credential`  | `auth` (`key` \| `password`); for `key`, `key_field` (default `sshKey.privateKey`) and optional `passphrase_field`; for `password`, `password_field` (default `password`).           |
 | `policy`      | Common fields; exactly one of `allowed_commands` (one or more patterns, ACT-34) or `any_command: true`.                                                                              |
 
-- **ACT-87** Dependency: `ssh2` (pure JavaScript; its optional native binding is not installed),
-  justified in the M12 pull request. The host key presented at connect MUST match `host_key` or
-  the call fails `host_key_mismatch` before authentication; key algorithms and ciphers are the
-  library's modern defaults with `ssh-rsa` (SHA-1) disabled.
+- **ACT-87** Dependency: `ssh2` (pure JavaScript; its optional native bindings are never built —
+  `allowScripts` denies the install scripts of `ssh2` itself and of its optional `cpu-features`
+  binding, so `npm ci` compiles nothing on any platform and no native addon reaches
+  `node_modules`, and the library uses its JavaScript implementations), justified in the M12
+  pull request. `host_key` is parsed at save, so a target that could never be verified cannot be
+  stored. The host key presented at connect MUST match it or the call fails `host_key_mismatch`
+  before authentication: the check runs in the library's `hostVerifier`, during the key exchange,
+  so no credential is offered to a server that fails it. Key algorithms and ciphers are the
+  library's modern defaults with `ssh-rsa` (SHA-1) removed from `serverHostKey`; only the one
+  authentication method the mapping names is offered, so no agent, `none` or keyboard-interactive
+  attempt can follow it.
 - **ACT-88** `any_command: true` is accepted at save only when the deployment sets
   `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND=true`, the target page shows a standing warning for such a
   target, and `actions_list_targets` reports its `operations` as `["shell"]` with
-  `unrestricted: true`. Every call on such a target is audited with the full command.
+  `unrestricted: true`. Every call on such a target is audited with the full command: the
+  `arguments` column is capped at 4 KiB (ACT-60), so the command is recorded in `classification`
+  as well, scrubbed like every other stored argument (ACT-61). Turning the deployment switch off
+  afterwards refuses every call on such a target (`policy_denied`, reason `command`) and drops it
+  from `actions_list_targets`; the operator page still shows it, so it can be repaired or
+  removed.
 
 ## 14.6 `winrm`
 

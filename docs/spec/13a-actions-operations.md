@@ -58,7 +58,9 @@
 - **ACT-60** Every call appends the MCP-13 audit event (tool, client, token prefix, outcome,
   duration) **and** one `action_calls` row: `id`, `at`, `target_id`, `target_name`, `connector`,
   `revision`, `tool`, `session_id_hash` (the SHA-256 of the browser session id, ACT-96), `client_id`, `token_prefix`, `operation` (`read` \|
-  `write` \| `shell` \| `act`), `classification` (SQL class, HTTP method, `command`, or the browser
+  `write` \| `shell` \| `act`), `classification` (SQL class, HTTP method, `command` — the whole command on an
+  any-command target, which ACT-88 requires and the 4 KiB cap on `arguments` could otherwise cut
+  — or the browser
   page URL), `arguments` (JSON of the tool arguments minus injected values and minus any header
   the policy did not allow, capped at 4 KiB with `arguments_truncated`), `output_bytes`,
   `output_truncated`, `duration_ms`, `outcome` (`ok` \| `denied:<code>` \| `error:<code>`),
@@ -164,8 +166,8 @@ src/actions/
     registry.ts        schemas of every connector; runtimes loaded for enabled connectors only (ACT-73)
     http/              the runtime (M9): schemas (14.2), the tool (ACT-20, 21), authorize (pure), request, response, run, index
     graph/             the 14.3 adapter: document, token exchange, cache, write-back
-    sql/               tokeniser and classifier; mssql/ and postgres/ drivers (planned)
-    ssh/               ssh2 client wrapper, host-key pinning (planned)
+    sql/               tokeniser and classifier; mssql/ and postgres/ drivers
+    ssh/               the runtime (M12): schemas (14.5), the host-key parser and matcher, the tool, authorize (pure), the ssh2 driver shape, client, channel, run
     winrm/             WS-Management client, shell lifecycle (planned)
     browser/           CDP client, login sequence, origin interception, snapshot and masking (planned)
 ```

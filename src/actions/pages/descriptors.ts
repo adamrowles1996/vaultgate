@@ -28,6 +28,10 @@ interface FieldBase {
   The field is read only when the named sibling holds one of these values (a credential mode's own fields).
   */
   readonly when?: { readonly field: string; readonly values: readonly string[] };
+  /**
+  The deployment switch the field needs; without it the form leaves the field out (ACT-88).
+  */
+  readonly allowedBy?: 'allowAnyCommand';
 }
 
 export type FieldDescriptor = FieldBase &
@@ -52,6 +56,13 @@ export type FieldDescriptor = FieldBase &
 export interface ConnectorForm {
   readonly kind: ConnectorKind;
   readonly fields: readonly FieldDescriptor[];
+}
+
+/**
+The deployment switches a form's fields may depend on (§13.14).
+*/
+export interface FormSwitches {
+  readonly allowAnyCommand: boolean;
 }
 
 const KIB = 1024;

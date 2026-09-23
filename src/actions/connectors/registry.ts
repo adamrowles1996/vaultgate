@@ -9,10 +9,14 @@ import { CONNECTOR_KINDS, type ActionsConfig, type ConnectorKind } from '../../c
 
 import { httpSchemas } from './http/schemas.ts';
 import { sqlSchemas } from './sql/schemas.ts';
+import { sshSchemas } from './ssh/schemas.ts';
 
 import type { AnyConnector, AnyConnectorSchemas, ConnectorTool } from './connector.ts';
 
-export type ConnectorLoader = () => Promise<AnyConnector>;
+/**
+A connector's runtime, built with the configuration it needs (`ssh` reads `allowAnyCommand`, ACT-88).
+*/
+export type ConnectorLoader = (config: ActionsConfig) => Promise<AnyConnector>;
 
 /**
  * One line per connector milestone (M9: `http`, M11: `sql`, M12: `ssh`,
@@ -28,11 +32,16 @@ export const CONNECTOR_LOADERS: Partial<Readonly<Record<ConnectorKind, Connector
     const { sqlConnector } = await import('./sql/index.ts');
     return sqlConnector;
   },
+  ssh: async (config) => {
+    const { createSshConnector } = await import('./ssh/index.ts');
+    return createSshConnector({ allowAnyCommand: config.allowAnyCommand });
+  },
 };
 
 const CONNECTOR_SCHEMAS: Partial<Readonly<Record<ConnectorKind, AnyConnectorSchemas>>> = {
   http: httpSchemas,
   sql: sqlSchemas,
+  ssh: sshSchemas,
 };
 
 /**
@@ -72,14 +81,14 @@ export function connectorRegistry(connectors: readonly AnyConnector[]): Connecto
 Loads the runtime of every enabled connector that has one (ACT-73).
 */
 export async function loadConnectors(
-  config: Pick<ActionsConfig, 'enabled' | 'connectors'>,
+  config: ActionsConfig,
   loaders: Partial<Readonly<Record<ConnectorKind, ConnectorLoader>>> = CONNECTOR_LOADERS,
 ): Promise<ConnectorRegistry> {
   const loaded: AnyConnector[] = [];
   for (const kind of CONNECTOR_KINDS) {
     const loader = loaders[kind];
     if (loader !== undefined && config.enabled && config.connectors[kind]) {
-      loaded.push(await loader());
+      loaded.push(await loader(config));
     }
   }
   return connectorRegistry(loaded);

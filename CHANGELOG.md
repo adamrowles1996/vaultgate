@@ -6,6 +6,54 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `ssh` connector runtime and `ssh_run` (spec 14 §14.5 and spec 13 §13.6.5, M12; ACT-27, ACT-28,
+  ACT-87, ACT-88): the tool is listed on a deployment with `VAULTGATE_ENABLE_ACTIONS=true` and
+  `VAULTGATE_ACTIONS_ENABLE_SSH=true` for tokens holding `actions:ssh`. An `ssh` target names a
+  host, a port, the login name the command runs as and the server's host key — the line
+  `ssh-keyscan` prints, or its `SHA256:` fingerprint — which is parsed at save, so a target that
+  could never be verified cannot be stored; there is no trust-on-first-use and no way to skip the
+  check. The credential is either a private key from the vault item (with an optional passphrase
+  field) or a password. The policy names either a list of command patterns or `any_command`,
+  never both and never neither. A call matches the whole command against the patterns before
+  anything connects (`policy_denied`, reason `command`; a command beyond 16 KiB is
+  `command_size`), refuses a newline or carriage return except on an any-command target, and
+  refuses a NUL byte as `invalid_arguments`. The connection goes to the address the engine
+  resolved and validated once, with the host name kept for the host-key lookup; the presented key
+  is checked in `ssh2`'s `hostVerifier` during the key exchange, so a mismatch fails
+  `host_key_mismatch` before any credential is offered. `ssh-rsa` (the SHA-1 signature algorithm)
+  is removed from the host-key algorithms and only the one authentication method the mapping
+  names is offered, so no agent, `none` or keyboard-interactive attempt can follow. One exec
+  channel runs the command with no pseudo-terminal, no agent forwarding, no X11, no environment
+  and no port forwarding; standard input is written and closed; standard output and standard
+  error are captured separately, each cut at the target's output limit with the scrubber's guard
+  band; and the connection is closed when the call ends. The policy timeout signals `KILL` to the
+  remote command. Every call is a shell operation, so `confirm_writes` asks a human first, and
+  every injected value in every encoding is replaced by `[redacted:<field>]` in the result, the
+  error detail and the audit row. Contract tests drive the connector over a fake client (every
+  policy reason, both authentication modes, the caps with a value straddling the cut, the
+  timeout, the canary suite) and the real `ssh2` wrapper over a fake driver, so no test needs a
+  server. Operator guide: `docs/guides/actions.md` ("Creating an `ssh` target", "Calling an `ssh`
+  target"); tool reference: `docs/guides/tools-and-scopes.md`.
+- The account page can create and edit `ssh` targets, and shows a standing warning on a target
+  that allows any command (ACT-88). The unrestricted box is drawn only on a deployment with
+  `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND=true`, and turning that switch off afterwards refuses
+  every call on such a target and hides it from `actions_list_targets`, as §13.14 says it should.
+- Runtime dependency `ssh2` (exact pin, ACT-72, ACT-87, QG-9). `package.json` gains an
+  `allowScripts` block denying the install scripts of `ssh2` and of its optional `cpu-features`
+  binding, so `npm ci` compiles nothing on any platform and no native addon reaches
+  `node_modules`; the library uses its JavaScript implementations, which is all it needs.
+
+### Changed
+
+- The audited `classification` of a call is now scrubbed like its arguments, because an
+  any-command `ssh` target records the whole command there (ACT-60, ACT-61, ACT-88): the 4 KiB
+  cap on `arguments` could otherwise cut the very command an operator needs to read back.
+- A connector's loader receives the actions configuration, so the `ssh` runtime can close over
+  `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` and refuse every call on an any-command target once the
+  deployment withdraws it.
+
 ## [0.1.0-rc.8] - 2026-09-24
 
 ### Added

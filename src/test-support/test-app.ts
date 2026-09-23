@@ -64,7 +64,9 @@ export interface TestConfigOverrides {
   readonly VAULTGATE_ENABLE_ACTIONS?: string;
   readonly VAULTGATE_ACTIONS_ENABLE_HTTP?: string;
   readonly VAULTGATE_ACTIONS_ENABLE_SQL?: string;
+  readonly VAULTGATE_ACTIONS_ENABLE_SSH?: string;
   readonly VAULTGATE_ACTIONS_ENABLE_BROWSER?: string;
+  readonly VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND?: string;
   readonly VAULTGATE_ACTIONS_BROWSER_CDP_URL?: string;
 }
 

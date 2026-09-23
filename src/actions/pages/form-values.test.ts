@@ -5,7 +5,10 @@ import { formFor } from './forms.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
 
-const HTTP: ConnectorForm = formFor('http') ?? { kind: 'http', fields: [] };
+const HTTP: ConnectorForm = formFor('http', { allowAnyCommand: false }) ?? {
+  kind: 'http',
+  fields: [],
+};
 
 describe('documentsFromForm', () => {
   it('ACT-6 reads each control kind into its document, trimming text, splitting lines and leaving empties out', () => {
