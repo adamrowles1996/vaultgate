@@ -96,3 +96,20 @@ interface IdentityProvider {
   regeneration) is exercised in-process through `app.request()` with a cookie jar in
   `src/test-support/browser.ts`, so no headless browser is needed in CI (ARCH-5). Pages carry no
   JavaScript, so there is no client-side behaviour a real browser would add.
+
+## 4.9 HTTP routes
+
+| Route                                             | Purpose                                                                                                            |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `GET /`                                           | **ID-23** `303` to `/account` when the request carries a live operator session, otherwise to `/login`; `no-store`. |
+| `GET /setup`, `POST /setup`                       | First-run bootstrap (ID-1 to ID-4).                                                                                |
+| `GET /login`, `POST /login`, `POST /login/verify` | The two-step login (ID-12).                                                                                        |
+| `POST /logout`                                    | Ends the session (ID-17).                                                                                          |
+| `GET /account`, `POST /account/*`                 | The account page and its ID-15 actions.                                                                            |
+| `GET /static/vaultgate.css`                       | The single stylesheet (ID-19).                                                                                     |
+
+- **ID-24** Any other path answers `404`. When the `Accept` header prefers `text/html` the body is
+  a short page rendered by the same escaping template and stylesheet as every other page, under
+  the ID-19 policy and `Cache-Control: no-store`; otherwise (JSON accepted, `*/*`, or no `Accept`
+  at all) the body is `{"error":"not_found"}`. The `/mcp` endpoint and the `.well-known` metadata
+  routes (spec 06) produce their own answers and headers and are not affected.

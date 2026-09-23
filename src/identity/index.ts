@@ -2,6 +2,7 @@ import { type Bootstrap, createBootstrap } from './bootstrap.ts';
 import { attachSession } from './browser.ts';
 import { createGuards, type Guards } from './guards.ts';
 import { createLoginThrottle } from './login-throttle.ts';
+import { notFound } from './not-found.ts';
 import { EMPTY } from './pages/template.ts';
 import { createLocalProvider, type IdentityProvider } from './provider.ts';
 import { createIdentityStores } from './repositories/index.ts';
@@ -18,7 +19,7 @@ import type { AuditSink } from '../audit/event.ts';
 import type { Config } from '../config/index.ts';
 import type { Logger } from '../logger.ts';
 import type { ConnectedClientsRenderer, IdentityServices } from './services.ts';
-import type { Hono, MiddlewareHandler } from 'hono';
+import type { Hono, MiddlewareHandler, NotFoundHandler } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
 
 export type { IdentityVariables } from './context.ts';
@@ -48,6 +49,10 @@ export interface Identity {
   Resolves the session cookie into `context.var.session`; install before any browser route.
   */
   readonly attachSession: MiddlewareHandler<IdentityEnvironment>;
+  /**
+  The 404 fallback: JSON for API clients, a page under ID-19 for a browser (ID-24).
+  */
+  readonly notFound: NotFoundHandler<IdentityEnvironment>;
   readonly provider: IdentityProvider;
   readonly bootstrap: Bootstrap;
   readonly cookiePolicy: CookiePolicy;
@@ -114,6 +119,7 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
   return {
     routes: createIdentityRoutes(services),
     attachSession: attachSession(services),
+    notFound,
     provider: createLocalProvider(),
     bootstrap,
     cookiePolicy,

@@ -93,6 +93,9 @@ which invalidates the old set.
 
 ## 5. Sign in and the account page
 
+Opening the bare address (`https://vault.example.com/`) takes you to the login page, or straight
+to the account page when you are already signed in.
+
 `/login` asks for the display name and password, then for a six-digit authenticator code or a
 recovery code. Failure messages are identical for an unknown name, a wrong password and a wrong
 code. After five failures in fifteen minutes from one address or against the account, further
