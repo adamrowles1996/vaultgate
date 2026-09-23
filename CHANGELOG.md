@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.0-rc.5] - 2026-09-23
+
 ### Security
 
 - OAUTH-8, T6: the CIMD fetcher no longer resolves a host name twice. It validates every
@@ -282,7 +286,8 @@ field `display_name` is gone; send `email` instead.
   over a read-only store, with a CI smoke step (`scripts/cli-smoke.sh`) that exports an empty
   store from both the build and the source.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.4...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.5...HEAD
+[0.1.0-rc.5]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.4...v0.1.0-rc.5
 [0.1.0-rc.4]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.3...v0.1.0-rc.4
 [0.1.0-rc.3]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.2...v0.1.0-rc.3
 [0.1.0-rc.2]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.1...v0.1.0-rc.2
