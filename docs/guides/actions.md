@@ -150,6 +150,12 @@ notes).
 revoked or for another tenant); the OAuth error code is in `detail.error` and the call history
 carries it too. Any other answer from the token endpoint is `upstream_error` with its status.
 
+A target's vault item must be one vaultgate has already synced. The vault is synced on the
+interval `VAULTGATE_BW_SYNC_INTERVAL` sets (15 minutes by default), so an item created in the
+vault moments earlier is not yet visible and saving the target is refused with
+`credential.item_id: no such item in the vault`. Wait for the next sync, which the log records as
+`vault synced`, and save again.
+
 ## Calling an `http` target
 
 An agent whose token holds `actions:http` and whose client you granted the target calls

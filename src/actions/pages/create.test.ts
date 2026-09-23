@@ -89,7 +89,7 @@ describe('GET /account/actions/new', () => {
     expect(markup).toContain('max="300000"');
     expect(markup).toContain('value="30000"');
     expect(markup).toContain('Default 262 144 (256 KiB), at most 1 048 576 (1 MiB)');
-    expect(markup).toContain('cannot be saved until the graph adapter arrives in M10');
+    expect(markup).toContain('a tenant id or a verified domain name');
     expect(markup).toContain('name="credential.refresh_token_field"');
   });
 

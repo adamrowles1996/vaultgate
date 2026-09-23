@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The account page's `graph` credential fields still carried the pre-M10 help text, telling the
+  operator that "a graph target cannot be saved until the graph adapter arrives in M10" on the
+  very release that ships the adapter. The help now describes the tenant field and keeps the
+  base-URL rule. Found by the M10 live test against the reference deployment.
+
+- A call the policy refuses is now covered by a test asserting it is recorded with the
+  classification it was refused for (ACT-26, ACT-60), so the operator can see what was asked for.
+  The behaviour arrived with the `sql` connector, which moved the connector's `describe` ahead of
+  its `authorize`; nothing asserted it, and the release before it recorded a blank classification
+  on every refusal.
+- The operator guide says that a target's vault item must be one vaultgate has already synced,
+  since a freshly created item is refused until the next scheduled sync.
+
 ### Added
 
 - `sql` connector runtime and `sql_query` (spec 14 §14.4 and spec 13 §13.6.4, M11 first pull

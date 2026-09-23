@@ -6,6 +6,7 @@ import {
   caller,
   createActionsHarness,
   createHttpTarget,
+  errorOf,
   httpInvocation,
   resultOf,
   storedCalls,
@@ -77,5 +78,29 @@ describe('what a call leaves behind', () => {
     const large = httpInvocation({ body: 'x'.repeat(5000) });
     resultOf(await harness.engine.call(caller(), large));
     expect(storedCalls(harness.database)[1]).toMatchObject({ argumentsTruncated: true });
+  });
+
+  it('ACT-26 ACT-60 a call the policy refuses is recorded with the classification it was refused for; its operation is empty because the policy never allowed one', async () => {
+    const harness = createActionsHarness();
+    await createHttpTarget(harness, {
+      policy: { allowed_methods: ['GET'], allowed_paths: ['/v1/**'] },
+    });
+    const refusedMethod = await harness.engine.call(
+      caller(),
+      httpInvocation({ method: 'POST', path: '/v1/me' }),
+    );
+    expect(errorOf(refusedMethod).code).toBe('policy_denied');
+    const refusedPath = await harness.engine.call(
+      caller(),
+      httpInvocation({ method: 'GET', path: '/other' }),
+    );
+    expect(errorOf(refusedPath).code).toBe('policy_denied');
+    // The operator who finds an unexpected refusal must see what was asked
+    // for, so the classification is known even though the call never ran;
+    // `operation` stays empty because the policy allowed none.
+    expect(storedCalls(harness.database)).toMatchObject([
+      { outcome: 'denied:policy_denied', operation: undefined, classification: 'POST' },
+      { outcome: 'denied:policy_denied', operation: undefined, classification: 'GET' },
+    ]);
   });
 });
