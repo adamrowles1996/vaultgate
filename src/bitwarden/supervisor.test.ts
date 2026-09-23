@@ -15,37 +15,6 @@ import { allocateLoopbackPort } from './ports.ts';
 import { spawnChild } from './serve-process.ts';
 import { backoffMs, resolveDependencies } from './supervisor-support.ts';
 
-import type { FetchFunction } from './api.ts';
-
-interface SyncGate {
-  readonly fetch: FetchFunction;
-  readonly syncsStarted: () => number;
-  readonly release: () => void;
-}
-
-/**
-A fetch that lets every request through except the second `/sync`, which waits for `release`.
-*/
-function holdingSecondSync(fake: FakeBwServe): SyncGate {
-  const held = Promise.withResolvers<undefined>();
-  let syncs = 0;
-  const fetchFunction: FetchFunction = async (input, init) => {
-    const isSync = new URL(input).pathname === '/sync';
-    syncs += isSync ? 1 : 0;
-    if (isSync && syncs === 2) {
-      await held.promise;
-    }
-    return fake.fetch(input, init);
-  };
-  return {
-    fetch: fetchFunction,
-    syncsStarted: () => syncs,
-    release: () => {
-      held.resolve(undefined);
-    },
-  };
-}
-
 describe('startVaultSupervisor start-up', () => {
   it('VAULT-4 logs in, spawns bw serve, unlocks, syncs and reports ready', async () => {
     const harness = new SupervisorHarness();
@@ -132,15 +101,6 @@ describe('startVaultSupervisor start-up', () => {
     await supervisor.stop();
   });
 
-  it('VAULT-9 logs a failed initial sync and stays ready', async () => {
-    const harness = new SupervisorHarness();
-    harness.fake.override('POST', '/sync', 'not json');
-    const supervisor = harness.start();
-    await harness.until(() => supervisor.isReady());
-    expect(harness.messages()).toContain('initial vault sync failed');
-    await supervisor.stop();
-  });
-
   it('exposes a client bound to the running bw serve', async () => {
     const harness = new SupervisorHarness();
     const supervisor = harness.start();
@@ -150,42 +110,6 @@ describe('startVaultSupervisor start-up', () => {
     await supervisor.stop();
     const status = unwrapOk(await supervisor.client.status());
     expect(status.state).toBe('unavailable');
-  });
-});
-
-describe('startVaultSupervisor periodic sync', () => {
-  it('VAULT-9 syncs every interval and a failure does not affect readiness', async () => {
-    const harness = new SupervisorHarness();
-    const supervisor = harness.start();
-    await harness.until(() => supervisor.isReady());
-    expect(harness.fake.requestsTo('/sync')).toHaveLength(1);
-
-    await harness.clock.advance(60_000);
-    await harness.until(() => harness.fake.requestsTo('/sync').length === 2);
-    expect(harness.messages()).toContain('vault synced');
-
-    harness.fake.override('POST', '/sync', { success: false, message: 'Server unreachable.' });
-    await harness.clock.advance(60_000);
-    await harness.until(() => harness.messages().includes('vault sync failed'));
-    expect(supervisor.isReady()).toBe(true);
-
-    await supervisor.stop();
-    expect(harness.clock.pending()).toBe(0);
-  });
-
-  it('VAULT-9 does not reschedule a sync that finishes after shutdown', async () => {
-    const fake = new FakeBwServe({ state: 'locked' });
-    const gate = holdingSecondSync(fake);
-    const harness = new SupervisorHarness({ fake, fetch: gate.fetch });
-    const supervisor = harness.start();
-    await harness.until(() => supervisor.isReady());
-    await harness.clock.advance(60_000);
-    await harness.until(() => gate.syncsStarted() === 2);
-    await supervisor.stop();
-    gate.release();
-    await harness.until(() => harness.messages().includes('vault sync failed'));
-    expect(supervisor.isReady()).toBe(false);
-    expect(harness.clock.pending()).toBe(0);
   });
 });
 

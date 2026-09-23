@@ -17,6 +17,11 @@ export const TEST_PUBLIC_URL = 'https://vault.example.com';
 export const TEST_RESOURCE = `${TEST_PUBLIC_URL}/mcp`;
 export const TEST_METADATA_URL = `${TEST_PUBLIC_URL}/.well-known/oauth-protected-resource/mcp`;
 const TEST_EPOCH_MS = Date.parse('2026-09-22T12:00:00.000Z');
+export const READY: Readiness = {
+  ready: true,
+  failing: [],
+  vault: { ready: true, lastSyncAt: '2026-09-22T12:00:00.000Z' },
+};
 
 class RecordingAuditSink implements AuditSink {
   readonly events: AuditEvent[] = [];
@@ -108,7 +113,7 @@ export function createTestApp(options: TestAppOptions = {}): TestApp {
   const app = createApp({
     config,
     logger: createLogger('info', sink),
-    readiness: options.readiness ?? (() => ({ ready: true, failing: [] })),
+    readiness: options.readiness ?? (() => READY),
     identity: options.identity ?? createHarness({ publicUrl: config.publicUrl }).identity,
     vaultClient: vault,
     tokenVerifier: verifier,

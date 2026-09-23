@@ -110,7 +110,11 @@ const app = createApp({
       ...(store.db.isOpen ? [] : ['store']), // -- storage --
       ...(vault.isReady() ? [] : ['vault']), // -- vault --
     ];
-    return { ready: failing.length === 0, failing };
+    return {
+      ready: failing.length === 0,
+      failing,
+      vault: { ready: vault.isReady(), lastSyncAt: vault.syncState().lastSyncAt }, // -- vault --
+    };
   },
   vaultClient: vault.client, // -- vault --
   auditSink, // -- audit --

@@ -4,6 +4,8 @@ import { FakeBwServe } from '../test-support/fake-bw-serve.ts';
 import { CANARY } from '../test-support/fake-vault-fixture.ts';
 import { harnessConfig, SupervisorHarness } from '../test-support/supervisor-harness.ts';
 
+import { MIN_HEALTHY_UPTIME_MS } from './supervisor-support.ts';
+
 const WARN = 40;
 const ERROR = 50;
 const FAILED = 'vault backend start failed';
@@ -21,9 +23,16 @@ describe('startVaultSupervisor restarts', () => {
     const supervisor = harness.start();
     await harness.until(() => supervisor.isReady());
 
+    harness.serveChild(0).stderr.write(`Error: BW_SESSION=${'s'.repeat(64)} rejected\n`);
     harness.serveChild(0).exit(1);
     await harness.until(() => !supervisor.isReady());
-    expect(harness.linesFor('bw serve exited')[0]).toMatchObject({ code: 1, signal: null });
+    expect(harness.linesFor('bw serve exited')[0]).toMatchObject({
+      level: WARN,
+      code: 1,
+      signal: null,
+      uptimeMs: 0,
+      output: 'Error: BW_SESSION=[REDACTED] rejected',
+    });
     await harness.until(() => failures(harness).length === 1);
     expect(failures(harness)[0]).toMatchObject({ level: WARN, attempt: 1, nextRetryMs: 1000 });
     expect(harness.spawner.spawned('serve')).toHaveLength(1);
@@ -36,7 +45,56 @@ describe('startVaultSupervisor restarts', () => {
 
     harness.serveChild(1).exit(0);
     await harness.until(() => failures(harness).length === 2);
-    expect(failures(harness)[1]).toMatchObject({ attempt: 1, nextRetryMs: 1000 });
+    expect(failures(harness)[1]).toMatchObject({ attempt: 2, nextRetryMs: 2000 });
+    await supervisor.stop();
+  });
+
+  it('VAULT-6 counts a crash soon after ready as consecutive and escalates to error', async () => {
+    const harness = new SupervisorHarness();
+    const supervisor = harness.start();
+    const delays: number[] = [];
+    const levels: number[] = [];
+    for (let attempt = 1; attempt <= 12; attempt += 1) {
+      await harness.until(() => supervisor.isReady());
+      await harness.clock.advance(7000);
+      harness.serveChild(attempt - 1).exit(1);
+      await harness.until(() => failures(harness).length === attempt);
+      const line = failures(harness)[attempt - 1]!;
+      delays.push(Number(line['nextRetryMs']));
+      levels.push(Number(line['level']));
+      expect(line).toMatchObject({ attempt });
+      expect(harness.linesFor('bw serve exited')[attempt - 1]).toMatchObject({
+        level: WARN,
+        code: 1,
+        uptimeMs: 7000,
+      });
+      await harness.clock.advance(Number(line['nextRetryMs']));
+    }
+    expect(delays).toStrictEqual([
+      1000, 2000, 4000, 8000, 16_000, 32_000, 60_000, 60_000, 60_000, 60_000, 60_000, 60_000,
+    ]);
+    expect(levels).toStrictEqual([...Array.from({ length: 9 }, () => WARN), ERROR, ERROR, ERROR]);
+    expect(harness.spawner.spawned('serve')).toHaveLength(13);
+    await supervisor.stop();
+  });
+
+  it('VAULT-6 starts the count afresh once bw serve has been ready for five minutes', async () => {
+    const harness = new SupervisorHarness();
+    const supervisor = harness.start();
+    for (const attempt of [1, 2]) {
+      await harness.until(() => supervisor.isReady());
+      harness.serveChild(attempt - 1).exit(1);
+      await harness.until(() => failures(harness).length === attempt);
+      expect(failures(harness)[attempt - 1]).toMatchObject({ attempt });
+      await harness.clock.advance(Number(failures(harness)[attempt - 1]!['nextRetryMs']));
+    }
+    await harness.until(() => supervisor.isReady());
+    await harness.clock.advance(MIN_HEALTHY_UPTIME_MS);
+    expect(supervisor.isReady()).toBe(true);
+    harness.serveChild(2).exit(1);
+    await harness.until(() => failures(harness).length === 3);
+    expect(failures(harness)[2]).toMatchObject({ level: WARN, attempt: 1, nextRetryMs: 1000 });
+    expect(harness.linesFor('bw serve exited')[2]).toMatchObject({ uptimeMs: 300_000 });
     await supervisor.stop();
   });
 

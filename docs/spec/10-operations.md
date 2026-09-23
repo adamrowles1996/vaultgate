@@ -13,12 +13,13 @@
 
 ## 10.2 Health
 
-| Probe      | Meaning                                                                                                                                |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `/healthz` | Process is up and the event loop responds. Always `200` once listening.                                                                |
-| `/readyz`  | Store open and migrated, `bw serve` unlocked and synced at least once. `503` otherwise, with a JSON body naming the failing component. |
+| Probe      | Meaning                                                                                                                                                                                                                                                                                                                                                        |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/healthz` | Process is up and the event loop responds. Always `200` once listening.                                                                                                                                                                                                                                                                                        |
+| `/readyz`  | Store open and migrated, `bw serve` unlocked. `200` with `{"status":"ok","vault":{"ready":true,"lastSyncAt":…}}`; `503` otherwise, with `failing` naming each component that is not ready and the same `vault` object. `lastSyncAt` is the ISO 8601 time of the last successful sync since start-up, or `null`; a failed sync leaves `ready` `true` (VAULT-9). |
 
-- **OPS-4** Both probes are unauthenticated, cacheless and reveal no version or configuration.
+- **OPS-4** Both probes are unauthenticated, cacheless and reveal no version or configuration;
+  the vault detail on `/readyz` is limited to readiness and the time of the last sync.
 
 ## 10.3 Audit export
 

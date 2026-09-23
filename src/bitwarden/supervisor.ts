@@ -2,7 +2,7 @@
  * Owns the vault backend's lifecycle: start `bw serve`, log in, unlock, sync,
  * declare readiness, restart with backoff when the child dies (VAULT-5, 6, 9)
  * and lock and stop it on shutdown (VAULT-7). The HTTP layer only ever sees
- * `isReady()` and the `VaultClient`.
+ * `isReady()`, `syncState()` and the `VaultClient`.
  */
 import { fail, ok, type Result } from '../result.ts';
 
@@ -12,11 +12,14 @@ import { Credentials } from './credentials.ts';
 import { BwCli, type ServeHandle } from './serve-process.ts';
 import {
   backoffMs,
+  ensureLoggedIn,
   isServeSettling,
+  MIN_HEALTHY_UPTIME_MS,
   resolveDependencies,
   SERVE_SETTLE_POLL_MS,
   type VaultSupervisorDependencies,
 } from './supervisor-support.ts';
+import { type SyncState, VaultSyncRunner } from './supervisor-sync.ts';
 import { messageDataSchema, statusDataSchema } from './types.ts';
 import { BwServeVaultClient } from './vault-client.ts';
 import { formatVersion } from './versions.ts';
@@ -28,6 +31,10 @@ import type { VaultClient } from '../vault/client.ts';
 export interface VaultSupervisor {
   readonly client: VaultClient;
   isReady(): boolean;
+  /**
+  When the vault last synced and how the last sync failed, for `/readyz` (VAULT-9).
+  */
+  syncState(): SyncState;
   stop(): Promise<void>;
 }
 
@@ -44,12 +51,12 @@ class Supervisor implements VaultSupervisor {
   readonly #cli: BwCli;
   readonly #credentials: Credentials;
   readonly #api: BwServeApi;
+  readonly #syncRunner: VaultSyncRunner;
   #serve: ServeHandle | undefined;
   #ready = false;
   #stopping = false;
   #failures = 0;
   #waiting: Sleep | undefined;
-  #cancelSync: (() => void) | undefined;
   #loop: Promise<void> = Promise.resolve();
   readonly client: VaultClient;
 
@@ -78,28 +85,13 @@ class Supervisor implements VaultSupervisor {
         ? options
         : { ...options, serverUrl: config.bitwarden.server },
     );
-  }
-
-  /**
-  Logs in when the CLI reports `unauthenticated`, configuring the server first (VAULT-3, 4).
-  */
-  async #ensureLoggedIn(): Promise<Result<void>> {
-    const status = await this.#cli.status();
-    if (!status.ok) {
-      return status;
-    }
-    if (status.value.status !== 'unauthenticated') {
-      return ok(undefined);
-    }
-    const server = this.#config.bitwarden.server;
-    if (server !== undefined) {
-      const configured = await this.#cli.configureServer(server);
-      if (!configured.ok) {
-        return configured;
-      }
-    }
-    this.#logger.info('logging in to bitwarden with the api key');
-    return this.#cli.login(this.#credentials);
+    this.#syncRunner = new VaultSyncRunner({
+      client: this.client,
+      clock: this.#clock,
+      logger,
+      intervalMs: config.bitwarden.syncIntervalMs,
+      isChildAlive: () => this.#serve !== undefined && !this.#stopping,
+    });
   }
 
   /**
@@ -148,7 +140,12 @@ class Supervisor implements VaultSupervisor {
       return version;
     }
     this.#logger.info({ version: formatVersion(version.value) }, 'bitwarden cli version');
-    const loggedIn = await this.#ensureLoggedIn();
+    const loggedIn = await ensureLoggedIn(
+      this.#cli,
+      this.#config.bitwarden.server,
+      this.#credentials,
+      this.#logger,
+    );
     if (!loggedIn.ok) {
       return loggedIn;
     }
@@ -161,10 +158,7 @@ class Supervisor implements VaultSupervisor {
       await this.#stopServe();
       return unlocked;
     }
-    const synced = await this.client.sync();
-    if (!synced.ok) {
-      this.#logger.warn({ err: synced.error }, 'initial vault sync failed');
-    }
+    await this.#syncRunner.initial();
     return ok(serve);
   }
 
@@ -177,45 +171,33 @@ class Supervisor implements VaultSupervisor {
     await serve.stop();
   }
 
-  #scheduleSync(): void {
-    this.#cancelSync = this.#clock.schedule(() => {
-      void this.#runSync();
-    }, this.#config.bitwarden.syncIntervalMs);
-  }
-
-  async #runSync(): Promise<void> {
-    const synced = await this.client.sync();
-    if (synced.ok) {
-      this.#logger.debug('vault synced');
-    } else {
-      this.#logger.warn({ err: synced.error }, 'vault sync failed');
-    }
-    if (this.#ready) {
-      this.#scheduleSync();
-    }
-  }
-
   #becomeUnready(): void {
     this.#ready = false;
-    this.#cancelSync?.();
-    this.#cancelSync = undefined;
+    this.#syncRunner.stop();
   }
 
   /**
-  Serves until the child exits; `true` when that was our own shutdown.
+  Serves until the child exits; `true` when that was our own shutdown. A child that
+  was ready for `MIN_HEALTHY_UPTIME_MS` clears the failure count; an earlier exit
+  counts as one more consecutive failure (VAULT-6).
   */
   async #serveUntilExit(serve: ServeHandle): Promise<boolean> {
-    this.#failures = 0;
+    const readyAt = this.#clock.now();
     this.#ready = true;
     this.#logger.info('vault ready');
-    this.#scheduleSync();
+    this.#syncRunner.start();
     const exit = await serve.exited;
     this.#becomeUnready();
     this.#serve = undefined;
-    if (!this.#stopping) {
-      this.#logger.warn(exit, 'bw serve exited');
+    if (this.#stopping) {
+      return true;
     }
-    return this.#stopping;
+    const uptimeMs = this.#clock.now() - readyAt;
+    if (uptimeMs >= MIN_HEALTHY_UPTIME_MS) {
+      this.#failures = 0;
+    }
+    this.#logger.warn({ ...exit, uptimeMs, output: serve.output() }, 'bw serve exited');
+    return false;
   }
 
   /**
@@ -260,6 +242,10 @@ class Supervisor implements VaultSupervisor {
 
   isReady(): boolean {
     return this.#ready;
+  }
+
+  syncState(): SyncState {
+    return this.#syncRunner.state();
   }
 
   /**
