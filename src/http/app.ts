@@ -80,9 +80,12 @@ export function createApp(dependencies: AppDependencies): App {
   const app = new Hono<AppEnvironment>();
 
   app.use(requestId());
-  // HSTS per ID-20, only over https.
+  // HSTS per ID-20, only over https. ID-19: `same-origin`, not the default
+  // `no-referrer`, because under `no-referrer` a browser sends `Origin: null`
+  // on a form POST and the ID-18 origin check refuses every sign-in.
   app.use(
     secureHeaders({
+      referrerPolicy: 'same-origin',
       strictTransportSecurity: identity.cookiePolicy.isSecure && STRICT_TRANSPORT_SECURITY,
     }),
   );

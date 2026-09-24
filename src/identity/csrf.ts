@@ -10,12 +10,16 @@ export function generateCsrfToken(random: RandomSource): string {
 
 /**
  * The browser-hardening half of ID-18: the request must carry an `Origin`
- * equal to the public origin, or (when no `Origin` is sent) a
- * `Sec-Fetch-Site: same-origin` header.
+ * equal to the public origin, or, when no usable `Origin` is sent, a
+ * `Sec-Fetch-Site: same-origin` header. A browser sends the opaque
+ * `Origin: null` for a form POST from a page whose referrer policy is
+ * `no-referrer` (or when a privacy setting strips it); that says nothing
+ * about where the request came from, so it is treated as absent and the
+ * browser-set `Sec-Fetch-Site` decides.
  */
 export function isSameOriginRequest(headers: Headers, publicUrl: string): boolean {
   const origin = headers.get('origin');
-  return origin === null
+  return origin === null || origin === 'null'
     ? headers.get('sec-fetch-site') === 'same-origin'
     : origin === new URL(publicUrl).origin;
 }

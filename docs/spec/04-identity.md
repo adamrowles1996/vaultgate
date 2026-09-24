@@ -78,16 +78,22 @@ added without touching the OAuth layer (see `PLAN.md`).
 
 ## 4.6 CSRF and browser hardening
 
-- **ID-18** Every state-changing browser route requires: `SameSite=Lax` cookie, an `Origin` (or
-  `Sec-Fetch-Site: same-origin`) header matching `PUBLIC_URL`, and a per-session synchroniser token
-  in the form body. Any missing element is a `403` with an audit event. The token comparison is
+- **ID-18** Every state-changing browser route requires: `SameSite=Lax` cookie, an `Origin`
+  header matching `PUBLIC_URL` (or, when `Origin` is absent or the opaque `null`,
+  `Sec-Fetch-Site: same-origin`), and a per-session synchroniser token in the form body. `null`
+  is what a browser sends for a form POST from a page under `Referrer-Policy: no-referrer` or
+  when a privacy setting strips the origin; it proves nothing either way, so the browser-set
+  `Sec-Fetch-Site` decides, and a cross-site `null` is still refused. Any missing element is a `403` with an audit event. The token comparison is
   over the bytes of both values and never throws: a submitted token of the same code-unit length
   but a different byte length once raised inside the constant-time comparison, which left the
   route as a `500` with no audit event at all — a silent gap in the trail where this clause
   requires a recorded refusal.
 - **ID-19** HTML pages are served with a `Content-Security-Policy` of
   `default-src 'none'; style-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`
-  and `Cache-Control: no-store`.
+  and `Cache-Control: no-store`. Every response carries `Referrer-Policy: same-origin`: no
+  referrer leaves the origin, and a same-origin form POST keeps its real `Origin` (under the
+  stricter `no-referrer` a browser sends `Origin: null`, and until 0.1.0-rc.14 that made ID-18
+  refuse every browser sign-in and consent with a bare `403`).
   Pages contain no JavaScript. Styling is a single static stylesheet. A page another layer serves
   (the Actions section of ACT-5) sets both itself, through the middleware identity hands it, so
   the headers do not depend on the order in which the composition layer mounts the two.
