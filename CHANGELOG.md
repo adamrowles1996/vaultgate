@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- VAULT-7: stopping vaultgate no longer logs a warning. The supervisor locks the vault on the way
+  down, and by then the `bw serve` child is usually already gone, so the lock could not connect and
+  was reported as `vault lock failed` at warning level on every upgrade — eleven times in the
+  reference deployment's journal. A backend that has stopped cannot be locked and does not need to
+  be, because its session went with the process, so that outcome is now recorded at information
+  level as what it is. A vault that is reachable and refuses to lock is still a warning, because
+  then something really did stay unlocked.
+
 ## [0.1.0-rc.10] - 2026-09-24
 
 ### Added
