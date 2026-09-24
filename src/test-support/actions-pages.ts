@@ -69,6 +69,7 @@ export function createPagesHarness(options: PagesHarnessOptions = {}): PagesHarn
           database,
           vault: actions.vault,
           sensitiveAction: (context) => identity.identity.sensitiveAction(context),
+          pageHeaders: (context, next) => identity.identity.pageHeaders(context, next),
           listClients: () => clients,
           switches: { allowAnyCommand: isAnyCommandAllowed },
         });

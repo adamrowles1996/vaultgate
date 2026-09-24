@@ -25,6 +25,9 @@ import type { IdentityServices } from './services.ts';
 import type { SessionState } from './session-manager.ts';
 import type { Hono } from 'hono';
 
+/**
+ID-24: matched as an own property, so `?notice=constructor` names no notice rather than answering 500.
+*/
 const NOTICES: Readonly<Record<string, string>> = {
   reauthenticated: 'Password confirmed. Sensitive actions are available for five minutes.',
   'password-changed': 'Password changed. Every other session has been signed out.',
@@ -280,7 +283,8 @@ export function registerAccountRoutes(
     if (session === undefined || operator === undefined) {
       return context.redirect(loginLocation(context.req.raw), 303);
     }
-    const notice = NOTICES[context.req.query('notice') ?? ''];
+    const name = context.req.query('notice') ?? '';
+    const notice = Object.hasOwn(NOTICES, name) ? NOTICES[name] : undefined;
     return context.html(
       renderAccount(await accountView(services, { session, operator }, { notice })),
     );

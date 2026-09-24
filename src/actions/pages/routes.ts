@@ -47,6 +47,16 @@ const NOTICES: Readonly<Record<string, string>> = {
   'sessions-closed': 'Every open session on this target was closed.',
 };
 
+/**
+ * ID-24: the query parameter names one of the notices above and nothing
+ * else. A plain index would return an inherited member for `constructor` or
+ * `toString`, which the renderer is not typed for and which crashed the page
+ * with a 500 that no audit event explained.
+ */
+function noticeFor(name: string | undefined): string | undefined {
+  return name !== undefined && Object.hasOwn(NOTICES, name) ? NOTICES[name] : undefined;
+}
+
 function editableForm(
   dependencies: ActionsPagesDependencies,
   kind: string | undefined,
@@ -153,7 +163,7 @@ async function showTarget(
   if (target === undefined) {
     return context.notFound();
   }
-  const notice = NOTICES[context.req.query('notice') ?? ''];
+  const notice = noticeFor(context.req.query('notice'));
   const view = await targetPageView(dependencies, target, viewer, { notice });
   return context.html(renderTargetPage(view));
 }
@@ -207,6 +217,10 @@ export function createActionsRoutes(
   dependencies: ActionsPagesDependencies,
 ): Hono<IdentityEnvironment> {
   const app = new Hono<IdentityEnvironment>();
+  // ID-19 on every page and every write of this sub-application, whatever
+  // order the composition layer mounts it in.
+  app.use(`${CREATE_PATH}/*`, dependencies.pageHeaders);
+  app.use(CREATE_PATH, dependencies.pageHeaders);
   registerCallPages(app, dependencies);
   app.get(`${CREATE_PATH}/new`, (context) => showCreate(context, dependencies));
   app.post(CREATE_PATH, (context) => create(context, dependencies));

@@ -21,11 +21,18 @@ export function isSameOriginRequest(headers: Headers, publicUrl: string): boolea
 }
 
 /**
-The synchroniser half of ID-18: the form token must equal the one bound to the session.
-*/
+ * The synchroniser half of ID-18: the form token must equal the one bound to
+ * the session. The lengths compared are the byte lengths the buffers will
+ * have, not the code-unit lengths of the strings: a submitted token of the
+ * same code-unit length but a different byte length made `timingSafeEqual`
+ * throw a `RangeError`, which left the route as a 500 with no audit event
+ * where ID-18 requires a 403 with one.
+ */
 export function isValidCsrfToken(submitted: string | undefined, expected: string): boolean {
-  return (
-    submitted?.length === expected.length &&
-    timingSafeEqual(Buffer.from(submitted), Buffer.from(expected))
-  );
+  if (submitted === undefined) {
+    return false;
+  }
+  const presented = Buffer.from(submitted, 'utf8');
+  const bound = Buffer.from(expected, 'utf8');
+  return presented.length === bound.length && timingSafeEqual(presented, bound);
 }

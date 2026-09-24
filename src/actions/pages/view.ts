@@ -19,15 +19,26 @@ import { DESCRIPTION_FIELD, drawnPaths, INTERNAL_FIELD, ITEM_ID_FIELD } from './
 import type { ConnectorForm, FormSwitches } from './descriptors.ts';
 import type { SectionView, TargetListItem } from './section.ts';
 import type { ClientChoice, GrantItem, TargetPageView } from './target-page.ts';
-import type { IdentityContext, SensitiveAction, SessionState } from '../../identity/index.ts';
+import type {
+  IdentityContext,
+  IdentityEnvironment,
+  SensitiveAction,
+  SessionState,
+} from '../../identity/index.ts';
 import type { VaultClient } from '../../vault/client.ts';
 import type { TargetsService, TargetSummary } from '../targets.ts';
+import type { MiddlewareHandler } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
 
 /**
 The clients that currently hold a consent, from the OAuth layer by injection (ACT-9, ACT-70).
 */
 export type ClientLister = (operatorId: string) => readonly ClientChoice[];
+
+/**
+ID-19: the identity module's page-header middleware, injected (ACT-70).
+*/
+export type PageHeaders = MiddlewareHandler<IdentityEnvironment>;
 
 export interface ActionsPagesDependencies {
   readonly targets: TargetsService;
@@ -40,6 +51,13 @@ export interface ActionsPagesDependencies {
   The identity module's ID-18 and ID-15 gate, injected by the composition layer (ACT-70).
   */
   readonly sensitiveAction: SensitiveAction;
+  /**
+   * ID-19's CSP and `no-store`, injected the same way. The pages set them
+   * themselves rather than inheriting them from whatever identity happens to
+   * have registered on `/account/*` before them: a header that arrives only
+   * because of mount order is not a header the pages own.
+   */
+  readonly pageHeaders: PageHeaders;
   readonly listClients: ClientLister;
   /**
   The deployment switches the forms depend on (§13.14, ACT-88).

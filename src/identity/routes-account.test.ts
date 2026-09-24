@@ -132,6 +132,30 @@ describe('POST /account/reauthenticate', () => {
 });
 
 describe('re-authentication gate', () => {
+  it('ID-24 a notice naming an inherited property of Object renders the account page rather than crashing it', async () => {
+    const harness = createHarness();
+    const { browser } = await setUpOperator(harness);
+    for (const notice of ['constructor', 'toString', '__proto__', 'nonsense']) {
+      const response = await browser.get(`/account?notice=${notice}`);
+      expect([notice, response.status]).toStrictEqual([notice, 200]);
+      expect(await response.text()).not.toContain('function Object');
+    }
+  });
+
+  it('ID-18 answers 403 with an audit event for a synchroniser token whose bytes differ but whose length does not', async () => {
+    const harness = createHarness();
+    const { browser } = await setUpOperator(harness);
+    const csrf = csrfOf(await pageText(browser, '/account'));
+    const multibyte = `${'é'.repeat(csrf.length - 1)}x`;
+    expect(multibyte).toHaveLength(csrf.length);
+    const response = await browser.submit('/account/reauthenticate', {
+      csrf: multibyte,
+      password: PASSWORD,
+    });
+    expect(response.status).toBe(403);
+    expect(harness.audits.at(-1)?.details?.['reason']).toBe('missing or stale synchroniser token');
+  });
+
   it('ID-15 ID-18 refuses every sensitive action without a session', async () => {
     const harness = createHarness();
     const browser = harness.browser();

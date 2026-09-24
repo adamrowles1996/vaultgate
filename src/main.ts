@@ -127,6 +127,7 @@ const actionsPages =
         database: store.db,
         vault: vault.client,
         sensitiveAction: (context) => identity.sensitiveAction(context),
+        pageHeaders: (context, next) => identity.pageHeaders(context, next),
         listClients: (operatorId) =>
           authorization.listConnectedClients(operatorId).map((client) => ({
             clientId: client.clientId,
