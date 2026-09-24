@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Docs
+
+- The independent reviews of the actions layer are published verbatim under `docs/reviews/`: a
+  security review of the whole layer at M14 (nine findings, three required before approval) and a
+  second reviewer's report on the `ssh` and `winrm` connectors, written independently over the same
+  tree. They agreed, separately, on two findings, which is why both are published rather than one
+  summarised. The fixes for the findings are recorded in their own entries.
+
 ### Added
 
 - A confirmation-message rendering test per connector (spec 13 §13.8, M14; ACT-43): the exact
