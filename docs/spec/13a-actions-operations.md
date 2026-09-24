@@ -267,9 +267,13 @@ src/actions/
   `sql`, a Linux host for `ssh`, a Windows host for `winrm`, two of the maintainer's own web
   applications for `browser`).
 - **ACT-76** The elicitation flow is tested in-process with the SDK client declaring, in turn,
-  form-mode elicitation on `2026-07-28`, elicitation on an older negotiated version, and no
-  elicitation, asserting the three behaviours of ACT-42 and ACT-48 and every outcome of ACT-47,
-  with replay, expiry, edited-target and altered-argument retries refused (ACT-45, 46).
+  form-mode elicitation on `2026-07-28`, elicitation at `initialize` on an older negotiated
+  version, and no elicitation, asserting the behaviours of ACT-42 and ACT-48 and every outcome of
+  ACT-47, with replay, expiry, edited-target and altered-argument retries refused (ACT-45, 46).
+  The older-version case asserts the refusal ACT-48 records: the client is answered
+  `confirmation_unavailable`, is never shown a prompt though it offered to render one, and the
+  call leaves its `action_calls` row; a read on the same target and the same wire still runs, so
+  the limit is the confirmation and nothing else.
 - **ACT-77** The classifier (13.7.2) has a corpus of statements per engine, including comment and
   string tricks (`SELECT 1; DROP …`, `SELECT '…; DROP' …`, `/* */` splits, dollar quoting,
   `SELECT … INTO`, `WITH … AS (DELETE …)`, `EXEC` inside a string), and every corpus entry is a

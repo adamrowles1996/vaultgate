@@ -51,10 +51,17 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * empty means form mode; anything else, including a request without the
  * envelope, cannot elicit.
  *
- * M14 seam: on the 2025 wire the capability was declared at `initialize`,
- * which the stateless handler (MCP-1) never sees, so every legacy-wire
- * request answers `none` here until the in-band `elicitInput` fallback
- * lands; that fallback replaces this function's legacy branch, nothing else.
+ * A request on the 2025 wire therefore always answers `none`, and that is
+ * final rather than provisional. That wire declares elicitation once, in
+ * `initialize`, and MCP-1's stateless handler builds a fresh server per HTTP
+ * request that never sees that message: the SDK resolves the capability view
+ * from `initialize` on a legacy-era instance and a per-request instance holds
+ * nothing, so its own legacy shim refuses with "no client capabilities are
+ * available on this connection — per-request legacy serving cannot receive
+ * server-to-client requests". Attempting the fallback anyway costs the agent
+ * its typed `confirmation_unavailable` code and the operator the ACT-60 row,
+ * and still shows no human a prompt; `actions-elicitation.test.ts` pins what
+ * a real 2025-wire SDK client actually gets. Spec ACT-48 records why.
  */
 export function elicitationCapability(body: unknown): Caller['elicitation'] {
   const parsed = clientCapabilitiesSchema.safeParse(body);

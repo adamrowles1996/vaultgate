@@ -1,9 +1,10 @@
 /**
  * The in-process app with the actions engine behind `/mcp` (one audit trail
  * for the route and the engine), the real MCP client SDK connected to it on
- * the 2026-07-28 wire with a scripted elicitation handler, and the raw
- * multi-round-trip retry for the cases the SDK's driver cannot script
- * (replay, expiry, an edited target, altered arguments).
+ * the 2026-07-28 wire with a scripted elicitation handler, the same client on
+ * the 2025 wire (ACT-48, ACT-76), and the raw multi-round-trip retry for the
+ * cases the SDK's driver cannot script (replay, expiry, an edited target,
+ * altered arguments).
  */
 import {
   Client,
@@ -92,6 +93,32 @@ export async function connectSdkClient(app: App, options: SdkClientOptions): Pro
       capabilities: options.elicitation === 'none' ? {} : { elicitation: { form: {} } },
       versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } },
       inputRequired: { maxRounds: 2 },
+    },
+  );
+  if (options.elicitation !== 'none') {
+    const handler = options.elicitation;
+    client.setRequestHandler('elicitation/create', (elicitation) => handler(elicitation));
+  }
+  await client.connect(transport);
+  return client;
+}
+
+/**
+ * The same client on the 2025 wire (ACT-76's second behaviour), declaring
+ * form-mode elicitation at `initialize` — which is the only place that wire
+ * has to declare it. The SDK refuses a pinned 2025 revision (`pin` is for
+ * 2026-07-28 and later), so the era is selected with `mode: 'legacy'`.
+ */
+export async function connectLegacySdkClient(app: App, options: SdkClientOptions): Promise<Client> {
+  const transport = new StreamableHTTPClientTransport(new URL(TEST_RESOURCE), {
+    fetch: (url, init) => Promise.resolve(app.request(url, init)),
+    authProvider: { token: () => Promise.resolve(options.token) },
+  });
+  const client = new Client(
+    { name: 'contract-legacy', version: '1' },
+    {
+      capabilities: options.elicitation === 'none' ? {} : { elicitation: { form: {} } },
+      versionNegotiation: { mode: 'legacy' },
     },
   );
   if (options.elicitation !== 'none') {

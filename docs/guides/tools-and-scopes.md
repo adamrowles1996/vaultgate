@@ -360,9 +360,18 @@ call") and an opaque `requestState`; the client shows the prompt, then retries t
 signed, expires after two minutes, is single-use and is bound to the client, the token, the
 target's revision and the exact arguments; anything else is refused. A client that declares no
 form-mode elicitation is refused before anything else happens with the fixed message of
-`confirmation_unavailable`; a client on the 2025 wire counts as one until the in-band fallback of
-M14. A retry that echoes the state without a well-formed answer is treated as a fresh call: nothing
-runs and the prompt is issued again.
+`confirmation_unavailable`. A retry that echoes the state without a well-formed answer is treated
+as a fresh call: nothing runs and the prompt is issued again.
+
+**A confirmed target needs a client on `2026-07-28`.** A client on an older protocol revision is
+always refused `confirmation_unavailable`, whatever it supports and whatever it declared when it
+connected, and there is no fallback that could change that. The older wire declares elicitation
+once, during `initialize`; vaultgate serves every request with a fresh stateless handler, which
+never sees that message and has no open channel on which a server-to-client prompt could be
+delivered or answered. Reads on the same target and the same wire are unaffected. If your client
+is on the older revision, either use one on `2026-07-28` or set `confirm_writes: false` and
+review the target's writes under **Unexpected writes** on the account page. Spec
+[ACT-48](../spec/13-actions.md) records the whole finding.
 
 ### Actions error codes
 

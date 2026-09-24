@@ -17,8 +17,8 @@ master password.
 > compatibility evidence) is in progress. The off-by-default actions layer has landed through M13:
 > M9 the engine, the operator pages and the `http` connector, M10 the Microsoft Graph credential
 > adapter, M11 `sql`, M12 `ssh`, M13 `winrm`, and M14 the policy-form validation messages, the
-> call-history and unexpected-write views and grant management from the connected-clients list.
-> `browser` is M15; see [`docs/PLAN.md`](docs/PLAN.md).
+> call-history and unexpected-write views, grant management from the connected-clients list and
+> the elicitation hardening. `browser` is M15; see [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Why
 

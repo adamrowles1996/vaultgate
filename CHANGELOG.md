@@ -8,6 +8,43 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- A confirmation-message rendering test per connector (spec 13 §13.8, M14; ACT-43): the exact
+  ACT-42 message for an `http` POST, a `sql_execute` statement, an `ssh_run` command and a
+  `winrm_run` command, each asserted whole and asserted to contain no policy pattern (every
+  target in the test carries one no call matches), no vault item id and no injected value. The
+  vault is made to refuse everything first, so a message that survives proves the credential was
+  never fetched (ACT-41). A statement longer than 1 KiB is cut at the first KiB, and `sql_query`
+  — a read whatever the policy says — is never confirmed at all.
+- `connectLegacySdkClient` in the test support: the real MCP client SDK on the 2025 wire, used by
+  the ACT-76 cases below.
+
+### Changed
+
+- **Spec ACT-48 is rewritten: there is no in-band elicitation fallback for the older protocol
+  wire, and there cannot be one in this deployment model.** The clause previously required the
+  engine to fall back to the SDK's server-to-client `elicitation/create` request when the
+  negotiated revision predates the multi-round-trip pattern but the client declared `elicitation`
+  at initialisation. Implementing it proved impossible under MCP-1's stateless handler, which
+  builds a fresh server per HTTP request and so never sees `initialize` — the one place the older
+  wire has to declare that capability. The SDK documents the same boundary on its per-request
+  capability view ("per-request instances that never saw an initialize (stateless legacy) hold
+  nothing, so gates refuse there"), and its legacy shim, asked to fulfil the request anyway,
+  answers "no client capabilities are available on this connection — per-request legacy serving
+  cannot receive server-to-client requests". Attempting the fallback is strictly worse than
+  refusing: measured against a real SDK client on `2025-11-25`, it returns an untyped `isError`
+  text result in place of the `confirmation_unavailable` code an agent can act on, writes no
+  `action_calls` row at all, and still shows no human a prompt. The `confirmation_unavailable`
+  refusal therefore stands, ACT-48 and ACT-76 now say why, `docs/PLAN.md`'s M14 entry is
+  corrected, and the operator guides tell an operator what to do instead (a client on
+  `2026-07-28`, or `confirm_writes: false` with the ACT-63 review). Two tests drive a real SDK
+  client on the older wire and pin what it actually gets: the refusal, no prompt shown though the
+  client offered to render one, the ACT-60 row written — and a read on the same target and the
+  same wire still served, so the limit is the confirmation and nothing else.
+- `docs/spec/12-compatibility.md` gains §12.2.1, a form-mode elicitation row per client. Only
+  `@modelcontextprotocol/client` is marked supported, evidenced by the in-process suite that runs
+  in CI; every product client is "not yet verified" rather than guessed, and the section says a
+  row is filled in only from a run someone performed and recorded.
+
 - Policy-form validation messages, the call-history and unexpected-write views, and grant
   management from the connected-clients list (spec 13 §13.3.2 and §13.12, M14; ACT-5, ACT-6,
   ACT-7, ACT-49, ACT-63). A target's page gains **The whole call history**, which pages back
