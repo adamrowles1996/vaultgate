@@ -1,9 +1,9 @@
+import { Agent } from 'node:http';
 import { Readable } from 'node:stream';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { fakeTlsSocket } from '../test-support/fake-tls-socket.ts';
-
+import { KeptConnection } from './kept-connection.ts';
 import {
   createPinnedHttpsFetch,
   type PinnedRequest,
@@ -12,17 +12,8 @@ import {
   type ResponseMessage,
 } from './pinned-https.ts';
 
-import type { TlsConnect } from './certificate-pin.ts';
 import type { IncomingHttpHeaders } from 'node:http';
 import type { RequestOptions } from 'node:https';
-import type { ConnectionOptions } from 'node:tls';
-
-/**
-Node's `createConnection` callback, which the pinned connection never uses: it answers at once.
-*/
-function ignoreCallback(): void {
-  // The socket is returned synchronously.
-}
 
 /**
 A certificate check that is happy with anything; `certificate-pin.test.ts` proves the pin itself.
@@ -185,24 +176,45 @@ describe('createPinnedHttpsFetch', () => {
     expect(typeof createPinnedHttpsFetch()).toBe('function');
   });
 
-  it('ACT-55 ACT-57 gives a pinned destination its own TLS connection, on the URL port and host', async () => {
-    const opened: ConnectionOptions[] = [];
-    const connect: TlsConnect = (options) => {
-      opened.push(options);
-      return fakeTlsSocket();
-    };
-    for (const url of ['https://win.example.com:5986/wsman', 'https://agent.example.com/c.json']) {
-      const { request, calls } = answering(() => message([], 200));
-      await createPinnedHttpsFetch({ https: request, connect })(
-        pinned({ url, certificate: accepts }),
-      );
-      expect(calls[0]?.options.agent).toBe(false);
-      calls[0]?.options.createConnection?.({}, ignoreCallback);
-    }
-    expect(opened).toStrictEqual([
-      { host: PUBLIC, port: 5986, servername: 'win.example.com', rejectUnauthorized: false },
-      { host: PUBLIC, port: 443, servername: 'agent.example.com', rejectUnauthorized: false },
-    ]);
+  it('ACT-55 ACT-57 gives a pinned destination an agent of its own, never the default one', async () => {
+    // The pin has to be an agent: Node ignores a `createConnection` in the
+    // request options once a request has one, and `agent: false` gives it a
+    // default agent whose sockets the system store verifies. What that agent
+    // opens is `kept-connection.test.ts`.
+    const { request, calls } = answering(() => message([], 200));
+    const fetch = createPinnedHttpsFetch({ https: request });
+    await fetch(pinned({ certificate: accepts }));
+    await fetch(pinned({ url: 'https://win.example.com:5986/wsman', certificate: accepts }));
+    expect(calls.map((call) => call.options.agent instanceof Agent)).toStrictEqual([true, true]);
+    expect(calls[0]?.options.createConnection).toBeUndefined();
+  });
+
+  it('ACT-89 puts every request of a kept connection on one agent, and releases it', async () => {
+    const kept = new KeptConnection();
+    const { request, calls } = answering(() => message([], 200));
+    const fetch = createPinnedHttpsFetch({ https: request });
+    await fetch(pinned({ connection: kept }));
+    await fetch(pinned({ connection: kept }));
+    const [first, second] = calls;
+    expect(first?.options.agent).toBeInstanceOf(Agent);
+    expect(second?.options.agent).toBe(first?.options.agent);
+    kept.release();
+    await fetch(pinned({ connection: kept }));
+    expect(calls[2]?.options.agent).not.toBe(first?.options.agent);
+  });
+
+  it('ACT-89 keeps a connection to a plain listener on its default port too', async () => {
+    const plain = answering(() => message(['plain'], 200));
+    const secure = answering(() => message([], 200));
+    await createPinnedHttpsFetch({ https: secure.request, http: plain.request })(
+      pinned({
+        url: 'http://win.example.internal/wsman',
+        address: '10.0.0.8',
+        connection: new KeptConnection(),
+      }),
+    );
+    expect(plain.calls[0]?.options.agent).toBeInstanceOf(Agent);
+    expect(secure.calls).toStrictEqual([]);
   });
 
   it('ACT-80 sends any method with a body, pinned the same way', async () => {

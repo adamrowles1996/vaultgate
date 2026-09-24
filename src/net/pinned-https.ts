@@ -4,9 +4,10 @@ import { isIP, type LookupFunction } from 'node:net';
 import { Readable } from 'node:stream';
 import { connect as tlsConnect } from 'node:tls';
 
-import { pinnedConnection, type CertificateCheck, type TlsConnect } from './certificate-pin.ts';
+import { agentFor, type ConnectionPlan, type KeptConnection } from './kept-connection.ts';
 
-import type { IncomingHttpHeaders } from 'node:http';
+import type { CertificateCheck, TlsConnect } from './certificate-pin.ts';
+import type { AgentOptions, IncomingHttpHeaders } from 'node:http';
 
 export type PinnedMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS';
 
@@ -35,6 +36,12 @@ export interface PinnedRequest {
   ACT-57: judges the leaf certificate in place of the system store; nothing is sent until it passes.
   */
   readonly certificate?: CertificateCheck | undefined;
+  /**
+   * The socket every request of one authenticated session travels, for a
+   * protocol that authenticates the connection rather than the message
+   * (`winrm` over NTLM). Without one each request is free to open its own.
+   */
+  readonly connection?: KeptConnection | undefined;
 }
 
 export type PinnedFetch = (request: PinnedRequest) => Promise<Response>;
@@ -92,28 +99,39 @@ function pinnedLookup(address: string): LookupFunction {
 }
 
 const HTTPS_PORT = 443;
+const HTTP_PORT = 80;
 
 /**
- * ACT-57: the request options that carry a certificate pin, or nothing when
- * the destination has none and the system store verifies it.
- */
-function pinnedCertificateOptions(
-  connect: TlsConnect,
-  pinned: PinnedRequest,
-  url: URL,
-): RequestOptions {
-  if (pinned.certificate === undefined) {
-    return {};
-  }
+One socket, reused for every request of the session that holds it.
+*/
+const KEPT: AgentOptions = { keepAlive: true, maxSockets: 1 };
+
+function connectionPlan(pinned: PinnedRequest, url: URL): ConnectionPlan {
+  const isTls = url.protocol !== 'http:';
   return {
-    agent: false,
-    createConnection: pinnedConnection(connect, {
-      address: pinned.address,
-      port: url.port === '' ? HTTPS_PORT : Number(url.port),
-      servername: url.hostname,
-      check: pinned.certificate,
-    }),
+    address: pinned.address,
+    port: url.port === '' ? (isTls ? HTTPS_PORT : HTTP_PORT) : Number(url.port),
+    servername: url.hostname,
+    isTls,
+    check: pinned.certificate,
   };
+}
+
+/**
+ * The agent the request runs on: the session's own socket where it holds one,
+ * an agent carrying the certificate pin where the destination has one
+ * (ACT-57), and otherwise nothing, which leaves Node's default agent and the
+ * system trust store in charge.
+ */
+function agentOptions(connect: TlsConnect, pinned: PinnedRequest, url: URL): RequestOptions {
+  if (pinned.connection !== undefined) {
+    return {
+      agent: pinned.connection.use(() => agentFor(connect, connectionPlan(pinned, url), KEPT)),
+    };
+  }
+  return pinned.certificate === undefined
+    ? {}
+    : { agent: agentFor(connect, connectionPlan(pinned, url), {}) };
 }
 
 function toHeaders(raw: IncomingHttpHeaders): Headers {
@@ -163,7 +181,7 @@ export function createPinnedHttpsFetch(requests: Partial<RequestFunctions> = {})
           headers: pinned.headers,
           lookup: pinnedLookup(pinned.address),
           signal: pinned.signal,
-          ...pinnedCertificateOptions(functions.connect, pinned, url),
+          ...agentOptions(functions.connect, pinned, url),
         },
         (message) => {
           try {
