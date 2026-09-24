@@ -119,9 +119,11 @@ Exit: a real deployment from the button reaches the setup page on the generated
 
 Exit: `v1.0.0`.
 
-### Post-1.0: the actions layer (spec 13, 14; ADR 0007)
+### The actions layer (spec 13, 14; ADR 0007)
 
-Milestones M9 to M15 deliver the typed actions layer after `v1.0.0`. Every milestone ships
+Milestones M9 to M15 deliver the typed actions layer. They were planned for after `v1.0.0`; M9 to
+M14 landed during the release-candidate series, ahead of M8's exit, because using a credential
+without revealing it is what the operator's agents need vaultgate for. Every milestone ships
 behind `VAULTGATE_ENABLE_ACTIONS` (and its connector switch) so a release between them changes
 nothing for a deployment that has not opted in. Each milestone lands contract tests against
 fakes (ACT-75) and records a live test against the maintainer's own systems in its pull request.

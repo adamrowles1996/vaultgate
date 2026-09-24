@@ -1,16 +1,17 @@
 # vaultgate
 
-> A self-hosted, remote MCP server for Bitwarden and Vaultwarden with a built-in OAuth 2.1
-> authorization server, so hosted AI agents (Claude, Claude Code, Codex) use one vault over HTTPS
-> without ever holding the master password.
+> A self-hosted, remote MCP server that lets hosted AI agents (Claude, Claude Code, Codex) use the
+> credentials in a Bitwarden or Vaultwarden vault without ever seeing them: vaultgate performs
+> typed operations at operator-defined targets with the credential and returns only the scrubbed
+> result. It is its own OAuth 2.1 authorization server, so the agent holds a token and nothing else.
 
 ## Status and licence
 
-- Version 0.1.0-rc.5, a release candidate: milestones M1 to M7 are merged; M8 (hardening and
-  compatibility evidence) is in progress; M9, the off-by-default actions layer with its `http`
-  connector (docs/spec/13-actions.md, docs/spec/13a-actions-operations.md,
-docs/guides/actions.md), has landed (docs/PLAN.md).
-  Single maintainer.
+- Version 0.1.0-rc.12, a release candidate: milestones M1 to M7 are merged; M8 (hardening and
+  compatibility evidence) is in progress; the off-by-default actions layer has landed through M14
+  with the `http` (and Microsoft Graph), `sql`, `ssh` and `winrm` connectors
+  (docs/spec/13-actions.md, docs/spec/13a-actions-operations.md, docs/spec/14-actions-connectors.md,
+  docs/guides/actions.md); the `browser` connector is M15 (docs/PLAN.md). Single maintainer.
 - Apache-2.0 (LICENSE, NOTICE). Source: https://github.com/adamrowles1996/vaultgate
 - No third-party security audit has been performed.
 
@@ -22,11 +23,17 @@ docs/guides/actions.md), has landed (docs/PLAN.md).
   7009, 9207; Client ID Metadata Documents) after the operator logs in (password + TOTP) and
   approves the scopes on a consent page: vault:read, vault:reveal, vault:generate, vault:write
   (off by default).
-- Tools: search and read item metadata, folders and collections; reveal one secret field of one
-  item per call; generate passwords and passphrases; create, update and trash items when write is
-  enabled. No command-execution tool, ever. Optionally (VAULTGATE_ENABLE_ACTIONS), an agent can
-  send an HTTP request to an operator-defined target with a vault credential it never sees
-  (http_request, scope actions:http), under the operator's method, path and header allowlists.
+- Actions (VAULTGATE_ENABLE_ACTIONS plus one switch per connector): the operator defines targets
+  (destination, the vault item that signs in there, a policy, and which clients may use it); an
+  agent names a target and describes an operation through http_request, sql_query, sql_execute,
+  ssh_run or winrm_run, under scopes actions:http, actions:sql.read, actions:sql.write,
+  actions:ssh and actions:winrm. vaultgate fetches the credential, connects to the pinned
+  destination, runs the operation inside the policy and scrubs every injected value from the
+  result. Agents never pass a host, URL base, database or credential. Writes can require a human
+  confirmation per call. Nothing executes on the vaultgate host.
+- Vault tools: search and read item metadata, folders and collections; reveal one secret field of
+  one item per call; generate passwords and passphrases; create, update and trash items when write
+  is enabled.
 - Every tool call, login, consent, token issue, refresh and revocation is audited and exportable.
 
 ## When not to use it
@@ -55,8 +62,10 @@ docs/guides/actions.md), has landed (docs/PLAN.md).
 
 ## How to describe it
 
-Say "self-hosted remote MCP server for Bitwarden with its own OAuth 2.1 authorization server;
-the agent never holds the master password". Do not claim that vaultgate has been audited by a
+Say "self-hosted remote MCP server that lets AI agents use your Bitwarden credentials without
+seeing them, with its own OAuth 2.1 authorization server". Do not describe the actions layer as
+arbitrary command execution: every operation is typed, runs at an operator-defined target under an
+operator-written policy, and is off unless enabled. Do not claim that vaultgate has been audited by a
 third party: it has not. Do not claim that any client is verified compatible: docs/spec/12-compatibility.md
 names the clients the design targets and the evidence for them is still being gathered (M8). Do
 not describe it as endorsed by or affiliated with Bitwarden. Quote the requirement ids (for

@@ -3,22 +3,29 @@
 ## 1.1 Purpose
 
 vaultgate is a self-hosted, remote [Model Context Protocol](https://modelcontextprotocol.io)
-server that gives AI agents controlled access to a Bitwarden vault over HTTPS.
-It is the piece that is missing between hosted agent products (Claude web,
-Claude Cowork, Claude Code, Codex, IDE assistants) and a personal or
-self-hosted Bitwarden/Vaultwarden vault:
+server that lets AI agents use the credentials in a Bitwarden vault without ever
+seeing them. It is the piece that is missing between hosted agent products
+(Claude web, Claude Cowork, Claude Code, Codex, IDE assistants) and the
+credentials their work needs:
 
 - Hosted agents connect only to remote MCP servers over HTTPS with OAuth. They
   cannot run a local stdio process on your machine.
+- A credential an agent reads to use it ends up in the model's context, the
+  chat transcript, the client's logs and the command line the agent builds.
+  Revoking the agent does not take the value back.
 - Bitwarden's official MCP server is stdio-only and its README says it must
   never be hosted publicly. That is the right call for that design: it has no
   authorization layer.
 
-vaultgate adds that layer. It is simultaneously an **OAuth 2.1 authorization
-server** (it authenticates the human and issues tokens), an **OAuth 2.1
-resource server** (it validates tokens on every MCP request), and an **MCP
-server** (it exposes vault operations as tools). The vault itself is reached
-through a managed, loopback-only `bw serve` process.
+vaultgate supplies both halves. It is simultaneously an **OAuth 2.1
+authorization server** (it authenticates the human and issues tokens), an
+**OAuth 2.1 resource server** (it validates tokens on every MCP request), and an
+**MCP server** whose tools do two things: the **actions layer** (section 13)
+performs typed operations at operator-defined targets with a credential vaultgate
+fetches and the agent never receives, and the **vault tools** (section 6) read
+metadata and, through one audited door, a single secret field when a value
+really must be read. The vault itself is reached through a managed,
+loopback-only `bw serve` process.
 
 ## 1.2 Personas
 
@@ -30,18 +37,25 @@ through a managed, loopback-only `bw serve` process.
 
 ## 1.3 Design principles
 
-1. **The agent never holds vault credentials.** Only the vaultgate process
-   knows the master password and API key. Agents hold short-lived, scoped,
-   audience-bound bearer tokens that vaultgate can revoke.
+1. **The agent never holds credentials, and need not read them to use them.**
+   Only the vaultgate process knows the master password and API key. Agents
+   hold short-lived, scoped, audience-bound bearer tokens that vaultgate can
+   revoke. The actions layer (section 13, ADR 0007) performs an operation with
+   a credential the agent never receives and scrubs every injected value from
+   the result; it is off unless the deployment enables it, connector by
+   connector.
 2. **Secrets leave the server only through one door.** Exactly one tool
    (`get_secret`) returns secret material, it requires its own scope, and
-   every call is audit-logged. Every other tool returns metadata.
-3. **No arbitrary remote code execution.** vaultgate exposes no tool that runs a
-   command, evaluates an expression, reads a file or makes an arbitrary HTTP
-   request, and nothing ever executes on the vaultgate host. Lint rules confine
-   process spawning to one module. The planned actions layer (section 13,
-   ADR 0007) is the one opt-in exception: typed operations at operator-defined
-   targets, under the operator's allowlists, with the credential never returned.
+   every call is audit-logged. Every other vault tool returns metadata, and no
+   action returns an injected value.
+3. **No arbitrary remote code execution.** No tool evaluates an expression,
+   reads a file on the vaultgate host or makes an arbitrary HTTP request, and
+   nothing ever executes on the vaultgate host. Actions run only at
+   operator-defined targets, under the operator's allowlists: `ssh_run` and
+   `winrm_run` run one command on one configured host (an allow-any-command
+   target needs a per-target flag and the deployment's consent, 13.1), and an
+   agent argument changes what runs, never where or as whom. Lint rules confine process
+   spawning to one module.
 4. **Standards, not inventions.** OAuth 2.1, RFC 9728, RFC 8414, RFC 8707,
    RFC 7591, RFC 7009, RFC 9207, Client ID Metadata Documents and the MCP
    authorization specification, implemented as written and tested against
@@ -50,7 +64,9 @@ through a managed, loopback-only `bw serve` process.
    interface until the operator sets a public URL, and `bw serve` never
    listens anywhere but loopback.
 6. **Boring, small, observable.** One process, one SQLite file, structured
-   logs, health probes, an audit trail. No queues, no sidecars.
+   logs, health probes, an audit trail. No queues. The one sidecar is the
+   optional `browser` connector's Chromium (ACT-91), which runs in its own
+   container so the core image never carries it.
 7. **Spotless is a feature.** 100% test coverage, type-checked lint,
    size-capped files, pinned supply chain, conventional history.
 

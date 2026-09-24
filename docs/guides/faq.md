@@ -9,13 +9,26 @@ connect to remote MCP servers over HTTPS with OAuth. vaultgate is that remote se
 OAuth 2.1 authorization server built in so that agents hold short-lived, scoped, revocable tokens
 instead of your credentials ([ADR 0002](../adr/0002-own-authorization-server.md)).
 
+## Can an agent use a credential without seeing it?
+
+Yes, at targets you define. That is what the actions layer is for: a credential an agent reads in
+order to use it ends up in the model's context, the chat transcript and the client's logs. With
+the layer enabled, you define a target on the account page (an HTTP API, Microsoft Graph, a SQL
+Server or PostgreSQL database, an SSH or WinRM host), the vault item that signs in there and what
+is allowed; the agent names the target and describes the operation, and vaultgate performs it and
+returns the result with every injected value scrubbed out
+([Actions](actions.md), [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)).
+
 ## Why is there no "run this command with the secret" tool?
 
 Local secret managers often offer one, so the model never sees the value. Over HTTPS, to a remote
-server, that is remote code execution behind a bearer token. vaultgate exposes vault operations
-only: no command execution, no file access, no arbitrary fetch. An agent that needs a secret in
-a command reveals it (with `vault:reveal`, audited) and runs the command where it runs
-([ADR 0004](../adr/0004-no-remote-command-execution.md)).
+server, a tool that runs any command the agent sends, anywhere, is remote code execution behind a
+bearer token ([ADR 0004](../adr/0004-no-remote-command-execution.md)). The actions layer is the
+typed alternative: `ssh_run` and `winrm_run` run one command on one host you configured, under a
+command allowlist you write (a target that accepts any command needs its own flag and the
+deployment's consent), with the credential injected by vaultgate. Nothing ever executes on
+the vaultgate host itself. Without the actions layer, an agent that needs a secret in a command
+reveals it (with `vault:reveal`, audited) and runs the command where it runs.
 
 ## Can several people share one instance?
 
@@ -51,9 +64,11 @@ delete, only the trash, and a password can be set without the agent ever seeing 
 
 Between vaultgate and Bitwarden: the same encrypted traffic the official clients send. Between
 vaultgate and an agent: tool results, which are metadata except for `get_secret`, which returns
-exactly one secret field per audited call. To anyone else: nothing. There is no telemetry, no
-update check, and the only outbound request vaultgate makes on an agent's behalf is fetching a
-client's metadata document when a client identifies itself with a URL.
+exactly one secret field per audited call, and, with the actions layer enabled, the scrubbed
+results of actions. There is no telemetry and no update check. vaultgate makes two kinds of
+outbound request on an agent's behalf: fetching a client's metadata document when a client
+identifies itself with a URL, and, only when you have enabled actions, connecting to the targets
+you defined (plus the Microsoft sign-in endpoint for a Graph target).
 
 ## Does vaultgate see my master password?
 

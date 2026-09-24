@@ -5,59 +5,73 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/adamrowles1996/vaultgate/badge)](https://scorecard.dev/viewer/?uri=github.com/adamrowles1996/vaultgate)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-A self-hosted, remote [MCP](https://modelcontextprotocol.io) server for
-[Bitwarden](https://bitwarden.com) (and Vaultwarden) with a built-in OAuth 2.1
-authorization server, so hosted AI agents such as Claude, Claude Cowork,
-Claude Code and Codex can use your vault over HTTPS without ever holding your
-master password.
+A self-hosted, remote [MCP](https://modelcontextprotocol.io) server that lets hosted AI agents
+such as Claude, Claude Cowork, Claude Code and Codex **use your credentials without ever seeing
+them**. The credentials stay in your [Bitwarden](https://bitwarden.com) (or Vaultwarden) vault.
+vaultgate uses them on the agent's behalf against systems you define (an HTTP API, Microsoft
+Graph, a SQL Server or PostgreSQL database, an SSH or WinRM host) under your policy, and hands
+back only the result. It is its own OAuth 2.1 authorization server, so the agent holds a
+short-lived, scoped, revocable token and nothing else.
 
 > **Status: release candidate.** Milestones M1 to M7 are merged: configuration, SQLite store,
 > operator identity with TOTP, the OAuth 2.1 authorization server, the MCP tool surface, the
 > managed `bw serve` backend, the audit trail, packaging and the Azure template. M8 (hardening and
-> compatibility evidence) is in progress. The off-by-default actions layer has landed through M13:
-> M9 the engine, the operator pages and the `http` connector, M10 the Microsoft Graph credential
-> adapter, M11 `sql`, M12 `ssh`, M13 `winrm`, and M14 the policy-form validation messages, the
-> call-history and unexpected-write views, grant management from the connected-clients list and
-> the elicitation hardening. `browser` is M15; see [`docs/PLAN.md`](docs/PLAN.md).
+> compatibility evidence) is in progress. The actions layer, opt-in and off by default, has landed
+> through M14: M9 the engine, the operator pages and the `http` connector, M10 the Microsoft Graph
+> credential adapter, M11 `sql`, M12 `ssh`, M13 `winrm`, and M14 the policy-form validation
+> messages, the call-history and unexpected-write views, grant management from the
+> connected-clients list and the elicitation hardening. `browser` is M15; see
+> [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Why
 
-**The agent never holds your credentials.** A hosted agent (Claude, Claude Cowork, Claude Code,
-Codex) holds a short-lived, scoped, revocable OAuth 2.1 access token; the master password and API
-key live only in the vaultgate process on your host. Hosted agents reach MCP servers over HTTPS
-and cannot run a process next to your vault, and the other Bitwarden MCP servers are built for
-exactly that local process:
+**A credential an agent can read ends up in the transcript.** Once an agent reveals a password
+in order to use it, the value sits in the model's context, in the chat transcript, in the client's
+logs and on whatever command line the agent builds, and revoking the agent does not take it back.
+vaultgate is built so that the agent never needs the value:
 
-| Server                                                                                                                                                                         | Where it runs                                                  | Who holds the master password / API key                                                                        | Client authorization                                                                                                                               | Consent and scopes                                                                                      | Revocation                                                                                           | Audit trail                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| [Official `bitwarden/mcp-server`](https://github.com/bitwarden/mcp-server)                                                                                                     | Local, stdio; its README says it must never be hosted publicly | Your machine: the `bw` CLI session (`BW_SESSION`) in the client's configuration, or an OS password dialog      | None; whoever launches the process                                                                                                                 | None; every tool is available to the launching client                                                   | Lock the vault or end the `bw` session                                                               | Not described                                                                    |
-| [warden-mcp](https://github.com/icoretech/warden-mcp), remote mode                                                                                                             | A long-running HTTP service you host                           | The client, which sends them as `X-BW-Password`, `X-BW-ClientId` and `X-BW-ClientSecret` headers on every call | None built in ("no built-in authentication layer in v1")                                                                                           | None; `READONLY` and `NOREVEAL` switches apply to every client alike                                    | Rotate the Bitwarden credentials                                                                     | Not described                                                                    |
-| Typical community servers, e.g. [vaultwarden-mcp](https://github.com/rmangaha/vaultwarden-mcp), [bitwarden-mcp-server](https://github.com/giuliolibrando/bitwarden-mcp-server) | Local stdio, or a plain HTTP port                              | The server process, from environment variables holding the e-mail address and master password                  | None                                                                                                                                               | None                                                                                                    | Rotate the Bitwarden credentials                                                                     | Not described                                                                    |
-| vaultgate                                                                                                                                                                      | Your host, reachable over HTTPS by hosted agents               | The vaultgate process only; the agent holds an opaque token                                                    | Built-in OAuth 2.1 authorization server: operator login with TOTP, PKCE, RFC 9728 / 8414 / 8707 / 7591 / 7009 / 9207, Client ID Metadata Documents | Per-client consent page; `vault:read`, `vault:reveal`, `vault:generate`, `vault:write` (off by default) | Per client or per token from the account page; refresh tokens rotate and a replay revokes the family | Every tool call, login, consent, token issue, refresh and revocation, exportable |
-
-"Not described" means the project's README does not document one. Dated verification notes with
-links, and when the official stdio server is the better choice: [`docs/comparison.md`](docs/comparison.md).
-
-What the design gives you beyond the table:
-
-- **The master password stays with vaultgate.** It lives only in the process, and encrypted under
-  your secret key once you connect the vault from the account page; agents hold short-lived,
-  scoped, revocable tokens.
-- **One door for secrets.** A single tool returns secret values, one field of one item per call,
-  behind its own scope, with every call audited. Every other tool returns metadata.
-- **No remote code execution.** There is no "run this command" tool. An off-by-default
-  actions layer ([ADR 0007](docs/adr/0007-typed-actions-with-operator-policy.md),
-  [spec 13](docs/spec/13-actions.md) and [13a](docs/spec/13a-actions-operations.md),
-  [guide](docs/guides/actions.md)) lets an agent use a
-  credential against an `http`, `sql`, `ssh` or `winrm` target you define, under your allowlist,
-  without ever seeing it; every non-read call can require a human confirmation, and the account
-  page lists every one that did not get one. Nothing runs on the vaultgate host.
+- **Use, don't read.** With the actions layer enabled
+  ([guide](docs/guides/actions.md), [spec 13](docs/spec/13-actions.md) and
+  [13a](docs/spec/13a-actions-operations.md), [ADR 0007](docs/adr/0007-typed-actions-with-operator-policy.md)),
+  an agent names a target you defined and describes an operation: an HTTP request, a SQL query
+  or statement, a command on an SSH or WinRM host. vaultgate fetches the credential from the
+  vault, connects to the pinned destination, runs the operation inside your policy, scrubs every
+  injected value from the result and returns what is left. An agent never supplies a host, a URL
+  base, a database name or a credential; its arguments change what runs, never where or as whom.
+- **Writes are opt-in three times.** A write needs its own scope at consent, a target policy that
+  allows it and, when you ask for it, a human confirmation on every call; the account page lists
+  every write that ran without one.
+- **One audited door for the rare value that must be read.** The vault tools return metadata. A
+  single tool returns a secret value, one field of one item per call, behind its own scope, with
+  every call audited.
+- **Nothing runs on the vaultgate host.** No tool runs whatever an agent sends wherever it likes: `ssh_run` and
+  `winrm_run` run one command on one configured host under your allowlist (a target that accepts
+  any command needs both its own flag and the deployment's consent), and every operation executes
+  at its target.
+- **The agent holds a token and nothing else.** The master password and API key live only in the
+  vaultgate process on your host, encrypted under your secret key once you connect the vault from
+  the account page.
 - **Standards as written.** OAuth 2.1, PKCE, RFC 9728 / 8414 / 8707 / 7591 /
   7009 / 9207 and Client ID Metadata Documents, per the MCP authorization
   specification (2026-07-28).
 - **Any Bitwarden.** bitwarden.com, bitwarden.eu, self-hosted Bitwarden and Vaultwarden.
 - **Boring to operate.** One process, one SQLite file, structured logs, health
   probes, an audit trail. `docker compose up` is a complete installation.
+
+### Compared with other Bitwarden MCP servers
+
+Hosted agents reach MCP servers over HTTPS and cannot run a process next to your vault, and the
+other Bitwarden MCP servers are built for exactly that local process:
+
+| Server                                                                                                                                                                         | Where it runs                                                  | Who holds the master password / API key                                                                        | Client authorization                                                                                                                               | Consent and scopes                                                                                                                                     | Revocation                                                                                           | Audit trail                                                                      | Using a credential without seeing it                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [Official `bitwarden/mcp-server`](https://github.com/bitwarden/mcp-server)                                                                                                     | Local, stdio; its README says it must never be hosted publicly | Your machine: the `bw` CLI session (`BW_SESSION`) in the client's configuration, or an OS password dialog      | None; whoever launches the process                                                                                                                 | None; every tool is available to the launching client                                                                                                  | Lock the vault or end the `bw` session                                                               | Not described                                                                    | Not described                                                                             |
+| [warden-mcp](https://github.com/icoretech/warden-mcp), remote mode                                                                                                             | A long-running HTTP service you host                           | The client, which sends them as `X-BW-Password`, `X-BW-ClientId` and `X-BW-ClientSecret` headers on every call | None built in ("no built-in authentication layer in v1")                                                                                           | None; `READONLY` and `NOREVEAL` switches apply to every client alike                                                                                   | Rotate the Bitwarden credentials                                                                     | Not described                                                                    | Not described                                                                             |
+| Typical community servers, e.g. [vaultwarden-mcp](https://github.com/rmangaha/vaultwarden-mcp), [bitwarden-mcp-server](https://github.com/giuliolibrando/bitwarden-mcp-server) | Local stdio, or a plain HTTP port                              | The server process, from environment variables holding the e-mail address and master password                  | None                                                                                                                                               | None                                                                                                                                                   | Rotate the Bitwarden credentials                                                                     | Not described                                                                    | Not described                                                                             |
+| vaultgate                                                                                                                                                                      | Your host, reachable over HTTPS by hosted agents               | The vaultgate process only; the agent holds an opaque token                                                    | Built-in OAuth 2.1 authorization server: operator login with TOTP, PKCE, RFC 9728 / 8414 / 8707 / 7591 / 7009 / 9207, Client ID Metadata Documents | Per-client consent page; `vault:read`, `vault:reveal`, `vault:generate`, `vault:write` (off by default); `actions:*` scopes for each enabled connector | Per client or per token from the account page; refresh tokens rotate and a replay revokes the family | Every tool call, login, consent, token issue, refresh and revocation, exportable | Typed actions at targets you define: `http` (with Microsoft Graph), `sql`, `ssh`, `winrm` |
+
+"Not described" means the project's README does not document one. Dated verification notes with
+links, and when the official stdio server is the better choice: [`docs/comparison.md`](docs/comparison.md).
 
 ## Quick start
 
@@ -94,23 +108,33 @@ the consent page. The `bw` CLI that vaultgate drives is bundled in the image and
 [`docs/guides/first-run.md`](docs/guides/first-run.md); details and the verification of the
 image: [`docs/guides/install-docker-compose.md`](docs/guides/install-docker-compose.md).
 
+To let agents use credentials rather than read them, set `VAULTGATE_ENABLE_ACTIONS=true` and the
+switch for each connector you want, restart, and define targets in the account page's Actions
+section: [`docs/guides/actions.md`](docs/guides/actions.md).
+
 ## How it works
 
 ```text
 Claude / Codex ──HTTPS + Bearer──▶ vaultgate ──loopback──▶ bw serve ──▶ Bitwarden
-                 ▲                    │
-                 └── OAuth 2.1 ◀──────┘  (consent page, operator login with TOTP)
+                 ▲                    │    │
+                 │                    │    └──pinned──▶ your API, database, SSH or WinRM host
+                 └── OAuth 2.1 ◀──────┘        (credential injected by vaultgate, result scrubbed)
+                   (consent page, operator login with TOTP)
 ```
 
 1. An agent calls `/mcp` and is challenged with `WWW-Authenticate`.
 2. It discovers the authorization server from the protected resource metadata,
    registers (Client ID Metadata Document, dynamic registration, or a
    pre-registered id) and sends you to the consent page.
-3. You log in (password + TOTP) and approve the scopes:
-   `vault:read`, `vault:reveal`, `vault:generate`, and optionally `vault:write`.
-4. The agent receives tokens and can search items, read metadata, reveal one
-   secret field at a time, generate passwords and, if allowed, create or update
-   items.
+3. You log in (password + TOTP) and approve the scopes: `vault:read`,
+   `vault:reveal`, `vault:generate`, optionally `vault:write`, and the `actions:*`
+   scopes of each connector the deployment enables.
+4. With an `actions:*` scope, the agent lists the targets granted to it and calls
+   them: `http_request`, `sql_query`, `sql_execute`, `ssh_run`, `winrm_run`.
+   vaultgate fetches the credential from the vault, performs the operation at the
+   target and returns the scrubbed result; the credential never reaches the agent.
+5. With the vault scopes, it can search items, read metadata, reveal one secret
+   field at a time, generate passwords and, if allowed, create or update items.
 
 ## Install
 
