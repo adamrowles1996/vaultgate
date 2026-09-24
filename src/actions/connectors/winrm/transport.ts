@@ -72,6 +72,15 @@ interface Wire {
 }
 
 /**
+ * A `negotiate` session always holds its socket, because NTLM authenticates
+ * the connection — and because the leaf certificate that socket's peer
+ * presented is what the exchange binds itself to (RFC 5929).
+ */
+interface NegotiateWire extends Wire {
+  readonly kept: KeptConnection;
+}
+
+/**
  * A reader of the NTLM and multipart parsers: what they refuse is a malformed
  * answer from the destination (T33), which is `upstream_error` and never an
  * uncaught exception. The message is vaultgate's own words, so there is no
@@ -136,10 +145,17 @@ function basicTransport(wire: Wire): WinrmTransport {
  * negotiate message and no body and is answered with `401` and the challenge;
  * the second carries the authenticate message, and a `401` to *that* is the
  * destination rejecting the credential.
+ *
+ * The first request is also what makes the channel binding possible: by the
+ * time the challenge has been answered the socket has completed its handshake
+ * and the connection knows the certificate the destination presented. On a
+ * plain endpoint it knows none, and the exchange carries no binding, which is
+ * correct — there is no channel there to bind to.
  */
-async function handshake(wire: Wire, signal: AbortSignal): Promise<NtlmSecurity> {
+async function handshake(wire: NegotiateWire, signal: AbortSignal): Promise<NtlmSecurity> {
   const exchange = startNtlm({
     credential: ntlmCredential(wire.connection.username, wire.connection.password),
+    certificate: () => wire.kept.certificate,
     random: wire.dependencies.random,
     now: wire.dependencies.now,
   });
@@ -174,7 +190,7 @@ function sealedAnswer(security: NtlmSecurity, answer: RawAnswer): SoapAnswer {
   };
 }
 
-function negotiateTransport(wire: Wire, isSealed: boolean): WinrmTransport {
+function negotiateTransport(wire: NegotiateWire, isSealed: boolean): WinrmTransport {
   let security: NtlmSecurity | undefined;
   return {
     async send(body, signal) {
@@ -193,7 +209,7 @@ function negotiateTransport(wire: Wire, isSealed: boolean): WinrmTransport {
         : { text: answer.body.toString('utf8'), status: answer.status };
     },
     release() {
-      wire.kept?.release();
+      wire.kept.release();
     },
   };
 }
@@ -206,6 +222,11 @@ export function openTransport(
   if (connection.auth === 'basic') {
     return basicTransport({ connection, dependencies, certificate, kept: undefined });
   }
-  const wire: Wire = { connection, dependencies, certificate, kept: new KeptConnection() };
+  const wire: NegotiateWire = {
+    connection,
+    dependencies,
+    certificate,
+    kept: new KeptConnection(),
+  };
   return negotiateTransport(wire, new URL(connection.url).protocol === 'http:');
 }

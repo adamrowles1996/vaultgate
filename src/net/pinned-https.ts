@@ -106,14 +106,18 @@ One socket, reused for every request of the session that holds it.
 */
 const KEPT: AgentOptions = { keepAlive: true, maxSockets: 1 };
 
-function connectionPlan(pinned: PinnedRequest, url: URL): ConnectionPlan {
+function connectionPlan(
+  pinned: PinnedRequest,
+  url: URL,
+  record: ((certificate: Buffer) => void) | undefined,
+): ConnectionPlan {
   const isTls = url.protocol !== 'http:';
   return {
     address: pinned.address,
     port: url.port === '' ? (isTls ? HTTPS_PORT : HTTP_PORT) : Number(url.port),
     servername: url.hostname,
     isTls,
-    check: pinned.certificate,
+    guard: { check: pinned.certificate, record },
   };
 }
 
@@ -124,14 +128,18 @@ function connectionPlan(pinned: PinnedRequest, url: URL): ConnectionPlan {
  * system trust store in charge.
  */
 function agentOptions(connect: TlsConnect, pinned: PinnedRequest, url: URL): RequestOptions {
-  if (pinned.connection !== undefined) {
-    return {
-      agent: pinned.connection.use(() => agentFor(connect, connectionPlan(pinned, url), KEPT)),
-    };
+  const kept = pinned.connection;
+  if (kept !== undefined) {
+    const plan = connectionPlan(pinned, url, (certificate) => {
+      kept.record(certificate);
+    });
+    return { agent: kept.use(() => agentFor(connect, plan, KEPT)) };
   }
+  // A request that keeps no connection has nowhere to put the peer's
+  // certificate, and nothing in a one-request protocol wants it.
   return pinned.certificate === undefined
     ? {}
-    : { agent: agentFor(connect, connectionPlan(pinned, url), {}) };
+    : { agent: agentFor(connect, connectionPlan(pinned, url, undefined), {}) };
 }
 
 function toHeaders(raw: IncomingHttpHeaders): Headers {

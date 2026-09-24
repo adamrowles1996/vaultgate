@@ -682,6 +682,18 @@ the plain endpoint is safe:
   SOAP message after it is sealed with that key and signed. This is what `AllowUnencrypted=false`
   asks for, and vaultgate refuses a reply whose signature does not verify rather than reading it
   anyway.
+- **On an `https://` endpoint the exchange is bound to the connection.** vaultgate sends a
+  channel-binding token computed from the certificate the listener actually presented, so an
+  attacker who terminates TLS in front of the host cannot relay the sign-in on somewhere else.
+  Windows checks it at its default `CbtHardeningLevel` of `Relaxed`, so there is nothing to
+  configure. A plain `http://` endpoint has no TLS to bind to; that is why vaultgate only accepts
+  one on a target you marked **internal**, and it is worth keeping it that way.
+
+Two things Negotiate does not do, which are worth knowing before you enable a `winrm` target.
+Anyone who captures an exchange can attack the password offline at their leisure — NTLM has no
+defence against that, so the account below matters as much as the network does. And NTLM is
+weaker than Kerberos: it never authenticates the host to vaultgate. If the machine is
+domain-joined and you have a stronger option, prefer it.
 
 The **login name** is the account the command runs as. A bare name (`vaultgate`) is a local
 account on the host itself, which is what a workgroup machine has; `MACHINE\vaultgate` or
@@ -725,8 +737,9 @@ Restart-Service -Name Spooler
 
 ### Giving the target its own user
 
-Create a dedicated local account, put it in **Remote Management Users** rather than
-**Administrators**, and give it only what the allowed commands need:
+The account is the control, exactly as the key is for `ssh`. Create a dedicated local account,
+put it in **Remote Management Users** rather than **Administrators**, and give it only what the
+allowed commands need:
 
 ```powershell
 New-LocalUser -Name 'vaultgate' -Password (Read-Host -AsSecureString) -PasswordNeverExpires
@@ -735,6 +748,12 @@ Add-LocalGroupMember -Group 'Remote Management Users' -Member 'vaultgate'
 
 A member of that group can open a WinRM shell but is not an administrator; grant any further
 privilege the target genuinely needs one command at a time.
+
+**Give it a long random password**, generated rather than chosen, and use it for nothing else.
+An NTLM exchange answers the host's challenge with a value derived from the password, and anyone
+who captures that answer can try passwords against it offline, as fast as their hardware allows,
+for as long as they like. Length is the only thing that makes that pointless. Rotating the
+password means editing the vault item; the next call picks it up.
 
 ### If you want `Basic` instead
 

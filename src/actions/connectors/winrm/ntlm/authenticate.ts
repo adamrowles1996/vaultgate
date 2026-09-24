@@ -53,6 +53,10 @@ export interface AuthenticateRequest {
   The Type 1 message as it was sent; the MIC covers all three, byte for byte.
   */
   readonly negotiate: Buffer;
+  /**
+  RFC 5929: `MsvAvChannelBindings` for a TLS connection, `undefined` for a plain one.
+  */
+  readonly channelBinding: Buffer | undefined;
   readonly random: (bytes: number) => Buffer;
   readonly now: () => number;
 }
@@ -106,7 +110,7 @@ export function authenticateMessage(request: AuthenticateRequest): Authenticatio
   const blob = ntlmv2Blob({
     timestamp: challenge.timestamp ?? fileTime(request.now()),
     clientChallenge,
-    attributes: blobAttributes(challenge),
+    attributes: blobAttributes(challenge, request.channelBinding),
   });
   const response = ntlmv2Response({
     key: ntowfv2(credential),

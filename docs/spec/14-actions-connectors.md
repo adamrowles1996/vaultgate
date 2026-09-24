@@ -265,6 +265,34 @@ agent must never see the client secret, the refresh token or the access token.
   and is never decoded on a best-effort basis. NTLM authenticates the _connection_, so one socket
   carries the handshake and all six exchanges of a call and is released when the shell is deleted.
 
+  On an `https://` endpoint the authenticate message also carries a **channel binding** (T35).
+  Nothing in an NTLM exchange names the channel it travels, so an attacker who can terminate TLS
+  in front of the destination can relay the three messages and authenticate as the operator's
+  account somewhere else. The client's answer is RFC 5929 `tls-server-end-point`: the leaf
+  certificate the socket's peer actually presented, digested with SHA-384 or SHA-512 where the
+  certificate is signed with one and SHA-256 otherwise — which is RFC 5929's own rule once its
+  MD5 and SHA-1 cases are raised, and what an algorithm naming no single digest (RSASSA-PSS,
+  Ed25519) is bound with too. That digest goes into the `gss_channel_bindings_struct`, whose MD5
+  is the `MsvAvChannelBindings` attribute of the NTLMv2 blob (MS-NLMP 2.2.2.1). Windows checks it
+  at `CbtHardeningLevel` `Relaxed`, the default, as well as at `Strict`, so a relay fails against
+  a host nobody reconfigured. The certificate is read from the connection the exchange is
+  travelling — `src/net/kept-connection.ts` records what the socket's peer presented — and never
+  from anything supplied beside it, which is the whole point. **On a plain `http://` endpoint
+  there is no channel to bind to and the attribute is omitted**, which is correct: the mitigation
+  there is ACT-56's `internal: true`, a network the operator already controls.
+
+  Three further properties are load-bearing and are asserted rather than assumed. The negotiate
+  flags refuse a downgrade: `NTLMSSP_NEGOTIATE_LM_KEY`, `NTLMSSP_REQUEST_NON_NT_SESSION_KEY` and
+  `NTLMSSP_NEGOTIATE_DATAGRAM` are never requested, extended session security, sealing, signing
+  and 128-bit keys are, and a challenge that does not agree to all of them is refused rather than
+  answered. The client challenge and the exported session key come from `node:crypto`'s
+  `randomBytes`, never from a counter, a clock or anything an agent influences. And the MIC over
+  all three messages is written whenever the challenge carries `MsvAvTimestamp`, with
+  `MsvAvFlags` bit 1 set to announce it; a challenge that carries none is answered as MS-NLMP
+  3.1.5.1.2 says to — the LM response computed rather than zeroed, the blob timestamped locally,
+  and no MIC, because the specification defines none for that case — rather than by quietly
+  dropping a MIC that was due.
+
   **MD4 and RC4 are in the tree, in `src/crypto/`, and that is a protocol requirement, not a
   choice.** NTLM is defined in terms of both — the NT hash is `MD4(UTF-16LE(password))` and
   `SEAL` is RC4 — and OpenSSL 3 removed both from its default provider, so `node:crypto` cannot

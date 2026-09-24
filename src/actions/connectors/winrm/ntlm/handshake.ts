@@ -12,6 +12,7 @@
  */
 import { authenticateMessage } from './authenticate.ts';
 import { parseChallenge } from './challenge.ts';
+import { channelBindingToken } from './channel-binding.ts';
 import { negotiateMessage } from './negotiate.ts';
 import { NtlmProblem } from './reader.ts';
 import { NtlmSecurity } from './security.ts';
@@ -23,6 +24,13 @@ const BASE64 = /^[\d+/A-Za-z]+={0,2}$/u;
 
 export interface NtlmStart {
   readonly credential: NtlmCredential;
+  /**
+   * The leaf certificate the connection's peer presented, read when the third
+   * message is built because that is the first moment the socket has one.
+   * `undefined` on a plain `http://` connection, where there is no channel to
+   * bind the exchange to and the pair is left out (RFC 5929).
+   */
+  readonly certificate: () => Buffer | undefined;
   readonly random: (bytes: number) => Buffer;
   readonly now: () => number;
 }
@@ -71,10 +79,12 @@ export function startNtlm(start: NtlmStart): NtlmHandshake {
   return {
     authorization: negotiateHeader(negotiate),
     answer(header) {
+      const certificate = start.certificate();
       const authentication = authenticateMessage({
         credential: start.credential,
         challenge: parseChallenge(challengeToken(header)),
         negotiate,
+        channelBinding: certificate === undefined ? undefined : channelBindingToken(certificate),
         random: start.random,
         now: start.now,
       });

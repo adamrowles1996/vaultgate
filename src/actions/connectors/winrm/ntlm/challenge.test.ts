@@ -7,6 +7,7 @@ import {
 } from '../../../../test-support/fake-ntlm.ts';
 
 import {
+  AV_CHANNEL_BINDINGS,
   blobAttributes,
   parseChallenge,
   readAttributes,
@@ -98,13 +99,21 @@ describe('the NTLM challenge message', () => {
 
   it('ACT-89 announces the MIC in the blob only when the destination timestamped its challenge', () => {
     const bare = parseChallenge(challengeFrom({}));
-    expect(blobAttributes(bare)).toStrictEqual(writeAttributes(bare.attributes));
+    expect(blobAttributes(bare, undefined)).toStrictEqual(writeAttributes(bare.attributes));
     const timestamped = parseChallenge(challengeFrom({ timestamped: true }));
-    const announced = readAttributes(blobAttributes(timestamped));
+    const announced = readAttributes(blobAttributes(timestamped, undefined));
     expect(announced.at(-1)).toStrictEqual({
       id: 0x00_06,
       value: Buffer.from('02000000', 'hex'),
     });
+  });
+
+  it('ACT-89 appends the channel binding to the list it echoes, leaving the rest in order', () => {
+    const challenge = parseChallenge(challengeFrom({ timestamped: true }));
+    const token = Buffer.alloc(16, 0x5a);
+    const bound = readAttributes(blobAttributes(challenge, token));
+    expect(bound.at(-1)).toStrictEqual({ id: AV_CHANNEL_BINDINGS, value: token });
+    expect(bound.slice(0, -1)).toStrictEqual(readAttributes(blobAttributes(challenge, undefined)));
   });
 
   it('ACT-89 keeps an existing flags attribute in place, adding only the MIC bit', () => {
