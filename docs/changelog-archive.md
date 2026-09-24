@@ -1,8 +1,143 @@
 # Changelog archive
 
 Earlier entries from [`../CHANGELOG.md`](../CHANGELOG.md), kept verbatim. The current changelog
-holds the recent releases; this file holds 0.1.0-rc.1 to 0.1.0-rc.5, so neither file grows past
+holds the recent releases; this file holds 0.1.0-rc.1 to 0.1.0-rc.6, so neither file grows past
 the repository's 64 KiB file gate.
+
+## [0.1.0-rc.6] - 2026-09-23
+
+### Added
+
+- `http` connector runtime and `http_request` (spec 14 §14.2 and spec 13 §13.6.3, M9 fourth pull
+  request; ACT-20, ACT-21, ACT-22, ACT-79, ACT-80): the tool is listed on a deployment with
+  `VAULTGATE_ENABLE_ACTIONS=true` and `VAULTGATE_ACTIONS_ENABLE_HTTP=true` for tokens holding
+  `actions:http`. An `http_request` names a granted target and gives a method, a path with an
+  optional query string, up to 32 headers and a string or JSON body; the policy decision is pure
+  (method, normalised path and query against `allowed_paths`, header allowlist with
+  `Authorization`, `Cookie`, `Host`, `Content-Length`, `User-Agent`, `Transfer-Encoding`,
+  `Proxy-*` and the credential's own header always refused, body size), the credential is placed
+  by its mapping (`bearer`, `basic`, `header` with a prefix, or `query` URL-encoded after the
+  agent's query and only with `allow_query_credentials`), and the request goes through the
+  pinned transport with `User-Agent: vaultgate/<version>`, the policy timeout and a body read
+  capped at `max_output_bytes` plus the scrub guard band. Redirects are returned as results
+  unless `follow_redirects` is on, then at most two hops and only under `base_url` (the same
+  origin, so the same pinned address, never a second resolution), with Fetch's method rules.
+  The result carries the status, the policy's response headers, the body as text or as base64
+  (`body_encoding`) when the media type is not textual or the bytes are not UTF-8, the bytes
+  received, `truncated` and `duration_ms`; a non-2xx status, `401` included, is a normal result,
+  and only an unreachable destination is an error (`connection_failed`, `tls_error`, `timeout`,
+  `destination_refused`, with the error code as the only detail). Contract tests run the
+  connector against a fake transport for every policy reason, error code, redirect case, the cap
+  with a value straddling the cut, the timeout and each injection mode, plus the ACT-53 canary
+  suite through the engine and a confirmed `POST` through the MCP client SDK. A `graph` mapping
+  is refused at save with "the graph adapter arrives in M10", and a stored target is validated
+  against the connector's save-time rules again on read, so no half-implemented mode can run.
+  Operator guide: `docs/guides/actions.md` ("Calling an `http` target"); tool reference:
+  `docs/guides/tools-and-scopes.md`.
+- Account-page Actions section (spec 13 §13.3.2, M9 third pull request; ACT-5, ACT-6, ACT-8,
+  ACT-9, ACT-49, ACT-62, ACT-63 basic): present only with `VAULTGATE_ENABLE_ACTIONS=true`, it
+  lists every target with its connector, destination summary, state (a stored row that fails its
+  schema is marked `target_invalid` with the reason, ACT-1), grants, last call and open sessions,
+  and links to a page per target and to a create form per connector. The forms are drawn from
+  per-connector field descriptors over the connector's zod schemas (`http` now: base URL,
+  `internal`, the vault item id with its name shown once saved, the injection mode and its
+  fields including the `graph` adapter document, the policy allowlists one pattern per line, the
+  common limits with their defaults and ceilings; `confirm_writes` is on for every new target);
+  a rejected save re-renders with every problem and the submitted values. Edit, enable,
+  disable, delete, grant management among the clients holding a consent, "close sessions" and
+  the last 50 calls live on the target's page; every write is `POST /account/actions/*` behind
+  the ID-18 checks and the five-minute re-authentication window, and every change goes through
+  the targets service so its `actions.*` event is recorded (`sessions_closed` is new). The
+  account-page audit export offers the `actions` stream beside `audit`. Operator guide:
+  `docs/guides/actions.md`.
+
+- Actions engine core (spec 13, M9 first pull request; ACT-1…ACT-74 as far as the engine
+  enforces them), off by default behind `VAULTGATE_ENABLE_ACTIONS` with one switch per connector
+  (`VAULTGATE_ACTIONS_ENABLE_{HTTP,SQL,SSH,WINRM,BROWSER}`, `VAULTGATE_ACTIONS_BROWSER_CDP_URL`,
+  `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND`; a connector switch without the master switch is a
+  start-up warning): the six `actions:*` scopes in the registry, advertised and effective only
+  when the layer and the connector are on, with the consent-page group and its warning lines;
+  migration `004-actions` (`action_targets`, `action_grants`, `action_calls`, `action_sessions`)
+  and the maintenance rules that close expired sessions as `idle` and retire calls past audit
+  retention; the targets service (create, edit, enable, disable, delete, grant, revoke, consent
+  revocation callback) with save-time destination resolution, vault item and field checks and
+  `actions.*` audit events; the glob-like policy matcher and HTTP subject normalisation; the
+  confirmation `requestState` (HKDF-derived HMAC, 120 s, single-use nonce) and the ACT-42
+  elicitation document; the scrubber over every encoded variant with the guard band; per-target
+  and per-client limits; the engine (`createActionsEngine`: `listTargets`, `call`) with the
+  ACT-16 order, one error code per failure and one `action_calls` row plus one audit event per
+  call; `node dist/cli.js audit export --stream actions`; the dependency-cruiser rules for the
+  `actions` layer; and the `http` connector's document schemas (including the `graph` adapter
+  document). No MCP tool, account page or connector runtime yet: those are the next pull
+  requests. Test support gains an echo connector whose fake destination returns its request, so
+  the canary suite proves end to end that no injected value, in any encoding, reaches a result,
+  an audit row, a log line or an elicitation message.
+- Actions MCP surface (spec 13 §13.6 and §13.8, M9 second pull request): `actions_list_targets`
+  (ACT-19) and the generic registration every connector tool uses. A connector declares each of
+  its tools (name, scope, LLM-facing description, the 13.6.1 annotations, operation schema and
+  strict result schema) on its `Connector`; `src/mcp/tools/actions.ts` advertises the tools of
+  the loaded connectors with `target` first and dispatches every call to the engine, which
+  records the one MCP-13 event itself. `tools/list` shows an actions tool only to a token whose
+  effective scopes reach it, so a `vault:read`-only token sees none; `actions_list_targets`
+  opens to any enabled `actions:*` scope and its OAUTH-33 challenge lists them all as one
+  any-of set. `ToolAnnotations.openWorldHint` is a boolean (ACT-18). On the 2026-07-28 wire a
+  confirmed target answers a form-capable client with the ACT-42 elicitation document as the
+  SDK's `input_required` result and honours the retried answer (ACT-45…47); a client that
+  declares no form-mode elicitation is refused with the fixed ACT-48 message before anything
+  else happens, and a 2025-wire client counts as one until M14's in-band fallback. Revoking a
+  client's consent on the account page now revokes its grants and closes its sessions (ACT-10)
+  through a callback the composition layer wires into the authorization server. No connector
+  runtime yet: `http_request` is declared by the `http` connector when it lands, so no
+  connector tool is listed on any deployment until then.
+
+### Changed
+
+- The pinned transport (`src/net/pinned-https.ts`) serves every method, a request body, and
+  plain `http://` through `node:http` beside `https://`, still connecting only to the address the
+  caller validated; `createPinnedHttpsFetch` takes `{ https, http }` request functions and
+  `readBodyCapped` reads a response up to a limit and cancels the rest. The CIMD fetcher's
+  behaviour is unchanged.
+- The connector interface's `authorize` receives the credential document as a third argument,
+  so a connector can refuse the header its mapping injects (ACT-22). `validateTarget` runs the
+  connector's pure save-time problems again on read (ACT-1), marking such a row `invalid`.
+- One version source: `src/version.ts` reads `package.json`, and both the MCP `initialize`
+  response (previously a hand-kept `0.1.0`) and the actions `User-Agent` report it.
+- One in-memory limiter module, `src/net/rate-limit.ts`, serves the authorization server, the
+  MCP endpoint and the actions engine; `src/oauth/rate-limit.ts` and `src/mcp/rate-limit.ts` are
+  gone. A token bucket now remembers the budget it was taken under, so a key with its own limit
+  (a target's `rate_limit_per_minute`) is never judged full against the limiter's default.
+- `src/oauth/ip-ranges.ts` moved to `src/net/ip-ranges.ts` and gained `classifyAddress`
+  (`public`, `private`, `forbidden`, `invalid`) and the `Lookup` type; `isPublicAddress` and the
+  CIMD fetcher are unchanged.
+- The audit keyset pagination and streaming export are shared by both streams
+  (`src/audit/keyset.ts`, `lineFormats`); `listAuditEvents` returns `records`.
+- `parseSecretField` lives in `src/vault/fields.ts` with the field-presence check ACT-4 needs;
+  `deriveKey` is exported from `src/crypto/secret-box.ts` for the confirmation HMAC purpose.
+
+### Docs
+
+- ADR 0007 and spec sections 13 (Actions) and 14 (Action connectors) specify a planned,
+  off-by-default actions layer: operator-defined targets, six `actions:*` scopes, typed tools
+  (`http_request` with a Microsoft Graph adapter, `sql_query`/`sql_execute`, `ssh_run`,
+  `winrm_run`, `browser_*` over a Chromium sidecar), operator allowlist policy, MCP tool
+  annotations, per-call confirmation through MCP elicitation, scrubbing of every injected value,
+  `action_*` tables and audit. ADR 0004 is marked amended by 0007; the threat model gains
+  T24…T34 and the residual risks of the layer; `PLAN.md` gains M9…M15 with exit criteria; the
+  tools guide, README and section 01 principle 3 note the layer as planned. No code changes.
+
+### Fixed
+
+- VAULT-16: a `bw serve` call that vaultgate aborted at the 60 s bound carried the same message
+  as a refused or reset connection (`the vault is locked or not reachable`), so a `vault backend
+start failed` line could not say whether the child had stalled or was gone. The abort now reads
+  `the vault did not answer within 60 s`; the code is still `vault_unavailable`. Spec VAULT-6
+  states that a `/unlock` which is refused, reset or times out is a failed attempt, restarted on
+  the same generation without a second login.
+- Integration suite: the readiness wait gave up silently at 90 s, so a first `/unlock` that hit the
+  VAULT-16 bound (the restart a second later was ready) failed `VAULT-4 VAULT-5` with
+  `expected false to be true` while the rest of the suite passed. The wait now covers one failed
+  attempt and a clean restart (150 s, `hookTimeout` 180 s), fails the hook with the reason, and the
+  supervisor logs at `info` so a run shows when the CLI logged in, synced and became ready.
 
 ## [0.1.0-rc.5] - 2026-09-23
 
@@ -302,6 +437,7 @@ field `display_name` is gone; send `email` instead.
   over a read-only store, with a CI smoke step (`scripts/cli-smoke.sh`) that exports an empty
   store from both the build and the source.
 
+[0.1.0-rc.6]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.5...v0.1.0-rc.6
 [0.1.0-rc.5]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.4...v0.1.0-rc.5
 [0.1.0-rc.4]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.3...v0.1.0-rc.4
 [0.1.0-rc.3]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.2...v0.1.0-rc.3

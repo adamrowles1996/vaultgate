@@ -1,7 +1,7 @@
 /**
  * Vault items as the Computers pages show them (ID-19, ACT-4): the search
- * and its results, the chosen item on a form, and the note under a field
- * picker whose selection the item does not carry.
+ * and its results, the chosen item on a form, the note under a field picker
+ * whose selection the item does not carry, and what a check found (ACT-118).
  */
 export const ITEMS = `.search-form {
   display: flex;
@@ -56,6 +56,31 @@ details[open] > summary {
 small.warn {
   color: var(--warn);
   font-weight: 600;
+}
+.checks {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.checks li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+.checks li > .icon {
+  margin-top: 0.1rem;
+}
+.check-ok > .icon {
+  color: var(--ok);
+}
+.check-bad > .icon {
+  color: var(--bad);
+}
+.check-problem {
+  color: var(--bad);
 }
 @media (max-width: 640px) {
   .item-row {

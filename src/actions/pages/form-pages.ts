@@ -11,11 +11,13 @@ import { icon } from '../../identity/pages/icons.ts';
 import { type Html, html } from '../../identity/pages/template.ts';
 import { pageHead } from '../../identity/pages/ui.ts';
 
+import { checkCard } from './check-report.ts';
 import { type ComputerKind, KINDS } from './kinds.ts';
 import { CREATE_PATH, NEW_PATH, targetPath } from './paths.ts';
 import { type ChosenItem, lockedForm, renderProblems, renderTargetForm } from './target-form.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
+import type { CheckReport } from '../targets-checks.ts';
 import type { FormValues } from './form-values.ts';
 import type { FieldProblems } from './messages.ts';
 import type { ConsolePage } from '../../identity/index.ts';
@@ -26,6 +28,19 @@ export interface FormPageView {
   readonly form: ConnectorForm;
   readonly values: FormValues;
   readonly item: ChosenItem;
+  /**
+  What "Check without saving" found (ACT-118), shown in place of a rejected save's banner.
+  */
+  readonly check?: { readonly report: CheckReport; readonly at: number };
+}
+
+/**
+Above the form: what a check found, or why the last save was refused.
+*/
+function outcome(view: FormPageView): Html {
+  return view.check === undefined
+    ? renderProblems(view.problems)
+    : checkCard(view.check.report, view.check.at);
 }
 
 /**
@@ -136,7 +151,7 @@ export function createPage(frame: StepFrame, view: FormPageView): ConsolePage {
   return stepPage(
     frame,
     'Name it for your agents, say where it is and which of the item’s fields sign in, then set what agents may do. Nothing here is a secret: vaultgate stores the item and field names only.',
-    html`${renderProblems(view.problems)}
+    html`${outcome(view)}
     ${renderTargetForm({
       action: CREATE_PATH,
       csrfToken: view.csrfToken,
@@ -159,7 +174,7 @@ export function editPage(frame: StepFrame, view: EditPageView): ConsolePage {
   return stepPage(
     frame,
     `A ${KINDS[view.kind].label} computer. Saving moves its revision on, so any confirmation still open for it is void.`,
-    html`${renderProblems(view.problems)}
+    html`${outcome(view)}
     ${renderTargetForm({
       action: targetPath(view.targetId),
       csrfToken: view.csrfToken,

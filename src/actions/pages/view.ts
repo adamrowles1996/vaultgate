@@ -77,11 +77,12 @@ export interface ActionsPagesDependencies {
 }
 
 /**
-What a page adds to a target's view: a notice, or the error of a refused write.
+What a page adds to a target's view: a notice, the error of a refused write, or a check (ACT-118).
 */
 export interface PageExtras {
   readonly notice?: string | undefined;
   readonly error?: string | undefined;
+  readonly check?: TargetPageView['check'];
 }
 
 /**
@@ -218,6 +219,7 @@ export async function targetPageView(
     isUnconfirmed: isUnconfirmed(target),
     notice: extras.notice,
     error: extras.error,
+    check: extras.check,
     target,
     summary: summarise(target),
     itemName: await describeItem(dependencies.vault, target.credential.item_id),

@@ -9,8 +9,10 @@
 import { Hono } from 'hono';
 
 import { registerCallPages } from './call-routes.ts';
+import { CHECK_NOW, CHECK_PARAM } from './check-report.ts';
 import { computersView } from './computers-view.ts';
 import { computersPage } from './computers.ts';
+import { savedInput } from './form-input.ts';
 import { formRoutes } from './form-routes.ts';
 import { isComputerKind } from './kinds.ts';
 import { CREATE_PATH, NEW_PATH } from './paths.ts';
@@ -67,7 +69,14 @@ async function showTarget(
     return context.notFound();
   }
   const notice = noticeFor(context.req.query('notice'));
-  const view = await targetPageView(dependencies, target, viewer, { notice });
+  const check =
+    context.req.query(CHECK_PARAM) === CHECK_NOW
+      ? {
+          report: await dependencies.targets.checkChanges(target.connector, savedInput(target)),
+          at: dependencies.now(),
+        }
+      : undefined;
+  const view = await targetPageView(dependencies, target, viewer, { notice, check });
   return context.html(await dependencies.renderConsole(viewer.session, targetPage(view)));
 }
 

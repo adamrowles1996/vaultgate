@@ -150,6 +150,18 @@ Design rules, in priority order:
 - **ACT-8** Deleting a target deletes its grants, closes its sessions and keeps its
   `action_calls` rows (the audit trail outlives the target; rows carry the name and connector
   redundantly for that reason).
+- **ACT-118** Checks as you go. The create and edit forms carry **Check without saving**, a `POST`
+  behind the same gate as a save (ID-18, ID-15). It runs every save-time check on what the form
+  holds: the shapes of ACT-1, ACT-3's resolution and private-range rule, ACT-4's item and fields,
+  ACT-57, the connector's own rules and, for a new target, whether the name is free. It saves
+  nothing, records no ACT-7 event, and shows what each check found: the address each destination
+  host would be pinned to or why it is refused, whether the item is there, each mapped field on
+  it (a secret one by name only), and every other problem. Unlike a save it does not stop at a
+  taken name. Each problem is also shown against its field, as for a refused save. A target's page
+  offers **Check now** (`?check=now`) at any time, which runs the same checks on the saved target,
+  resolving its hosts and reading its item's metadata again, so a DNS record or vault item that
+  changed since the save shows before an agent's call fails. Neither connects to a destination or
+  reads a secret.
 
 ## 13.4 Grants
 
