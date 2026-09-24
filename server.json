@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.adamrowles1996/vaultgate",
   "title": "vaultgate",
-  "description": "Self-hosted remote MCP server for Bitwarden and Vaultwarden with OAuth 2.1; agents hold tokens only",
+  "description": "Self-hosted MCP server: AI agents use your Bitwarden credentials without ever seeing them",
   "websiteUrl": "https://github.com/adamrowles1996/vaultgate#readme",
   "repository": {
     "url": "https://github.com/adamrowles1996/vaultgate",

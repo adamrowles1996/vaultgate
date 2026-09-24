@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The documentation leads with what vaultgate is now for: letting hosted agents use the
+  credentials in a Bitwarden vault without ever seeing them, so no secret reaches the model's
+  context or the chat transcript. The README, spec 01 (purpose and design principles 1 to 3 and
+  6), the comparison page (a row for using a credential without seeing it; the command-execution
+  row and the "secret injection" caveat restated against ADR 0007), the FAQ, the security model,
+  `llms.txt`, `PLAN.md` and the `server.json` and `package.json` descriptions now describe the
+  actions layer as the primary path and the vault tools as the audited fallback. Principle 6 now
+  names the optional `browser` sidecar (ACT-91) that it previously ruled out. No behaviour
+  changes.
+
 ## [0.1.0-rc.12] - 2026-09-24
 
 ### Added
