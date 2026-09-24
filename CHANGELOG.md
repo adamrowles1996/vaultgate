@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- ACT-1, ACT-2: **the address can come from the vault item.** Beside the address field, the form
+  offers the item's login addresses and text fields; a host field takes the host and any port, a
+  URL field a full `http://` or `https://` URL. On a new computer the first is chosen while nothing
+  is typed. The address is copied into the computer when it is saved, so the private-range check
+  and every confirmation stay bound to that address and a later change in the vault does not move
+  it. A typed address that differs from the chosen one is refused rather than overridden.
 - ACT-4, ACT-5: **choose the vault item by searching, and its fields from a list.** After the
   kind, **Add computer** asks which vault item signs in: search by name, username or address, or
   paste an id. Each result shows the item's login name, first address and fields, a secret field

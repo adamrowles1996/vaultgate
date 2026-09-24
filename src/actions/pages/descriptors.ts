@@ -47,7 +47,15 @@ export type FieldPicker = { readonly role: 'username' | 'secret' } & (
 
 export type FieldDescriptor = FieldBase &
   (
-    | { readonly kind: 'text'; readonly required?: boolean; readonly picker?: FieldPicker }
+    | {
+        readonly kind: 'text';
+        readonly required?: boolean;
+        readonly picker?: FieldPicker;
+        /**
+        The destination's address, which the vault item may supply (ACT-2): a host, or a URL.
+        */
+        readonly address?: 'host' | 'url';
+      }
     | {
         readonly kind: 'number';
         readonly min: number;

@@ -107,6 +107,7 @@ describe('GET /account/actions/new', () => {
       'destination.base_url': 'https://crm.example.com/api',
       'credential.field': 'password',
       'policy.allowed_paths': '/v1/**',
+      address_from: '',
     };
     expect(submitted['connector']).toBe('http');
     const response = await browser.submit('/account/actions', submitted);

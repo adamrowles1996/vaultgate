@@ -13,6 +13,7 @@ const destination: readonly FieldDescriptor[] = [
     name: 'url',
     label: 'WS-Management endpoint',
     kind: 'text',
+    address: 'url',
     required: true,
     help:
       'http://host:5985/wsman for the listener a stock Windows host already runs, or ' +

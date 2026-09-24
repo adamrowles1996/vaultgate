@@ -79,7 +79,7 @@ Design rules, in priority order:
 | `name`                                   | string                                                     | `^[a-z0-9][a-z0-9-]{0,62}$`, unique per deployment, stable API for agents. Renaming is a new target.                                                        |
 | `description`                            | string ≤ 200 chars                                         | Operator prose shown to agents by `actions_list_targets`; written for an LLM audience (what the destination is, what to use it for).                        |
 | `connector`                              | `http` \| `sql` \| `ssh` \| `winrm` \| `browser` \| `code` | Fixed at creation.                                                                                                                                          |
-| `destination`                            | JSON                                                       | Connector-specific (section 14). Always a host, URL or origin the operator typed; never derived from an agent argument.                                     |
+| `destination`                            | JSON                                                       | Connector-specific (section 14). Always a host, URL or origin the operator typed or took from the vault item (ACT-2); never derived from an agent argument. |
 | `internal`                               | boolean, default `false`                                   | When `true` the destination may resolve to a private-range address (13.10). Loopback and link-local are refused whatever this says.                         |
 | `credential`                             | JSON `{ item_id, mapping }`                                | `item_id` is a vault item id; `mapping` names which secret fields feed which injection points (section 14). The row holds field _names_, never values.      |
 | `policy`                                 | JSON                                                       | Connector-specific allowlists and limits (13.7) plus the common fields `timeout_ms`, `max_output_bytes`, `rate_limit_per_minute`, `confirm_writes`.         |
@@ -89,7 +89,14 @@ Design rules, in priority order:
 
 - **ACT-2** A target's `destination` and `credential.item_id` MUST refer to things the operator
   typed or chose on the operator pages (ACT-5). No tool creates, edits or deletes a target; there is no
-  API for targets other than the operator pages.
+  API for targets other than the operator pages. The destination's address may be taken from the
+  chosen item instead of typed: its login addresses and text custom fields (never a hidden one)
+  are offered beside the address field, a host field taking the host and any port an address
+  names, a URL field only an `http://` or `https://` URL. The chosen address is copied into the
+  destination when the target is saved, not linked: ACT-3 resolves and checks the saved address,
+  every confirmation binds to it, and a later change to the item does not move the target. A save
+  that carries both a typed address and a different chosen one is refused rather than resolved
+  silently, and so is a choice that names no address of its field.
 - **ACT-3** Saving a target validates the destination the same way a call does (13.10): each
   host is resolved and checked against the private-range rule for the target's `internal` flag,
   and a destination that fails is rejected with the reason. Saving does not connect and does not
@@ -115,7 +122,8 @@ Design rules, in priority order:
   item summaries by name, username and address, at most 20 at a time, each shown with its login
   name, first address and field names, a secret field sealed; `?item=` takes the chosen or pasted
   id), then shows that connector's form with the kind's defaults filled in (the SQL Server engine
-  and port, for example). Every field that names a vault field (ACT-4) is offered as a list of the
+  and port, for example), the item's first address chosen for the address field while nothing is
+  typed there (ACT-2). Every field that names a vault field (ACT-4) is offered as a list of the
   chosen item's fields, never their secret values, with the schema's default selected; a
   selection the item does not carry is flagged rather than replaced. The edit page's **Choose
   another item** (`?change=item`) runs the same search. Every step after the kind reads the vault

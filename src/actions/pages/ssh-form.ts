@@ -16,6 +16,7 @@ const destination: readonly FieldDescriptor[] = [
     name: 'host',
     label: 'Host',
     kind: 'text',
+    address: 'host',
     required: true,
     help: 'Resolved once per call; the connection goes to that address and nowhere else.',
   },
