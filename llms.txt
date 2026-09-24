@@ -7,7 +7,7 @@
 
 ## Status and licence
 
-- Version 0.1.0-rc.13, a release candidate: milestones M1 to M7 are merged; M8 (hardening and
+- Version 0.1.0-rc.14, a release candidate: milestones M1 to M7 are merged; M8 (hardening and
   compatibility evidence) is in progress; the off-by-default actions layer has landed through M14
   with the `http` (and Microsoft Graph), `sql`, `ssh` and `winrm` connectors
   (docs/spec/13-actions.md, docs/spec/13a-actions-operations.md, docs/spec/14-actions-connectors.md,
