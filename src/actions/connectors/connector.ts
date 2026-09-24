@@ -85,6 +85,12 @@ export interface ConnectorSchemas<Destination, Credential, Policy> {
   ACT-43: the host and, where relevant, the database, base path or origin. Never a credential.
   */
   summariseDestination(destination: Destination): string;
+  /**
+   * ACT-49: whether the policy permits an operation that is not a read, so
+   * the account page knows whether `confirm_writes` is in force for this
+   * target and can say so when the operator turns it off.
+   */
+  allowsNonRead(policy: Policy): boolean;
 }
 
 /**

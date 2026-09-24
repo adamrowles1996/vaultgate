@@ -9,7 +9,7 @@ import {
 } from './clients/preregistered.ts';
 import { type ClientResolver, createClientResolver } from './clients/resolve.ts';
 import { type Clock, HOUR_MS, MINUTE_MS } from './clock.ts';
-import { renderConnectedClients } from './connected-clients.ts';
+import { type ClientTargetsRenderer, renderConnectedClients } from './connected-clients.ts';
 import { createConsentDecisionHandler } from './consent.ts';
 import { createRegisterHandler } from './register.ts';
 import { createOAuthRepos, type OAuthRepos } from './repositories/index.ts';
@@ -65,6 +65,10 @@ export interface AuthorizationServerDependencies {
   ACT-10: called with the client id on every consent revocation (OAUTH-30); the composition layer points it at the actions layer.
   */
   readonly onConsentRevoked?: ((clientId: string) => void) | undefined;
+  /**
+  ACT-9: draws each client's action-target grants in the connected-clients list; absent when the layer is off.
+  */
+  readonly clientTargets?: ClientTargetsRenderer | undefined;
 }
 
 export interface AuthorizationServer {
@@ -110,6 +114,19 @@ function buildResolver(
     now,
     newId: dependencies.newId,
   });
+}
+
+/**
+ * OAUTH-30 with ACT-9: the account page's connected-clients section, with the
+ * per-client target grants the composition layer injected, or without them on
+ * a deployment where the actions layer is off.
+ */
+function connectedClientsSection(
+  repos: OAuthRepos,
+  targets: ClientTargetsRenderer | undefined,
+): (session: SessionState) => Html {
+  return (session) =>
+    renderConnectedClients(listConnectedClients({ repos }, session.operatorId), session, targets);
 }
 
 /**
@@ -172,7 +189,6 @@ export function createAuthorizationServer(
     tokenVerifier: new StoreTokenVerifier({ publicUrl: config.publicUrl, repos, now }),
     revokeConsent: (operatorId, consentId) => revokeConsent(shared, operatorId, consentId),
     listConnectedClients: (operatorId) => listConnectedClients(shared, operatorId),
-    renderConnectedClients: (session) =>
-      renderConnectedClients(listConnectedClients(shared, session.operatorId), session),
+    renderConnectedClients: connectedClientsSection(repos, dependencies.clientTargets),
   });
 }

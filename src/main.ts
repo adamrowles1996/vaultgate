@@ -115,6 +115,25 @@ const guards = createGuards({
   clientAddress: (context) => getConnInfo(context).remote.address,
   audit: auditSink,
 });
+// The Actions pages come before the authorization server because the
+// connected-clients list draws each client's grants through their renderer
+// (ACT-9); they reach back for the consent holders through a closure, so
+// neither layer imports the other (ACT-70).
+const actionsPages =
+  engine === undefined
+    ? undefined
+    : createActionsPages({
+        targets: engine.targets,
+        database: store.db,
+        vault: vault.client,
+        sensitiveAction: (context) => identity.sensitiveAction(context),
+        listClients: (operatorId) =>
+          authorization.listConnectedClients(operatorId).map((client) => ({
+            clientId: client.clientId,
+            clientName: client.clientName,
+          })),
+        switches: { allowAnyCommand: config.actions.allowAnyCommand },
+      });
 const oauth = createAuthorizationServer({
   config,
   db: store.db,
@@ -129,27 +148,14 @@ const oauth = createAuthorizationServer({
   onConsentRevoked: (clientId) => {
     engine?.targets.onConsentRevoked(clientId);
   },
+  clientTargets: actionsPages?.clientTargets,
 });
 if (!oauth.ok) {
   logger.fatal({ err: oauth.error }, 'invalid pre-registered OAuth clients');
   store.close();
   process.exit(1);
 }
-const actionsPages =
-  engine === undefined
-    ? undefined
-    : createActionsPages({
-        targets: engine.targets,
-        database: store.db,
-        vault: vault.client,
-        sensitiveAction: (context) => identity.sensitiveAction(context),
-        listClients: (operatorId) =>
-          oauth.value.listConnectedClients(operatorId).map((client) => ({
-            clientId: client.clientId,
-            clientName: client.clientName,
-          })),
-        switches: { allowAnyCommand: config.actions.allowAnyCommand },
-      });
+const authorization = oauth.value;
 const identity = createIdentity({
   config,
   database: store.db,
@@ -160,7 +166,7 @@ const identity = createIdentity({
   delay: (ms) => sleep(ms),
   guards,
   passwordParameters: CURRENT_PARAMETERS,
-  connectedClients: oauth.value.renderConnectedClients,
+  connectedClients: authorization.renderConnectedClients,
   accountSections: actionsPages === undefined ? [] : [actionsPages.section],
   vaultConnection,
 });
@@ -189,8 +195,8 @@ const app = createApp({
   },
   vaultClient: vault.client,
   auditSink,
-  tokenVerifier: oauth.value.tokenVerifier,
-  oauth: oauth.value.routes,
+  tokenVerifier: authorization.tokenVerifier,
+  oauth: authorization.routes,
   engine,
   actionsPages: actionsPages?.routes,
 });

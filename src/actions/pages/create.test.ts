@@ -169,40 +169,47 @@ describe('POST /account/actions', () => {
       addresses: { 'private.example.com': ['10.0.0.5'], 'home.example.com': ['127.0.0.1'] },
     });
     const { browser, csrf } = await signedInOperator(harness);
+    // A problem that names a control is shown against it; one that names
+    // none (the destination as a whole, the credential mapping) is listed.
     const cases: readonly [Record<string, string>, string][] = [
-      [{ name: 'Bad Name' }, 'name: must be 1 to 63 lower-case letters'],
+      [
+        { name: 'Bad Name' },
+        '<p class="error">must be 1 to 63 lower-case letters, digits or hyphens',
+      ],
       [
         { 'destination.base_url': 'ftp://crm.example.com' },
-        'destination.base_url: must be an https:// (or, on an internal target, http://) URL',
+        '<p class="error">must be an https:// (or, on an internal target, http://) URL</p>',
       ],
       [{ 'destination.base_url': 'https://private.example.com' }, '<li>destination: '],
       [
         { 'destination.base_url': 'https://home.example.com', internal: 'on' },
         'which is refused always',
       ],
-      [{ 'credential.item_id': 'item-nope' }, 'credential.item_id: no such item in the vault'],
+      [{ 'credential.item_id': 'item-nope' }, '<p class="error">no such item in the vault</p>'],
       [
         { 'credential.field': 'custom.nope' },
-        'credential.mapping: the item has no &quot;custom.nope&quot; field',
+        '<li>credential.mapping: the item has no &quot;custom.nope&quot; field</li>',
       ],
       [
         { 'policy.allowed_paths': '/../up' },
-        'policy.allowed_paths: &quot;/../up&quot; must start with / and stay under base_url',
+        '(&quot;/../up&quot; must start with / and stay under base_url)</p>',
       ],
       [
         { 'policy.allowed_paths': '/a/./b' },
-        'is not in normalised form; write it as &quot;/a/b&quot;',
+        'is not in normalised form; write it as &quot;/a/b&quot;)</p>',
       ],
       [
         { 'credential.mode': 'basic', 'credential.field': '' },
-        'credential.mapping.field: Invalid input: expected string, received undefined',
+        '<li>credential.mapping.field: Invalid input: expected string, received undefined</li>',
       ],
     ];
     for (const [fields, problem] of cases) {
       const response = await browser.submit('/account/actions', { csrf, ...VALID, ...fields });
       const markup = await response.text();
       expect(response.status).toBe(400);
-      expect(markup).toContain('The target was not saved; fix the problems below and try again.');
+      expect(markup).toContain(
+        'The target was not saved; fix the problems shown against each field and try again.',
+      );
       expect(markup).toContain(problem);
       expect(markup).toContain('<form method="post" action="/account/actions">');
     }
@@ -217,7 +224,7 @@ describe('POST /account/actions', () => {
       internal: 'on',
     });
     const markup = await last.text();
-    expect(markup).toContain('<li>name: must be 1 to 63 lower-case letters');
+    expect(markup).toContain('<p class="error">must be 1 to 63 lower-case letters');
     expect(markup).toContain('value="Bad Name"');
     expect(markup).toContain('value="nope"');
     expect(markup).toContain('<option value="header" selected>header</option>');
@@ -227,8 +234,8 @@ describe('POST /account/actions', () => {
     const empty = await browser.submit('/account/actions', { csrf, connector: 'http' });
     const emptyMarkup = await empty.text();
     expect(empty.status).toBe(400);
-    expect(emptyMarkup).toContain('<li>name: must be 1 to 63 lower-case letters');
-    expect(emptyMarkup).toContain('<li>credential.item_id: Too small');
+    expect(emptyMarkup).toContain('<p class="error">must be 1 to 63 lower-case letters');
+    expect(emptyMarkup).toContain('<p class="error">Too small: expected string to have &gt;=1');
     expect(harness.actions.engine.targets.list()).toStrictEqual([]);
     expect(actionsAudit(harness)).toStrictEqual([]);
   });

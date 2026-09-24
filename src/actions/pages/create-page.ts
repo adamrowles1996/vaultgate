@@ -5,17 +5,17 @@
  */
 import { document, type Html, html, when } from '../../identity/pages/template.ts';
 
+import { CREATE_PATH } from './paths.ts';
 import { renderProblems, renderTargetForm } from './target-form.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
 import type { FormValues } from './form-values.ts';
-
-export const CREATE_PATH = '/account/actions';
+import type { FieldProblems } from './messages.ts';
 
 export interface CreatePageView {
   readonly csrfToken: string;
   readonly isReauthenticated: boolean;
-  readonly problems: readonly string[];
+  readonly problems: FieldProblems;
   readonly form: ConnectorForm;
   readonly values: FormValues;
 }
@@ -27,6 +27,7 @@ function createForm(view: CreatePageView): Html {
     csrfToken: view.csrfToken,
     form: view.form,
     values: view.values,
+    problems: view.problems,
     isNew: true,
     submitLabel: 'Create target',
   })}`;

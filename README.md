@@ -14,8 +14,11 @@ master password.
 > **Status: release candidate.** Milestones M1 to M7 are merged: configuration, SQLite store,
 > operator identity with TOTP, the OAuth 2.1 authorization server, the MCP tool surface, the
 > managed `bw serve` backend, the audit trail, packaging and the Azure template. M8 (hardening and
-> compatibility evidence) is in progress, and M9 (the off-by-default actions layer with its
-> `http` connector) has landed; see [`docs/PLAN.md`](docs/PLAN.md).
+> compatibility evidence) is in progress. The off-by-default actions layer has landed through M13:
+> M9 the engine, the operator pages and the `http` connector, M10 the Microsoft Graph credential
+> adapter, M11 `sql`, M12 `ssh`, M13 `winrm`, and M14 the policy-form validation messages, the
+> call-history and unexpected-write views and grant management from the connected-clients list.
+> `browser` is M15; see [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Why
 
@@ -46,8 +49,9 @@ What the design gives you beyond the table:
   actions layer ([ADR 0007](docs/adr/0007-typed-actions-with-operator-policy.md),
   [spec 13](docs/spec/13-actions.md) and [13a](docs/spec/13a-actions-operations.md),
   [guide](docs/guides/actions.md)) lets an agent use a
-  credential against an `http` target you define, under your allowlist, without ever seeing it
-  (further connectors follow); nothing runs on the vaultgate host.
+  credential against an `http`, `sql`, `ssh` or `winrm` target you define, under your allowlist,
+  without ever seeing it; every non-read call can require a human confirmation, and the account
+  page lists every one that did not get one. Nothing runs on the vaultgate host.
 - **Standards as written.** OAuth 2.1, PKCE, RFC 9728 / 8414 / 8707 / 7591 /
   7009 / 9207 and Client ID Metadata Documents, per the MCP authorization
   specification (2026-07-28).

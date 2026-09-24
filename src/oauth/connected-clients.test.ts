@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { html } from '../identity/pages/template.ts';
 import {
   csrfOf,
   pageText,
@@ -101,6 +102,19 @@ describe('renderConnectedClients', () => {
     expect(markup).toContain('<td data-label=""><form method="post"');
     expect(markup).toContain(DISCONNECT_BUTTON);
     expect(markup).not.toContain(REAUTHENTICATION_LINK);
+  });
+
+  it('ACT-9 draws the injected targets cell, and leaves it empty where the actions layer is off', () => {
+    const withTargets = renderConnectedClients(
+      [UNNAMED],
+      CONFIRMED,
+      (clientId, view) => html`<em>${clientId} ${String(view.isReauthenticated)}</em>`,
+    ).markup;
+    expect(withTargets).toContain('<th>Targets</th>');
+    expect(withTargets).toContain('<td data-label="Targets"><em>vg_c_unnamed true</em></td>');
+    const withoutTargets = renderConnectedClients([UNNAMED], CONFIRMED).markup;
+    expect(withoutTargets).toContain('<th>Targets</th>');
+    expect(withoutTargets).toContain('<td data-label="Targets"></td>');
   });
 
   it('ID-15 lists the clients without Disconnect forms and links to the re-authentication form until the password is confirmed', () => {

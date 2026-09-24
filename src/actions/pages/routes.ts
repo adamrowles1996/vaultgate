@@ -10,10 +10,11 @@ import { Hono } from 'hono';
 
 import { CONNECTOR_KINDS } from '../../config/actions.ts';
 
-import { CREATE_PATH, renderCreatePage } from './create-page.ts';
+import { registerCallPages } from './call-routes.ts';
+import { renderCreatePage } from './create-page.ts';
 import { documentsFromForm, type FormValues } from './form-values.ts';
 import { deploymentProblems, formFor } from './forms.ts';
-import { targetPath } from './section.ts';
+import { CREATE_PATH, targetPath } from './paths.ts';
 import {
   CONNECTOR_FIELD,
   DESCRIPTION_FIELD,
@@ -23,7 +24,14 @@ import {
 } from './target-form.ts';
 import { renderTargetPage } from './target-page.ts';
 import { registerTargetWrites } from './target-writes.ts';
-import { type ActionsPagesDependencies, createValues, targetPageView, viewerOf } from './view.ts';
+import {
+  type ActionsPagesDependencies,
+  createValues,
+  fieldProblems,
+  signedIn,
+  targetPageView,
+  viewerOf,
+} from './view.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
 import type { IdentityContext, IdentityEnvironment } from '../../identity/index.ts';
@@ -38,11 +46,6 @@ const NOTICES: Readonly<Record<string, string>> = {
   'grant-revoked': 'Grant removed and the client’s sessions on this target closed.',
   'sessions-closed': 'Every open session on this target was closed.',
 };
-
-function loginRedirect(context: IdentityContext): Response {
-  const url = new URL(context.req.url);
-  return context.redirect(`/login?next=${encodeURIComponent(url.pathname + url.search)}`, 303);
-}
 
 function editableForm(
   dependencies: ActionsPagesDependencies,
@@ -81,9 +84,9 @@ function showCreate(
   context: IdentityContext,
   dependencies: ActionsPagesDependencies,
 ): Response | Promise<Response> {
-  const session = context.get('session');
-  if (session === undefined) {
-    return loginRedirect(context);
+  const viewer = signedIn(context);
+  if (viewer instanceof Response) {
+    return viewer;
   }
   const form = editableForm(dependencies, context.req.query(CONNECTOR_FIELD));
   if (form === undefined) {
@@ -91,9 +94,8 @@ function showCreate(
   }
   return context.html(
     renderCreatePage({
-      csrfToken: session.csrfToken,
-      isReauthenticated: session.isReauthenticated,
-      problems: [],
+      ...viewer,
+      problems: fieldProblems(form, undefined),
       form,
       values: createValues(form),
     }),
@@ -114,7 +116,12 @@ async function create(
   }
   const refused = deploymentProblems(gate.form, dependencies.switches);
   if (refused.length > 0) {
-    const denied = { ...viewerOf(gate.session), problems: refused, form, values: gate.form };
+    const denied = {
+      ...viewerOf(gate.session),
+      problems: fieldProblems(form, refused),
+      form,
+      values: gate.form,
+    };
     return context.html(renderCreatePage(denied), 400);
   }
   const created = await dependencies.targets.create(
@@ -126,7 +133,7 @@ async function create(
   }
   const view = {
     ...viewerOf(gate.session),
-    problems: created.error.problems,
+    problems: fieldProblems(form, created.error.problems),
     form,
     values: gate.form,
   };
@@ -138,16 +145,16 @@ async function showTarget(
   dependencies: ActionsPagesDependencies,
   id: string,
 ): Promise<Response> {
-  const session = context.get('session');
-  if (session === undefined) {
-    return loginRedirect(context);
+  const viewer = signedIn(context);
+  if (viewer instanceof Response) {
+    return viewer;
   }
   const target = dependencies.targets.get(id);
   if (target === undefined) {
     return context.notFound();
   }
   const notice = NOTICES[context.req.query('notice') ?? ''];
-  const view = await targetPageView(dependencies, target, viewerOf(session), { notice });
+  const view = await targetPageView(dependencies, target, viewer, { notice });
   return context.html(renderTargetPage(view));
 }
 
@@ -200,6 +207,7 @@ export function createActionsRoutes(
   dependencies: ActionsPagesDependencies,
 ): Hono<IdentityEnvironment> {
   const app = new Hono<IdentityEnvironment>();
+  registerCallPages(app, dependencies);
   app.get(`${CREATE_PATH}/new`, (context) => showCreate(context, dependencies));
   app.post(CREATE_PATH, (context) => create(context, dependencies));
   app.get(`${CREATE_PATH}/:id`, (context) =>

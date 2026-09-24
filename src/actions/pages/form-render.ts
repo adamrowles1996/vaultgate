@@ -9,6 +9,7 @@ import { EMPTY, type Html, html, when } from '../../identity/pages/template.ts';
 import { fieldName, type FormValues, optionName } from './form-values.ts';
 
 import type { ConnectorForm, DocumentName, FieldDescriptor } from './descriptors.ts';
+import type { FieldProblems } from './messages.ts';
 
 const DOCUMENT_LABELS: Readonly<Record<DocumentName, string>> = {
   destination: 'Destination',
@@ -20,6 +21,14 @@ const DOCUMENTS: readonly DocumentName[] = ['destination', 'credential', 'policy
 
 function help(field: FieldDescriptor): Html {
   return field.help === undefined ? EMPTY : html`<small>${field.help}</small>`;
+}
+
+/**
+ACT-6: what a rejected save said about this one control, next to it.
+*/
+export function fieldErrors(problems: FieldProblems, path: string): Html {
+  const messages = problems.byPath.get(path) ?? [];
+  return html`${messages.map((message) => html`<p class="error">${message}</p>`)}`;
 }
 
 function textInput(field: FieldDescriptor & { readonly kind: 'text' }, value: string): Html {
@@ -83,7 +92,7 @@ function set(field: FieldDescriptor & { readonly kind: 'set' }, values: FormValu
   </fieldset>`;
 }
 
-function renderField(field: FieldDescriptor, values: FormValues): Html {
+function control(field: FieldDescriptor, values: FormValues): Html {
   const value = values.get(fieldName(field)) ?? '';
   switch (field.kind) {
     case 'text': {
@@ -107,14 +116,22 @@ function renderField(field: FieldDescriptor, values: FormValues): Html {
   }
 }
 
+function renderField(field: FieldDescriptor, values: FormValues, problems: FieldProblems): Html {
+  return html`${fieldErrors(problems, fieldName(field))} ${control(field, values)}`;
+}
+
 /**
 Every field of the form, one fieldset per document, showing `values`.
 */
-export function renderFields(form: ConnectorForm, values: FormValues): Html {
+export function renderFields(
+  form: ConnectorForm,
+  values: FormValues,
+  problems: FieldProblems,
+): Html {
   const groups = DOCUMENTS.map((document) => {
     const fields = form.fields
       .filter((field) => field.document === document)
-      .map((field) => renderField(field, values));
+      .map((field) => renderField(field, values, problems));
     return html`<fieldset>
       <legend>${DOCUMENT_LABELS[document]}</legend>
       ${fields}

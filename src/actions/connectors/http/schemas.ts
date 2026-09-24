@@ -18,6 +18,11 @@ import type { ConnectorSchemas, CredentialField, Endpoint } from '../connector.t
 
 export const HTTP_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const;
 
+/**
+ACT-40: the methods that classify as a read; every other method is a write.
+*/
+export const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const DEFAULT_BODY_BYTES = 256 * 1024;
 
@@ -161,5 +166,8 @@ export const httpSchemas: ConnectorSchemas<HttpDestination, HttpCredential, Http
   summariseDestination(destination) {
     const url = new URL(destination.base_url);
     return `${url.host}${url.pathname === '/' ? '' : url.pathname}`;
+  },
+  allowsNonRead(policy) {
+    return policy.allowed_methods.some((method) => !READ_METHODS.has(method));
   },
 };

@@ -13,10 +13,11 @@ import {
   when,
 } from '../../identity/pages/template.ts';
 
-import { renderFields } from './form-render.ts';
+import { fieldErrors, renderFields } from './form-render.ts';
+import { fieldName, type FormValues } from './form-values.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
-import type { FormValues } from './form-values.ts';
+import type { FieldProblems } from './messages.ts';
 
 export const CONNECTOR_FIELD = 'connector';
 export const NAME_FIELD = 'name';
@@ -24,11 +25,25 @@ export const DESCRIPTION_FIELD = 'description';
 export const INTERNAL_FIELD = 'internal';
 export const ITEM_ID_FIELD = 'credential.item_id';
 
+/**
+ACT-6: the controls a problem may name, so one that names none is listed instead of hidden.
+*/
+export function drawnPaths(form: ConnectorForm): readonly string[] {
+  return [
+    NAME_FIELD,
+    DESCRIPTION_FIELD,
+    INTERNAL_FIELD,
+    ITEM_ID_FIELD,
+    ...form.fields.map((field) => fieldName(field)),
+  ];
+}
+
 export interface TargetFormView {
   readonly action: string;
   readonly csrfToken: string;
   readonly form: ConnectorForm;
   readonly values: FormValues;
+  readonly problems: FieldProblems;
   /**
   The name is fixed at creation (ACT-1); the edit form does not offer it.
   */
@@ -36,27 +51,29 @@ export interface TargetFormView {
   readonly submitLabel: string;
 }
 
-function nameField(values: FormValues): Html {
-  return html`<label
-    >Name
-    <input
-      name="${NAME_FIELD}"
-      value="${values.get(NAME_FIELD) ?? ''}"
-      required
-      maxlength="63"
-      pattern="[a-z0-9][a-z0-9-]{0,62}"
-      autocomplete="off"
-    />
-    <small
-      >Lower-case letters, digits and hyphens; how agents name the target. Renaming is a new
-      target.</small
-    >
-  </label>`;
+function nameField(view: TargetFormView): Html {
+  const { values } = view;
+  return html`${fieldErrors(view.problems, NAME_FIELD)}<label
+      >Name
+      <input
+        name="${NAME_FIELD}"
+        value="${values.get(NAME_FIELD) ?? ''}"
+        required
+        maxlength="63"
+        pattern="[a-z0-9][a-z0-9-]{0,62}"
+        autocomplete="off"
+      />
+      <small
+        >Lower-case letters, digits and hyphens; how agents name the target. Renaming is a new
+        target.</small
+      >
+    </label>`;
 }
 
 function commonFields(view: TargetFormView): Html {
   const isInternal = view.values.get(INTERNAL_FIELD) === 'on';
-  return html`${when(view.isNew, () => nameField(view.values))}
+  return html`${when(view.isNew, () => nameField(view))}
+    ${fieldErrors(view.problems, DESCRIPTION_FIELD)}
     <label
       >Description
       <textarea name="${DESCRIPTION_FIELD}" rows="2" maxlength="200">
@@ -66,11 +83,13 @@ ${view.values.get(DESCRIPTION_FIELD) ?? ''}</textarea>
         for.</small
       >
     </label>
+    ${fieldErrors(view.problems, INTERNAL_FIELD)}
     <label
       ><input name="${INTERNAL_FIELD}" type="checkbox" ${when(isInternal, () => html`checked`)} />
       Internal destination (may resolve to a private address; loopback and link-local are refused
       whatever this says)</label
     >
+    ${fieldErrors(view.problems, ITEM_ID_FIELD)}
     <label
       >Vault item id
       <input
@@ -87,17 +106,24 @@ ${view.values.get(DESCRIPTION_FIELD) ?? ''}</textarea>
 }
 
 /**
-The problems a rejected save reported, every one of them (ACT-6).
-*/
-export function renderProblems(problems: readonly string[]): Html {
-  if (problems.length === 0) {
+ * ACT-6: the banner a rejected save carries, with the problems that name no
+ * control of the form; the rest are shown against the control they name.
+ */
+export function renderProblems(problems: FieldProblems): Html {
+  if (problems.isEmpty) {
     return EMPTY;
   }
-  const items = problems.map((problem) => html`<li>${problem}</li>`);
-  return html`${errorBanner('The target was not saved; fix the problems below and try again.')}
-    <ul class="error">
-      ${items}
-    </ul>`;
+  const items = problems.rest.map((problem) => html`<li>${problem}</li>`);
+  return html`${errorBanner(
+    'The target was not saved; fix the problems shown against each field and try again.',
+  )}
+  ${when(
+    problems.rest.length > 0,
+    () =>
+      html`<ul class="error">
+        ${items}
+      </ul>`,
+  )}`;
 }
 
 /**
@@ -112,7 +138,7 @@ function connectorField(view: TargetFormView): Html {
 export function renderTargetForm(view: TargetFormView): Html {
   return html`<form method="post" action="${view.action}">
     ${hidden('csrf', view.csrfToken)} ${connectorField(view)} ${commonFields(view)}
-    ${renderFields(view.form, view.values)}
+    ${renderFields(view.form, view.values, view.problems)}
     <button type="submit">${view.submitLabel}</button>
   </form>`;
 }
