@@ -1,8 +1,10 @@
 /**
  * The create and edit forms of a target (ACT-2, ACT-6): the common fields
- * (name at creation only, description, `internal`, the vault item id) and
- * the connector's fields from its descriptors, re-shown with every problem
- * after a rejected submission. There is no secret in any of these forms.
+ * (name at creation only, description, `internal`), the chosen vault item
+ * with the way to choose another, and the connector's fields from its
+ * descriptors, the ones naming a vault field offered from the item's own
+ * fields (ACT-4); re-shown with every problem after a rejected submission.
+ * There is no secret in any of these forms.
  */
 import { unlockPath } from '../../identity/pages/console.ts';
 import { icon } from '../../identity/pages/icons.ts';
@@ -18,9 +20,12 @@ import { cardHead } from '../../identity/pages/ui.ts';
 
 import { fieldErrors, renderFields } from './form-render.ts';
 import { fieldName, type FormValues } from './form-values.ts';
+import { itemFields } from './item-fields.ts';
+import { itemChips, itemLine } from './item-view.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
 import type { FieldProblems } from './messages.ts';
+import type { ItemSummary } from '../../vault/client.ts';
 
 export const CONNECTOR_FIELD = 'connector';
 export const NAME_FIELD = 'name';
@@ -41,6 +46,14 @@ export function drawnPaths(form: ConnectorForm): readonly string[] {
   ];
 }
 
+/**
+The vault item the form maps (ACT-4), as read for this page, and where to choose another.
+*/
+export type ChosenItem = { readonly changeHref: string } & (
+  | { readonly state: 'found'; readonly summary: ItemSummary }
+  | { readonly state: 'unreadable'; readonly id: string; readonly reason: string }
+);
+
 export interface TargetFormView {
   readonly action: string;
   readonly csrfToken: string;
@@ -52,6 +65,7 @@ export interface TargetFormView {
   */
   readonly isNew: boolean;
   readonly submitLabel: string;
+  readonly item: ChosenItem;
 }
 
 function nameField(view: TargetFormView): Html {
@@ -96,23 +110,27 @@ ${view.values.get(DESCRIPTION_FIELD) ?? ''}</textarea>
   </section>`;
 }
 
-function itemField(view: TargetFormView): Html {
-  return html`<section class="card">
-    ${cardHead('Vault item', 'The Bitwarden item that holds the sign-in. Its fields are mapped below.')}
-    ${fieldErrors(view.problems, ITEM_ID_FIELD)}
-    <label
-      >Vault item id
-      <input
-        name="${ITEM_ID_FIELD}"
-        value="${view.values.get(ITEM_ID_FIELD) ?? ''}"
-        required
-        autocomplete="off"
-      />
-      <small
-        >The id of the vault item holding the credential; it must exist and carry every mapped
-        field. Its name is shown once the computer is saved.</small
-      >
-    </label>
+function chosenItem(item: ChosenItem): Html {
+  return item.state === 'found'
+    ? html`<div class="item-chosen">${itemLine(item.summary)} ${itemChips(item.summary)}</div>`
+    : html`<p class="field-error">
+        The item <code>${item.id}</code> could not be read: ${item.reason}.
+      </p>`;
+}
+
+function itemCard(view: TargetFormView): Html {
+  const { item } = view;
+  const id = item.state === 'found' ? item.summary.id : item.id;
+  const change = html`<a class="button small" href="${item.changeHref}"
+    >${icon('search')} Choose another item</a
+  >`;
+  return html`<section class="card" id="vault-item">
+    ${cardHead(
+      'Vault item',
+      'The Bitwarden item that signs in. vaultgate keeps its id and the names of the fields it reads, never a value.',
+      change,
+    )}
+    ${hidden(ITEM_ID_FIELD, id)} ${fieldErrors(view.problems, ITEM_ID_FIELD)} ${chosenItem(item)}
   </section>`;
 }
 
@@ -167,8 +185,14 @@ export function lockedForm(returnTo: string, what: string): Html {
 }
 
 export function renderTargetForm(view: TargetFormView): Html {
+  const { item } = view;
+  const fields = {
+    values: view.values,
+    problems: view.problems,
+    itemFields: item.state === 'found' ? itemFields(item.summary) : undefined,
+  };
   return html`<form method="post" action="${view.action}" class="target-form">
     ${hidden('csrf', view.csrfToken)} ${connectorField(view)} ${commonFields(view)}
-    ${itemField(view)} ${renderFields(view.form, view.values, view.problems)} ${submitRow(view)}
+    ${itemCard(view)} ${renderFields(view.form, fields)} ${submitRow(view)}
   </form>`;
 }

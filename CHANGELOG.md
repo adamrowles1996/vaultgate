@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- ACT-4, ACT-5: **choose the vault item by searching, and its fields from a list.** After the
+  kind, **Add computer** asks which vault item signs in: search by name, username or address, or
+  paste an id. Each result shows the item's login name, first address and fields, a secret field
+  as a sealed chip bearing only its name. The form then offers the item's own fields for every
+  mapping (the login name, the password, a key, a custom field), never their values, and flags a
+  default the item does not carry. **Choose another item** on the edit page runs the same search.
+  The vault is read for these steps only inside the password window, and only its metadata.
 - VAULT-19, ID-25: **Sync now** on the Vault page syncs the vault at once instead of waiting
   for the next scheduled sync, so a change made in Bitwarden reaches agents straight away. It is
   offered while the vault is ready, needs the usual form checks but no password confirmation,

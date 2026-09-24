@@ -34,9 +34,20 @@ interface FieldBase {
   readonly allowedBy?: 'allowAnyCommand';
 }
 
+/**
+ * ACT-4: a text field that names one of the vault item's fields. Once an
+ * item is chosen the form offers its fields to pick from instead of a text
+ * box: a `username` field any of them, a `secret` field all but the login
+ * name. A field either has the schema's default (`fallback`), preselected
+ * when the field is empty, or is `optional` and may name none.
+ */
+export type FieldPicker = { readonly role: 'username' | 'secret' } & (
+  { readonly fallback: string } | { readonly optional: true }
+);
+
 export type FieldDescriptor = FieldBase &
   (
-    | { readonly kind: 'text'; readonly required?: boolean }
+    | { readonly kind: 'text'; readonly required?: boolean; readonly picker?: FieldPicker }
     | {
         readonly kind: 'number';
         readonly min: number;

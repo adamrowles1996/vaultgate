@@ -81,6 +81,7 @@ const credential: readonly FieldDescriptor[] = [
     name: 'password_field',
     label: 'Password field',
     kind: 'text',
+    picker: { role: 'secret', fallback: 'password' },
     help:
       'password unless another field holds it. A vault field: password, notes, or ' +
       'custom.<name> for a hidden custom field.',

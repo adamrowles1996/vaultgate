@@ -82,6 +82,7 @@ const credential: readonly FieldDescriptor[] = [
     name: 'username_from',
     label: 'Login name field',
     kind: 'text',
+    picker: { role: 'username', fallback: 'login.username' },
     help: `login.username unless another field holds it. ${SELECTOR_HELP}`,
   },
   {
@@ -89,6 +90,7 @@ const credential: readonly FieldDescriptor[] = [
     name: 'password_field',
     label: 'Password field',
     kind: 'text',
+    picker: { role: 'secret', fallback: 'password' },
     help: `password unless another field holds it. ${SELECTOR_HELP}`,
   },
 ];

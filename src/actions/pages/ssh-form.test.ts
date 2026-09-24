@@ -46,12 +46,15 @@ describe('the ssh form', () => {
   });
 
   it('ACT-88 draws the any-command box only where the deployment allows it', async () => {
-    const off = await markup(createPagesHarness(), '/account/actions/new?connector=ssh');
+    const off = await markup(
+      createPagesHarness(),
+      '/account/actions/new?connector=ssh&item=item-ssh',
+    );
     expect(off).toContain('name="destination.host_key"');
     expect(off).not.toContain(`name="${ANY_COMMAND_FIELD}"`);
     const on = await markup(
       createPagesHarness({ allowAnyCommand: true }),
-      '/account/actions/new?connector=ssh',
+      '/account/actions/new?connector=ssh&item=item-ssh',
     );
     expect(on).toContain(`name="${ANY_COMMAND_FIELD}"`);
   });
