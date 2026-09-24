@@ -225,16 +225,68 @@ agent must never see the client secret, the refresh token or the access token.
 
 ## 14.6 `winrm`
 
-| Document      | Fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `destination` | `url` (`https://host:5986/wsman`; `http://` only when `internal: true`, and then the save-time check of ACT-57 insists on it and warns); `username`; `shell` (`powershell` default \| `cmd`); `certificate_sha256` (optional pin: the SHA-256 of the DER leaf certificate, 64 hexadecimal digits with the colons optional. It **replaces** the system store rather than adding to it, which is what a listener with its own certificate needs; the socket is held corked until the certificate matches, so nothing is sent to a host that fails it, and a mismatch is `tls_error`. A pin on a plain endpoint is refused at save.) |
-| `credential`  | `password_field` (default `password`). The login name is the destination's, which the connector reports through `basicUsername` so the engine generates the `base64(username:password)` scrub variant of ACT-51 for the header it sends.                                                                                                                                                                                                                                                                                                                                                                                          |
-| `policy`      | As `ssh` (14.5): `allowed_commands` or `any_command: true`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Document      | Fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `destination` | `url` (`http://host:5985/wsman`, the listener a stock Windows host already runs, or `https://host:5986/wsman`; a plain URL needs `internal: true`, which the save-time check of ACT-57 insists on); `username` (a bare name, or `DOMAIN\name`, which NTLM carries as two fields); `auth` (`negotiate` default \| `basic`; `basic` on an `http://` URL is refused at save); `shell` (`powershell` default \| `cmd`); `certificate_sha256` (optional pin: the SHA-256 of the DER leaf certificate, 64 hexadecimal digits with the colons optional. It **replaces** the system store rather than adding to it, which is what a listener with its own certificate needs; the socket is held corked until the certificate matches, so nothing is sent to a host that fails it, and a mismatch is `tls_error`. A pin on a plain endpoint is refused at save.) |
+| `credential`  | `password_field` (default `password`). The login name is the destination's, which the connector reports through `basicUsername` so the engine generates the `base64(username:password)` scrub variant of ACT-51. On a `negotiate` target vaultgate builds no such pair, and the variant then matches nothing; it is generated anyway so a target later switched to `basic` is covered from its first call.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `policy`      | As `ssh` (14.5): `allowed_commands` or `any_command: true`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
-- **ACT-89** Transport is WS-Management over HTTPS with `Basic` authentication over TLS in v1
-  (NTLM and Kerberos are post-M15 candidates). The M13 pull request evaluated the npm WinRM
-  clients per QG-9 against a hand-written client; the hand-written client won, and the comparison
-  is recorded under M13 in [`PLAN.md`](../PLAN.md). No dependency was added. The client is the
+- **ACT-89** Transport is WS-Management with **NTLMv2 over `Negotiate`** by default, and `Basic`
+  over TLS as an option for a listener whose owner has deliberately enabled it. `basic` on an
+  `http://` URL is refused at save: that combination is the one thing that really does send the
+  password, and `negotiate` exists for exactly that endpoint.
+
+  **This replaces the v1 decision, which was wrong.** v1 specified `Basic` over TLS only, with
+  NTLM and Kerberos deferred. Measured against a stock Windows 11 Pro machine, that makes the
+  connector unusable: the only listener is HTTP on 5985 with no certificate, `Service\Auth\Basic`
+  is `false`, `Service\AllowUnencrypted` is `false`, and `POST /wsman` answers
+  `401 WWW-Authenticate: Negotiate`. That is not a misconfigured host — it is the default, and
+  the secure one. Reaching it as built would have required the operator to enable `Basic` and
+  either install a certificate or send the password base64-encoded over the network, which is
+  asking them to weaken a correctly configured machine so that vaultgate can talk to it. The
+  destination now stays exactly as its owner has it.
+
+  NTLM is what makes port 5985 safe without TLS, for two reasons and no others. The password
+  **never crosses the network**: the client answers a server-chosen challenge with
+  `HMAC-MD5(NTOWFv2, …)`, and `NTOWFv2` is derived from the password locally (MS-NLMP 3.3.2).
+  And the SOAP payload **is encrypted**, sealed with a session key derived from that exchange and
+  wrapped in the MS-WSMV `multipart/encrypted` form — which is precisely what
+  `AllowUnencrypted=false` demands. Over `https://` the transport already encrypts, so MS-WSMV
+  sends the envelope unwrapped and the pin of ACT-57 still governs the certificate.
+
+  The exchange is NTLMv2 with extended session security: a negotiate message asking for Unicode,
+  NTLM, always-sign, extended session security, key exchange, sealing, signing, 128-bit keys and
+  target information; a challenge; and an authenticate message carrying the NTLMv2 response, the
+  session key sealed to the server, and — when the challenge carries `MsvAvTimestamp` — a MIC
+  over all three messages. A challenge that will not agree to Unicode, extended session security,
+  sealing, signing and 128-bit keys is **refused**, never met half-way: a silent downgrade would
+  give away the two properties above. Sealing and signing keep a running RC4 handle and a
+  sequence number per direction; a reply whose 16-byte signature does not verify fails the call
+  and is never decoded on a best-effort basis. NTLM authenticates the _connection_, so one socket
+  carries the handshake and all six exchanges of a call and is released when the shell is deleted.
+
+  **MD4 and RC4 are in the tree, in `src/crypto/`, and that is a protocol requirement, not a
+  choice.** NTLM is defined in terms of both — the NT hash is `MD4(UTF-16LE(password))` and
+  `SEAL` is RC4 — and OpenSSL 3 removed both from its default provider, so `node:crypto` cannot
+  supply them. Both are broken primitives and **neither protects anything on its own**: what the
+  exchange rests on is the challenge-response construction, the HMAC-MD5 chain over a
+  server-chosen challenge, and the per-connection session key. vaultgate hashes nothing of its
+  own with MD4, stores no MD4 digest, and encrypts nothing of its own with RC4; stored secrets
+  use AES-256-GCM. Each file says so at the top, and each is proved against its own
+  specification's test vectors (RFC 1320; the published RC4 vectors) rather than against another
+  implementation. The NTLMv2 arithmetic, the key derivation and the signature are proved against
+  the worked example in MS-NLMP 4.2.4.
+
+  Every byte of a challenge and of a `multipart/encrypted` response is attacker-reachable input
+  from a destination that has proved nothing (T33), and is read as strictly as the XML reader
+  reads a SOAP response: every offset and length bounds-checked, the attribute list capped, the
+  multipart shape located from the declared length rather than by hunting for a boundary inside
+  bytes the destination chose, and anything malformed refused as `upstream_error` rather than
+  worked around. No parse failure escapes as an exception.
+
+  The M13 pull request evaluated the npm WinRM clients per QG-9 against a hand-written client;
+  the hand-written client won, and the comparison is recorded under M13 in
+  [`PLAN.md`](../PLAN.md). No dependency was added, for the NTLM work either. The client is the
   five SOAP operations (`Create` shell, `Command`, `Receive`, `Signal`, `Delete`) plus `Send`,
   which ACT-27's `stdin` needs, driven through the pinned transport of ACT-55, and a reader
   written for exactly the elements those responses carry: no DOCTYPE, no entity of any kind, no
@@ -242,6 +294,7 @@ agent must never see the client secret, the refresh token or the access token.
   `Receive` means the shell had nothing to say yet and is polled again, not a failure. HTTP 401 is
   `authentication_failed`; any other fault is `upstream_error` with the fault reason, capped at
   1 KiB and scrubbed.
+
 - **ACT-90** The remote shell is created with a fixed idle timeout (`wsman:OperationTimeout`) and
   a `MaxEnvelopeSize` that keeps each answer well under the output cap, `Receive` is polled until
   the command state is `Done` or the policy timeout elapses, and on timeout `Signal`

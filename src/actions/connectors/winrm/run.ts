@@ -42,6 +42,7 @@ function prepare(context: WinrmRunContext): Result<WinrmConnection, ActionError>
     address: endpoint.address,
     username: destination.username,
     password,
+    auth: destination.auth,
     shell: destination.shell,
     certificateSha256: destination.certificate_sha256,
     signal: context.signal,

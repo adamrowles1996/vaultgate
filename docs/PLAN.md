@@ -258,8 +258,9 @@ sidecar produces a scrubbed snapshot and a masked screenshot, recorded in the pu
 - PostgreSQL store for multi-replica deployments.
 - Prometheus metrics.
 - Organisation collections filtering and per-client item allowlists.
-- Actions follow-ups: `http_get` with `readOnlyHint: true`, Graph national clouds, NTLM/Kerberos
-  for WinRM, further connectors only with a policy model as tight as spec 14.
+- Actions follow-ups: `http_get` with `readOnlyHint: true`, Graph national clouds, Kerberos for
+  WinRM (NTLM landed; see ACT-89), further connectors only with a policy model as tight as
+  spec 14.
 
 ## Test environments
 

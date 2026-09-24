@@ -46,6 +46,7 @@ async function open(
     address: ADDRESS,
     username: WINRM_USERNAME,
     password: PASSWORD,
+    auth: 'basic',
     shell: 'powershell',
     certificateSha256: undefined,
     signal: controller.signal,

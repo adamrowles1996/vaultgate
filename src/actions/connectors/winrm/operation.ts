@@ -30,8 +30,8 @@ export const winrmRunOutputSchema: OutputSchema = commandOutput(
 );
 
 export const WINRM_RUN_DESCRIPTION =
-  'Runs one command on a Windows host the operator configured, over WinRM (WS-Management over ' +
-  'HTTPS), signed in with a credential from the vault that you never see. `target` must be a ' +
+  'Runs one command on a Windows host the operator configured, over WinRM (WS-Management), ' +
+  'signed in with a credential from the vault that you never see. `target` must be a ' +
   'name returned by actions_list_targets. `command` is matched in full against the commands the ' +
   'operator allowed on that target; anything else is refused with policy_denied (reason command) ' +
   'before any connection is opened, so ask the operator rather than guessing variations. A ' +

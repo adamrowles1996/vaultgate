@@ -23,6 +23,7 @@ import {
   type ActionsHarness,
   type HarnessOptions,
 } from './actions-fixtures.ts';
+import { negotiating, type FakeNegotiate, type NegotiateOptions } from './fake-wsman-negotiate.ts';
 import { fakeWsman, type FakeWsman, type FakeWsmanOptions } from './fake-wsman.ts';
 import { captureLogger } from './logging.ts';
 import { unwrapOk } from './result.ts';
@@ -36,8 +37,30 @@ import type { TargetSummary } from '../actions/targets.ts';
 
 export const WINRM_HOST = 'win.example.com';
 export const WINRM_URL = `https://${WINRM_HOST}:5986/wsman`;
+/**
+ACT-89: the listener a stock Windows host runs — plain, and therefore an internal target.
+*/
+export const WINRM_PLAIN_URL = `http://${WINRM_HOST}:5985/wsman`;
 export const WINRM_USERNAME = 'vaultgate';
 export const PASSWORD_FIELD = 'password';
+
+/**
+ * The NTLM client challenge and exported session key. Fixed and distinctive,
+ * so a canary test can look for the session key by its bytes: the first
+ * handshake takes 0xc1 for the client challenge and 0xc2 for the session key.
+ */
+export function countingRandom(): (bytes: number) => Buffer {
+  let next = 0xc0;
+  return (bytes) => {
+    next += 1;
+    return Buffer.alloc(bytes, next);
+  };
+}
+
+/**
+What `countingRandom` gives the first handshake as its exported session key.
+*/
+export const NEGOTIATE_SESSION_KEY = Buffer.alloc(16, 0xc2);
 
 /**
 The SHA-256 of the certificate `fakeTlsSocket` would present; a pinned target uses it.
@@ -57,7 +80,7 @@ export function countingIds(): () => string {
 }
 
 export function winrmSessionOverFake(
-  fake: FakeWsman,
+  fake: Pick<FakeWsman, 'transport'>,
   cleanup: AbortSignal = new AbortController().signal,
 ): WinrmSessionFactory {
   return winrmSessionOver({
@@ -65,10 +88,15 @@ export function winrmSessionOverFake(
     version: '9.9.9',
     newId: countingIds(),
     cleanupSignal: () => cleanup,
+    random: countingRandom(),
+    now: () => 1_700_000_000_000,
   });
 }
 
-export function winrmConnectorOver(fake: FakeWsman, isAnyCommandAllowed = false): WinrmConnector {
+export function winrmConnectorOver(
+  fake: Pick<FakeWsman, 'transport'>,
+  isAnyCommandAllowed = false,
+): WinrmConnector {
   return createWinrmConnector({ allowAnyCommand: isAnyCommandAllowed }, winrmSessionOverFake(fake));
 }
 
@@ -87,7 +115,12 @@ export function winrmTargetInput(overrides: WinrmTargetOverrides = {}): Record<s
     name: overrides.name ?? 'build-agent',
     description: 'The Windows build agent',
     connector: 'winrm',
-    destination: { url: WINRM_URL, username: WINRM_USERNAME, ...overrides.destination },
+    destination: {
+      url: WINRM_URL,
+      username: WINRM_USERNAME,
+      auth: 'basic',
+      ...overrides.destination,
+    },
     internal: overrides.internal ?? false,
     credential: { item_id: overrides.itemId ?? 'item-login', mapping: { ...overrides.mapping } },
     policy: { allowed_commands: ['Get-ComputerInfo'], ...overrides.policy },
@@ -169,6 +202,7 @@ export function winrmRunContext(options: WinrmContextOptions = {}): BuiltWinrmCo
   const destination: WinrmDestination = {
     url: WINRM_URL,
     username: WINRM_USERNAME,
+    auth: 'basic',
     shell: 'powershell',
     certificate_sha256: undefined,
     ...options.destination,
@@ -213,3 +247,40 @@ export function winrmRunContext(options: WinrmContextOptions = {}): BuiltWinrmCo
     },
   };
 }
+
+export interface OverNegotiate extends OverWinrm {
+  readonly destination: FakeNegotiate;
+}
+
+/**
+ * ACT-89: the same engine harness over a destination that really performs the
+ * NTLM exchange and seals its replies, on the plain listener a stock Windows
+ * host runs.
+ */
+export function harnessOverNegotiate(
+  options: FakeWsmanOptions = {},
+  negotiateOptions: Partial<NegotiateOptions> = {},
+  harnessOptions: OverWinrmOptions = {},
+): OverNegotiate {
+  const { allowAnyCommand: isAnyCommandAllowed = false, ...rest } = harnessOptions;
+  const fake = fakeWsman(options);
+  const destination = negotiating(fake, { password: CANARY.password, ...negotiateOptions });
+  return {
+    fake,
+    destination,
+    harness: createActionsHarness({
+      config: actionsEnabled(['winrm'], { allowAnyCommand: isAnyCommandAllowed }),
+      addresses: { [WINRM_HOST]: [PUBLIC_ADDRESS] },
+      ...rest,
+      runtime: winrmConnectorOver(destination, isAnyCommandAllowed),
+    }),
+  };
+}
+
+/**
+A `negotiate` target on the plain listener a stock Windows host runs; plain transport needs internal.
+*/
+export const NEGOTIATE_TARGET: WinrmTargetOverrides = {
+  destination: { url: WINRM_PLAIN_URL, auth: 'negotiate' },
+  internal: true,
+};

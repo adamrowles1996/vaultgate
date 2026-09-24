@@ -6,6 +6,63 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`winrm` targets speak NTLMv2 over `Negotiate`, and it is now the default** (spec 14 §14.6,
+  ACT-89). A stock Windows 10 or 11 machine runs one listener — HTTP on 5985, no certificate —
+  with `Basic` disabled and `AllowUnencrypted` set to `false`, and answers `POST /wsman` with
+  `401 WWW-Authenticate: Negotiate`. vaultgate now speaks exactly that, so **no change to the
+  Windows host is required**: the password never crosses the network (NTLM answers a
+  server-chosen challenge), and every SOAP message is sealed and signed with a session key
+  derived from the exchange and wrapped in the MS-WSMV `multipart/encrypted` form, which is what
+  `AllowUnencrypted=false` demands. Over `https://` the transport already encrypts and the
+  envelope is sent as it is, with the ACT-57 certificate pin unchanged. NTLM authenticates the
+  connection, so one socket carries the handshake and all six exchanges of a call.
+- `destination.auth` on a `winrm` target: `negotiate` (new, the default) or `basic`, which is
+  kept for a listener whose owner has deliberately enabled it. `basic` on an `http://` URL is
+  refused at save — it is the one combination that really does send the password in the clear,
+  and `negotiate` exists for that endpoint. The account may be a bare local name, `DOMAIN\name`
+  or a user principal name.
+- `src/crypto/md4.ts` and `src/crypto/rc4.ts`. **Both are broken primitives, and neither protects
+  anything on its own; they are here because NTLM is defined in terms of them** — the NT hash is
+  `MD4(UTF-16LE(password))` and `SEAL` is RC4 — **and OpenSSL 3 removed both from its default
+  provider, so `node:crypto` cannot supply them.** What the exchange rests on is the
+  challenge-response construction and the per-connection session key. vaultgate hashes nothing of
+  its own with MD4 and encrypts nothing of its own with RC4; stored secrets still use
+  AES-256-GCM. Each file says so at the top, ACT-89 records the reasoning, and each is proved
+  against its own specification's vectors (RFC 1320; the published RC4 vectors) rather than
+  against another implementation. The NTLMv2 responses, the four derived sub-keys and the message
+  signature are proved against the worked example in MS-NLMP 4.2.4.
+- Every byte of a challenge and of a `multipart/encrypted` reply is read as strictly as the XML
+  reader reads a SOAP response (T33): bounds-checked offsets and lengths, a capped attribute
+  list, the sealed payload located from the declared length rather than by hunting for a boundary
+  inside bytes the destination chose, and anything malformed refused as `upstream_error` rather
+  than worked around. A signature that does not verify fails the call; an answer sent in the
+  clear where the exchange requires encryption is refused rather than read.
+- `KeptConnection` in `src/net/`: one socket held across the requests of an authenticated
+  session, released when the session ends.
+
+### Fixed
+
+- **The ACT-57 certificate pin did not take effect on the wire.** It was expressed as
+  `agent: false` plus a `createConnection` in the request options, and Node ignores
+  `options.createConnection` once a request has an agent — which `agent: false` gives it, a
+  default agent whose sockets the system trust store verifies. A pinned destination presenting a
+  self-signed certificate therefore failed with `DEPTH_ZERO_SELF_SIGNED_CERT` instead of being
+  accepted by its pin, and one presenting a different CA-signed certificate would have been
+  accepted by the store. The pin is now an agent of vaultgate's own whose `createConnection` is
+  the corked, pin-checked socket, so the guard runs where it was always meant to. The existing
+  test asserted the option shape rather than the mechanism Node uses, and was rewritten around
+  the agent.
+
+### Changed
+
+- The `winrm` section of the actions guide is rewritten around `Negotiate`, since that is the
+  path an operator will use; the `Basic` setup is kept as a short note for the case where someone
+  wants it.
+- The `winrm_run` tool description no longer says "over HTTPS", because it is no longer only
+  HTTPS.
+
 ## [0.1.0-rc.11] - 2026-09-24
 
 ### Fixed

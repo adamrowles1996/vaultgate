@@ -15,9 +15,27 @@ const destination: readonly FieldDescriptor[] = [
     kind: 'text',
     required: true,
     help:
-      'https://host:5986/wsman for the HTTPS listener. A plain http:// endpoint sends the ' +
-      'password in the clear and is accepted only on an internal target. The host is resolved ' +
-      'once per call and the connection goes to that address and nowhere else.',
+      'http://host:5985/wsman for the listener a stock Windows host already runs, or ' +
+      'https://host:5986/wsman where one has been set up. With Negotiate authentication the ' +
+      'plain endpoint gives nothing away — the password never crosses the network and the ' +
+      'payload is encrypted — but it is still accepted only on an internal target. The host is ' +
+      'resolved once per call and the connection goes to that address and nowhere else.',
+  },
+  {
+    document: 'destination',
+    name: 'auth',
+    label: 'Authentication',
+    kind: 'select',
+    options: [
+      { value: 'negotiate', label: 'Negotiate (NTLM)' },
+      { value: 'basic', label: 'Basic' },
+    ],
+    fallback: 'negotiate',
+    help:
+      'Negotiate is what Windows enables by default and needs no change to the host: it proves ' +
+      'the password without sending it and encrypts the payload, which is what a listener with ' +
+      'AllowUnencrypted set to false requires. Basic sends the password and is accepted only on ' +
+      'an https:// endpoint whose owner has turned Basic on.',
   },
   {
     document: 'destination',

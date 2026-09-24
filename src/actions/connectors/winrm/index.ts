@@ -6,7 +6,7 @@
  * closing over `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND`; contract tests build one
  * with the same call over a fake WS-Management destination.
  */
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import { createPinnedHttpsFetch } from '../../../net/pinned-https.ts';
 import { VERSION } from '../../../version.ts';
@@ -48,6 +48,9 @@ const defaultSession: WinrmSessionFactory = winrmSessionOver({
   version: VERSION,
   newId: randomUUID,
   cleanupSignal,
+  // ACT-89: the NTLM client challenge and exported session key.
+  random: randomBytes,
+  now: Date.now,
 });
 
 export function createWinrmConnector(

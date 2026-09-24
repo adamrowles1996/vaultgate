@@ -3,13 +3,14 @@
  * `winrm_run`, each a single POST through the pinned transport to the address
  * the engine validated, with the URL's host name kept for TLS and `wsa:To`
  * (ACT-55) and the leaf certificate judged against the target's pin where it
- * has one (ACT-57). `Basic` over TLS is the only authentication v1 offers.
- * The shell is created per call and deleted when the call ends; a command
- * that outlives the policy timeout is terminated first, on a deadline of its
- * own, because the call's has already elapsed.
+ * has one (ACT-57). How each envelope is authenticated and whether it is
+ * encrypted belongs to `./transport.ts`: `negotiate` runs NTLM and seals the
+ * payload, `basic` sends the pair over TLS. The shell is created per call and
+ * deleted when the call ends; a command that outlives the policy timeout is
+ * terminated first, on a deadline of its own, because the call's has already
+ * elapsed.
  */
 import { pinnedCertificateCheck, type CertificateCheck } from '../../../net/certificate-pin.ts';
-import { readBodyCapped, type PinnedFetch } from '../../../net/pinned-https.ts';
 import { ActionError } from '../../errors.ts';
 import { Capture } from '../capture.ts';
 
@@ -27,7 +28,6 @@ import {
   OK,
   statusFailure,
   transportFailure,
-  UNAUTHORIZED,
   unreadableResponse,
 } from './failures.ts';
 import {
@@ -38,44 +38,22 @@ import {
   TIMED_OUT,
   type Received,
 } from './responses.ts';
+import { openTransport, type SoapAnswer, type WinrmTransport } from './transport.ts';
 import { parseXml, XmlProblem, type XmlElement } from './xml.ts';
 
 import type {
   WinrmCommand,
   WinrmConnection,
+  WinrmDependencies,
   WinrmResult,
   WinrmSession,
   WinrmSessionFactory,
 } from './session.ts';
 
-/**
- * Well above the `MaxEnvelopeSize` the shell is created with, so a response
- * that respects it always fits and one that does not is cut and reported as
- * unreadable rather than buffered without limit (T33).
- */
-const MAX_RESPONSE_BYTES = 512 * 1024;
-
-export interface WinrmDependencies {
-  readonly transport: PinnedFetch;
-  /**
-  Sent as `User-Agent: vaultgate/<version>`, as the `http` connector does.
-  */
-  readonly version: string;
-  /**
-  The `wsa:MessageID` of each exchange; injected so a test can assert the exact envelopes.
-  */
-  readonly newId: () => string;
-  /**
-  ACT-90: the deadline for `Signal` and `Delete`, which run after the call's own deadline elapsed.
-  */
-  readonly cleanupSignal: () => AbortSignal;
-}
-
 interface Wire {
   readonly dependencies: WinrmDependencies;
   readonly connection: WinrmConnection;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly certificate: CertificateCheck | undefined;
+  readonly transport: WinrmTransport;
 }
 
 interface Answer {
@@ -83,21 +61,13 @@ interface Answer {
   readonly status: number;
 }
 
-function wireOf(connection: WinrmConnection, dependencies: WinrmDependencies): Wire {
-  const pair = `${connection.username}:${connection.password}`;
-  return {
-    dependencies,
-    connection,
-    headers: {
-      'content-type': 'application/soap+xml;charset=UTF-8',
-      authorization: `Basic ${Buffer.from(pair, 'utf8').toString('base64')}`,
-      'user-agent': `vaultgate/${dependencies.version}`,
-    },
-    certificate:
-      connection.certificateSha256 === undefined
-        ? undefined
-        : pinnedCertificateCheck(connection.certificateSha256),
-  };
+/**
+ACT-57: the pin replaces the system store where the target names one.
+*/
+function certificateFor(connection: WinrmConnection): CertificateCheck | undefined {
+  return connection.certificateSha256 === undefined
+    ? undefined
+    : pinnedCertificateCheck(connection.certificateSha256);
 }
 
 /**
@@ -117,26 +87,13 @@ export function read<Value>(reader: () => Value): Value {
 }
 
 async function post(wire: Wire, body: string, signal: AbortSignal): Promise<Answer> {
-  let response: Response;
-  let raw: Buffer;
+  let answer: SoapAnswer;
   try {
-    response = await wire.dependencies.transport({
-      url: wire.connection.url,
-      address: wire.connection.address,
-      method: 'POST',
-      headers: wire.headers,
-      body: Buffer.from(body, 'utf8'),
-      signal,
-      certificate: wire.certificate,
-    });
-    raw = await readBodyCapped(response, MAX_RESPONSE_BYTES);
+    answer = await wire.transport.send(body, signal);
   } catch (error: unknown) {
     throw transportFailure(error, signal);
   }
-  if (response.status === UNAUTHORIZED) {
-    throw new ActionError('authentication_failed');
-  }
-  return { envelope: read(() => parseXml(raw.toString('utf8'))), status: response.status };
+  return { envelope: read(() => parseXml(answer.text)), status: answer.status };
 }
 
 /**
@@ -262,11 +219,16 @@ function session(wire: Wire, shellId: string): WinrmSession {
       }
     },
     async close(): Promise<void> {
-      await call(
-        wire,
-        deleteShell(url, wire.dependencies.newId(), shellId),
-        wire.dependencies.cleanupSignal(),
-      );
+      try {
+        await call(
+          wire,
+          deleteShell(url, wire.dependencies.newId(), shellId),
+          wire.dependencies.cleanupSignal(),
+        );
+      } finally {
+        // NTLM authenticates the connection, so the session's socket ends here.
+        wire.transport.release();
+      }
     },
   };
 }
@@ -276,15 +238,24 @@ ACT-58: the shell is created after the policy decision and holds for this call o
 */
 export function winrmSessionOver(dependencies: WinrmDependencies): WinrmSessionFactory {
   return async (connection) => {
-    const wire = wireOf(connection, dependencies);
-    const created = await call(
-      wire,
-      createShell(connection.url, dependencies.newId()),
-      connection.signal,
-    );
-    return session(
-      wire,
-      read(() => shellIdOf(created)),
-    );
+    const wire: Wire = {
+      dependencies,
+      connection,
+      transport: openTransport(connection, dependencies, certificateFor(connection)),
+    };
+    try {
+      const created = await call(
+        wire,
+        createShell(connection.url, dependencies.newId()),
+        connection.signal,
+      );
+      return session(
+        wire,
+        read(() => shellIdOf(created)),
+      );
+    } catch (error: unknown) {
+      wire.transport.release();
+      throw error;
+    }
   };
 }
