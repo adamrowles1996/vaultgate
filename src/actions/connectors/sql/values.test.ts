@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { createScrubber } from '../../scrub.ts';
+
 import { fitRows, toSqlScalar, toSqlString } from './values.ts';
 
 function named(): number {
@@ -32,9 +34,27 @@ describe('sql result values', () => {
     expect(toSqlScalar(noon)).toBe('2026-09-23T07:30:00.000Z');
   });
 
-  it('ACT-24 binary becomes base64, from a Buffer and from any other view', () => {
-    expect(toSqlScalar(Buffer.from('hi', 'utf8'))).toBe('aGk=');
-    expect(toSqlScalar(Uint8Array.from([104, 105]))).toBe('aGk=');
+  it('ACT-51 ACT-24 binary stays bytes, from a Buffer and from any other view, so the engine scrubs it before it becomes base64', () => {
+    const buffer = Buffer.from('hi', 'utf8');
+    expect(toSqlScalar(buffer)).toBe(buffer);
+    expect(toSqlScalar(Uint8Array.from([104, 105]))).toStrictEqual(Uint8Array.from([104, 105]));
+  });
+
+  it('ACT-51 ACT-24 a credential inside a binary column is redacted at every byte offset, because the driver does not encode it before the scrubber sees it', () => {
+    const secret = 'CANARY-PASSWORD-for-a-binary-column';
+    const scrub = createScrubber([{ field: 'password', value: Buffer.from(secret) }], undefined);
+    for (let offset = 0; offset < 6; offset += 1) {
+      const raw = Buffer.concat([Buffer.alloc(offset, 0x41), Buffer.from(secret, 'utf8')]);
+      const [[cell]] = scrub.deep([[toSqlScalar(raw)]]);
+      expect(Buffer.from(String(cell), 'base64').toString('latin1')).toBe(
+        `${'A'.repeat(offset)}[redacted:password]`,
+      );
+    }
+  });
+
+  it('ACT-52 a binary value is counted at the size of the base64 the engine will send', () => {
+    expect(fitRows([[Buffer.alloc(30)]], 10, 1024).bytes).toBe(45);
+    expect(fitRows([[Buffer.alloc(30)]], 10, 44)).toMatchObject({ rows: [], truncated: true });
   });
 
   it('ACT-24 a structured value becomes its JSON text', () => {

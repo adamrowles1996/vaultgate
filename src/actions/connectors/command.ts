@@ -11,6 +11,8 @@ import { z } from 'zod';
 
 import { commonPolicySchema, isPatternMatch } from '../policy.ts';
 
+import { hasControlCharacter, hasNul } from './control-characters.ts';
+
 import type { OperationDescription, OperationSchema, TargetCapabilities } from './connector.ts';
 import type { OutputSchema } from '../../mcp/tools/definition.ts';
 import type { ActionScope } from '../../scopes/registry.ts';
@@ -19,18 +21,6 @@ import type { PolicyDecision, PolicyReason } from '../policy.ts';
 export const MAX_COMMAND_BYTES = 16 * 1024;
 
 const MAX_STDIN_BYTES = 64 * 1024;
-const NUL = '\u{0}';
-/**
- * The C0 controls other than tab, line feed and carriage return. XML 1.0 can
- * carry none of them, not even as a character reference, so a `winrm` command
- * holding one could not be sent at all; on `ssh` one is a mistake or an
- * attempt at a terminal escape. Both refuse the command rather than send it.
- */
-const CONTROL_CHARACTERS: ReadonlySet<string> = new Set(
-  Array.from({ length: 32 }, (_value, code) => String.fromCodePoint(code)).filter(
-    (character) => !'\t\n\r'.includes(character),
-  ),
-);
 const SUMMARY_CAP = 1024;
 const LINE_BREAK = /[\n\r]/u;
 
@@ -47,15 +37,6 @@ export interface CommandHelp {
   readonly stdin: string;
 }
 
-function hasControlCharacter(command: string): boolean {
-  for (const character of command) {
-    if (CONTROL_CHARACTERS.has(character)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /**
 ACT-27: at most 16 KiB, never a NUL byte and never another control character, whichever connector carries it.
 */
@@ -63,7 +44,7 @@ function commandIssues(command: string, context: z.RefinementCtx): void {
   if (Buffer.byteLength(command, 'utf8') > MAX_COMMAND_BYTES) {
     context.addIssue({ code: 'custom', message: 'must be at most 16 KiB' });
   }
-  if (command.includes(NUL)) {
+  if (hasNul(command)) {
     context.addIssue({ code: 'custom', message: 'must not contain a NUL byte' });
   } else if (hasControlCharacter(command)) {
     context.addIssue({

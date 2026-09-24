@@ -44,6 +44,18 @@ describe('isPatternMatch', () => {
     expect(isPatternMatch(String.raw`a\b`, String.raw`a\b`, 'command')).toBe(true);
   });
 
+  it('ACT-34 a star in a command stops at a carriage return as well, so a pattern cannot span a line the server would split', () => {
+    expect(isPatternMatch('uptime *', 'uptime -p\rrm -rf /', 'command')).toBe(false);
+    expect(isPatternMatch('ls **', 'ls a\rb', 'command')).toBe(false);
+    expect(
+      isPatternMatch(
+        'DELETE FROM sessions WHERE id = 1*',
+        'DELETE FROM sessions WHERE id = 1 --\r; DROP TABLE customers',
+        'command',
+      ),
+    ).toBe(false);
+  });
+
   it('ACT-34 considers every placement of a literal after a wildcard, not only the first', () => {
     expect(isPatternMatch('/*.json', '/a.json', 'path')).toBe(true);
     expect(isPatternMatch('/*.json', '/a.json.bak', 'path')).toBe(false);

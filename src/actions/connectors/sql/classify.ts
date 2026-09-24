@@ -22,6 +22,7 @@ const DENIED: ReadonlySet<string> = new Set([
   'CALL',
   'COPY',
   'CREATE',
+  'DBCC',
   'DELETE',
   'DENY',
   'DROP',
@@ -34,6 +35,7 @@ const DENIED: ReadonlySet<string> = new Set([
   'MERGE',
   'OPENQUERY',
   'OPENROWSET',
+  'READTEXT',
   'RECONFIGURE',
   'RESTORE',
   'REVOKE',
@@ -41,8 +43,10 @@ const DENIED: ReadonlySet<string> = new Set([
   'SHUTDOWN',
   'TRUNCATE',
   'UPDATE',
+  'UPDATETEXT',
   'USE',
   'WAITFOR',
+  'WRITETEXT',
 ]);
 
 const READ_FIRST: ReadonlySet<string> = new Set(['EXPLAIN', 'SELECT', 'WITH']);

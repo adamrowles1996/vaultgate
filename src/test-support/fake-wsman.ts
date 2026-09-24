@@ -23,8 +23,11 @@ export type WsmanHandler = (
 ) => WsmanReply | undefined;
 
 export interface ReceiveScript {
-  readonly stdout?: string;
-  readonly stderr?: string;
+  /**
+  Text, or the exact bytes a stream carries when the command's output is not text.
+  */
+  readonly stdout?: string | Buffer;
+  readonly stderr?: string | Buffer;
   readonly done?: boolean;
   readonly exitCode?: number;
   /**
@@ -85,8 +88,9 @@ export function soapFault(subcode: string, reason: string, status = 500): Respon
   );
 }
 
-function stream(name: string, text: string): string {
-  return `<rsp:Stream Name="${name}" CommandId="${COMMAND_ID}">${Buffer.from(text, 'utf8').toString('base64')}</rsp:Stream>`;
+function stream(name: string, value: string | Buffer): string {
+  const bytes = typeof value === 'string' ? Buffer.from(value, 'utf8') : value;
+  return `<rsp:Stream Name="${name}" CommandId="${COMMAND_ID}">${bytes.toString('base64')}</rsp:Stream>`;
 }
 
 function receiveBody(script: ReceiveScript): string {

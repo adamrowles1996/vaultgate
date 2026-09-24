@@ -9,6 +9,7 @@ import {
   storedCalls,
 } from '../../../test-support/actions-fixtures.ts';
 import {
+  bytesResponse,
   echoResponse,
   harnessOver,
   surfaces,
@@ -135,6 +136,55 @@ describe('the http connector through the engine: secret handling', () => {
     expect(String(result['body'])).not.toContain('CANARY');
     expect(String(result['body']).startsWith('a'.repeat(1020))).toBe(true);
     expect(Buffer.byteLength(String(result['body']))).toBeLessThanOrEqual(1024);
+    expect(storedCalls(harness.database)).toMatchObject([{ outputTruncated: true }]);
+  });
+
+  it('ACT-53 ACT-51 ACT-21 a body that is not text carries no canary at any byte offset: the engine scrubs the bytes before it base64-encodes them', async () => {
+    const leaked: string[] = [];
+    // A media type that is never textual, and a textual one whose bytes are
+    // not valid UTF-8: `isText` sends both down the base64 path.
+    const types = ['application/octet-stream', 'text/plain'];
+    for (const type of types) {
+      for (let offset = 0; offset < 6; offset += 1) {
+        const raw = Buffer.concat([
+          Buffer.alloc(offset, 0x41),
+          Buffer.from(CANARY.password, 'utf8'),
+          Buffer.from([0xff, 0xfe]),
+        ]);
+        const { harness } = harnessOver(() => bytesResponse(raw, type));
+        await createHttpTarget(harness);
+        const result = resultOf(await harness.engine.call(caller(), httpInvocation()));
+        expect(result['body_encoding']).toBe('base64');
+        const body = Buffer.from(String(result['body']), 'base64').toString('latin1');
+        expect(body).toBe(`${'A'.repeat(offset)}[redacted:password]\u{FF}\u{FE}`);
+        const everything = surfaces(harness, [result]);
+        leaked.push(
+          ...scrubVariants(CANARY.password, USERNAME).filter((variant) =>
+            everything.includes(variant),
+          ),
+          ...(body.includes(CANARY.password) ? [`decoded body at offset ${String(offset)}`] : []),
+        );
+      }
+    }
+    expect(leaked).toStrictEqual([]);
+  });
+
+  it('ACT-52 the guard band catches a credential straddling the cut of a body that is not text', async () => {
+    // The cap admits 768 raw bytes (the largest whole base64 that fits 1 KiB),
+    // and the canary spans it.
+    const raw = Buffer.concat([
+      Buffer.alloc(760, 0x41),
+      Buffer.from(CANARY.password, 'utf8'),
+      Buffer.alloc(200, 0x42),
+    ]);
+    const { harness } = harnessOver(() => bytesResponse(raw, 'application/octet-stream'));
+    await createHttpTarget(harness, { policy: { max_output_bytes: 1024 } });
+    const result = resultOf(await harness.engine.call(caller(), httpInvocation()));
+    expect(result['truncated']).toBe(true);
+    const body = Buffer.from(String(result['body']), 'base64').toString('latin1');
+    expect(body).not.toContain('CANARY');
+    expect(body.startsWith('A'.repeat(760))).toBe(true);
+    expect(String(result['body']).length).toBeLessThanOrEqual(1024);
     expect(storedCalls(harness.database)).toMatchObject([{ outputTruncated: true }]);
   });
 

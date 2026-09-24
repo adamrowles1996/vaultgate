@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { caller, errorOf, resultOf, storedCalls } from '../../../test-support/actions-fixtures.ts';
+import { soapFault } from '../../../test-support/fake-wsman.ts';
 import { surfaces } from '../../../test-support/http-connector.ts';
 import { CANARY } from '../../../test-support/vault-fixture.ts';
 import {
   createWinrmTarget,
   harnessOverWinrm,
   winrmInvocation,
+  WINRM_USERNAME,
 } from '../../../test-support/winrm-connector.ts';
 import { scrubVariants } from '../../scrub.ts';
 
@@ -31,8 +33,46 @@ describe('the winrm connector through the engine', () => {
     expect(result['stdout']).toBe('[redacted:password]\n[redacted:password]\n[redacted:password]');
     expect(result['stderr']).toBe('"[redacted:password]"');
     const everything = surfaces(harness, [result]);
-    const variants = scrubVariants(CANARY.password, undefined);
+    const variants = scrubVariants(CANARY.password, WINRM_USERNAME);
     expect(variants.filter((variant) => everything.includes(variant))).toStrictEqual([]);
+  });
+
+  it('ACT-51 ACT-89 the Basic pair vaultgate builds from the destination account is a scrubbed variant, so a listener cannot echo it back', async () => {
+    const pair = Buffer.from(`${WINRM_USERNAME}:${CANARY.password}`, 'utf8').toString('base64');
+    const { harness } = harnessOverWinrm({
+      handler: (action, request) =>
+        action === 'Command'
+          ? soapFault('InternalError', `rejected ${String(request.headers['authorization'])}`)
+          : undefined,
+    });
+    await createWinrmTarget(harness);
+    const error = errorOf(await harness.engine.call(caller(WINRM), winrmInvocation()));
+    expect(error.detail).toStrictEqual({ message: 'rejected Basic [redacted:password]' });
+    expect(surfaces(harness, [error.detail])).not.toContain(pair);
+  });
+
+  it('ACT-53 ACT-51 no variant of the password survives a stdout that is not text, at any byte offset', async () => {
+    const leaked: string[] = [];
+    for (let offset = 0; offset < 6; offset += 1) {
+      const raw = Buffer.concat([
+        Buffer.alloc(offset, 0xff),
+        Buffer.from(CANARY.password, 'utf8'),
+        Buffer.from([0xfe, 0x80]),
+      ]);
+      const { harness } = harnessOverWinrm({
+        receives: [{ stdout: raw, done: true, exitCode: 0 }],
+      });
+      await createWinrmTarget(harness);
+      const result = resultOf(await harness.engine.call(caller(WINRM), winrmInvocation()));
+      expect(String(result['stdout'])).toContain('[redacted:password]');
+      const everything = surfaces(harness, [result]);
+      leaked.push(
+        ...scrubVariants(CANARY.password, WINRM_USERNAME).filter((variant) =>
+          everything.includes(variant),
+        ),
+      );
+    }
+    expect(leaked).toStrictEqual([]);
   });
 
   it('ACT-60 records the shell operation and the command classification with the output size', async () => {

@@ -189,7 +189,7 @@ async function readResponse(
 ): Promise<Result<ConnectorOutput, ActionError>> {
   const limit = context.outputLimit.maxBytes + context.outputLimit.guardBytes;
   const raw = await readBodyCapped(response, limit);
-  return ok(toOutput(response, raw, context.policy, context.outputLimit.maxBytes));
+  return ok(toOutput(response, raw, context.policy));
 }
 
 /**

@@ -109,6 +109,64 @@ describe('createScrubber', () => {
     });
   });
 
+  it('ACT-51 scrubs raw bytes at every offset, inside a buffer that is not valid UTF-8', () => {
+    const scrubber = createScrubber([{ field: 'password', value: Buffer.from(SECRET) }], undefined);
+    for (let offset = 0; offset < 6; offset += 1) {
+      const raw = Buffer.concat([
+        Buffer.alloc(offset, 0xff),
+        Buffer.from(SECRET, 'utf8'),
+        Buffer.from([0xfe, 0x80]),
+      ]);
+      const scrubbed = scrubber.bytes(raw);
+      expect(scrubbed.toString('latin1')).toBe(
+        `${'\u{FF}'.repeat(offset)}[redacted:password]\u{FE}\u{80}`,
+      );
+      expect(scrubbed.includes(Buffer.from(SECRET, 'utf8'))).toBe(false);
+    }
+  });
+
+  it('ACT-51 ACT-52 base64 scrubs the bytes before it encodes, so no offset survives the encoding', () => {
+    const scrubber = createScrubber([{ field: 'password', value: Buffer.from(SECRET) }], undefined);
+    for (let offset = 0; offset < 6; offset += 1) {
+      const raw = Buffer.concat([Buffer.alloc(offset, 0x41), Buffer.from(SECRET, 'utf8')]);
+      const capped = scrubber.base64(raw, 1024);
+      expect(capped).toMatchObject({ truncated: false, bytes: raw.length });
+      expect(Buffer.from(capped.text, 'base64').toString('utf8')).toBe(
+        `${'A'.repeat(offset)}[redacted:password]`,
+      );
+    }
+  });
+
+  it('ACT-52 base64 cuts to the largest whole base64 that fits the limit and says truncated', () => {
+    const scrubber = createScrubber([], undefined);
+    const raw = Buffer.alloc(1000, 0xff);
+    const capped = scrubber.base64(raw, 100);
+    expect(capped).toStrictEqual({
+      text: raw.subarray(0, 75).toString('base64'),
+      truncated: true,
+      bytes: 1000,
+    });
+    expect(capped.text).toHaveLength(100);
+    expect(scrubber.base64(raw.subarray(0, 30), 100)).toMatchObject({
+      truncated: false,
+      bytes: 30,
+    });
+  });
+
+  it('ACT-51 ACT-24 deep renders a binary value as the base64 of its scrubbed bytes', () => {
+    const scrubber = createScrubber([{ field: 'password', value: Buffer.from(SECRET) }], undefined);
+    const raw = Buffer.concat([Buffer.from('a'), Buffer.from(SECRET, 'utf8')]);
+    expect(scrubber.deep({ rows: [[raw, Uint8Array.from([0xff])]] })).toStrictEqual({
+      rows: [[base64('a[redacted:password]'), Buffer.from([0xff]).toString('base64')]],
+    });
+  });
+
+  it('ACT-52 buffer scrubs the bytes before it decodes, so a value among invalid UTF-8 is caught', () => {
+    const scrubber = createScrubber([{ field: 'password', value: Buffer.from(SECRET) }], undefined);
+    const raw = Buffer.concat([Buffer.from([0xc3]), Buffer.from(SECRET, 'utf8')]);
+    expect(scrubber.buffer(raw, 1024).text).toBe('\u{FFFD}[redacted:password]');
+  });
+
   it('ACT-50 keeps working after the injected buffers have been zeroed', () => {
     const value = Buffer.from(SECRET);
     const scrubber = createScrubber([{ field: 'password', value }], undefined);

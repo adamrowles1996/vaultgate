@@ -16,6 +16,50 @@ describe('the sql statement classifier', () => {
   }
 });
 
+describe('line comments', () => {
+  const ENGINES = ['mssql', 'postgres'] as const;
+
+  it.each(ENGINES)(
+    'ACT-36 %s: a -- comment ends at a bare carriage return, so what follows is a second statement',
+    (engine) => {
+      expect(classifyStatement('SELECT 1 --x\r; DROP TABLE audit_log', engine)).toStrictEqual({
+        ok: false,
+        reason: 'statement_count',
+      });
+      expect(classifyStatement('SELECT 1 --x\n; DROP TABLE audit_log', engine)).toStrictEqual({
+        ok: false,
+        reason: 'statement_count',
+      });
+    },
+  );
+
+  it.each(ENGINES)(
+    'ACT-36 %s: a -- comment with no line terminator still runs to the end of the statement',
+    (engine) => {
+      expect(classifyStatement('SELECT 1 -- ; DROP TABLE audit_log', engine)).toStrictEqual({
+        ok: true,
+        facts: { statementClass: 'read', positions: [] },
+      });
+    },
+  );
+
+  it.each(ENGINES)(
+    'ACT-37 %s: DBCC, WRITETEXT, UPDATETEXT and READTEXT are denied in a read',
+    (engine) => {
+      const denied = [
+        'DBCC CHECKDB',
+        'WRITETEXT t.c @ptr N',
+        'UPDATETEXT t.c @ptr 0 0',
+        'READTEXT t.c @ptr 0 1',
+      ];
+      for (const tail of denied) {
+        const reading = classifyStatement(`SELECT * FROM t WHERE x = (${tail})`, engine);
+        expect(reading.ok && reading.facts.statementClass).toBe('other');
+      }
+    },
+  );
+});
+
 describe('placeholders', () => {
   it('ACT-23 counts $n on PostgreSQL, once per distinct position, ignoring dollar-quoted bodies', () => {
     const reading = classifyStatement('SELECT $$ $9 $$, $2, $1 FROM t WHERE a = $1', 'postgres');

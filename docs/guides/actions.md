@@ -214,8 +214,12 @@ What vaultgate does with it, in order:
    and none of the forbidden ones; the body (a string, or a JSON object or array serialised as
    `application/json` unless the agent set a content type) must fit **Maximum request body**.
    A refusal is `policy_denied` with `detail.reason` (`method`, `path`, `header`, `body_size`)
-   and is audited as such. A malformed argument (a path with `..` or an empty segment `//`, a
-   header name that is not a token, more than 32 headers) is `invalid_arguments`. The URL that
+   and is audited as such. A malformed argument (a path with `..`, an empty segment `//`, or a
+   percent-encoded slash or backslash — `%2F`, `%5C` — anywhere before the query string; a
+   header name that is not a token; more than 32 headers) is `invalid_arguments`. The encoded
+   separators are refused because normalisation decodes the unreserved characters only, so
+   neither the dot-segment rule nor a `*` in a pattern would treat one as a boundary while a
+   destination that decodes it before routing does. Put them in the query string instead. The URL that
    is actually built is checked against the base URL as well, so a protocol-relative path can
    never move the request to another host.
 2. **Read or write.** `GET`, `HEAD` and `OPTIONS` are read calls; every other method is a
@@ -241,7 +245,9 @@ What vaultgate does with it, in order:
    received; `truncated` when the body was cut at **Maximum output** (with a guard band, so a
    credential straddling the cut is still scrubbed); `duration_ms`. Every injected value, in
    every encoding, is replaced by `[redacted:<field>]` in the body, the headers and the audit
-   row before anything leaves the engine.
+   row before anything leaves the engine — and for a body that is not text the replacement
+   happens on the raw bytes, before they are base64-encoded, so the encoding cannot hide a
+   credential the destination sent.
 
 A non-2xx status is a normal result: a `401` or `403` means the destination refused the
 request and is reported as such, never as `authentication_failed`, so the agent (and you, in
@@ -312,7 +318,8 @@ Two more fields matter only to `sql_execute`:
   (`CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `GRANT`, `REVOKE`, `DENY`) only for a target whose
   agent is meant to change the schema.
 - **Allowed statements**: one pattern per line, matched against the statement as the agent wrote
-  it; `*` matches within one line and matching is anchored at both ends, so
+  it; `*` matches within one line — it stops at a line feed and at a carriage return — and
+  matching is anchored at both ends, so
   `UPDATE orders SET status = $1 WHERE id = $2` admits exactly that statement and
   `DELETE FROM sessions WHERE *` admits any single-line delete from that table. An empty list
   means no statement restriction, and the classification and the login are then the controls.
@@ -405,7 +412,8 @@ What vaultgate does with it, in order:
    PostgreSQL), quoted identifiers (`"…"`, and `[…]` on SQL Server), line comments and block
    comments (which nest on PostgreSQL) — and must be **exactly one statement**: a `;` outside a
    string or comment followed by anything but whitespace, a trailing comment included, is
-   `policy_denied` with `detail.reason: "statement_count"`. It must then classify as `read`:
+   `policy_denied` with `detail.reason: "statement_count"`. A `--` comment ends at the first
+   line terminator, carriage return as well as line feed, as both engines' lexers do. It must then classify as `read`:
    the first keyword is `SELECT`, `WITH` or `EXPLAIN`, no writing, executing or session-changing
    keyword appears outside a string, comment or quoted identifier, and no identifier begins with
    `xp_` or `sp_`. Anything else is `policy_denied` with `detail.reason: "statement_class"`, and
@@ -417,7 +425,9 @@ What vaultgate does with it, in order:
    allowed, and a statement it does allow can still do whatever the login may do. Give the target
    a read-only login.
 3. **Parameters.** Placeholders are counted in the tokenised statement, outside strings and
-   comments: `$1…$n` on PostgreSQL, `@p1…@pn` on SQL Server. A placeholder with no parameter, a
+   comments: `$1…$n` on PostgreSQL, `@p1…@pn` on SQL Server. (A statement may not carry a NUL
+   byte or any other control character but tab, carriage return and line feed; one that does is
+   `invalid_arguments`.) A placeholder with no parameter, a
    parameter with no placeholder, or a gap in the sequence is `invalid_arguments`. There is no
    other way to get a value into a statement.
 4. **The credential and one pinned connection.** The login name and password are fetched from
@@ -721,7 +731,10 @@ Out: `exit_code`, `stdout` and `stderr` captured separately and each cut at the 
 Errors are reserved for the connection: `tls_error` (the certificate is not the pinned one, or
 does not verify), `authentication_failed` (a 401 from the listener), `connection_failed`,
 `timeout` — which sends `Signal terminate` to the command and then deletes the shell — and
-`upstream_error` for a fault the service reported, with its reason scrubbed and capped.
+`upstream_error` for a fault the service reported, with its reason scrubbed and capped. The
+`Basic` header vaultgate builds from the account name and the password is scrubbed as one value
+too, so a listener that quotes the `Authorization` header back in a fault cannot hand the agent a
+decodable pair.
 
 ## Grants
 

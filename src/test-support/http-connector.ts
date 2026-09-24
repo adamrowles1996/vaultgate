@@ -207,6 +207,13 @@ export function textResponse(
   return new Response(body, { status, headers: { 'content-type': 'text/plain', ...headers } });
 }
 
+/**
+The destination answering with exactly these bytes under exactly this content type (ACT-21).
+*/
+export function bytesResponse(body: Buffer, contentType: string, status = 200): Response {
+  return new Response(body, { status, headers: { 'content-type': contentType } });
+}
+
 export function redirectResponse(
   status: number,
   location: string,

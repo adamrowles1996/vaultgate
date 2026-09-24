@@ -93,6 +93,10 @@ function endpoints(destination: WinrmDestination): readonly Endpoint[] {
   return [{ host: url.hostname, tls: url.protocol === 'https:' }];
 }
 
+/**
+ * The login name lives in the destination (§14.6), so nothing here has the
+ * `username` role; `basicUsername` is what puts it in front of the scrubber.
+ */
 function credentialFields(credential: WinrmCredential): readonly CredentialField[] {
   return [{ name: credential.password_field, selector: credential.password_field, role: 'secret' }];
 }
@@ -114,6 +118,16 @@ export const winrmSchemas: ConnectorSchemas<WinrmDestination, WinrmCredential, W
   policySchema: winrmPolicySchema,
   endpoints,
   credentialFields,
+  /**
+   * ACT-51: `client.ts` authenticates with `Basic
+   * base64(destination.username:password)`, a string vaultgate builds itself,
+   * so the engine needs the account name to generate that variant. Without it
+   * a listener that echoed the `Authorization` header would return the pair
+   * the agent can decode, with only the raw password redacted.
+   */
+  basicUsername(destination) {
+    return destination.username;
+  },
   saveProblems({ destination, policy }) {
     return [...certificateProblems(destination), ...commandPolicyProblems(policy)];
   },

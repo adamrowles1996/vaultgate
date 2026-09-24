@@ -13,9 +13,6 @@ import { ActionError } from '../../errors.ts';
 import type { HttpPolicy } from './schemas.ts';
 import type { ConnectorOutput } from '../connector.ts';
 
-const BASE64_BLOCK = 4;
-const BASE64_BYTES_PER_BLOCK = 3;
-
 const TEXT_MEDIA_TYPES: ReadonlySet<string> = new Set([
   'application/json',
   'application/xml',
@@ -54,29 +51,27 @@ function visibleHeaders(headers: Headers, names: readonly string[]): Record<stri
 }
 
 /**
- * The connector output before the engine scrubs it. Text goes to `captured`
- * as read (the engine scrubs it and cuts it at the limit, ACT-52); a binary
- * body is cut here to the largest base64 that fits the limit, so what the
- * agent receives always decodes.
+ * The connector output before the engine scrubs it. The body goes to
+ * `captured` exactly as it came off the wire, textual or not; the engine
+ * scrubs it, cuts it at the limit and sets `truncated` (ACT-52). A body that
+ * is not text is named in `base64`, so the engine encodes it after scrubbing
+ * its bytes and what the agent receives still decodes. Encoding here would
+ * hand the agent the credential: base64 is positional, so no variant of the
+ * value matches the base64 of a buffer that merely contains it (ACT-51).
  */
-export function toOutput(
-  response: Response,
-  raw: Buffer,
-  policy: HttpPolicy,
-  maxBytes: number,
-): ConnectorOutput {
-  const common = {
+export function toOutput(response: Response, raw: Buffer, policy: HttpPolicy): ConnectorOutput {
+  const result = {
     status: response.status,
     headers: visibleHeaders(response.headers, policy.response_headers),
     bytes: raw.length,
   };
   if (isText(response.headers.get('content-type'), raw)) {
-    return { result: { ...common, truncated: raw.length > maxBytes }, captured: { body: raw } };
+    return { result, captured: { body: raw } };
   }
-  const fit = raw.subarray(0, Math.floor(maxBytes / BASE64_BLOCK) * BASE64_BYTES_PER_BLOCK);
   return {
-    result: { ...common, body_encoding: 'base64', truncated: raw.length > fit.length },
-    captured: { body: Buffer.from(fit.toString('base64'), 'ascii') },
+    result: { ...result, body_encoding: 'base64' },
+    captured: { body: raw },
+    base64: ['body'],
   };
 }
 

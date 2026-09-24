@@ -97,9 +97,18 @@ function endOfEscaped(source: string, start: number): number {
   return source.length;
 }
 
+/**
+ * A `--` comment ends at the first line terminator, carriage return included.
+ * PostgreSQL's lexer defines `non_newline` as `[^\n\r]` and T-SQL ends a line
+ * comment at a bare CR too, so a tokeniser that looked for `\n` alone would
+ * swallow a statement the server would go on to run (ACT-36).
+ */
 function endOfLineComment(source: string, start: number): number {
-  const newline = source.indexOf('\n', start);
-  return newline === -1 ? source.length : newline;
+  let index = start;
+  while (index < source.length && source[index] !== '\n' && source[index] !== '\r') {
+    index += 1;
+  }
+  return index;
 }
 
 function endOfBlockComment(source: string, start: number, isNested: boolean): number {

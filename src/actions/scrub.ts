@@ -43,11 +43,22 @@ export interface Scrubber {
   readonly guardBytes: number;
   text(input: string): string;
   /**
+   * ACT-51 over raw bytes, before anything encodes them. Every encoding
+   * vaultgate itself applies — base64 above all, which is positional — has to
+   * happen after this, or the scrub table matches nothing: none of a value's
+   * variants appears in the base64 of a buffer that merely contains it.
+   */
+  bytes(input: Buffer): Buffer;
+  /**
   Scrubs a captured buffer, then cuts it at `maxBytes` with `truncated: true`.
   */
   buffer(input: Buffer, maxBytes: number): CappedText;
   /**
-  Scrubs every string anywhere inside a JSON-like value.
+  Scrubs a captured buffer's bytes, then cuts it to the largest base64 that fits `maxBytes`.
+  */
+  base64(input: Buffer, maxBytes: number): CappedText;
+  /**
+  Scrubs every string anywhere inside a JSON-like value, and every binary value as base64.
   */
   deep<T>(value: T): T;
 }
@@ -57,6 +68,7 @@ export function redactionMarker(field: string): string {
 }
 
 const BASE64_BLOCK = 4;
+const BASE64_BYTES_PER_BLOCK = 3;
 const HEX_DIGITS = 4;
 const UTF16_UNIT_BYTES = 2;
 
@@ -169,16 +181,48 @@ function scrubText(table: readonly Replacement[], input: string): string {
   return parts.join('');
 }
 
-function scrubDeep(value: unknown, scrub: (text: string) => string): unknown {
+/**
+The two shapes a leaf can take: text, and the raw bytes of a binary column, which become base64.
+*/
+interface DeepScrubs {
+  readonly text: (value: string) => string;
+  readonly binary: (value: Uint8Array) => string;
+}
+
+function scrubDeep(value: unknown, scrubs: DeepScrubs): unknown {
   if (typeof value === 'string') {
-    return scrub(value);
+    return scrubs.text(value);
+  }
+  if (value instanceof Uint8Array) {
+    return scrubs.binary(value);
   }
   if (Array.isArray(value)) {
-    return value.map((item: unknown) => scrubDeep(item, scrub));
+    return value.map((item: unknown) => scrubDeep(item, scrubs));
   }
   return value !== null && typeof value === 'object'
-    ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrubDeep(item, scrub)]))
+    ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrubDeep(item, scrubs)]))
     : value;
+}
+
+/**
+ * The byte table: every variant and marker as the latin1 reading of its UTF-8
+ * bytes. latin1 maps each byte to one code point and back without loss, so the
+ * text scan above does the byte work too, longest match first by byte length.
+ */
+function byteTable(table: readonly Replacement[]): readonly Replacement[] {
+  return table
+    .map((entry) => ({
+      variant: Buffer.from(entry.variant, 'utf8').toString('latin1'),
+      marker: Buffer.from(entry.marker, 'utf8').toString('latin1'),
+    }))
+    .toSorted((left, right) => byLengthDescending(left.variant, right.variant));
+}
+
+/**
+ACT-52: the most whole base64 blocks of `input` that fit in `maxBytes` of encoded output.
+*/
+function base64Room(maxBytes: number): number {
+  return Math.floor(maxBytes / BASE64_BLOCK) * BASE64_BYTES_PER_BLOCK;
 }
 
 /**
@@ -202,11 +246,17 @@ export function createScrubber(
     .toSorted((left, right) => byLengthDescending(left.variant, right.variant));
   const guardBytes = Math.max(0, ...table.map((entry) => Buffer.byteLength(entry.variant)));
   const text = (input: string): string => scrubText(table, input);
+  const raw = byteTable(table);
+  const bytes = (input: Buffer): Buffer =>
+    Buffer.from(scrubText(raw, input.toString('latin1')), 'latin1');
+  const binary = (value: Uint8Array): string =>
+    bytes(Buffer.from(value.buffer, value.byteOffset, value.byteLength)).toString('base64');
   return {
     guardBytes,
     text,
+    bytes,
     buffer(input, maxBytes) {
-      const scrubbed = Buffer.from(text(input.toString('utf8')), 'utf8');
+      const scrubbed = bytes(input);
       const isCut = scrubbed.length > maxBytes;
       return {
         text: (isCut ? scrubbed.subarray(0, maxBytes) : scrubbed).toString('utf8'),
@@ -214,6 +264,15 @@ export function createScrubber(
         bytes: input.length,
       };
     },
-    deep: <T>(value: T): T => scrubDeep(value, text) as T,
+    base64(input, maxBytes) {
+      const scrubbed = bytes(input);
+      const fit = scrubbed.subarray(0, base64Room(maxBytes));
+      return {
+        text: fit.toString('base64'),
+        truncated: fit.length < scrubbed.length || input.length > maxBytes,
+        bytes: input.length,
+      };
+    },
+    deep: <T>(value: T): T => scrubDeep(value, { text, binary }) as T,
   };
 }

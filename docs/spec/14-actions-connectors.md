@@ -27,6 +27,8 @@ interface ConnectorSchemas<Destination, Credential, Policy> {
   endpoints(destination: Destination): readonly Endpoint[];
   /** The vault fields a mapping needs, as `get_secret` selectors (ACT-4). */
   credentialFields(credential: Credential): readonly CredentialField[];
+  /** ACT-51: the login name of the `base64(username:secret)` variant, when this connector builds one and the destination holds the name rather than the vault (`winrm`). */
+  basicUsername?(destination: Destination): string | undefined;
   /** Save-time rules beyond the schemas (ACT-79, ACT-81); each problem is shown to the operator. */
   saveProblems(documents: TargetDocuments<Destination, Credential, Policy>): readonly string[];
   /** The host (and database, base path or origin) for ACT-43 and the account page. */
@@ -62,9 +64,12 @@ interface Connector<Destination, Credential, Policy, Operation> extends Connecto
 `RunContext` carries the parsed documents, the common policy fields, the `InjectedValues`
 holder (ACT-50), the pinned endpoints (ACT-55), the `AbortSignal` of the policy timeout
 (ACT-59), the output limit with its guard band (ACT-52) and a logger. `ConnectorOutput` is
-`{ result, captured, bytes? }`: `result` is the tool result before scrubbing, `captured` the byte
+`{ result, captured, base64?, bytes? }`: `result` is the tool result before scrubbing, `captured`
+the byte
 streams (`body`, `stdout`, `stderr`, `snapshot`) taken up to `max_output_bytes` plus the guard
-band, which the engine scrubs, cuts and writes back into `result` under the same keys, and
+band, which the engine scrubs, cuts and writes back into `result` under the same keys, `base64`
+the subset of those keys the engine returns base64-encoded — it encodes after it has scrubbed the
+raw bytes, and a connector never encodes anything itself (ACT-51) — and
 `bytes` the size of a result that is not a byte stream (the `sql` rows, which are fitted to the
 limits row by row so no value is ever cut in half), which the engine records as `output_bytes`
 in place of the sum of `captured`. The
@@ -221,7 +226,7 @@ agent must never see the client secret, the refresh token or the access token.
 | Document      | Fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `destination` | `url` (`https://host:5986/wsman`; `http://` only when `internal: true`, and then the save-time check of ACT-57 insists on it and warns); `username`; `shell` (`powershell` default \| `cmd`); `certificate_sha256` (optional pin: the SHA-256 of the DER leaf certificate, 64 hexadecimal digits with the colons optional. It **replaces** the system store rather than adding to it, which is what a listener with its own certificate needs; the socket is held corked until the certificate matches, so nothing is sent to a host that fails it, and a mismatch is `tls_error`. A pin on a plain endpoint is refused at save.) |
-| `credential`  | `password_field` (default `password`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `credential`  | `password_field` (default `password`). The login name is the destination's, which the connector reports through `basicUsername` so the engine generates the `base64(username:password)` scrub variant of ACT-51 for the header it sends.                                                                                                                                                                                                                                                                                                                                                                                          |
 | `policy`      | As `ssh` (14.5): `allowed_commands` or `any_command: true`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 - **ACT-89** Transport is WS-Management over HTTPS with `Basic` authentication over TLS in v1

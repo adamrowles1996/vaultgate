@@ -16,7 +16,7 @@ import { isIP } from 'node:net';
 
 import { driverModule } from '../drivers.ts';
 import { actionErrorOf, type FaultCodes } from '../failures.ts';
-import { toSqlScalar, type SqlRow, type SqlScalar } from '../values.ts';
+import { toSqlScalar, type SqlRow, type SqlValue } from '../values.ts';
 
 import { EXACT_TYPES, exactScalar } from './exact.ts';
 
@@ -134,7 +134,7 @@ export function configOf(connection: SqlConnection): MssqlConfig {
   };
 }
 
-function scalarOf(value: unknown, column: MssqlColumnMeta | undefined): SqlScalar {
+function scalarOf(value: unknown, column: MssqlColumnMeta | undefined): SqlValue {
   if (column === undefined || !EXACT_TYPES.has(column.type.declaration)) {
     return toSqlScalar(value);
   }

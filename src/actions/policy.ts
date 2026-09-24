@@ -136,12 +136,12 @@ class Reach {
    * `*` up to and including the next separator's index (the run it matches
    * stops before the separator).
    */
-  wildcard(stopAt: string | undefined): void {
+  wildcard(stopAt: ReadonlySet<string> | undefined): void {
     let isOpen = false;
     for (const [position, isReached] of this.#current.entries()) {
       isOpen ||= isReached === 1;
       this.#next[position] = isOpen ? 1 : 0;
-      if (this.#subject.charAt(position) === stopAt) {
+      if (stopAt?.has(this.#subject.charAt(position)) === true) {
         isOpen = false;
       }
     }
@@ -150,14 +150,25 @@ class Reach {
 }
 
 /**
+ * ACT-34: a path `*` stops at a segment boundary; a command `*` stops at a
+ * line terminator, carriage return as well as line feed — a `--` comment ends
+ * at a bare CR on both engines, so a `*` that crossed one would let a pattern
+ * match a subject the server reads as two lines.
+ */
+const SEPARATORS: Readonly<Record<PatternKind, ReadonlySet<string>>> = {
+  path: new Set(['/']),
+  command: new Set(['\n', '\r']),
+};
+
+/**
  * ACT-34: anchored at both ends, case-sensitive, `*` stops at `/` (paths) or a
- * newline (commands), `**` crosses `/`. Each token advances the set of
+ * line terminator (commands), `**` crosses `/`. Each token advances the set of
  * subject positions the pattern so far can end at in one sweep over the
  * subject, so matching is linear in the subject for a fixed pattern: no
  * backtracking, no ReDoS however the pattern is written.
  */
 export function isPatternMatch(pattern: string, subject: string, kind: PatternKind): boolean {
-  const separator = kind === 'path' ? '/' : '\n';
+  const separator = SEPARATORS[kind];
   const reach = new Reach(subject);
   for (const token of tokenise(pattern, kind)) {
     if (token.kind === 'literal') {

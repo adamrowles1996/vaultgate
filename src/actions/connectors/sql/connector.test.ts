@@ -47,6 +47,33 @@ describe('the sql connector through the engine', () => {
     expect(variants.filter((variant) => everything.includes(variant))).toStrictEqual([]);
   });
 
+  it('ACT-53 ACT-51 ACT-24 a binary column carrying the credential comes back scrubbed, at any byte offset', async () => {
+    const leaked: string[] = [];
+    for (let offset = 0; offset < 6; offset += 1) {
+      const raw = Buffer.concat([
+        Buffer.alloc(offset, 0x41),
+        Buffer.from(CANARY.password, 'utf8'),
+        Buffer.from([0xff, 0xfe]),
+      ]);
+      const { harness } = harnessOverSql({ answers: [rowsOf(['blob'], [[raw]])] });
+      await createSqlTarget(harness);
+      const result = resultOf(
+        await harness.engine.call(caller({ scopes: ['actions:sql.read'] }), sqlInvocation()),
+      );
+      const [[cell] = []] = result['rows'] as string[][];
+      expect(Buffer.from(String(cell), 'base64').toString('latin1')).toBe(
+        `${'A'.repeat(offset)}[redacted:password]\u{FF}\u{FE}`,
+      );
+      const everything = surfaces(harness, [result]);
+      leaked.push(
+        ...scrubVariants(CANARY.password, USERNAME).filter((variant) =>
+          everything.includes(variant),
+        ),
+      );
+    }
+    expect(leaked).toStrictEqual([]);
+  });
+
   it('ACT-53 ACT-74 a database error that quotes the credential is scrubbed before it leaves the engine', async () => {
     const { harness } = harnessOverSql({
       answers: [new ActionError('upstream_error', { message: `password "${CANARY.password}" ?` })],

@@ -46,7 +46,6 @@ describe('http run', () => {
         status: 200,
         headers: { 'content-type': 'text/plain' },
         bytes: 2,
-        truncated: false,
       },
       captured: { body: Buffer.from('ok') },
     });
@@ -60,11 +59,10 @@ describe('http run', () => {
       status: 401,
       headers: { 'content-type': 'text/plain', 'retry-after': '9' },
       bytes: 4,
-      truncated: false,
     });
   });
 
-  it('ACT-52 ACT-21 reads the body up to the limit plus the guard band, then reports truncated with the bytes it received', async () => {
+  it('ACT-52 ACT-21 reads the body up to the limit plus the guard band and reports the bytes it received; the engine cuts it', async () => {
     const big = 'a'.repeat(5000);
     const { built, outcome } = await run(scripted([text(200, big)]), {
       policy: { max_output_bytes: 1024 },
@@ -72,18 +70,19 @@ describe('http run', () => {
     const { guardBytes } = built.context.outputLimit;
     expect(guardBytes).toBeGreaterThan(0);
     const output = unwrapOk(outcome);
-    expect(output.result).toMatchObject({ bytes: 1024 + guardBytes, truncated: true });
+    expect(output.result).toMatchObject({ bytes: 1024 + guardBytes });
     expect(output.captured['body']?.length).toBe(1024 + guardBytes);
   });
 
-  it('ACT-21 a binary body comes back base64 with body_encoding', async () => {
+  it('ACT-51 ACT-21 a binary body is named in base64 and handed over as raw bytes, for the engine to scrub before it encodes', async () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0x00]);
     const { outcome } = await run(
       scripted([new Response(png, { status: 200, headers: { 'content-type': 'image/png' } })]),
     );
     const output = unwrapOk(outcome);
     expect(output.result).toMatchObject({ status: 200, body_encoding: 'base64', bytes: 10 });
-    expect(output.captured['body']?.toString('ascii')).toBe(png.toString('base64'));
+    expect(output.base64).toStrictEqual(['body']);
+    expect(output.captured['body']).toStrictEqual(png);
   });
 
   it('ACT-59 answers timeout when the signal aborts while waiting for the destination or while reading the body', async () => {

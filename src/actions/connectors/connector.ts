@@ -82,6 +82,16 @@ export interface ConnectorSchemas<Destination, Credential, Policy> {
   */
   saveProblems(documents: TargetDocuments<Destination, Credential, Policy>): readonly string[];
   /**
+   * ACT-51: the login name of the `base64(username:secret)` variant, when this
+   * connector authenticates with one and the destination holds the name rather
+   * than the vault (`winrm`). A connector whose mapping names a `username`
+   * field leaves this out — the engine already has that name — and so does one
+   * that never builds such a string, `ssh` among them: its protocol sends the
+   * login name and the secret as separate fields, so vaultgate creates no pair
+   * for a destination to echo.
+   */
+  basicUsername?(destination: Destination): string | undefined;
+  /**
   ACT-43: the host and, where relevant, the database, base path or origin. Never a credential.
   */
   summariseDestination(destination: Destination): string;
@@ -222,6 +232,13 @@ export interface ConnectorOutput {
   engine scrubs and cuts each and writes the text into `result` under the same key.
   */
   readonly captured: Readonly<Record<string, Buffer>>;
+  /**
+   * ACT-51, ACT-52: the `captured` keys the engine returns base64-encoded. A
+   * connector hands over the raw bytes and names the key here; it never encodes
+   * them itself, because base64 is positional and the scrub table holds the
+   * value's own encodings, not the encoding of a buffer that contains it.
+   */
+  readonly base64?: readonly string[];
   /**
   ACT-60: the size of a result that is not a byte stream (the `sql` rows), for `output_bytes`;
   without it the engine adds up what `captured` holds.
