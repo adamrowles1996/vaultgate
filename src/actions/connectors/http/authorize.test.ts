@@ -183,9 +183,12 @@ describe('authorize', () => {
     expect(
       describeOperation(described, { method: 'DELETE', path: '/v1/items/7?force=1' }),
     ).toStrictEqual({ summary: 'DELETE /v1/items/7?force=1', classification: 'DELETE' });
-    const long = describeOperation(described, { method: 'GET', path: `/${'a'.repeat(2000)}` });
-    expect(long.summary).toHaveLength(1024);
+    const path = `/${'a'.repeat(2000)}?token=x`;
+    const long = describeOperation(described, { method: 'GET', path });
+    expect(long.summary).toHaveLength(768 + 3 + 192);
     expect(long.summary.startsWith('GET /aaa')).toBe(true);
+    expect(long.summary.endsWith('?token=x')).toBe(true);
+    expect(long.omitted?.total).toBe(`GET ${path}`.length);
   });
 
   it('ACT-19 reports one operation per allowed method with the actions:http scope', () => {

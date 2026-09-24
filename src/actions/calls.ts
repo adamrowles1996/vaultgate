@@ -6,6 +6,8 @@
  * when the call ends; a refused call is one insert. Nothing else updates or
  * deletes a row: retention is the store's maintenance task (ACT-62).
  */
+import { createHash } from 'node:crypto';
+
 import { z } from 'zod';
 
 import { fail, ok, type Result } from '../result.ts';
@@ -71,17 +73,31 @@ const INSERT =
 const nonceRow = z.object({ id: z.string() });
 
 /**
-ACT-60: the arguments as JSON, cut at 4 KiB with the flag set.
-*/
+ * ACT-60: the arguments as JSON, cut at 4 KiB. What is cut is named: the
+ * excerpt carries the byte counts and the SHA-256 of the whole of it, so the
+ * ACT-63 review view shows an operator that it is reading part of a record
+ * and gives them something to check the rest against. `ssh` and `winrm` also
+ * have ACT-88's full command in `classification`; `sql` has nothing else, and
+ * a 64 KiB statement would otherwise hide its operative clause from the one
+ * view that exists to catch an unexpected write.
+ */
 export function encodeArguments(value: unknown): {
   readonly text: string;
   readonly truncated: boolean;
 } {
   const text = JSON.stringify(value);
   const bytes = Buffer.from(text, 'utf8');
-  return bytes.length > ARGUMENTS_CAP_BYTES
-    ? { text: bytes.subarray(0, ARGUMENTS_CAP_BYTES).toString('utf8'), truncated: true }
-    : { text, truncated: false };
+  if (bytes.length <= ARGUMENTS_CAP_BYTES) {
+    return { text, truncated: false };
+  }
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const excerpt = bytes.subarray(0, ARGUMENTS_CAP_BYTES).toString('utf8');
+  return {
+    text:
+      `${excerpt}\n[vaultgate: ${String(ARGUMENTS_CAP_BYTES)} of ${String(bytes.length)} bytes ` +
+      `shown; sha256 of the whole is ${sha256}]`,
+    truncated: true,
+  };
 }
 
 function orNull<T extends string | number>(value: T | undefined): T | null {

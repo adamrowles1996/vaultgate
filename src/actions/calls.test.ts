@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import { listActionCalls, type StoredActionCall } from '../audit/actions-query.ts';
@@ -44,11 +46,16 @@ function rows(database: DatabaseSync): readonly StoredActionCall[] {
 }
 
 describe('encodeArguments', () => {
-  it('ACT-60 stores the arguments as JSON cut at 4 KiB with the flag set', () => {
+  it('ACT-60 ACT-63 stores the arguments as JSON cut at 4 KiB, saying how much is missing and the digest of the whole', () => {
     expect(encodeArguments({ a: 1 })).toStrictEqual({ text: '{"a":1}', truncated: false });
+    const whole = JSON.stringify({ body: 'x'.repeat(5000) });
     const big = encodeArguments({ body: 'x'.repeat(5000) });
     expect(big.truncated).toBe(true);
-    expect(Buffer.byteLength(big.text)).toBe(4096);
+    expect(big.text.startsWith(whole.slice(0, 4096))).toBe(true);
+    const sha256 = createHash('sha256').update(whole, 'utf8').digest('hex');
+    expect(big.text).toContain(
+      `\n[vaultgate: 4096 of ${String(Buffer.byteLength(whole))} bytes shown; sha256 of the whole is ${sha256}]`,
+    );
   });
 });
 

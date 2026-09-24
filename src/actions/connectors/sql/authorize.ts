@@ -9,6 +9,7 @@
  * opened (ACT-26). No I/O.
  */
 import { isPatternMatch } from '../../policy.ts';
+import { excerptOf } from '../operation-summary.ts';
 
 import { classifyStatement } from './classify.ts';
 import { SQL_QUERY_TOOL } from './operation.ts';
@@ -17,8 +18,6 @@ import type { SqlOperation } from './operation.ts';
 import type { SqlCredential, SqlDestination, SqlPolicy } from './schemas.ts';
 import type { PolicyDecision, StatementClass } from '../../policy.ts';
 import type { OperationDescription, OperationRequest, TargetCapabilities } from '../connector.ts';
-
-const SUMMARY_CAP = 1024;
 
 export type SqlRequest = OperationRequest<SqlDestination, SqlCredential, SqlPolicy>;
 
@@ -79,7 +78,7 @@ export function authorize(request: SqlRequest, operation: SqlOperation): PolicyD
 }
 
 /**
-ACT-43: the statement as the agent wrote it, capped; ACT-60: the class the engine audits.
+ACT-43: the statement as the agent wrote it, excerpted and never silently; ACT-60: the class the engine audits.
 */
 export function describeOperation(
   request: SqlRequest,
@@ -87,7 +86,7 @@ export function describeOperation(
 ): OperationDescription {
   const reading = classifyStatement(operation.statement, request.destination.engine);
   return {
-    summary: operation.statement.slice(0, SUMMARY_CAP),
+    ...excerptOf(operation.statement),
     classification: reading.ok ? reading.facts.statementClass : 'other',
   };
 }

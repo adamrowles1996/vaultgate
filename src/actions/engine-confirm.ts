@@ -100,6 +100,7 @@ export function confirmationStep(
     connector: row.connector,
     destinationSummary: schemas.summariseDestination(documents.destination),
     operationSummary: resolved.description.summary,
+    omitted: resolved.description.omitted,
   });
   return {
     kind: 'request',

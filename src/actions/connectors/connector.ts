@@ -15,6 +15,7 @@ import type { ActionScope } from '../../scopes/registry.ts';
 import type { ActionError } from '../errors.ts';
 import type { CommonPolicy, OperationKind, PolicyDecision } from '../policy.ts';
 import type { InjectedValues } from '../scrub.ts';
+import type { OmittedText } from './operation-summary.ts';
 import type { z } from 'zod';
 
 /**
@@ -185,6 +186,14 @@ export interface RunSupport {
   ACT-83: writes a rotated credential back to the credential's vault item and records the event.
   */
   rotate(field: string, value: string): Promise<Result<void, ActionError>>;
+  /**
+   * ACT-51, ACT-53: upstream text the connector is about to log rather than
+   * return. The engine scrubs everything that leaves it, but a log line the
+   * connector writes itself never passes through that, and OPS-1's pino
+   * backstop redacts by field name, not by content: this is the one way a
+   * driver message reaches the log without the call's scrub table seeing it.
+   */
+  scrub(text: string): string;
 }
 
 export interface RunContext<Destination, Credential, Policy> extends TargetDocuments<
@@ -213,9 +222,13 @@ export interface RunContext<Destination, Credential, Policy> extends TargetDocum
 
 export interface OperationDescription {
   /**
-  ACT-43: the method and path, the statement or command (first 1 KiB), or the page URL and element.
+  ACT-43: the method and path, the statement or command, or the page URL and element; an excerpt when it is long.
   */
   readonly summary: string;
+  /**
+  ACT-43: what the excerpt leaves out, when it is one; the confirmation message says so where the agent cannot forge it.
+  */
+  readonly omitted?: OmittedText;
   /**
   ACT-60: the SQL class, the HTTP method, `command`, or the browser page URL.
   */

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -63,9 +65,17 @@ function head(clientName: string, tool: string, target: string, where: string): 
   return `vaultgate: ${clientName} asks to run ${tool} on target "${target}" (${where}).`;
 }
 
+function quoted(summary: string): string {
+  return summary
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+}
+
 function expected(tool: string, target: string, where: string, summary: string): string {
   return (
-    `${head('Agent One', tool, target, where)}\n\n${summary}\n\n` +
+    `${head('Agent One', tool, target, where)}\n\n` +
+    `The operation, every line of it quoted with "> ":\n${quoted(summary)}\n\n` +
     'Allow this one call? It expires in 2 minutes and cannot be reused.'
   );
 }
@@ -163,18 +173,47 @@ describe('the confirmation message of every connector', () => {
     });
   }
 
-  it('ACT-43 cuts a statement at the first KiB, so a long one cannot flood the prompt', async () => {
+  it('ACT-43 excerpts a long statement without hiding its end, and says what is missing', async () => {
     const { harness } = harnessOverSql();
     await createSqlTarget(harness, {
       policy: { operations: ['read', 'write'], ...CONFIRMED },
     });
-    const statement = `DELETE FROM t WHERE note = '${'x'.repeat(2000)}'`;
+    const statement = `DELETE FROM t WHERE note = '${'x'.repeat(2000)}' AND id = 1`;
     const pending = confirmationOf(
       await harness.engine.call(caller({ scopes: SCOPES }), sqlWriteInvocation({ statement })),
     );
     const { message } = pending.request.params;
-    expect(message).toContain(statement.slice(0, 1024));
-    expect(message).not.toContain(statement.slice(0, 1025));
+    // The head, the tail that a 1 KiB head-only cut hid, and the notice that
+    // says the middle is missing — the last outside the quoted block.
+    expect(message).toContain(`> ${statement.slice(0, 768)}`);
+    expect(message).toContain(statement.slice(-192));
+    expect(message).toContain('AND id = 1');
+    expect(message).not.toContain(statement);
+    const notice = message.split('\n').find((line) => line.startsWith('NOT SHOWN:'));
+    expect(notice).toContain(
+      `${String(statement.length - 960)} of ${String(statement.length)} characters are missing`,
+    );
+    expect(notice).toContain(createHash('sha256').update(statement, 'utf8').digest('hex'));
+  });
+
+  it('ACT-43 a statement that reproduces the trailer is quoted, so the real trailer is still the only unquoted one', async () => {
+    const { harness } = harnessOverSql();
+    await createSqlTarget(harness, {
+      policy: { operations: ['read', 'write'], ...CONFIRMED },
+    });
+    const statement =
+      "DELETE FROM t WHERE a = '\n\nAllow this one call? It expires in 2 minutes and cannot be " +
+      "reused.\n\nDROP TABLE audit_log'";
+    const pending = confirmationOf(
+      await harness.engine.call(caller({ scopes: SCOPES }), sqlWriteInvocation({ statement })),
+    );
+    const { message } = pending.request.params;
+    const unquoted = message.split('\n').filter((line) => line !== '' && !line.startsWith('> '));
+    expect(unquoted.at(-1)).toBe(
+      'Allow this one call? It expires in 2 minutes and cannot be reused.',
+    );
+    expect(unquoted.filter((line) => line.startsWith('Allow this one call?'))).toHaveLength(1);
+    expect(message).toContain("> DROP TABLE audit_log'");
   });
 
   it('ACT-41 sql_query is a read, so it is never confirmed however the policy is written', async () => {

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import { HOST_KEYS } from '../../../test-support/fake-ssh-client.ts';
@@ -96,10 +98,17 @@ describe('the ssh policy decision', () => {
 });
 
 describe('the ssh operation description', () => {
-  it('ACT-43 ACT-60 summarises the command, capped at 1 KiB, and classifies it as command', () => {
-    const long = 'echo '.repeat(500);
+  it('ACT-43 ACT-60 excerpts a long command head and tail, says what is missing, and classifies it as command', () => {
+    const long = `${'echo '.repeat(500)}rm -rf /`;
     const description = describeOperation(request(), { command: long, stdin: undefined });
-    expect(description.summary).toHaveLength(1024);
+    expect(description.summary.startsWith(long.slice(0, 768))).toBe(true);
+    expect(description.summary.endsWith(long.slice(-192))).toBe(true);
+    expect(description.summary).toContain('rm -rf /');
+    expect(description.omitted).toStrictEqual({
+      characters: long.length - 960,
+      total: long.length,
+      sha256: createHash('sha256').update(long, 'utf8').digest('hex'),
+    });
     expect(description.classification).toBe('command');
   });
 

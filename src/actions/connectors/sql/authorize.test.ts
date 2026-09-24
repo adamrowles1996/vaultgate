@@ -192,13 +192,18 @@ describe('describing a sql operation', () => {
     ).toStrictEqual({ summary: 'DELETE FROM t', classification: 'dml' });
   });
 
-  it('ACT-43 caps the summary at 1 KiB', () => {
-    const statement = `SELECT '${'a'.repeat(4000)}'`;
+  it('ACT-43 excerpts a long statement head and tail rather than hiding its end', () => {
+    const statement = `SELECT '${'a'.repeat(4000)}' FROM audit_log`;
     const described = describeOperation(
       request(SQL_QUERY_TOOL),
       sqlOperationSchema.parse({ statement }),
     );
-    expect(described.summary).toHaveLength(1024);
+    expect(described.summary).toHaveLength(768 + 3 + 192);
+    expect(described.summary.endsWith('FROM audit_log')).toBe(true);
+    expect(described.omitted).toMatchObject({
+      characters: statement.length - 960,
+      total: statement.length,
+    });
   });
 
   it('ACT-60 a statement with no single class is audited as other', () => {

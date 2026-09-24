@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import { caller, errorOf, resultOf, storedCalls } from '../../../test-support/actions-fixtures.ts';
@@ -7,6 +9,7 @@ import {
   createSqlTarget,
   harnessOverSql,
   sqlInvocation,
+  sqlWriteInvocation,
 } from '../../../test-support/sql-connector.ts';
 import { CANARY } from '../../../test-support/vault-fixture.ts';
 import { ActionError } from '../../errors.ts';
@@ -143,6 +146,41 @@ describe('the sql connector through the engine', () => {
     await harness.clock.advance(2000);
     expect(errorOf(await pending).code).toBe('timeout');
     expect(storedCalls(harness.database)).toMatchObject([{ outcome: 'error:timeout' }]);
+  });
+
+  it('ACT-53 a driver message quoting the credential is scrubbed on the one path that logs it, the failed session close', async () => {
+    const { harness } = harnessOverSql({
+      closeError: new Error(`FATAL: password authentication failed for "${CANARY.password}"`),
+    });
+    await createSqlTarget(harness);
+    resultOf(await harness.engine.call(caller({ scopes: ['actions:sql.read'] }), sqlInvocation()));
+    const logged = harness
+      .logged()
+      .filter((line) => line['msg'] === 'the sql session did not close cleanly');
+    expect(logged).toHaveLength(1);
+    expect(logged[0]?.['reason']).toBe(
+      'FATAL: password authentication failed for "[redacted:password]"',
+    );
+    expect(surfaces(harness, [])).not.toContain(CANARY.password);
+  });
+
+  it('ACT-60 ACT-63 a statement beyond the arguments cap is stored as an excerpt that says so and carries the digest of the whole', async () => {
+    const statement = `DELETE FROM t WHERE note = '${'x'.repeat(5000)}' AND id = 1`;
+    const { harness } = harnessOverSql();
+    await createSqlTarget(harness, { policy: { operations: ['read', 'write'] } });
+    resultOf(
+      await harness.engine.call(
+        caller({ scopes: ['actions:sql.write'] }),
+        sqlWriteInvocation({ statement }),
+      ),
+    );
+    const [stored] = storedCalls(harness.database);
+    expect(stored?.argumentsTruncated).toBe(true);
+    const whole = JSON.stringify({ target: 'warehouse', statement });
+    expect(stored?.arguments).toContain(
+      `[vaultgate: 4096 of ${String(Buffer.byteLength(whole))} bytes shown; sha256 of the whole is ` +
+        `${createHash('sha256').update(whole, 'utf8').digest('hex')}]`,
+    );
   });
 
   it('ACT-19 lists a sql target with its engine and the read operation only', async () => {
