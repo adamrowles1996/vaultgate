@@ -24,6 +24,16 @@ Whitespace, a backslash (which a URL parser turns into a slash), a fragment or a
 */
 const PATH_REFUSED = /[\s\\#\p{Cc}]/u;
 
+/**
+ * An encoded separator. ACT-35 normalises a path by decoding the unreserved
+ * characters only, so `%2F` is still an escape when the dot segments are
+ * removed and when a `*` is matched — neither treats it as a boundary — while
+ * a destination that decodes it before routing reads it as one. The pattern
+ * would then be matched against a shorter path than the server resolves, so
+ * the escape is refused rather than normalised.
+ */
+const ENCODED_SEPARATOR = /%(?:2f|5c)/iu;
+
 function pathProblem(path: string): string | undefined {
   if (!path.startsWith('/')) {
     return 'must start with /';
@@ -36,6 +46,9 @@ function pathProblem(path: string): string | undefined {
   }
   const queryAt = path.indexOf('?');
   const pathPart = queryAt === -1 ? path : path.slice(0, queryAt);
+  if (ENCODED_SEPARATOR.test(pathPart)) {
+    return 'must not percent-encode a slash or a backslash (%2F, %5C) before the query string';
+  }
   if (pathPart.split('/').includes('..')) {
     return 'must not contain a .. segment';
   }
@@ -62,7 +75,8 @@ const pathSchema = z
   })
   .describe(
     'The request path and optional query string, starting with /, appended to the target base URL. ' +
-      'No scheme, host, fragment, .. segment or empty segment (//); at most 2 KiB.',
+      'No scheme, host, fragment, .. segment, empty segment (//) or percent-encoded slash ' +
+      '(%2F, %5C) in the path; at most 2 KiB.',
   );
 
 const headersSchema = z

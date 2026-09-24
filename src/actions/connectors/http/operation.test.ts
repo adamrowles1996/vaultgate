@@ -49,6 +49,21 @@ describe('http_request arguments', () => {
     expect(problem({ method: 'GET', path: '/a/..b/c' })).toBeUndefined();
   });
 
+  it('ACT-20 ACT-35 refuses a percent-encoded slash or backslash in the path, which normalisation would not treat as a separator', () => {
+    const encoded =
+      'must not percent-encode a slash or a backslash (%2F, %5C) before the query string';
+    for (const path of [
+      '/orders/..%2F..%2Fadmin%2Fusers',
+      '/orders/%2f',
+      '/orders/%5C..',
+      '/orders/%5c',
+    ]) {
+      expect(problem({ method: 'GET', path })).toBe(encoded);
+    }
+    expect(problem({ method: 'GET', path: '/orders?next=%2Fadmin' })).toBeUndefined();
+    expect(problem({ method: 'GET', path: '/orders/%20a' })).toBeUndefined();
+  });
+
   it('ACT-20 a protocol-relative path cannot change the host: an empty segment anywhere in the path is refused, and a backslash stays refused', () => {
     for (const path of ['//evil.example/x', '/a//b', '/a//', '//']) {
       expect(problem({ method: 'GET', path })).toBe('must not contain an empty segment (//)');
