@@ -83,6 +83,8 @@ export class FakeSecurity {
   #toClient = 0;
 
   constructor(exported: Buffer, isKeyExchange: boolean) {
+    // The destination's key derivation is MD5 for the same reason the
+    // connector's is: MS-NLMP 3.4.5.2 says so.
     const sub = (purpose: string): Buffer =>
       createHash('md5')
         .update(Buffer.concat([exported, Buffer.from(`${purpose}\u{0}`, 'ascii')]))

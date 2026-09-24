@@ -32,8 +32,12 @@ export interface SealedMessage {
 }
 
 /**
-MS-NLMP 3.4.5.2, 3.4.5.3: the constants are part of the key, trailing NUL included.
-*/
+ * MS-NLMP 3.4.5.2, 3.4.5.3: the constants are part of the key, trailing NUL
+ * included. The digest is MD5 because the specification says MD5; CodeQL is
+ * right that it is weak, and it is not what protects the session — the key
+ * being digested is the one the exchange derived per connection, and the
+ * alternative is not speaking the protocol (ACT-89).
+ */
 function subKey(exportedSessionKey: Buffer, purpose: string): Buffer {
   return createHash('md5')
     .update(Buffer.concat([exportedSessionKey, Buffer.from(`${purpose}\u{0}`, 'ascii')]))

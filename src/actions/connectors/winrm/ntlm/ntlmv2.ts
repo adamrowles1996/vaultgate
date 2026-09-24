@@ -61,6 +61,14 @@ const FILETIME_EPOCH_OFFSET_MS = 11_644_473_600_000n;
 const FILETIME_PER_MS = 10_000n;
 const FILETIME_BYTES = 8;
 
+/**
+ * HMAC-MD5, which is what MS-NLMP builds every value of the exchange with.
+ * CodeQL reports this as a weak algorithm (`js/weak-cryptographic-algorithm`)
+ * and it is right about MD5; it is here because the protocol is defined in
+ * terms of it and a client that computes anything else cannot speak NTLM.
+ * See the header of `src/crypto/md4.ts` and ACT-89 for what actually protects
+ * the exchange, which is not this digest's collision resistance.
+ */
 export function hmacMd5(key: Buffer, data: Buffer): Buffer {
   return createHmac('md5', key).update(data).digest();
 }
