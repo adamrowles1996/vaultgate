@@ -22,6 +22,7 @@ export type PolicyReason =
   | 'statement_class'
   | 'statement_pattern'
   | 'command'
+  | 'command_metacharacter'
   | 'command_size'
   | 'origin'
   | 'element';
