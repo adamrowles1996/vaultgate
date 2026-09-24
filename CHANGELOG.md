@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.12] - 2026-09-24
+
 ### Added
 
 - **`winrm` targets speak NTLMv2 over `Negotiate`, and it is now the default** (spec 14 §14.6,
@@ -723,7 +725,8 @@ Release candidates 0.1.0-rc.1 to 0.1.0-rc.5 are in
 [`docs/changelog-archive.md`](docs/changelog-archive.md). They are kept verbatim; this file holds
 the current release and the ones after it, so it stays inside the repository's 64 KiB file gate.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.11...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.12...HEAD
+[0.1.0-rc.12]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.11...v0.1.0-rc.12
 [0.1.0-rc.11]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.10...v0.1.0-rc.11
 [0.1.0-rc.10]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.9...v0.1.0-rc.10
 [0.1.0-rc.9]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.8...v0.1.0-rc.9
