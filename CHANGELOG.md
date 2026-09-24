@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- ADR 0008 and spec 14.8 specify a seventh actions connector, `code`, planned for M16. It lets
+  an agent search and read a private GitHub repository through `code_search`, `code_find_related`
+  and `code_read` under a new `actions:code` scope, without holding the repository token.
+  vaultgate resolves the ref and streams that commit's archive to a new optional sidecar, which
+  builds a `semble` index in its own container with no credential and, in Compose, no route out.
+  Spec 13 and 13a gain the scope, the tools, the configuration, the error codes, migration `005`
+  and the amended non-goals. The threat model gains the snapshot as an asset and T38 to T44.
+  `PLAN.md` gains M16.
+
 ### Changed
 
 - The documentation leads with what vaultgate is now for: letting hosted agents use the

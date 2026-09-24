@@ -14,7 +14,8 @@
 > default of ACT-49 and the proof behind ACT-48's rewritten second half: the in-band fallback for
 > the 2025 wire is unimplementable under MCP-1, so a client on that wire is refused a confirmed
 > target with `confirmation_unavailable` and the clause now says why. Not yet: the `browser`
-> connector of M15 (no tool is listed until its runtime lands). The per-connector
+> connector of M15 and the `code` connector of M16 (ADR 0008; no tool is listed until a
+> connector's runtime lands). The per-connector
 > contracts are in [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence
 > continues there.
 
@@ -55,7 +56,7 @@ Design rules, in priority order:
 | Term           | Meaning                                                                                                                                         |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | Target         | An operator-defined destination plus credential mapping, policy and grants, identified to agents by `name`.                                     |
-| Connector      | The protocol implementation behind a target: `http`, `sql`, `ssh`, `winrm` or `browser` (section 14).                                           |
+| Connector      | The protocol implementation behind a target: `http`, `sql`, `ssh`, `winrm`, `browser` or `code` (section 14).                                   |
 | Operation      | What one tool call asks a target to do: an HTTP request, a statement, a command, a browser action.                                              |
 | Injected value | A secret fetched from the vault for one call (a password, a key, a TOTP code, a token vaultgate obtained with one), never seen by the agent.    |
 | Grant          | The operator's decision that one OAuth client may use one target.                                                                               |
@@ -72,19 +73,19 @@ Design rules, in priority order:
   document is validated by a zod schema on write and again on read, and a row that fails
   validation is reported on the account page and refuses every call with `target_invalid`.
 
-| Field                                    | Type                                             | Rules                                                                                                                                                       |
-| ---------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                                     | UUID                                             | Internal; never shown to agents.                                                                                                                            |
-| `name`                                   | string                                           | `^[a-z0-9][a-z0-9-]{0,62}$`, unique per deployment, stable API for agents. Renaming is a new target.                                                        |
-| `description`                            | string ≤ 200 chars                               | Operator prose shown to agents by `actions_list_targets`; written for an LLM audience (what the destination is, what to use it for).                        |
-| `connector`                              | `http` \| `sql` \| `ssh` \| `winrm` \| `browser` | Fixed at creation.                                                                                                                                          |
-| `destination`                            | JSON                                             | Connector-specific (section 14). Always a host, URL or origin the operator typed; never derived from an agent argument.                                     |
-| `internal`                               | boolean, default `false`                         | When `true` the destination may resolve to a private-range address (13.10). Loopback and link-local are refused whatever this says.                         |
-| `credential`                             | JSON `{ item_id, mapping }`                      | `item_id` is a vault item id; `mapping` names which secret fields feed which injection points (section 14). The row holds field _names_, never values.      |
-| `policy`                                 | JSON                                             | Connector-specific allowlists and limits (13.7) plus the common fields `timeout_ms`, `max_output_bytes`, `rate_limit_per_minute`, `confirm_writes`.         |
-| `enabled`                                | boolean, default `true`                          | A disabled target is listed to no agent and refuses every call with `target_disabled`.                                                                      |
-| `revision`                               | integer                                          | Incremented on every change; recorded on every call's audit row, used as the cache key for adapter tokens (14.3) and invalidates open confirmations (13.8). |
-| `created_at`, `updated_at`, `updated_by` | ms epoch, ms epoch, operator id                  | Conventions of section 07.                                                                                                                                  |
+| Field                                    | Type                                                       | Rules                                                                                                                                                       |
+| ---------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                     | UUID                                                       | Internal; never shown to agents.                                                                                                                            |
+| `name`                                   | string                                                     | `^[a-z0-9][a-z0-9-]{0,62}$`, unique per deployment, stable API for agents. Renaming is a new target.                                                        |
+| `description`                            | string ≤ 200 chars                                         | Operator prose shown to agents by `actions_list_targets`; written for an LLM audience (what the destination is, what to use it for).                        |
+| `connector`                              | `http` \| `sql` \| `ssh` \| `winrm` \| `browser` \| `code` | Fixed at creation.                                                                                                                                          |
+| `destination`                            | JSON                                                       | Connector-specific (section 14). Always a host, URL or origin the operator typed; never derived from an agent argument.                                     |
+| `internal`                               | boolean, default `false`                                   | When `true` the destination may resolve to a private-range address (13.10). Loopback and link-local are refused whatever this says.                         |
+| `credential`                             | JSON `{ item_id, mapping }`                                | `item_id` is a vault item id; `mapping` names which secret fields feed which injection points (section 14). The row holds field _names_, never values.      |
+| `policy`                                 | JSON                                                       | Connector-specific allowlists and limits (13.7) plus the common fields `timeout_ms`, `max_output_bytes`, `rate_limit_per_minute`, `confirm_writes`.         |
+| `enabled`                                | boolean, default `true`                                    | A disabled target is listed to no agent and refuses every call with `target_disabled`.                                                                      |
+| `revision`                               | integer                                                    | Incremented on every change; recorded on every call's audit row, used as the cache key for adapter tokens (14.3) and invalidates open confirmations (13.8). |
+| `created_at`, `updated_at`, `updated_by` | ms epoch, ms epoch, operator id                            | Conventions of section 07.                                                                                                                                  |
 
 - **ACT-2** A target's `destination` and `credential.item_id` MUST refer to things the operator
   typed or chose on the account page. No tool creates, edits or deletes a target; there is no
@@ -135,16 +136,17 @@ Design rules, in priority order:
 
 ## 13.5 Scopes and consent
 
-| Scope               | Grants                                                                 | Consent text                                                                                                |
-| ------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `actions:http`      | `http_request` against granted `http` targets                          | Send HTTP requests to web APIs the operator has configured, signed with credentials from the vault.         |
-| `actions:sql.read`  | `sql_query` against granted `sql` targets                              | Run read-only queries against databases the operator has configured.                                        |
-| `actions:sql.write` | `sql_execute` against granted `sql` targets whose policy allows writes | Change data in databases the operator has configured.                                                       |
-| `actions:ssh`       | `ssh_run` against granted `ssh` targets                                | Run commands on servers the operator has configured, over SSH.                                              |
-| `actions:winrm`     | `winrm_run` against granted `winrm` targets                            | Run commands on Windows hosts the operator has configured, over WinRM.                                      |
-| `actions:browser`   | The `browser_*` tools against granted `browser` targets                | Sign in to websites the operator has configured and act there as you, within the pages the operator allows. |
+| Scope               | Grants                                                                            | Consent text                                                                                                |
+| ------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `actions:http`      | `http_request` against granted `http` targets                                     | Send HTTP requests to web APIs the operator has configured, signed with credentials from the vault.         |
+| `actions:sql.read`  | `sql_query` against granted `sql` targets                                         | Run read-only queries against databases the operator has configured.                                        |
+| `actions:sql.write` | `sql_execute` against granted `sql` targets whose policy allows writes            | Change data in databases the operator has configured.                                                       |
+| `actions:ssh`       | `ssh_run` against granted `ssh` targets                                           | Run commands on servers the operator has configured, over SSH.                                              |
+| `actions:winrm`     | `winrm_run` against granted `winrm` targets                                       | Run commands on Windows hosts the operator has configured, over WinRM.                                      |
+| `actions:browser`   | The `browser_*` tools against granted `browser` targets                           | Sign in to websites the operator has configured and act there as you, within the pages the operator allows. |
+| `actions:code`      | `code_search`, `code_find_related` and `code_read` against granted `code` targets | Search and read code in repositories the operator has configured.                                           |
 
-- **ACT-12** The six scopes join the registry in `src/scopes/registry.ts` (one registry). None
+- **ACT-12** The seven scopes join the registry in `src/scopes/registry.ts` (one registry). None
   implies another, and none implies or is implied by a `vault:*` scope. `actions_list_targets`
   needs at least one `actions:*` scope and lists only the targets that scope set can call. Its
   OAUTH-33 challenge names every enabled `actions:*` scope as one any-of set
@@ -155,6 +157,8 @@ any of …"`), so a client learns in one challenge every scope that would satisf
   adds one plain-language line above the group: "These let the agent act on other systems with
   your credentials. It never sees the credentials, but it can do what the targets allow."
   `actions:browser` adds: "A signed-in browser can do anything you can do on that site."
+  `actions:code` adds: "The agent can read every file of those repositories that the operator
+  has not excluded."
 - **ACT-14** The scopes are absent from `scopes_supported` (OAUTH-1, OAUTH-2) and from
   `enabledScopes` unless `VAULTGATE_ENABLE_ACTIONS=true`; a connector's scope is absent unless
   that connector is also enabled. As with `vault:write`, a token that holds a scope the deployment
@@ -201,6 +205,7 @@ any of …"`), so a client learns in one challenge every scope that would satisf
 | `ssh_run`              | `actions:ssh`       | `false`        | `true`            | `false`          | `true`          |
 | `winrm_run`            | `actions:winrm`     | `false`        | `true`            | `false`          | `true`          |
 | `browser_*` (all six)  | `actions:browser`   | `false`        | `true`            | `false`          | `true`          |
+| `code_*` (all three)   | `actions:code`      | `true`         | `false`           | `true`           | `false`         |
 
 `http_request` carries write annotations although a `GET` changes nothing: annotations are per
 tool, the method is an argument, and a client that prompts before every `http_request` is the
@@ -340,6 +345,14 @@ before anything else (ACT-16) and a session opened by another client answers `un
   `true`. Before capture the engine masks every password input and every DOM text node or input
   value containing an injected value (14.7). `browser_close(session_id)` closes the context and
   returns `{ closed: true }`; closing an unknown or expired session is `unknown_session`.
+
+### 13.6.7 `code_search`, `code_find_related` and `code_read`
+
+The three tools of the `code` connector (ADR 0008) search and read the snapshot of a repository
+the operator configured. They are read-only by construction: no argument reaches the forge, and
+the snapshot is fetched and indexed by vaultgate and the sidecar, never at the agent's direction.
+Their arguments, results, path rules and errors are ACT-110 to ACT-112 in 14.8; they carry
+`openWorldHint: false` because every answer comes from a snapshot rather than from the forge.
 
 ## 13.7 Policy semantics
 

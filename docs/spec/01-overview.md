@@ -64,9 +64,10 @@ loopback-only `bw serve` process.
    interface until the operator sets a public URL, and `bw serve` never
    listens anywhere but loopback.
 6. **Boring, small, observable.** One process, one SQLite file, structured
-   logs, health probes, an audit trail. No queues. The one sidecar is the
-   optional `browser` connector's Chromium (ACT-91), which runs in its own
-   container so the core image never carries it.
+   logs, health probes, an audit trail. No queues. The sidecars are optional
+   and run in their own containers so the core image never carries them: the
+   `browser` connector's Chromium (ACT-91) and the `code` connector's index
+   (ACT-113).
 7. **Spotless is a feature.** 100% test coverage, type-checked lint,
    size-capped files, pinned supply chain, conventional history.
 

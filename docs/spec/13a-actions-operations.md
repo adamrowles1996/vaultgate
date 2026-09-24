@@ -34,19 +34,20 @@
 
 ## 13.11 Rate limits and caps
 
-| Limit                       | Default                                           | Key     | Beyond it                                 |
-| --------------------------- | ------------------------------------------------- | ------- | ----------------------------------------- |
-| Calls per target            | `policy.rate_limit_per_minute`, 60                | target  | `rate_limited` with `retry_after_s`       |
-| Calls per client            | 120 / min across all targets                      | client  | `rate_limited`                            |
-| In-flight calls per target  | 4                                                 | target  | `rate_limited`                            |
-| In-flight calls per client  | 8                                                 | client  | `rate_limited`                            |
-| Timeout per call            | `policy.timeout_ms`, 30 000; ceiling 300 000      | call    | `timeout`; the connector cancels the work |
-| Output per call             | `policy.max_output_bytes`, 256 KiB; ceiling 1 MiB | call    | `truncated: true`                         |
-| Request body (`http`)       | `policy.max_body_bytes`, 256 KiB; ceiling 4 MiB   | call    | `policy_denied` (`body_size`)             |
-| Rows (`sql_query`)          | `policy.max_rows`, 500; ceiling 10 000            | call    | `truncated: true`                         |
-| Browser sessions per client | `policy.max_sessions`, 1; ceiling 4               | client  | `session_limit`                           |
-| Browser session lifetime    | `policy.session_ttl_s`, 900 idle; 3 600 absolute  | session | `session_expired`                         |
-| Confirmations pending       | 2 minutes each                                    | state   | `confirmation_expired`                    |
+| Limit                       | Default                                                              | Key     | Beyond it                                          |
+| --------------------------- | -------------------------------------------------------------------- | ------- | -------------------------------------------------- |
+| Calls per target            | `policy.rate_limit_per_minute`, 60                                   | target  | `rate_limited` with `retry_after_s`                |
+| Calls per client            | 120 / min across all targets                                         | client  | `rate_limited`                                     |
+| In-flight calls per target  | 4                                                                    | target  | `rate_limited`                                     |
+| In-flight calls per client  | 8                                                                    | client  | `rate_limited`                                     |
+| Timeout per call            | `policy.timeout_ms`, 30 000; ceiling 300 000                         | call    | `timeout`; the connector cancels the work          |
+| Output per call             | `policy.max_output_bytes`, 256 KiB; ceiling 1 MiB                    | call    | `truncated: true`                                  |
+| Request body (`http`)       | `policy.max_body_bytes`, 256 KiB; ceiling 4 MiB                      | call    | `policy_denied` (`body_size`)                      |
+| Rows (`sql_query`)          | `policy.max_rows`, 500; ceiling 10 000                               | call    | `truncated: true`                                  |
+| Browser sessions per client | `policy.max_sessions`, 1; ceiling 4                                  | client  | `session_limit`                                    |
+| Browser session lifetime    | `policy.session_ttl_s`, 900 idle; 3 600 absolute                     | session | `session_expired`                                  |
+| Confirmations pending       | 2 minutes each                                                       | state   | `confirmation_expired`                             |
+| Index builds (`code`)       | 1 in flight per target; `policy.build_timeout_s`, 600; ceiling 3 600 | target  | A second trigger joins the running build (ACT-108) |
 
 - **ACT-59** Limits are the in-memory token buckets of OPS-6 (single replica, 10 000 keys), sit
   inside the per-token limit of MCP-5, and are applied before confirmation so an agent cannot
@@ -89,7 +90,10 @@
 
 ## 13.13 Storage
 
-Migration `004-actions` adds four tables (conventions of 07.1):
+Migration `004-actions` adds four tables (conventions of 07.1). Migration `005-code-connector`
+(M16, ADR 0008) rebuilds `action_targets` with the same columns to widen its `connector` `CHECK`
+to admit `code`, because SQLite cannot alter a `CHECK` in place; no column is added, and nothing
+about a repository, snapshot or index is stored in vaultgate's database:
 
 | Table             | Columns                                                                                                                                                                                                                                                                                                                                                                    |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -121,15 +125,18 @@ Migration `004-actions` adds four tables (conventions of 07.1):
 | `VAULTGATE_ACTIONS_ENABLE_WINRM`      | `false` | Enables the `winrm` connector and `actions:winrm`.                                                                                     |
 | `VAULTGATE_ACTIONS_ENABLE_BROWSER`    | `false` | Enables the `browser` connector and `actions:browser`. Requires `VAULTGATE_ACTIONS_BROWSER_CDP_URL`.                                   |
 | `VAULTGATE_ACTIONS_BROWSER_CDP_URL`   |         | `ws://` or `wss://` URL of the Chromium sidecar's DevTools endpoint (14.7). Must not be a public address.                              |
+| `VAULTGATE_ACTIONS_ENABLE_CODE`       | `false` | Enables the `code` connector and `actions:code` (14.8). Requires `VAULTGATE_ACTIONS_CODE_URL`.                                         |
+| `VAULTGATE_ACTIONS_CODE_URL`          |         | `http://` URL of the code sidecar (ACT-113, ACT-114). Must not be a public address.                                                    |
 | `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` | `false` | Allows `ssh`/`winrm` targets to be saved with `any_command: true` (ACT-88). Turning it off later makes such targets refuse every call. |
 
 - **ACT-67** The connector switches are meaningful only with the master switch on; a connector
   switch without the master is a start-up warning. A disabled connector keeps its targets in the
   store, hides them from agents, and answers `connector_disabled` to a call that names one by
   accident (after the grant check, ACT-16).
-- **ACT-68** The start-up configuration summary (CFG-3) lists the eight variables; `/readyz` does
+- **ACT-68** The start-up configuration summary (CFG-3) lists the ten variables; `/readyz` does
   not mention the layer (OPS-4), except that a signed-in operator sees `browser.ready` when the
-  connector is enabled (whether the sidecar answered its last probe). Section 08's reference table
+  connector is enabled (whether the sidecar answered its last probe), and `code.ready` likewise for
+  the code sidecar. Section 08's reference table
   gains the rows when M9 lands.
 
 ## 13.15 Architecture and dependencies
@@ -236,6 +243,10 @@ src/actions/
 | `unknown_session`            | No open session of that id for this client (ACT-16).                                                                                                                                                                                                                                                |
 | `session_expired`            | The session passed its idle or absolute TTL, or was closed by a revocation path (ACT-96).                                                                                                                                                                                                           |
 | `session_limit`              | The client already holds `max_sessions` sessions on this target (ACT-96).                                                                                                                                                                                                                           |
+| `index_unavailable`          | The code sidecar did not answer on `VAULTGATE_ACTIONS_CODE_URL` (ACT-113).                                                                                                                                                                                                                          |
+| `index_not_ready`            | The `code` target has no index yet; `detail.state` is `building`, `failed` or `absent` (ACT-112).                                                                                                                                                                                                   |
+| `path_not_found`             | The path is not a regular file in the target's current snapshot, including an excluded file (ACT-111).                                                                                                                                                                                              |
+| `not_text`                   | `code_read` of a file that is not text (ACT-111).                                                                                                                                                                                                                                                   |
 | `element_not_found`          | The `ref` is not in the current page (ACT-32).                                                                                                                                                                                                                                                      |
 
 - **ACT-74** Every code has one fixed `message`; `detail` is the only variable part, is scrubbed
@@ -245,9 +256,11 @@ src/actions/
 ## 13.17 Non-goals
 
 - No file transfer or file access tool (no SFTP, no `scp`, no download through the browser, no
-  reading a path on the remote host other than through a command the allowlist admits).
+  reading a path on the remote host other than through a command the allowlist admits). The one
+  exception is `code_read` (ADR 0008), which reads only from the snapshot of a repository the
+  operator configured, resolved inside that snapshot (ACT-111).
 - No process execution anywhere except on the remote host of an `ssh` or `winrm` target and
-  inside the browser sidecar; nothing runs on the vaultgate host (ARCH-2).
+  inside the browser and code sidecars; nothing runs on the vaultgate host (ARCH-2).
 - No multi-hop: a target is one destination; a command that reaches a further host does so
   under that host's own controls, and the policy of the first target is the only one vaultgate
   applies. Jump hosts, tunnels and port forwarding are not offered.
@@ -258,8 +271,10 @@ src/actions/
 - No agent-created targets, no agent-editable policy, no "temporary" grants from the agent side.
 - No credential types beyond what `get_secret` can name (a vault field), and no storing of a
   credential in `action_targets`.
-- No connectors beyond the six (SMTP, S3, Kubernetes and the like are declined until each has a
-  policy model as tight as these; a generic "TCP" connector is declined outright).
+- No connectors beyond the seven (SMTP, S3, Kubernetes and the like are declined until each has
+  a policy model as tight as these; a generic "TCP" connector is declined outright). `code`
+  joined the original six through ADR 0008 as a read-only connector with an operator-fixed
+  destination.
 
 ## 13.18 Verification
 
