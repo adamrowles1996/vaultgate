@@ -1,8 +1,8 @@
 /**
- * The account page's view of the vault (VAULT-18, ID-25) over the supervisor
- * and the stored settings: status to render, and "save then switch" with the
- * stored row rolled back when the switch fails, so what is stored is always
- * what runs.
+ * The Vault page's view of the vault (VAULT-18, VAULT-19, ID-25) over the
+ * supervisor and the stored settings: status to render, "save then switch"
+ * with the stored row rolled back when the switch fails, so what is stored is
+ * always what runs, and "sync now".
  */
 import { fail, ok, type Result } from '../result.ts';
 import { VaultError } from '../vault/client.ts';
@@ -69,5 +69,6 @@ export function createVaultConnection(dependencies: VaultConnectionDependencies)
       }
       return switched;
     },
+    sync: () => supervisor.syncNow(),
   };
 }

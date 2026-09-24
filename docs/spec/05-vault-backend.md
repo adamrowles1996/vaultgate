@@ -94,6 +94,12 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
   failed sync; a server-side sync can complete even when the reply is malformed. A protocol error
   from a sync is never treated as a failed start or restart (VAULT-6): only the child's exit is,
   and a sync that fails because the child exited is not counted a second time.
+- **VAULT-19** The operator can ask for a sync at once (ID-25's **Sync now**). It is the same
+  `POST /sync` as VAULT-9, with VAULT-17's one retry, logged the same way with `kind: manual`, and
+  it updates the same record. One sync runs at a time: a request while the initial, a scheduled or
+  another requested sync is running joins that sync and answers with its outcome. It does not move
+  the schedule. While the backend is not ready (unconfigured, starting, switching or stopping) the
+  request is refused with `vault_unavailable` and nothing is sent.
 
 ## 5.3 Vault client
 

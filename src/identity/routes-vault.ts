@@ -8,10 +8,10 @@ import {
   type IdentityEnvironment,
   readForm,
 } from './browser.ts';
-import { auditEvent, requireReauthenticated } from './routes-account.ts';
+import { VAULT_SYNC_PATH, type VaultFormValues } from './pages/vault-connection.ts';
+import { auditEvent, requireAuthenticated, requireReauthenticated } from './routes-account.ts';
 import { vaultResponse } from './routes-console.ts';
 
-import type { VaultFormValues } from './pages/vault-connection.ts';
 import type { IdentityServices } from './services.ts';
 import type { VaultConnectionInput } from '../vault/connection.ts';
 import type { Hono } from 'hono';
@@ -107,9 +107,38 @@ async function updateVault(context: IdentityContext, services: IdentityServices)
   return context.redirect('/account/vault?notice=vault-updated', 303);
 }
 
+/**
+ * `POST /account/vault/sync` (ID-25, VAULT-19): the ID-18 checks and no
+ * password confirmation, since a sync changes no setting and shows nothing
+ * new; the outcome comes back to the Vault page as a notice, or as the
+ * backend's fixed reason with `503`.
+ */
+async function syncVault(context: IdentityContext, services: IdentityServices) {
+  const form = await readForm(context);
+  const authenticated = requireAuthenticated(context, services, form);
+  if (authenticated instanceof Response) {
+    return authenticated;
+  }
+  const outcome = await services.vaultConnection.sync();
+  services.audit.record({
+    ...auditEvent(context, services, 'vault.sync_requested', authenticated.operator.id),
+    outcome: outcome.ok ? 'ok' : 'failure',
+    ...(!outcome.ok && { details: { reason: outcome.error.code } }),
+  });
+  if (!outcome.ok) {
+    const options = {
+      error: `The vault did not sync: ${outcome.error.message}.`,
+      status: UNAVAILABLE_STATUS,
+    } as const;
+    return vaultResponse(context, authenticated.session, services, options);
+  }
+  return context.redirect('/account/vault?notice=vault-synced', 303);
+}
+
 export function registerVaultRoutes(
   app: Hono<IdentityEnvironment>,
   services: IdentityServices,
 ): void {
   app.post('/account/vault', (context) => updateVault(context, services));
+  app.post(VAULT_SYNC_PATH, (context) => syncVault(context, services));
 }

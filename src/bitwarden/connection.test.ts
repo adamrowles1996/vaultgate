@@ -171,3 +171,17 @@ describe('createVaultConnection configure', () => {
     await supervisor.stop();
   });
 });
+
+describe('createVaultConnection sync', () => {
+  it('VAULT-19 ID-25 syncs through the supervisor and moves the last sync time', async () => {
+    const { harness, connection, supervisor } = wire(new SupervisorHarness());
+    await harness.until(() => supervisor.isReady());
+    await harness.clock.advance(45_000);
+    unwrapOk(await connection.sync());
+    expect(harness.fake.requestsTo('/sync')).toHaveLength(2);
+    const status = await connection.status();
+    expect(status.lastSyncAt).toBe('2026-09-22T12:00:45.000Z');
+    await supervisor.stop();
+    expect(unwrapFail(await connection.sync()).code).toBe('vault_unavailable');
+  });
+});
