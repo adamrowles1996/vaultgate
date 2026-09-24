@@ -54,7 +54,7 @@
       "type": "securestring",
       "defaultValue": "",
       "metadata": {
-        "description": "Bitwarden master password (stored only in Key Vault). Optional: leave all three Bitwarden values empty to connect the vault from the account page after the first sign-in."
+        "description": "Bitwarden master password (stored only in Key Vault). Optional: leave all three Bitwarden values empty to connect the vault on the console's Vault page after the first sign-in."
       }
     },
     "bwClientId": {

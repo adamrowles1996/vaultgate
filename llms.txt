@@ -18,7 +18,7 @@
 ## What it does
 
 - Runs as one process on your host behind TLS; the Bitwarden master password and API key live
-  only in that process (and encrypted under your secret key once saved from the account page).
+  only in that process (and encrypted under your secret key once saved from the console's Vault page).
 - Agents get short-lived, scoped, revocable OAuth 2.1 tokens (PKCE; RFC 9728, 8414, 8707, 7591,
   7009, 9207; Client ID Metadata Documents) after the operator logs in (password + TOTP) and
   approves the scopes on a consent page: vault:read, vault:reveal, vault:generate, vault:write

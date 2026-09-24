@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- ID-25: the installer's closing message, the two environment examples, `llms.txt` and the Azure
+  template's field descriptions still sent operators to "the account page" to connect the vault;
+  since 0.1.0-rc.15 that is the console's Vault page, and they now say so.
+
 ## [0.1.0-rc.15] - 2026-09-24
 
 ### Added

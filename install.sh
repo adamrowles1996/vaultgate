@@ -226,7 +226,7 @@ END
     cat <<END
     The service is running. If this is a first install, the bootstrap URL is in:
       journalctl -u vaultgate -n 50
-    Connect the vault from the account page (Vault connection) once signed in.
+    Connect the vault on the console's Vault page once signed in.
     Reverse proxy snippets: ${INSTALL_ROOT}/current/deploy/proxy/ (docs/guides/reverse-proxy.md).
 END
   fi
