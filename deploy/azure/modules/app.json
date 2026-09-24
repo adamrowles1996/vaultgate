@@ -64,7 +64,7 @@
     "hasBitwardenCredentials": {
       "type": "bool",
       "metadata": {
-        "description": "Whether the Bitwarden Key Vault secrets exist. Their references and environment variables are added only then, so the app can start unconfigured and be connected from the account page."
+        "description": "Whether the Bitwarden Key Vault secrets exist. Their references and environment variables are added only then, so the app can start unconfigured and be connected from the console's Vault page."
       }
     }
   },
