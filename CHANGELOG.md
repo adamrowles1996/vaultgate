@@ -17,6 +17,11 @@ All notable changes to this project are documented here. The format follows
   actions layer as the primary path and the vault tools as the audited fallback. Principle 6 now
   names the optional `browser` sidecar (ACT-91) that it previously ruled out. No behaviour
   changes.
+- MCP-16: the instructions an agent receives when it connects now depend on its token. A token
+  that holds an `actions:*` scope, on a deployment with the actions layer enabled, is told to
+  list its targets and act through them, and to prefer an action to `get_secret` so that a
+  credential it only needs to use never enters the conversation. Every other token gets the
+  previous text unchanged.
 
 ## [0.1.0-rc.12] - 2026-09-24
 

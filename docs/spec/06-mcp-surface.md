@@ -43,6 +43,12 @@ join this surface only on a deployment that enables the layer, for tokens with a
 - **MCP-7** `tools/list` returns only the tools the token's scopes allow, so an agent is never
   shown a tool it cannot call. Calling a tool outside scope anyway returns the OAUTH-33 challenge.
 - **MCP-8** There are no MCP resources or prompts in v1; the capability advertisement says so.
+- **MCP-16** The handshake's `instructions` depend on the token. A token that holds an
+  `actions:*` scope on a deployment with the actions layer enabled is told to call
+  `actions_list_targets` and then the action tool for a target, and to prefer an action to
+  `get_secret` so that no secret it only needs to use enters the conversation. Any other token is
+  told that read tools return metadata only and that `get_secret` is the sole, audited way to read
+  a secret value.
 
 ## 6.3 Secret-handling rules
 

@@ -2,10 +2,12 @@
  * Builds the per-request `McpServer` (MCP-1): only the tools the token's
  * effective scopes allow are registered (MCP-7), every call is audited
  * (MCP-13), no resources or prompts exist (MCP-8), and the actions tools of
- * section 13 exist only while an engine does (ACT-73).
+ * section 13 exist only while an engine does (ACT-73). A token that can use
+ * them is told to prefer them over `get_secret` (MCP-16).
  */
 import { type CallToolResult, McpServer } from '@modelcontextprotocol/server';
 
+import { isActionScope, type Scope } from '../scopes/registry.ts';
 import { VERSION } from '../version.ts';
 
 import { toolsAllowedBy } from './scopes.ts';
@@ -18,12 +20,23 @@ import type { ActionsEngine } from '../actions/engine.ts';
 import type { AuditEvent, AuditSink } from '../audit/event.ts';
 import type { VerifiedToken } from '../auth/token-types.ts';
 import type { Result } from '../result.ts';
-import type { Scope } from '../scopes/registry.ts';
 import type { VaultClient } from '../vault/client.ts';
 
-const INSTRUCTIONS =
+const VAULT_INSTRUCTIONS =
   'vaultgate exposes one Bitwarden vault. Read tools return metadata only; get_secret is the ' +
   'sole way to read a secret value and every call is audited. Search first, then act on ids.';
+
+/**
+MCP-16: a token that can use actions is steered to them, so a credential it needs to use never
+enters the conversation.
+*/
+const ACTIONS_INSTRUCTIONS =
+  'vaultgate lets you use the credentials in one Bitwarden vault without seeing them. To act on ' +
+  'a system, call actions_list_targets, then the action tool for that target: vaultgate injects ' +
+  "the credential, runs the operation under the operator's policy and returns a scrubbed " +
+  'result. Prefer an action to get_secret, so that no secret enters the conversation; ' +
+  'get_secret is the sole way to read a secret value and every call is audited. Vault read ' +
+  'tools return metadata only; search first, then act on ids.';
 
 export interface CallContext {
   readonly token: VerifiedToken;
@@ -98,13 +111,19 @@ function registerVaultTool(
   );
 }
 
+function instructionsFor(dependencies: ServerDependencies, context: CallContext): string {
+  return dependencies.engine !== undefined && context.scopes.some((scope) => isActionScope(scope))
+    ? ACTIONS_INSTRUCTIONS
+    : VAULT_INSTRUCTIONS;
+}
+
 export function createVaultMcpServer(
   dependencies: ServerDependencies,
   context: CallContext,
 ): McpServer {
   const server = new McpServer(
     { name: 'vaultgate', version: VERSION },
-    { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
+    { capabilities: { tools: {} }, instructions: instructionsFor(dependencies, context) },
   );
   const allowed = toolsAllowedBy(context.scopes);
   for (const tool of ALL_TOOLS) {
