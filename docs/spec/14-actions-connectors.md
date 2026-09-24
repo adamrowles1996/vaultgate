@@ -19,7 +19,7 @@ not loaded; the runtime half is imported dynamically only when the connector is 
 
 ```ts
 interface ConnectorSchemas<Destination, Credential, Policy> {
-  readonly kind: 'http' | 'sql' | 'ssh' | 'winrm' | 'browser';
+  readonly kind: 'http' | 'sql' | 'ssh' | 'winrm' | 'browser' | 'code';
   readonly destinationSchema: z.ZodType<Destination>;
   readonly credentialSchema: z.ZodType<Credential>;
   readonly policySchema: z.ZodType<Policy>;
@@ -475,3 +475,173 @@ error` when that happens.
   canary rules of ACT-53 over snapshots and the pre-screenshot DOM. The live test of M15 signs in
   to two of the maintainer's own web applications through the Compose sidecar and records the
   evidence in the milestone pull request.
+
+## 14.8 `code`
+
+A `code` target is a GitHub repository at a ref the operator chose. vaultgate fetches a snapshot
+of it with a read-only token from the vault, a sidecar builds a search index over it, and the
+agent searches and reads it through `code_search`, `code_find_related` and `code_read` (13.6.7).
+The trust an operator extends by granting a code target is **read access to that repository at
+that ref**, including every file the policy does not exclude. Decided in
+[ADR 0008](../adr/0008-code-search-connector.md).
+
+| Document      | Fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `destination` | `forge` (`github`; the only value in M16); `repository` (`owner/name`, each part `^[A-Za-z0-9._-]{1,100}$`, neither `.` nor `..`); `ref` (a branch or tag name, or a full 40-hex commit SHA).                                                                                                                                                                                                                                                                                                                                                                                       |
+| `credential`  | `token_field` (the vault field holding the token, `password` default). The guide asks for a fine-grained token limited to the one repository with `contents: read` and nothing else.                                                                                                                                                                                                                                                                                                                                                                                                |
+| `policy`      | Common fields; `refresh_interval_s` (default 900, minimum 60, maximum 86 400); `content` (a non-empty subset of `code`, `docs`, `config`; `["code"]` default); `include` and `exclude` (gitignore-syntax pattern lists, at most 100 each; `exclude` defaults to ACT-106's list); `max_archive_bytes` (256 MiB default, ceiling 1 GiB); `max_files` (50 000 default, ceiling 200 000); `max_total_bytes` (uncompressed, 1 GiB default, ceiling 4 GiB); `build_timeout_s` (600 default, ceiling 3 600); `allow_read` (`true` default); `max_read_lines` (400 default, ceiling 2 000). |
+
+### 14.8.1 Fetching
+
+- **ACT-103** `endpoints()` of a `github` destination returns `api.github.com` and
+  `codeload.github.com`, both over TLS; `internal` MUST be `false`. Both hosts are resolved,
+  validated and pinned per call (ACT-55, ACT-56) and verified against the system store (ACT-57).
+  The token is sent as `Authorization: Bearer` to `api.github.com` only.
+- **ACT-104** A fetch resolves the ref first: `GET /repos/{repository}/commits/{ref}` with
+  `Accept: application/vnd.github.sha`, whose body is the 40-hex SHA (anything else is
+  `upstream_error`). It then downloads that commit, not the ref, with
+  `GET /repos/{repository}/tarball/{sha}`, so the snapshot is exactly the commit it is labelled
+  with. vaultgate follows **one** redirect, and only to an `https://codeload.github.com/` URL whose
+  path begins with `/{repository}/`, compared case-insensitively because GitHub redirects to the
+  repository's canonical name; any other redirect, or a second one, is `upstream_error`.
+  `Authorization` is never sent to `codeload.github.com`. The redirect URL carries a short-lived
+  token of its own, so it joins the call's injected values (ACT-50) and is scrubbed, never logged
+  and never audited.
+- **ACT-105** The archive is streamed from the forge to the sidecar's build request as it
+  arrives. vaultgate neither decompresses it nor writes it to disk, and it cuts the stream at
+  `max_archive_bytes`, which fails the build with `archive_too_large`. Nothing from the archive
+  reaches vaultgate's data directory, database, logs or audit rows.
+
+### 14.8.2 Building the index
+
+- **ACT-106** The sidecar extracts the gzip tar into a new generation directory under these
+  rules, and a build that breaks one fails as a whole with the named reason:
+  - The single top-level directory GitHub adds is stripped; an archive without exactly one is
+    `archive_invalid`.
+  - Regular files and directories are the only entries written. Symbolic links, hard links,
+    devices and FIFOs are skipped and counted, never created.
+  - An entry name that is absolute, contains a `..` segment, a backslash or a NUL, or is longer
+    than 1 024 bytes is `archive_invalid`.
+  - `include` and then `exclude` are applied to each entry before it is written, so an excluded
+    file never exists in the snapshot. The default `exclude` is `.env`, `.env.*`, `*.pem`,
+    `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `*.kdbx`, `.git-credentials`, `.netrc`
+    and `.npmrc`. An operator who replaces the list replaces the defaults too, and the page
+    says so.
+  - Exceeding `max_files` or `max_total_bytes` is `archive_too_large`.
+
+  The extractor uses Python's `tarfile` data filter as well as these rules, never in place of
+  them.
+
+- **ACT-107** The sidecar then builds the index with `semble`'s `SembleIndex.from_path` over the
+  generation directory, with the policy's `content` and the model bundled in the image. Files
+  larger than 1 MiB are skipped and counted, as `semble` does. The index is saved into the
+  generation directory, and the generation replaces the target's current one by an atomic
+  rename, after which the previous one is deleted. A build that fails or exceeds
+  `build_timeout_s` leaves the current generation serving, and its reason is shown to the
+  operator.
+- **ACT-108** Builds happen at three points, never on a timer:
+  - When an enabled target is saved, including by a new revision. A revision that changes the
+    destination or any of `content`, `include`, `exclude` or the caps first deletes the target's
+    index, so no call answers from a snapshot the current policy would not have produced.
+  - When the operator presses **Rebuild index** on the target's page. This needs the operator
+    session and CSRF token; it is not a target write, so ID-15's re-authentication does not
+    apply.
+  - When a call finds the target's last freshness check older than `refresh_interval_s`. After
+    the ACT-16 checks and the credential fetch, vaultgate resolves the ref (ACT-104). If the
+    commit differs from the indexed one, it starts a build in the background and answers the call
+    from the current generation with `stale: true`. A failed freshness check never fails the call;
+    it is recorded on the target page and in the audit trail.
+
+  One build runs per target at a time; a second trigger while one runs joins it.
+
+- **ACT-109** Deleting a target deletes its index in the sidecar before the row is removed, and
+  a target that no longer exists has no index. A sidecar that loses its storage (Azure ephemeral
+  storage, a removed volume) loses nothing but time: the next call finds no generation and
+  vaultgate starts a build.
+
+### 14.8.3 Tools
+
+- **ACT-110** `code_search` takes `query` (1–1 000 characters), optional `top_k` (1–20, default
+  10), `paths` and `languages` (each at most 20 entries, passed to `semble` as its path and
+  language filters). It returns `{ commit, indexed_at, stale, results }`, each result
+  `{ path, start_line, end_line, language, score, snippet }`, with each snippet cut at 40 lines.
+  `code_find_related` takes `path` and `line` (the location of a chunk in the snapshot) and
+  optional `top_k`, and returns the same shape. `code_read` takes `path` and optional
+  `start_line` and `end_line` (inclusive, 1-based) and returns
+  `{ commit, path, start_line, end_line, total_lines, text, truncated }`, at most
+  `max_read_lines` lines. It is `policy_denied` (`reason: read`) when `allow_read` is `false`.
+  Every result passes the engine's scrubber and output cap (ACT-51, ACT-52) like any other
+  connector's.
+- **ACT-111** Every `path` argument is a repository-relative POSIX path. An absolute path, a `..`,
+  `.` or empty segment, a backslash, a NUL, or more than 1 024 bytes is `invalid_arguments`. A
+  path that is not a regular file in the current generation, including every excluded file, is
+  `path_not_found`, whether or not the repository contains it. The sidecar resolves the path
+  inside the generation directory and refuses anything whose resolved path leaves it. A file
+  with a NUL byte in its first 8 KiB is `not_text` for `code_read`.
+- **ACT-112** A target with no generation yet answers every tool with `index_not_ready`, whose
+  `detail.state` is `building`, `failed` or `absent`. The reason for a failure is shown only on
+  the operator's page. `actions_list_targets` reports a code target's repository, its ref,
+  `read` as its operation, and whether `code_read` is allowed (ACT-19).
+
+### 14.8.4 Sidecar
+
+- **ACT-113** The index is never built or searched in the vaultgate process or image. The
+  sidecar is an image built from `sidecars/code/` in this repository:
+  - It runs Python 3.12 with dependencies locked by hash (`uv`), `semble` pinned to an exact
+    version, and the `minishlab/potion-code-16M-v2` model at a pinned revision, downloaded at
+    build time and checked by SHA-256. It runs with `HF_HUB_OFFLINE=1`.
+  - It is released and signed with the core image and scanned the same way.
+  - It serves a JSON protocol over HTTP with the Python standard library's server, and only on
+    its internal interface. The protocol has seven operations: `health`, `build`, `status`,
+    `search`, `related`, `read` and `delete`.
+  - It uses `semble` as a library only, never its MCP server or `SembleIndex.from_git`.
+  - It never receives a credential. It holds no state beyond its generations, and loses none it
+    cannot rebuild.
+
+  vaultgate reaches it at `VAULTGATE_ACTIONS_CODE_URL`, validates every response against a
+  schema, and treats an unreachable sidecar as `index_unavailable`.
+
+- **ACT-114** Compose gains an optional `code` service under a `code` profile. Its network is
+  an internal network (`internal: true`) shared only with `vaultgate`, so it has no route to the
+  internet or the host. It has no published port, `cap_drop: [ALL]`, `no-new-privileges`, a
+  read-only root filesystem with `tmpfs` for `/tmp`, a named volume for its generations, a
+  memory limit (2 GiB default) and a `pids` limit.
+
+  On Azure the sidecar is a **separate Container App** in the same environment, with
+  internal-only ingress and ephemeral storage, deployed when `deployCodeSidecar` is `true`. It is
+  never a second container of vaultgate's app, because the containers of one app share a
+  network namespace and `bw serve` listens on its loopback (ACT-56). An Azure environment
+  without VNet integration cannot deny the sidecar egress; the threat model records that.
+
+- **ACT-115** With the connector enabled, vaultgate calls `health` at start-up and logs the
+  sidecar's protocol version, `semble` version and model id. An incompatible protocol version
+  disables the connector's tools with a start-up error rather than failing calls one by one.
+  The target page shows, for each code target:
+  - the indexed commit, the build time and the trigger;
+  - the file, chunk and skip counts;
+  - the last freshness check;
+  - the reason for the last failure;
+  - the **Rebuild index** button.
+
+### 14.8.5 Audit and verification
+
+- **ACT-116** Calls are audited per ACT-60 with operation `read` and classification `search`,
+  `related` or `read`; `arguments` records the query, the path and the line numbers. A build is
+  an audit event (`actions.code_index_built` or `actions.code_index_failed`) carrying the
+  target, the commit, the trigger (`save`, `operator` or `call`), the counts, the duration and,
+  on failure, the reason code. No file name beyond the arguments, and no content, is ever
+  recorded.
+- **ACT-117** The sidecar has its own test suite at 100% coverage. It runs hostile archives
+  (links, `..` names, devices, a decompression bomb, oversize and overcount archives, a missing
+  top-level directory) and the path rules of ACT-111 against real generation directories.
+
+  vaultgate's contract suite runs against a fake forge and a fake sidecar. It asserts:
+  - the resolve-then-download sequence;
+  - the single-redirect rule and that `Authorization` never reaches `codeload.github.com`;
+  - the stream cap;
+  - single-flight builds and `stale: true`;
+  - deletion on target removal;
+  - the ACT-53 canary over every tool result, audit row and log line.
+
+  The live test of M16 indexes one of the maintainer's private repositories through the Compose
+  sidecar and records the evidence in the milestone pull request.

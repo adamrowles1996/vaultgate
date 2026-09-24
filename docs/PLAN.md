@@ -253,6 +253,25 @@ sessions close on token, consent and grant revocation and on target edit in the 
 suite; a live sign-in to two of the maintainer's own web applications through the Compose
 sidecar produces a scrubbed snapshot and a masked screenshot, recorded in the pull request.
 
+### M16 `code` (ACT-103…117; ADR 0008)
+
+1. `build(sidecar)`: `sidecars/code/`: Python 3.12, `uv`-locked with hashes, `semble` pinned,
+   the `minishlab/potion-code-16M-v2` model fetched at build time by pinned revision and SHA-256;
+   the standard-library JSON server with `health`, `build`, `status`, `search`, `related`, `read`
+   and `delete`; hostile-archive extraction; its own test suite at 100% and its own CI job.
+2. `build(docker)`: the optional `code` Compose profile on an internal network with the ACT-114
+   limits; the Azure template's `deployCodeSidecar` parameter as a separate internal-ingress
+   Container App; the sidecar image in the release workflow, signed and scanned like the core.
+3. `feat(actions)`: the `code` connector: GitHub resolve-then-download with the single-redirect
+   rule, the streamed archive, single-flight builds, freshness checks, deletion with the target,
+   migration `005-code-connector`, the target page's index status and Rebuild button;
+   `code_search`, `code_find_related` and `code_read`; `actions:code`.
+
+Exit: the sidecar's hostile-archive suite and vaultgate's fake-forge and fake-sidecar contract
+suites pass (ACT-117) with the ACT-53 canary; a live index of one of the maintainer's private
+repositories through the Compose sidecar answers a search, a related-code query and a read,
+recorded in the pull request.
+
 ### Post-1.0 candidates
 
 - Passkey (WebAuthn) operator login.
@@ -262,6 +281,9 @@ sidecar produces a scrubbed snapshot and a masked screenshot, recorded in the pu
 - Organisation collections filtering and per-client item allowlists.
 - Actions follow-ups: `http_get` with `readOnlyHint: true`, Graph national clouds, further
   connectors only with a policy model as tight as spec 14.
+- `code` follow-ups: GitHub Enterprise Server, GitLab and Gitea or Forgejo forges, each with its
+  own archive and redirect rules (ADR 0008); revisiting the Azure placement of the `browser`
+  sidecar, which ACT-92 puts on the loopback `bw serve` shares.
 - **Kerberos for `winrm`**, the successor to the NTLM that landed in M13. Microsoft deprecated
   every version of NTLM in June 2024 and is removing it in phases: auditing today, IAKerb and a
   Local KDC in the second half of 2026, and network NTLM blocked by default — policy can still

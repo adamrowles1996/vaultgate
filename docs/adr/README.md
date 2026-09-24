@@ -12,3 +12,4 @@ records get the next number; superseded records are kept and marked.
 | [0005](0005-built-in-operator-login.md)            | Built-in operator account (password + TOTP) before passkeys/OIDC                              |
 | [0006](0006-one-hundred-percent-coverage.md)       | 100% coverage with no ignore hints                                                            |
 | [0007](0007-typed-actions-with-operator-policy.md) | Typed actions under operator policy: targets, scopes, annotations, elicitation (planned, M9+) |
+| [0008](0008-code-search-connector.md)              | A `code` connector: search and read repositories through a sidecar (planned, M16)             |
