@@ -382,9 +382,16 @@ allowed origins. The design therefore treats every session as a shell session wi
   port, `cap_drop: [ALL]`, the Playwright-recommended seccomp profile, `read_only` root filesystem
   with `tmpfs` for `/tmp` and the profile directory, a memory limit (1 GiB default), a `pids`
   limit, `no-new-privileges`, and a `shm_size` adequate for Chromium. The Azure template gains an
-  optional parameter (`deployBrowserSidecar`, default `false`) that adds the browser as a second
-  container of the Container App, reached on the app's shared loopback, with its own CPU and
-  memory reservation. At start-up with the connector enabled, vaultgate probes the endpoint
+  optional parameter (`deployBrowserSidecar`, default `false`) that deploys the browser as a
+  **separate Container App** in the same environment, with internal-only ingress and its own CPU
+  and memory reservation. It is never a second container of vaultgate's app. The containers of
+  one app share a network namespace, and `bw serve` listens on that loopback with no
+  authentication of its own (ADR 0003, ACT-56), so a Chromium compromised by a hostile page in
+  an allowed origin would reach the whole vault. The environment hosts nothing but vaultgate and
+  its sidecars, because internal ingress is reachable from every app in it. How vaultgate
+  addresses the endpoint across that ingress is settled with M15. Chromium's DevTools server
+  refuses a `Host` header that is neither an IP address nor `localhost`, and that constraint
+  applies to the Compose service name as well. At start-up with the connector enabled, vaultgate probes the endpoint
   (`/json/version`) and logs its readiness; a sidecar that is absent later answers every browser
   call `browser_unavailable`.
 - **ACT-93** Each session is a fresh, isolated browser context (own cookie jar and storage,

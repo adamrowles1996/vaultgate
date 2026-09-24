@@ -94,7 +94,8 @@ unless its own switch is on, with one scope, `actions:code`, and three read-only
   and Gitea or Forgejo are post-M16 candidates; each needs its own archive and redirect rules.
 - **The same placement question applies to the `browser` sidecar.** ACT-92 places Chromium as a
   second container of vaultgate's Container App on Azure, on the shared loopback where `bw serve`
-  listens. That placement should be revisited with M15, separately from this record.
+  listens. That placement should be revisited with M15, separately from this record. (Done on
+  2026-09-24: ACT-92 now places the browser in a separate internal-ingress Container App too.)
 - Milestone M16 in `PLAN.md` delivers it, behind `VAULTGATE_ACTIONS_ENABLE_CODE`, with contract
   tests against a fake forge and a fake sidecar, a hostile-archive suite in the sidecar's own
   tests, and a live test against one of the maintainer's private repositories.

@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- ACT-92: the planned `browser` sidecar is deployed on Azure as a separate Container App with
+  internal-only ingress, not as a second container of vaultgate's app. The containers of one app
+  share a network namespace, and `bw serve` listens unauthenticated on that loopback, so a
+  Chromium compromised by a hostile page could have reached the whole vault. This is the same
+  rule ADR 0008 set for the `code` sidecar. T39 now covers both sidecars. Specification only;
+  the connector lands with M15.
+
 ## [0.1.0-rc.14] - 2026-09-24
 
 ### Fixed
