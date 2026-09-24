@@ -10,11 +10,12 @@ import { CONNECTOR_KINDS, type ActionsConfig, type ConnectorKind } from '../../c
 import { httpSchemas } from './http/schemas.ts';
 import { sqlSchemas } from './sql/schemas.ts';
 import { sshSchemas } from './ssh/schemas.ts';
+import { winrmSchemas } from './winrm/schemas.ts';
 
 import type { AnyConnector, AnyConnectorSchemas, ConnectorTool } from './connector.ts';
 
 /**
-A connector's runtime, built with the configuration it needs (`ssh` reads `allowAnyCommand`, ACT-88).
+A connector's runtime, built with the configuration it needs (`ssh`/`winrm` read `allowAnyCommand`, ACT-88).
 */
 export type ConnectorLoader = (config: ActionsConfig) => Promise<AnyConnector>;
 
@@ -36,12 +37,17 @@ export const CONNECTOR_LOADERS: Partial<Readonly<Record<ConnectorKind, Connector
     const { createSshConnector } = await import('./ssh/index.ts');
     return createSshConnector({ allowAnyCommand: config.allowAnyCommand });
   },
+  winrm: async (config) => {
+    const { createWinrmConnector } = await import('./winrm/index.ts');
+    return createWinrmConnector({ allowAnyCommand: config.allowAnyCommand });
+  },
 };
 
 const CONNECTOR_SCHEMAS: Partial<Readonly<Record<ConnectorKind, AnyConnectorSchemas>>> = {
   http: httpSchemas,
   sql: sqlSchemas,
   ssh: sshSchemas,
+  winrm: winrmSchemas,
 };
 
 /**

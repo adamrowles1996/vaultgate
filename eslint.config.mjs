@@ -145,6 +145,14 @@ const sharedRules = {
   'unicorn/no-array-reduce': 'off',
   'unicorn/no-process-exit': 'off', // eslint-plugin-n owns this with a boundary exemption
   'unicorn/import-style': 'off',
+  // WS-Management and WS-Addressing namespace and action URIs are opaque identifiers the
+  // protocol defines with the `http:` scheme (MS-WSMV); nothing is ever fetched from them, and
+  // rewriting one would make the SOAP envelope unreadable to the destination. The rule already
+  // ignores the SOAP envelope namespace itself.
+  'unicorn/prefer-https': [
+    'error',
+    { ignore: [/^http:\/\/schemas\.(?:xmlsoap\.org\/ws|dmtf\.org\/wbem|microsoft\.com\/wbem)\//u] },
+  ],
 };
 
 const typeScriptRules = {

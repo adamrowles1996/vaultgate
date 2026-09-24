@@ -78,7 +78,7 @@ describe('the account page Actions section', () => {
     const harness = createPagesHarness();
     const { repo } = harness.actions.engine.targets;
     repo.insert(fixtureTargetRow({ id: 'row-1', name: 'broken', policy: {} }));
-    repo.insert(fixtureTargetRow({ id: 'row-2', name: 'db', connector: 'winrm' }));
+    repo.insert(fixtureTargetRow({ id: 'row-2', name: 'db', connector: 'browser' }));
     const { browser } = await signedInOperator(harness, false);
     const account = await browser.get('/account');
     const section = sectionOf(await account.text());
@@ -86,7 +86,7 @@ describe('the account page Actions section', () => {
       '<a href="/account/actions/row-1">broken</a><br /><code>target_invalid</code>: policy.allowed_paths: Invalid input: expected array, received undefined',
     );
     expect(section).toContain(
-      '<a href="/account/actions/row-2">db</a><br /><code>target_invalid</code>: connector: winrm is not available in this build',
+      '<a href="/account/actions/row-2">db</a><br /><code>target_invalid</code>: connector: browser is not available in this build',
     );
     expect(section).toContain('data-label="Destination"></td>');
   });
@@ -140,7 +140,7 @@ describe('the account page Actions section', () => {
     expect(missing.headers.get('content-security-policy')).toContain("default-src 'none'");
     const noConnector = await browser.get('/account/actions/new');
     expect(noConnector.status).toBe(404);
-    const laterConnector = await browser.get('/account/actions/new?connector=winrm');
+    const laterConnector = await browser.get('/account/actions/new?connector=browser');
     expect(laterConnector.status).toBe(404);
   });
 });

@@ -239,7 +239,7 @@ describe('POST /account/actions', () => {
     const response = await browser.submit('/account/actions', {
       csrf,
       ...VALID,
-      connector: 'winrm',
+      connector: 'browser',
     });
     expect(response.status).toBe(404);
     expect(harness.actions.engine.targets.list()).toStrictEqual([]);
