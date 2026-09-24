@@ -229,13 +229,19 @@ operations, confirm_writes, engine?, unrestricted? }` where `operations` is the 
   `Content-Type: application/json` when the agent sets no content type). `path` is appended to
   the destination's `base_url` (its prefix, then the ACT-35 subject); the resolved URL
   MUST stay under `base_url` after normalisation (the built URL is checked, so `//host`
-  cannot move the host) or the call fails `policy_denied` (`reason: path`).
+  cannot move the host) or the call fails `policy_denied` (`reason: path`). A percent-encoded
+  separator — `%2F` or `%5C` — in the path portion is refused as an invalid argument: ACT-35
+  decodes the unreserved characters only, so neither dot-segment removal nor a `*` treats such an
+  escape as a boundary, while a destination that decodes it before routing does. The query string
+  may carry either.
 - **ACT-21** Output: `status` (integer), `headers` (only the names in the policy's
   `response_headers` list, default `content-type`, `content-length`, `location`, `retry-after`),
   `body` (text when the media type is textual — `text/*`, JSON, XML, JavaScript, form-encoded
   or absent — and the bytes are valid UTF-8; otherwise base64 with `body_encoding: "base64"`,
   cut to fit the cap), `bytes` (received: the whole body unless
-  `truncated`), `truncated`, `duration_ms`. A non-2xx status is a normal result, not an error:
+  `truncated`), `truncated`, `duration_ms`. The connector never encodes the body itself: it hands
+  the bytes to the engine, which scrubs them and then encodes (ACT-51). A non-2xx status is a
+  normal result, not an error:
   a `401` is never `authentication_failed`; connection and TLS failures are errors whose
   `detail.reason` names the error code (ACT-74).
 - **ACT-22** The agent cannot set `Authorization`, `Cookie`, `Host`, `Content-Length`,
@@ -251,7 +257,11 @@ operations, confirm_writes, engine?, unrestricted? }` where `operations` is the 
 
 ### 13.6.4 `sql_query` and `sql_execute`
 
-- **ACT-23** Input for both: `target`; `statement` (string ≤ 64 KiB); `params` (array ≤ 100 of
+- **ACT-23** Input for both: `target`; `statement` (string ≤ 64 KiB; no NUL byte and no other C0
+  control character — tab, carriage return and line feed are the only ones accepted, as ACT-27
+  requires of a command, because the tokeniser of 13.7.2 is a control in depth and every character
+  it must agree with the server's lexer about that no statement legitimately contains is a
+  divergence); `params` (array ≤ 100 of
   string, number, boolean or `null`, bound positionally to the engine's native placeholders,
   `$1…$n` for PostgreSQL and `@p1…@pn` for SQL Server). There is no string interpolation path:
   a placeholder without a matching parameter or a parameter without a placeholder fails
@@ -337,7 +347,8 @@ before anything else (ACT-16) and a session opened by another client answers `un
 
 - **ACT-34** Allowlist patterns are glob-like strings, not regular expressions, so an operator
   cannot write a super-linear pattern and the matcher cannot be exploited (ReDoS): `*` matches any
-  run of characters except `/` (paths) or a newline (commands); `**` matches any run including
+  run of characters except `/` (paths) or a line terminator, carriage return as well as line feed
+  (commands, and the statements of ACT-38, which may contain either); `**` matches any run including
   `/` (paths only); every other character is literal; matching is anchored at both ends and
   case-sensitive except for HTTP header names and methods. A pattern list matches when any
   pattern matches the whole subject.
@@ -353,14 +364,19 @@ before anything else (ACT-16) and a session opened by another client answers `un
 ### 13.7.2 SQL classification
 
 - **ACT-36** A statement is tokenised (strings, quoted identifiers, `--` and `/* */` comments,
-  dollar-quoted strings on PostgreSQL) and MUST be exactly one statement: a `;` outside a string or
+  dollar-quoted strings on PostgreSQL) and MUST be exactly one statement. A `--` comment ends at
+  the first line terminator, **carriage return as well as line feed**: PostgreSQL's lexer defines
+  `non_newline` as `[^\n\r]` and T-SQL ends a line comment at a bare CR too, so a tokeniser that
+  looked for `\n` alone would swallow a statement the server would go on to run. A `;` outside a
+  string or
   comment that is followed by anything other than whitespace, a trailing comment included, fails
   `policy_denied` (`reason: statement_count`). Comments are stripped before classification.
   Tokenisation is per engine, which is why `authorize` receives the destination (14.1).
 - **ACT-37** `read`: the first keyword is `SELECT`, `WITH` or `EXPLAIN`, and no keyword of the
   set `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `INTO`, `EXEC`, `EXECUTE`, `CALL`, `CREATE`, `ALTER`,
   `DROP`, `TRUNCATE`, `GRANT`, `REVOKE`, `DENY`, `COPY`, `LOCK`, `SET`, `USE`, `BACKUP`,
-  `RESTORE`, `SHUTDOWN`, `RECONFIGURE`, `WAITFOR`, `OPENROWSET`, `OPENQUERY` appears outside a
+  `RESTORE`, `SHUTDOWN`, `RECONFIGURE`, `WAITFOR`, `OPENROWSET`, `OPENQUERY`, `DBCC`,
+  `WRITETEXT`, `UPDATETEXT`, `READTEXT` appears outside a
   string, comment or quoted identifier, and no identifier begins with `xp_` or `sp_`. `sql_query`
   accepts only `read`. `INTO` is on the list because `SELECT … INTO` creates a table on both
   engines, and PostgreSQL's `EXPLAIN ANALYZE DELETE …`, which executes, is `other`.
@@ -503,10 +519,16 @@ args_sha256, issued_at, expires_at }` and `expires_at` is `issued_at + 120 000`.
   encoded variants with `[redacted:<field>]`. The variants are: the raw value;
   `encodeURIComponent` of it; the `application/x-www-form-urlencoded` form (`+` for space);
   standard base64 and base64url, with and without padding; the `basic` credential
-  `base64(username:value)`; the JSON string escape of the value; and, for values containing
+  `base64(username:value)`, whose login name is the one the mapping names or, where the connector
+  authenticates with a pair whose name the destination holds (`winrm`, 14.6), the destination's;
+  the JSON string escape of the value; and, for values containing
   characters outside printable ASCII, the `\uXXXX`-escaped JSON form. Matching is exact-substring
-  on the buffered output; it is applied to `stdout`, `stderr`, `body`, `snapshot`, every response
-  header value, every `detail` string and the `message` of ACT-43. Values are scrubbed whatever
+  on the buffered output, **on its bytes, before any encoding vaultgate itself applies**: base64
+  is positional, so no variant of a value appears in the base64 of a buffer that merely contains
+  it, and a connector that encoded a body, a stream or a binary column before the scrubber saw it
+  would hand the agent the credential verbatim. Connectors therefore return raw bytes and the
+  engine encodes after it has scrubbed. It is applied to `stdout`, `stderr`, `body`, `snapshot`,
+  every response header value, every `detail` string and the `message` of ACT-43. Values are scrubbed whatever
   their length, so a short secret costs false positives rather than a leak.
 - **ACT-52** Output is captured up to `max_output_bytes` plus a guard band equal to the length of
   the longest variant of ACT-51, scrubbed, then cut at `max_output_bytes` with `truncated: true`,

@@ -112,6 +112,27 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **ACT-51, ACT-52, ACT-53: a body that was not text defeated the scrubber.** The `http`
+  connector base64-encoded the body itself; base64 is positional, so no ACT-51 variant matched
+  and the credential came back verbatim under `body_encoding`, at any offset. Connectors no
+  longer encode: `Scrubber` gains `bytes` and `base64`, `ConnectorOutput` a `base64` list, and
+  the engine scrubs raw bytes before it encodes and cuts. `sql`'s binary columns are closed the
+  same way and `Scrubber.buffer` scrubs bytes too. Every connector with a body has a non-textual
+  canary test, against an `http` fake that can now answer arbitrary bytes under a chosen type.
+- **ACT-36: a bare carriage return smuggled a second statement past the SQL classifier.** A `--`
+  comment ends at a bare CR on both engines but ran to `\n` here, so `SELECT 1 --x\r; DROP t`
+  classified `read`. It now ends at either terminator, and ACT-34's command `*` stops at CR too,
+  so an allowlist pattern cannot span a line the server splits. A `statement` may
+  no longer carry a NUL or other C0 control character but tab, CR and LF, as ACT-27 requires of a
+  `command` (ACT-23), and `DBCC`, `WRITETEXT`, `UPDATETEXT` and `READTEXT` join ACT-37's deny
+  set, an omission corrected in both places.
+- **ACT-51: the `winrm` `Basic` pair was never scrubbed.** Its login name is in the
+  destination, so the engine built the scrub table without one and never made the
+  `base64(username:password)` variant it sends; a listener echoing that header back in a fault
+  leaked the pair. `ConnectorSchemas` gains `basicUsername`.
+- **ACT-20, ACT-35: `%2F` in a path walked past `allowed_paths`.** Normalisation decodes
+  unreserved characters only, so `/orders/..%2F..%2Fadmin%2Fusers` matched `/orders/*` and
+  reached the wire unchanged. Both are now refused in the path, not the query.
 - ACT-88: a target submission naming a deployment-gated policy field is now refused and told why,
   instead of being dropped in silence. The account page does not draw the any-command field where
   `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` is off, so an ordinary browser never sends one; a
