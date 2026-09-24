@@ -8,6 +8,7 @@
  * and reads nothing from the vault; inside it, every vault read here is
  * metadata only.
  */
+import { applyAddress } from './address-source.ts';
 import { editableForm, targetInputFromForm, text, withParameters } from './form-input.ts';
 import {
   createFrame,
@@ -126,19 +127,20 @@ async function create(
     return context.notFound();
   }
   const viewer = viewerOf(gate.session);
-  const refused = deploymentProblems(gate.form, dependencies.switches);
+  const { values, problems } = applyAddress(form, gate.form);
+  const refused = [...deploymentProblems(gate.form, dependencies.switches), ...problems];
   if (refused.length > 0) {
-    const request = { form, values: gate.form, problems: refused };
+    const request = { form, values, problems: refused };
     return context.html(await renderCreate(dependencies, viewer, request), 400);
   }
   const created = await dependencies.targets.create(
-    targetInputFromForm(form, gate.form, true),
+    targetInputFromForm(form, values, true),
     gate.operatorId,
   );
   if (created.ok) {
     return context.redirect(`${targetPath(created.value.id)}?notice=created`, 303);
   }
-  const request = { form, values: gate.form, problems: created.error.problems };
+  const request = { form, values, problems: created.error.problems };
   return context.html(await renderCreate(dependencies, viewer, request), 400);
 }
 
@@ -234,20 +236,21 @@ async function update(
     return context.notFound();
   }
   const viewer = viewerOf(gate.session);
-  const refused = deploymentProblems(gate.form, dependencies.switches);
+  const { values, problems } = applyAddress(current.form, gate.form);
+  const refused = [...deploymentProblems(gate.form, dependencies.switches), ...problems];
   if (refused.length > 0) {
-    const request = { values: gate.form, problems: refused };
+    const request = { values, problems: refused };
     return context.html(await renderEdit(dependencies, viewer, current, request), 400);
   }
   const updated = await dependencies.targets.update(
     current.target.id,
-    targetInputFromForm(current.form, gate.form, false),
+    targetInputFromForm(current.form, values, false),
     gate.operatorId,
   );
   if (updated.ok) {
     return context.redirect(`${targetPath(current.target.id)}?notice=updated`, 303);
   }
-  const request = { values: gate.form, problems: updated.error.problems };
+  const request = { values, problems: updated.error.problems };
   return context.html(await renderEdit(dependencies, viewer, current, request), 400);
 }
 

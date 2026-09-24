@@ -54,8 +54,7 @@ login name, its first address and its fields, a secret field as a sealed chip be
 name. Choosing one opens that kind's form with its defaults filled in: a SQL Server starts on port
 1433 with the SQL Server engine chosen, a PostgreSQL database on 5432, a Microsoft Graph target
 with Graph's base URL. Every field that names a vault field is a list of the chosen item's
-fields with the usual one selected; one the item does not carry is flagged, and saving it would be
-refused.
+fields with the usual one selected; one the item does not carry is flagged, and saving it would be refused. Below the address field, **Take the address from the vault item** lists the item's addresses and text fields (a SQL, SSH or WinRM host takes the host and any port, an HTTP base URL only a full `https://` or `http://` URL); on a new computer the first is chosen while nothing is typed. The address is copied when you save: the computer keeps it, the private-range check runs on it, and a later change in the vault does not move the computer. Typing an address and choosing a different one is refused, so keep one.
 
 Clicking a computer opens its page: where it points and its open sessions, what it signs in
 with, its rules, the agents with access, its recent calls, and closing its sessions or deleting

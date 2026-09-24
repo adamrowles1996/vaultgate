@@ -9,6 +9,7 @@
 import { EMPTY, type Html, html, when } from '../../identity/pages/template.ts';
 import { cardHead } from '../../identity/pages/ui.ts';
 
+import { type AddressCandidate, ADDRESS_FROM_FIELD, canTakeAddress } from './address-source.ts';
 import { fieldName, type FormValues, optionName } from './form-values.ts';
 import { type ItemField, offeredFields, pickedSelector } from './item-fields.ts';
 
@@ -44,8 +45,15 @@ export function fieldErrors(problems: FieldProblems, path: string): Html {
   return html`${messages.map((message) => html`<p class="field-error">${message}</p>`)}`;
 }
 
-function textInput(field: FieldDescriptor & { readonly kind: 'text' }, value: string): Html {
-  const required = when(field.required === true, () => html`required`);
+/**
+A field the vault item can fill is not `required` in the browser, which would refuse a form left for the item to fill.
+*/
+function textInput(
+  field: FieldDescriptor & { readonly kind: 'text' },
+  value: string,
+  isFilledByItem: boolean,
+): Html {
+  const required = when(field.required === true && !isFilledByItem, () => html`required`);
   return html`<label
     >${field.label}
     <input name="${fieldName(field)}" value="${value}" autocomplete="off" ${required} />
@@ -155,12 +163,13 @@ function control(
   field: FieldDescriptor,
   values: FormValues,
   fields: readonly ItemField[] | undefined,
+  isFilledByItem: boolean,
 ): Html {
   const value = values.get(fieldName(field)) ?? '';
   switch (field.kind) {
     case 'text': {
       return fields === undefined || field.picker === undefined
-        ? textInput(field, value)
+        ? textInput(field, value, isFilledByItem)
         : fieldPicker({ ...field, picker: field.picker }, value, fields);
     }
     case 'number': {
@@ -191,11 +200,65 @@ export interface FieldsView {
   The chosen item's fields (ACT-4); without them a field that names one is a text box.
   */
   readonly itemFields: readonly ItemField[] | undefined;
+  /**
+  The item's addresses and text fields, for the destination's address (ACT-2).
+  */
+  readonly addressCandidates: readonly AddressCandidate[];
+  /**
+  A new computer with no address typed takes the item's first one unless the operator says otherwise.
+  */
+  readonly isNew: boolean;
+}
+
+/**
+ * ACT-2: the item's addresses that fit the field, offered to copy in when
+ * the computer is saved. On a new computer with nothing typed the first is
+ * chosen; once the form has been submitted, what was submitted stands.
+ */
+function offeredAddresses(field: FieldDescriptor, view: FieldsView): readonly AddressCandidate[] {
+  if (field.kind !== 'text' || field.address === undefined) {
+    return [];
+  }
+  const { address } = field;
+  return view.addressCandidates.filter((candidate) => canTakeAddress(address, candidate.value));
+}
+
+function addressSource(
+  field: FieldDescriptor,
+  view: FieldsView,
+  offered: readonly AddressCandidate[],
+): Html {
+  const [first, ...rest] = offered;
+  if (first === undefined) {
+    return EMPTY;
+  }
+  const typed = view.values.get(fieldName(field)) ?? '';
+  const chosen =
+    view.values.get(ADDRESS_FROM_FIELD) ?? (typed === '' && view.isNew ? first.value : '');
+  const options = [first, ...rest].map((candidate) =>
+    pickerOption(
+      candidate.value,
+      `${candidate.value} · ${candidate.source}`,
+      chosen === candidate.value,
+    ),
+  );
+  return html`<label
+    >Take the address from the vault item
+    <select name="${ADDRESS_FROM_FIELD}">
+      ${pickerOption('', 'No: use what is typed above', chosen === '')} ${options}
+    </select>
+    <small
+      >Copied when you save: the computer keeps that address, and a later change in the vault does
+      not move it.</small
+    >
+  </label>`;
 }
 
 function renderField(field: FieldDescriptor, view: FieldsView): Html {
+  const offered = offeredAddresses(field, view);
   return html`${fieldErrors(view.problems, fieldName(field))}
-  ${control(field, view.values, view.itemFields)}`;
+  ${control(field, view.values, view.itemFields, offered.length > 0)}
+  ${addressSource(field, view, offered)}`;
 }
 
 /**

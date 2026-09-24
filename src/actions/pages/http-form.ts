@@ -25,6 +25,7 @@ const destination: readonly FieldDescriptor[] = [
     name: 'base_url',
     label: 'Base URL',
     kind: 'text',
+    address: 'url',
     required: true,
     help:
       'An https:// origin with an optional path prefix, no query or fragment; http:// only on an ' +

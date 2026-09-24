@@ -18,6 +18,7 @@ import {
 } from '../../identity/pages/template.ts';
 import { cardHead } from '../../identity/pages/ui.ts';
 
+import { addressCandidates } from './address-source.ts';
 import { fieldErrors, renderFields } from './form-render.ts';
 import { fieldName, type FormValues } from './form-values.ts';
 import { itemFields } from './item-fields.ts';
@@ -190,6 +191,8 @@ export function renderTargetForm(view: TargetFormView): Html {
     values: view.values,
     problems: view.problems,
     itemFields: item.state === 'found' ? itemFields(item.summary) : undefined,
+    addressCandidates: item.state === 'found' ? addressCandidates(item.summary) : [],
+    isNew: view.isNew,
   };
   return html`<form method="post" action="${view.action}" class="target-form">
     ${hidden('csrf', view.csrfToken)} ${connectorField(view)} ${commonFields(view)}
