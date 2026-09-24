@@ -62,7 +62,11 @@
   any-command target, which ACT-88 requires and the 4 KiB cap on `arguments` could otherwise cut
   — or the browser
   page URL), `arguments` (JSON of the tool arguments minus injected values and minus any header
-  the policy did not allow, capped at 4 KiB with `arguments_truncated`), `output_bytes`,
+  the policy did not allow, capped at 4 KiB with `arguments_truncated`; a capped value carries a
+  trailing `[vaultgate: <n> of <m> bytes shown; sha256 of the whole is <hex>]`, so the ACT-63
+  view shows an operator that it is reading part of a record and gives them something to check
+  the rest against — `ssh` and `winrm` also have ACT-88's full command in `classification`, and
+  a 64 KiB `sql` statement has nothing else), `output_bytes`,
   `output_truncated`, `duration_ms`, `outcome` (`ok` \| `denied:<code>` \| `error:<code>`),
   `elicitation` (`not_required` \| `accepted` \| `declined` \| `cancelled` \| `unavailable` \|
   `invalid`), `confirmation_nonce`, `request_id`, `ip`. Results, snapshots and screenshots are

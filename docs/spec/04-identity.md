@@ -80,10 +80,19 @@ added without touching the OAuth layer (see `PLAN.md`).
 
 - **ID-18** Every state-changing browser route requires: `SameSite=Lax` cookie, an `Origin` (or
   `Sec-Fetch-Site: same-origin`) header matching `PUBLIC_URL`, and a per-session synchroniser token
-  in the form body. Any missing element is a `403` with an audit event.
+  in the form body. Any missing element is a `403` with an audit event. The token comparison is
+  over the bytes of both values and never throws: a submitted token of the same code-unit length
+  but a different byte length once raised inside the constant-time comparison, which left the
+  route as a `500` with no audit event at all — a silent gap in the trail where this clause
+  requires a recorded refusal.
 - **ID-19** HTML pages are served with a `Content-Security-Policy` of
-  `default-src 'none'; style-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`.
-  Pages contain no JavaScript. Styling is a single static stylesheet.
+  `default-src 'none'; style-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`
+  and `Cache-Control: no-store`.
+  Pages contain no JavaScript. Styling is a single static stylesheet. A page another layer serves
+  (the Actions section of ACT-5) sets both itself, through the middleware identity hands it, so
+  the headers do not depend on the order in which the composition layer mounts the two.
+  A query parameter that selects a page's notice is read as an own property of the notice table
+  and nothing else; `constructor` and `toString` name no notice (ID-24).
 - **ID-20** `Strict-Transport-Security: max-age=31536000; includeSubDomains` is set when
   `PUBLIC_URL` is `https`.
 
