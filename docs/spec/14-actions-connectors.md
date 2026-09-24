@@ -1,8 +1,8 @@
 # 14 Action connectors
 
 > **Status: the interface (14.1), the `http` connector (14.2), the `graph` credential adapter
-> (14.3), the `sql` connector (14.4) and the `ssh` connector (14.5) have landed (M9, M10, M11,
-> M12); `winrm` is M13 and `browser` M15.** The
+> (14.3), the `sql` connector (14.4), the `ssh` connector (14.5) and the `winrm` connector (14.6)
+> have landed (M9, M10, M11, M12, M13); `browser` is M15.** The
 > connector contracts of the actions layer ([13 Actions](13-actions.md),
 > [13a Actions in operation](13a-actions-operations.md),
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). A document whose runtime has
@@ -218,21 +218,28 @@ agent must never see the client secret, the refresh token or the access token.
 
 ## 14.6 `winrm`
 
-| Document      | Fields                                                                                                                                                                                                                                             |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `destination` | `url` (`https://host:5986/wsman`; `http://` only when `internal: true`, and then a warning is shown); `username`; `shell` (`powershell` default \| `cmd`); `certificate_sha256` (optional pin; when absent the system CA store verifies the host). |
-| `credential`  | `password_field` (default `password`).                                                                                                                                                                                                             |
-| `policy`      | As `ssh` (14.5): `allowed_commands` or `any_command: true`.                                                                                                                                                                                        |
+| Document      | Fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `destination` | `url` (`https://host:5986/wsman`; `http://` only when `internal: true`, and then the save-time check of ACT-57 insists on it and warns); `username`; `shell` (`powershell` default \| `cmd`); `certificate_sha256` (optional pin: the SHA-256 of the DER leaf certificate, 64 hexadecimal digits with the colons optional. It **replaces** the system store rather than adding to it, which is what a listener with its own certificate needs; the socket is held corked until the certificate matches, so nothing is sent to a host that fails it, and a mismatch is `tls_error`. A pin on a plain endpoint is refused at save.) |
+| `credential`  | `password_field` (default `password`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `policy`      | As `ssh` (14.5): `allowed_commands` or `any_command: true`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 - **ACT-89** Transport is WS-Management over HTTPS with `Basic` authentication over TLS in v1
-  (NTLM and Kerberos are post-M15 candidates). The M13 pull request evaluates the npm WinRM
-  clients per QG-9; a hand-written client on `node:https` is the expected outcome, because the
-  protocol subset needed is five SOAP operations (`Create` shell, `Command`, `Receive`, `Signal`,
-  `Delete`) and the existing packages carry dependencies or native bindings out of proportion to
-  that. The choice is recorded in the plan when made.
-- **ACT-90** The remote shell is created with a fixed idle timeout, `Receive` is polled until the
-  command state is `Done` or the policy timeout elapses, and on timeout `Signal` (`terminate`) is
-  sent before `Delete`.
+  (NTLM and Kerberos are post-M15 candidates). The M13 pull request evaluated the npm WinRM
+  clients per QG-9 against a hand-written client; the hand-written client won, and the comparison
+  is recorded under M13 in [`PLAN.md`](../PLAN.md). No dependency was added. The client is the
+  five SOAP operations (`Create` shell, `Command`, `Receive`, `Signal`, `Delete`) plus `Send`,
+  which ACT-27's `stdin` needs, driven through the pinned transport of ACT-55, and a reader
+  written for exactly the elements those responses carry: no DOCTYPE, no entity of any kind, no
+  comment, no CDATA section, and depth, element and attribute caps (T33). A `TimedOut` fault on
+  `Receive` means the shell had nothing to say yet and is polled again, not a failure. HTTP 401 is
+  `authentication_failed`; any other fault is `upstream_error` with the fault reason, capped at
+  1 KiB and scrubbed.
+- **ACT-90** The remote shell is created with a fixed idle timeout (`wsman:OperationTimeout`) and
+  a `MaxEnvelopeSize` that keeps each answer well under the output cap, `Receive` is polled until
+  the command state is `Done` or the policy timeout elapses, and on timeout `Signal`
+  (`terminate`) is sent before `Delete`. Both run on a short deadline of their own, because the
+  call's has already elapsed.
 
 ## 14.7 `browser`
 

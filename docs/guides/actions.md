@@ -582,6 +582,116 @@ channel the server refused or broke. Every injected value, in every encoding, is
 `[redacted:<field>]` before anything leaves the engine — including the audit trail, so a command
 that echoes the private key is stored redacted.
 
+## Creating a `winrm` target
+
+Follow **Create a winrm target**. A `winrm` target runs a command on a Windows host over
+WS-Management, the protocol behind `winrs` and PowerShell remoting. Like `ssh`, the account it
+signs in as and the list of commands it may run carry most of the safety.
+
+**Destination.** The **WS-Management endpoint**, the **login name**, the **shell**, and
+optionally the **certificate fingerprint**.
+
+The endpoint is the HTTPS listener: `https://build-agent.example.com:5986/wsman`. A plain
+`http://` endpoint sends the password where anyone on the path can read it; vaultgate accepts one
+only on a target you have marked **internal**, and says so when you save.
+
+Set up the listener on the Windows host once, from an elevated PowerShell:
+
+```powershell
+$certificate = New-SelfSignedCertificate -DnsName 'build-agent.example.com' -CertStoreLocation Cert:\LocalMachine\My
+New-Item -Path WSMan:\localhost\Listener -Transport HTTPS -Address * -CertificateThumbPrint $certificate.Thumbprint -Force
+Set-Item -Path WSMan:\localhost\Service\Auth\Basic -Value $true
+New-NetFirewallRule -DisplayName 'WinRM HTTPS' -Direction Inbound -Protocol TCP -LocalPort 5986 -Action Allow
+```
+
+`Basic` authentication is safe here **only because the transport is TLS** — it is what carries the
+password, so never enable it on the plain HTTP listener, and leave that listener disabled
+(`Remove-Item -Path WSMan:\localhost\Listener\<the HTTP listener> -Recurse`).
+
+**The certificate fingerprint.** Leave it empty if the listener's certificate comes from a
+certificate authority the vaultgate host already trusts. If it is self-signed — which is the usual
+case — give its SHA-256 and vaultgate will accept that one certificate and nothing else. Read it
+off the host you are configuring:
+
+```powershell
+# SHA-256 of the DER certificate the HTTPS listener presents
+Get-ChildItem Cert:\LocalMachine\My | Where-Object Thumbprint -eq (Get-Item WSMan:\localhost\Listener\*\CertificateThumbprint).Value |
+  ForEach-Object { [System.BitConverter]::ToString((Get-FileHash -InputStream ([System.IO.MemoryStream]::new($_.RawData)) -Algorithm SHA256).Hash) }
+```
+
+or, from any machine that can reach it:
+
+```bash
+openssl s_client -connect build-agent.example.com:5986 </dev/null 2>/dev/null |
+  openssl x509 -noout -fingerprint -sha256
+```
+
+Paste the 64 hexadecimal digits with or without the colons, in either case. The pin **replaces**
+the system certificate store: a host presenting any other certificate fails the call with
+`tls_error`, and because the socket is held closed until the certificate matches, the password is
+never sent to it. Renewing the certificate means editing the target, which bumps its revision and
+voids any open confirmation.
+
+**Credential mapping.** The vault item id and the field holding the password (`password` unless
+you say otherwise). The login name lives in the destination, so one item can serve several
+targets.
+
+**Shell.** `powershell` (the default) sends the command as a PowerShell `-EncodedCommand`, so
+nothing re-parses the quoting the agent wrote; `cmd` sends a command line for `cmd.exe` to parse.
+Prefer PowerShell unless you are allowing a classic console tool.
+
+**Policy.** Exactly as `ssh`: either **allowed commands**, one glob pattern per line matched
+against the whole command, or **allow any command** behind
+`VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND=true`.
+
+```text
+Get-ComputerInfo
+Get-Service -Name *
+Restart-Service -Name Spooler
+```
+
+### Giving the target its own user
+
+Create a dedicated local account, put it in **Remote Management Users** rather than
+**Administrators**, and give it only what the allowed commands need:
+
+```powershell
+New-LocalUser -Name 'vaultgate' -Password (Read-Host -AsSecureString) -PasswordNeverExpires
+Add-LocalGroupMember -Group 'Remote Management Users' -Member 'vaultgate'
+```
+
+A member of that group can open a WinRM shell but is not an administrator; grant any further
+privilege the target genuinely needs one command at a time.
+
+## Calling a `winrm` target
+
+An agent whose token holds `actions:winrm` and whose client you granted the target calls
+`winrm_run`:
+
+```json
+{
+  "target": "build-agent",
+  "command": "Get-Service -Name Spooler"
+}
+```
+
+`command` is at most 16 KiB, may not contain a NUL byte or any other control character (tab,
+carriage return and newline excepted), and may not contain a newline or carriage return unless
+the target is an any-command one; an optional `stdin` (at most 64 KiB) is written to the command
+and closed.
+
+The command is matched against the allowlist **before anything connects**. Then one connection is
+opened to the address the host name resolved to, the certificate is checked against the pin where
+there is one, and one WS-Management shell is created for the call, runs the command, and is
+deleted when the call ends. There is no session: nothing survives to the next call.
+
+Out: `exit_code`, `stdout` and `stderr` captured separately and each cut at the target's
+**maximum output**, `truncated` and `duration_ms`. A non-zero exit code is a result, not an error.
+Errors are reserved for the connection: `tls_error` (the certificate is not the pinned one, or
+does not verify), `authentication_failed` (a 401 from the listener), `connection_failed`,
+`timeout` — which sends `Signal terminate` to the command and then deletes the shell — and
+`upstream_error` for a fault the service reported, with its reason scrubbed and capped.
+
 ## Grants
 
 A target is usable by an OAuth client only while you have granted it, and only while that

@@ -168,7 +168,7 @@ src/actions/
     graph/             the 14.3 adapter: document, token exchange, cache, write-back
     sql/               tokeniser and classifier; mssql/ and postgres/ drivers
     ssh/               the runtime (M12): schemas (14.5), the host-key parser and matcher, the tool, authorize (pure), the ssh2 driver shape, client, channel, run
-    winrm/             WS-Management client, shell lifecycle (planned)
+    winrm/             the runtime (M13): schemas (14.6), the tool, authorize (pure), the SOAP envelopes, the strict response reader, client (shell lifecycle), run, index
     browser/           CDP client, login sequence, origin interception, snapshot and masking (planned)
 ```
 
@@ -187,8 +187,8 @@ src/actions/
   process or image. The lint rule is unchanged and the module-graph rule adds `actions/` to the
   list it applies to.
 - **ACT-72** Runtime dependencies are added one per connector milestone with the QG-9
-  justification: `pg` and `mssql` (M11), `ssh2` (M12), for WinRM either nothing (hand-written
-  client) or one evaluated package (M13), and `playwright-core` (M15; the driver only, it downloads
+  justification: `pg` and `mssql` (M11), `ssh2` (M12), nothing for WinRM (M13 evaluated the npm
+  clients and wrote the client by hand), and `playwright-core` (M15; the driver only, it downloads
   no browser). The `http` connector and the `graph` adapter add no dependency. Native addons
   remain unacceptable; a package whose install compiles or downloads anything is rejected.
 - **ACT-73** The engine is constructed only when `VAULTGATE_ENABLE_ACTIONS=true`; otherwise
