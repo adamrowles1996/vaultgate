@@ -1,6 +1,6 @@
 # 13 Actions: typed, policy-gated use of vault credentials
 
-> **Status: M9, M10, M11, M12 and M13 landed.** This section specifies the actions
+> **Status: M9, M10, M11, M12, M13 and the first half of M14 landed.** This section specifies the actions
 > layer decided in [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as
 > milestones M9 to M15 in [`PLAN.md`](../PLAN.md). Everything it specifies has landed except what
 > "not yet" names below: M9 brought the engine with the resolution order of ACT-16, the tool
@@ -8,9 +8,11 @@
 > (14.2) with `http_request`; M10 the `graph` credential adapter (14.3; ACT-81…83); M11 the `sql`
 > connector (14.4) with `sql_query` and `sql_execute` (13.6.4) and the classification of 13.7.2
 > (ACT-36…38); M12 the `ssh` connector (14.5) with `ssh_run` (13.6.5; ACT-27, ACT-28, ACT-87,
-> ACT-88); and M13 the `winrm` connector (14.6) with `winrm_run` (13.6.5; ACT-89, ACT-90). Not
-> yet: the remaining connectors (no tool is listed until
-> its runtime lands), ACT-63's "unexpected write" view (M14), and ACT-48's in-band fallback for
+> ACT-88); and M13 the `winrm` connector (14.6) with `winrm_run` (13.6.5; ACT-89, ACT-90). M14's
+> first half brought the per-target call history and ACT-63's "unexpected write" view, grant
+> management from the connected-clients list, the per-field validation messages of ACT-6 and the
+> `confirm_writes` default of ACT-49. Not yet: the remaining connectors (no tool is listed until
+> its runtime lands) and ACT-48's in-band fallback for
 > the 2025 wire (M14): until then a client on that wire, whose capabilities the stateless handler
 > never sees, is refused a confirmed target with `confirmation_unavailable`. The per-connector
 > contracts are in [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence

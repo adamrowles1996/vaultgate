@@ -351,7 +351,8 @@ its user before every call; the server never relies on that prompt.
 
 ### Confirmation
 
-When a target's policy sets `confirm_writes`, every non-read call needs a human's approval
+When a target's policy sets `confirm_writes` — which the account page turns on for every new
+target, whatever the connector — every non-read call needs a human's approval
 through MCP form-mode elicitation. On protocol `2026-07-28` the call answers with an
 `input_required` result carrying one `elicitation/create` request (a single boolean, "Allow this
 call") and an opaque `requestState`; the client shows the prompt, then retries the same call with

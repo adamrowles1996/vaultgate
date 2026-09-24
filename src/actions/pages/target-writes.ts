@@ -1,11 +1,13 @@
 /**
- * The one-button writes of a target's page (ACT-5, ACT-7, ACT-8, ACT-9):
- * enable, disable, delete, grant, revoke a grant, close sessions. Each is
- * gated like every sensitive account action, then handed to the targets
- * service, which records the event; a refused grant re-renders the page with
- * the reason.
+ * The one-button writes of a target (ACT-5, ACT-7, ACT-8, ACT-9): enable,
+ * disable, delete, grant, revoke a grant, close sessions — from the target's
+ * own page, and the two grant writes again from the account page's
+ * connected-clients list, where the target is named in the form instead of
+ * the path. Each is gated like every sensitive account action, then handed to
+ * the targets service, which records the event; a refused write re-renders
+ * the target's page with the reason.
  */
-import { targetPath } from './section.ts';
+import { CLIENT_GRANT_REVOKE_TEMPLATE, CLIENT_GRANTS_TEMPLATE, targetPath } from './paths.ts';
 import { renderTargetPage } from './target-page.ts';
 import { type ActionsPagesDependencies, targetPageView, viewerOf } from './view.ts';
 
@@ -18,6 +20,11 @@ import type { TargetResult, TargetSummary } from '../targets.ts';
 import type { Hono } from 'hono';
 
 const CLIENT_FIELD = 'client_id';
+
+/**
+The target a grant written from the connected-clients list names, since the path names the client.
+*/
+export const TARGET_FIELD = 'target_id';
 
 type Write = (
   dependencies: ActionsPagesDependencies,
@@ -89,6 +96,31 @@ async function gated(
   return target === undefined ? context.notFound() : { gate, target };
 }
 
+/**
+What a finished write answers with: the notice it redirects to, or the reason it shows again.
+*/
+interface Written extends Gated {
+  readonly outcome: TargetResult;
+  readonly notice: string;
+}
+
+/**
+The answer to a write: back to the target with its notice, or the page again with the reason.
+*/
+async function respond(
+  context: IdentityContext,
+  dependencies: ActionsPagesDependencies,
+  written: Written,
+): Promise<Response> {
+  const { target, gate, outcome, notice } = written;
+  if (outcome.ok) {
+    return context.redirect(`${targetPath(target.id)}?notice=${notice}`, 303);
+  }
+  const extras = { error: outcome.error.problems.join('; ') };
+  const view = await targetPageView(dependencies, target, viewerOf(gate.session), extras);
+  return context.html(renderTargetPage(view), 400);
+}
+
 async function performWrite(
   context: IdentityContext,
   dependencies: ActionsPagesDependencies,
@@ -100,17 +132,33 @@ async function performWrite(
     return ready;
   }
   const outcome = route.write(dependencies, ready.target, ready.gate);
-  if (outcome.ok) {
-    return context.redirect(`${targetPath(ready.target.id)}?notice=${route.notice}`, 303);
+  return respond(context, dependencies, { ...ready, outcome, notice: route.notice });
+}
+
+/**
+ * ACT-9: the same grant write from the connected-clients list. The client is
+ * in the path, the target in the form; the gate, the service and the audit
+ * event are the ones the target's own page uses.
+ */
+async function performClientGrant(
+  context: IdentityContext,
+  dependencies: ActionsPagesDependencies,
+  clientId: string,
+  isRevoke: boolean,
+): Promise<Response> {
+  const gate = await dependencies.sensitiveAction(context);
+  if (gate instanceof Response) {
+    return gate;
   }
-  const extras = { error: outcome.error.problems.join('; ') };
-  const view = await targetPageView(
-    dependencies,
-    ready.target,
-    viewerOf(ready.gate.session),
-    extras,
-  );
-  return context.html(renderTargetPage(view), 400);
+  const target = dependencies.targets.get(gate.form.get(TARGET_FIELD) ?? '');
+  if (target === undefined) {
+    return context.notFound();
+  }
+  const outcome = isRevoke
+    ? dependencies.targets.revokeGrant(target.id, clientId, gate.operatorId)
+    : dependencies.targets.grant(target.id, clientId, gate.operatorId);
+  const notice = isRevoke ? 'grant-revoked' : 'granted';
+  return respond(context, dependencies, { gate, target, outcome, notice });
 }
 
 /**
@@ -133,6 +181,12 @@ export function registerTargetWrites(
   app: Hono<IdentityEnvironment>,
   dependencies: ActionsPagesDependencies,
 ): void {
+  app.post(CLIENT_GRANTS_TEMPLATE, (context) =>
+    performClientGrant(context, dependencies, context.req.param('clientId'), false),
+  );
+  app.post(CLIENT_GRANT_REVOKE_TEMPLATE, (context) =>
+    performClientGrant(context, dependencies, context.req.param('clientId'), true),
+  );
   for (const route of WRITES) {
     app.post(`/account/actions/:id/${route.path}`, (context) =>
       performWrite(context, dependencies, route, context.req.param('id')),

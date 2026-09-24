@@ -8,12 +8,12 @@
 import { isPatternMatch, type PolicyDecision } from '../../policy.ts';
 
 import { encodeBody, requestSubject } from './request.ts';
+import { READ_METHODS } from './schemas.ts';
 
 import type { HttpOperation } from './operation.ts';
 import type { HttpCredential, HttpDestination, HttpPolicy } from './schemas.ts';
 import type { OperationDescription, OperationRequest, TargetCapabilities } from '../connector.ts';
 
-const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS']);
 const SUMMARY_CAP = 1024;
 
 /**

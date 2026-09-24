@@ -8,6 +8,33 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Policy-form validation messages, the call-history and unexpected-write views, and grant
+  management from the connected-clients list (spec 13 §13.3.2 and §13.12, M14; ACT-5, ACT-6,
+  ACT-7, ACT-49, ACT-63). A target's page gains **The whole call history**, which pages back
+  through its `action_calls` rows 50 at a time, newest first, on a keyset cursor so a page never
+  shifts while rows are appended or retired. The Actions section gains **Unexpected writes**
+  (`/account/actions/unexpected`): every call across every target that was not a read and whose
+  elicitation did not end in an accepted confirmation, with the target, the client, the tool, the
+  classification, the outcome and an excerpt of the stored — already scrubbed — arguments, so a
+  target with `confirm_writes: false` is reviewable and a declined, cancelled, expired or refused
+  confirmation on any other target is visible. Rows left behind by a deleted target keep its name
+  without a link (ACT-8). A rejected save now shows each problem against the control it names,
+  with an operator-facing sentence per policy field of every connector and the check's own detail
+  in brackets; a problem that names no control — the destination as a whole, the vault item's
+  fields — is still listed under the banner, so nothing is hidden. The account page's
+  connected-clients list gains a **Targets** column with a Remove form per grant and a picker for
+  the rest, injected by the composition layer so `src/oauth/` still knows nothing of the actions
+  layer (ACT-70); it writes through the same service, the same ID-15 gate and the same ACT-7
+  audit events as the target's own page. `confirm_writes` was already on by default in the form;
+  a target that allows a non-read operation and has it turned off now carries a standing note
+  saying what that means, which needed each connector to answer whether its policy allows
+  anything but a read.
+- `npm run check:requirements` (`scripts/check-requirement-citations.mjs`), part of
+  `npm run quality`: every `ACT-n` the specification defines must be named by at least one test
+  title. The `browser` requirements of M15 (ACT-29…33, ACT-91…102) are allowlisted inside the
+  script with their reason; every other actions requirement is cited, and the gate fails if one
+  loses its citation or if an allowlisted identifier leaves the specification.
+
 - `winrm` connector runtime and `winrm_run` (spec 14 §14.6 and spec 13 §13.6.5, M13; ACT-27,
   ACT-28, ACT-89, ACT-90): the tool is listed on a deployment with `VAULTGATE_ENABLE_ACTIONS=true`
   and `VAULTGATE_ACTIONS_ENABLE_WINRM=true` for tokens holding `actions:winrm`. A `winrm` target

@@ -9,11 +9,19 @@ import {
 } from '../../test-support/actions-fixtures.ts';
 import { createPagesHarness, signedInOperator } from '../../test-support/actions-pages.ts';
 import { fixtureTargetRow } from '../../test-support/actions-store-fixtures.ts';
+import { createSqlTarget } from '../../test-support/sql-connector.ts';
+import { createSshTarget } from '../../test-support/ssh-connector.ts';
+import { createWinrmTarget } from '../../test-support/winrm-connector.ts';
 import { VaultError } from '../../vault/client.ts';
 
 import type { PagesHarness } from '../../test-support/actions-pages.ts';
 
 const BROWSER_ACCEPT = 'text/html,application/xhtml+xml';
+
+/**
+ACT-49: the note the target page carries once the operator turns the confirmation off.
+*/
+const UNCONFIRMED_NOTE = 'Confirmation is off: a granted client can change things here';
 
 /**
 The stored target's edit form, as posted back unchanged but for `fields`.
@@ -141,6 +149,38 @@ describe('GET /account/actions/:id', () => {
     expect(edit.status).toBe(403);
   });
 
+  it('ACT-49 notes a target that changes things without asking, and says nothing where it asks or reads only', async () => {
+    const harness = createPagesHarness();
+    await createHttpTarget(harness.actions, {
+      policy: { allowed_methods: ['GET', 'POST'] },
+    });
+    await createHttpTarget(harness.actions, {
+      name: 'reader',
+      base_url: 'https://read.example.com',
+      policy: { allowed_methods: ['GET', 'HEAD'] },
+    });
+    await createHttpTarget(harness.actions, {
+      name: 'asks',
+      base_url: 'https://asks.example.com',
+      policy: { allowed_methods: ['GET', 'POST'], confirm_writes: true },
+    });
+    await createSqlTarget(harness.actions, { name: 'replica' });
+    await createSshTarget(harness.actions, { name: 'host' });
+    await createWinrmTarget(harness.actions, { name: 'agent' });
+    harness.actions.engine.targets.repo.insert(fixtureTargetRow({ id: 'row-1', policy: 'nope' }));
+    const { browser } = await signedInOperator(harness);
+    const noted: boolean[] = [];
+    for (const id of ['id-1', 'id-2', 'id-3', 'id-4', 'id-5', 'id-6', 'row-1']) {
+      const page = await browser.get(`/account/actions/${id}`);
+      expect(page.status).toBe(200);
+      const markup = await page.text();
+      noted.push(markup.includes(UNCONFIRMED_NOTE));
+    }
+    // api (http write), reader, asks, replica (sql read-only), host (ssh),
+    // agent (winrm), the invalid row.
+    expect(noted).toStrictEqual([true, false, false, false, true, true, false]);
+  });
+
   it('ID-15 offers no form before the password is confirmed and points at the confirmation', async () => {
     const harness = createPagesHarness();
     harness.clients.push({ clientId: CLIENT_ID, clientName: 'Agent One' });
@@ -218,10 +258,10 @@ describe('POST /account/actions/:id', () => {
     );
     const markup = await response.text();
     expect(response.status).toBe(400);
+    expect(markup).toContain('<p class="error">must not carry a query string or fragment</p>');
     expect(markup).toContain(
-      '<li>destination.base_url: must not carry a query string or fragment</li>',
+      '<p class="error">How long one call may run, in milliseconds: 1000 to 300000. (Too small',
     );
-    expect(markup).toContain('<li>policy.timeout_ms: Too small');
     expect(markup).toContain('name="destination.base_url" value="https://api.example.com/v1?x=1"');
     expect(markup).toContain('value="5"');
     expect(harness.actions.engine.targets.get(target.id)?.revision).toBe(1);

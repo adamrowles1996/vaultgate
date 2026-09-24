@@ -13,6 +13,7 @@ import {
   type KeysetSource,
   listPage,
   type Page,
+  type PageFilter,
   type PageOptions,
 } from './keyset.ts';
 
@@ -142,10 +143,31 @@ export const ACTION_CALL_FORMATS: Readonly<Record<ExportFormat, LineFormat<Store
   lineFormats(FIELDS, (call) => ({ ...call }));
 
 /**
-The account page reads one target's calls (ACT-63); the export reads them all.
-*/
+ * What the account page asks of the call trail (ACT-63): one target's calls,
+ * or the unexpected writes — every call that is not a read and whose
+ * elicitation did not end in an accepted confirmation, across targets. The
+ * export asks for neither and reads them all.
+ */
 export interface CallFilter {
   readonly targetId?: string | undefined;
+  readonly unexpectedOnly?: boolean | undefined;
+}
+
+/**
+ACT-63: a non-read call that no human accepted is the one an operator needs to see.
+*/
+const UNEXPECTED_WRITE: readonly PageFilter[] = [
+  { column: 'operation', operator: '<>', value: 'read' },
+  { column: 'elicitation', operator: '<>', value: 'accepted' },
+];
+
+function filtersOf(filter: CallFilter): readonly PageFilter[] {
+  return [
+    ...(filter.targetId === undefined
+      ? []
+      : [{ column: 'target_id', operator: '=', value: filter.targetId } as const]),
+    ...(filter.unexpectedOnly === true ? UNEXPECTED_WRITE : []),
+  ];
 }
 
 /**
@@ -156,12 +178,7 @@ export function listActionCalls(
   options: PageOptions,
   filter: CallFilter = {},
 ): Page<StoredActionCall> {
-  return listPage(
-    database,
-    SOURCE,
-    options,
-    filter.targetId === undefined ? undefined : { column: 'target_id', value: filter.targetId },
-  );
+  return listPage(database, SOURCE, options, filtersOf(filter));
 }
 
 /**

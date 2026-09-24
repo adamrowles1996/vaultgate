@@ -144,4 +144,7 @@ export const sqlSchemas: ConnectorSchemas<SqlDestination, SqlCredential, SqlPoli
   summariseDestination(destination) {
     return `${destination.host}:${portOf(destination)}/${destination.database}`;
   },
+  allowsNonRead(policy) {
+    return policy.operations.includes('write');
+  },
 };

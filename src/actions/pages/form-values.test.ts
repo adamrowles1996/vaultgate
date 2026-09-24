@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { defaultValues, documentsFromForm, valuesFromDocuments } from './form-values.ts';
-import { formFor } from './forms.ts';
+import { editableConnectors, formFor } from './forms.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
 
@@ -124,5 +124,22 @@ describe('valuesFromDocuments', () => {
     expect(values.get('credential.mode')).toBe('bearer');
     expect(values.get('policy.follow_redirects')).toBe('');
     expect(values.get('destination.base_url')).toBe('');
+  });
+});
+
+describe('a new target’s defaults', () => {
+  it('ACT-49 starts every connector’s form with the confirmation on, and reads it back off only when the operator clears it', () => {
+    for (const kind of editableConnectors()) {
+      const form = formFor(kind, { allowAnyCommand: true });
+      expect(form).toBeDefined();
+      if (form === undefined) {
+        continue;
+      }
+      expect(defaultValues(form).get('policy.confirm_writes')).toBe('on');
+      expect(documentsFromForm(form, defaultValues(form)).policy['confirm_writes']).toBe(true);
+      const cleared = new Map(defaultValues(form));
+      cleared.delete('policy.confirm_writes');
+      expect(documentsFromForm(form, cleared).policy['confirm_writes']).toBe(false);
+    }
   });
 });

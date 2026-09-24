@@ -33,10 +33,13 @@ export interface PageOptions extends AuditRange {
 }
 
 /**
-One equality the rows must satisfy besides the window (the account page reads one target's calls, ACT-63).
-*/
+ * One comparison the rows must satisfy besides the window: the account page
+ * reads one target's calls and, for the unexpected-write view, the calls that
+ * are neither reads nor accepted confirmations (ACT-63).
+ */
 export interface PageFilter {
   readonly column: string;
+  readonly operator: '=' | '<>';
   readonly value: string;
 }
 
@@ -71,7 +74,7 @@ export function listPage<Row extends KeysetCursor, Record>(
   database: DatabaseSync,
   source: KeysetSource<Row, Record>,
   options: PageOptions,
-  filter?: PageFilter,
+  filters: readonly PageFilter[] = [],
 ): Page<Record> {
   const { from, to, limit, cursor } = options;
   const conditions = ['at >= ?', 'at < ?'];
@@ -80,8 +83,8 @@ export function listPage<Row extends KeysetCursor, Record>(
     conditions.push('(at < ? OR (at = ? AND id < ?))');
     parameters.push(cursor.at, cursor.at, cursor.id);
   }
-  if (filter !== undefined) {
-    conditions.push(`${filter.column} = ?`);
+  for (const filter of filters) {
+    conditions.push(`${filter.column} ${filter.operator} ?`);
     parameters.push(filter.value);
   }
   const sql =

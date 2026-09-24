@@ -17,11 +17,13 @@ import {
   when,
 } from '../../identity/pages/template.ts';
 
-import { targetPath } from './section.ts';
+import { type CallItem, renderCallTable } from './calls.ts';
+import { callsPath, targetPath } from './paths.ts';
 import { renderProblems, renderTargetForm } from './target-form.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
 import type { FormValues } from './form-values.ts';
+import type { FieldProblems } from './messages.ts';
 import type { TargetSummary } from '../targets.ts';
 
 export interface GrantItem {
@@ -38,17 +40,6 @@ export interface ClientChoice {
   readonly clientName: string | undefined;
 }
 
-export interface CallItem {
-  readonly at: string;
-  readonly tool: string;
-  readonly operation: string;
-  readonly classification: string;
-  readonly outcome: string;
-  readonly elicitation: string;
-  readonly outputBytes: number;
-  readonly clientId: string;
-}
-
 export interface TargetPageView {
   readonly csrfToken: string;
   readonly isReauthenticated: boolean;
@@ -56,9 +47,13 @@ export interface TargetPageView {
   ACT-88: the target's policy allows any command; the page says so on every visit.
   */
   readonly isUnrestricted: boolean;
+  /**
+  ACT-49: the policy allows a non-read operation and asks no human to confirm one.
+  */
+  readonly isUnconfirmed: boolean;
   readonly notice: string | undefined;
   readonly error: string | undefined;
-  readonly problems: readonly string[];
+  readonly fieldProblems: FieldProblems;
   readonly target: TargetSummary;
   /**
   The vault item's name (ACT-4), or why it could not be read.
@@ -77,16 +72,6 @@ export interface TargetPageView {
 
 const STATUS_COLUMNS = ['Setting', 'Value'] as const;
 const GRANT_COLUMNS = ['Client', 'Granted', ''] as const;
-const CALL_COLUMNS = [
-  'Time',
-  'Tool',
-  'Operation',
-  'Classification',
-  'Outcome',
-  'Elicitation',
-  'Output bytes',
-  'Client',
-] as const;
 
 const REAUTHENTICATION_ANCHOR = '/account#sensitive-actions';
 
@@ -96,6 +81,14 @@ ACT-88: the standing warning an any-command target carries, shown whether or not
 const UNRESTRICTED_WARNING =
   'This target allows any command: a granted client can run anything its login can, and every ' +
   'call is audited with the full command.';
+
+/**
+ACT-49: the note a target carries once the operator turns the confirmation off.
+*/
+const UNCONFIRMED_NOTE =
+  'Confirmation is off: a granted client can change things here without asking anyone. New ' +
+  'targets ask for a confirmation on every non-read call; this one relies on the grant and on ' +
+  'the prompt the client may show. Review the unexpected writes below.';
 
 function statusRow(label: string, value: string | Html): Html {
   return html`<tr>
@@ -196,36 +189,21 @@ function grantsSection(view: TargetPageView): Html {
   </section>`;
 }
 
+/**
+ACT-63: the last 50 calls here; the history page pages back through the rest.
+*/
 function callsSection(view: TargetPageView): Html {
-  const rows = view.calls.map(
-    (call) =>
-      html`<tr>
-        ${cell(CALL_COLUMNS[0], call.at)} ${cell(CALL_COLUMNS[1], call.tool)}
-        ${cell(CALL_COLUMNS[2], call.operation)} ${cell(CALL_COLUMNS[3], call.classification)}
-        ${cell(CALL_COLUMNS[4], call.outcome)} ${cell(CALL_COLUMNS[5], call.elicitation)}
-        ${cell(CALL_COLUMNS[6], String(call.outputBytes))} ${cell(CALL_COLUMNS[7], call.clientId)}
-      </tr>`,
-  );
   return html`<section>
     <h3>Recent calls</h3>
-    ${when(view.calls.length === 0, () => html`<p>No calls yet.</p>`)}
-    ${when(
-      view.calls.length > 0,
-      () =>
-        html`<table>
-          ${tableHead(CALL_COLUMNS)}
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>`,
-    )}
+    ${renderCallTable(view.calls)}
+    <p><a href="${callsPath(view.target.id)}">The whole call history</a></p>
   </section>`;
 }
 
 function editSection(view: TargetPageView): Html {
   return html`<section>
     <h3>Edit</h3>
-    ${renderProblems(view.problems)}
+    ${renderProblems(view.fieldProblems)}
     ${when(
       view.form === undefined,
       () => html`<p>This build cannot edit ${view.target.connector} targets yet.</p>`,
@@ -238,6 +216,7 @@ function editSection(view: TargetPageView): Html {
             csrfToken: view.csrfToken,
             form: view.form,
             values: view.values,
+            problems: view.fieldProblems,
             isNew: false,
             submitLabel: 'Save target',
           })
@@ -252,7 +231,7 @@ export function renderTargetPage(view: TargetPageView): string {
     html`<h2>Target <code>${view.target.name}</code></h2>
       ${errorBanner(view.error)}
       ${when(view.isUnrestricted, () => errorBanner(UNRESTRICTED_WARNING))}
-      ${noticeBanner(view.notice)}
+      ${when(view.isUnconfirmed, () => errorBanner(UNCONFIRMED_NOTE))} ${noticeBanner(view.notice)}
       <p><a href="/account#actions">Back to the account page</a></p>
       <p>${view.target.description}</p>
       ${statusTable(view)}

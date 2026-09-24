@@ -95,4 +95,10 @@ export const sshSchemas: ConnectorSchemas<SshDestination, SshCredential, SshPoli
   summariseDestination(destination) {
     return `${destination.username}@${destination.host}:${destination.port}`;
   },
+  /**
+  ACT-49: running a command is never a read, whatever the command is.
+  */
+  allowsNonRead() {
+    return true;
+  },
 };

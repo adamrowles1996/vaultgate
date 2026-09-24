@@ -10,10 +10,10 @@ and describes an operation; vaultgate fetches the credential, performs the opera
 policy, scrubs the result of every injected value and returns it.
 
 This guide is for the operator. It covers what exists today: the layer's switches, the account
-page that manages targets, the `http`, `sql` and `ssh` connectors' target forms, and what an
-agent does with those targets through `http_request`, `sql_query`, `sql_execute` and `ssh_run`.
-The other connectors (`winrm`, `browser`) land with their milestones; until then their targets
-cannot be created.
+page that manages targets, the target forms of every connector that has landed — `http` (with the
+Microsoft Graph credential adapter), `sql`, `ssh` and `winrm` — and what an agent does with those
+targets through `http_request`, `sql_query`, `sql_execute`, `ssh_run` and `winrm_run`. The
+`browser` connector lands with M15; until then its targets cannot be created.
 
 ## Enabling the layer
 
@@ -24,6 +24,7 @@ VAULTGATE_ENABLE_ACTIONS=true
 VAULTGATE_ACTIONS_ENABLE_HTTP=true
 VAULTGATE_ACTIONS_ENABLE_SQL=true
 VAULTGATE_ACTIONS_ENABLE_SSH=true
+VAULTGATE_ACTIONS_ENABLE_WINRM=true
 ```
 
 Restart after changing them. With the master switch off nothing changes: no `actions:*` scope
@@ -38,6 +39,10 @@ with its connector, destination (host and base path only), whether it is enabled
 granted it, its last call and outcome, and the open sessions it holds, with a link to the page
 that manages it and a link to create a target per connector this build supports.
 
+Below the table, **Unexpected writes** opens the cross-target review of every call that changed
+something without a human's confirmation; it is described under
+[Sessions, calls and the audit trail](#sessions-calls-and-the-audit-trail).
+
 Every change (create, edit, enable, disable, delete, grant, remove a grant, close sessions) needs
 a fresh password confirmation under **Sensitive actions**; the confirmation lasts five minutes,
 as for every other sensitive action. Until then the pages show the target but offer no form.
@@ -45,6 +50,26 @@ as for every other sensitive action. Until then the pages show the target but of
 A target whose stored documents no longer pass validation (for example after an upgrade that
 tightened a rule) is marked `target_invalid` with the reason, refuses every call, and can be
 repaired or deleted from its page.
+
+### When a save is rejected
+
+Nothing is saved until every check passes, and every problem is reported at once rather than one
+per attempt. A problem that names a field in the form is shown against that field, with a
+sentence saying what the field is for and the exact complaint in brackets — so
+`Too small: expected number to be >=1000` against **Timeout (ms)** reads as "How long one call
+may run, in milliseconds: 1000 to 300000. (Too small: expected number to be >=1000)". A problem
+that names no field — the destination as a whole, the vault item's fields, a credential mapping —
+is listed under the banner at the top. The form is re-shown with exactly what you submitted, so
+nothing has to be typed again.
+
+### Confirmation is on for a new target
+
+**Ask a human to confirm every non-read call** starts on for every new target, whatever the
+connector. While it is on, a call that would change something answers the agent's client with an
+elicitation prompt, and runs only once a human ticks the box; see
+[Confirmation](tools-and-scopes.md#confirmation). If you turn it off on a target whose policy
+allows anything but a read, its page carries a standing note saying so, and every such call
+appears in **Unexpected writes**.
 
 ## Creating an `http` target
 
@@ -697,17 +722,35 @@ does not verify), `authentication_failed` (a 401 from the listener), `connection
 A target is usable by an OAuth client only while you have granted it, and only while that
 client's consent stands. On the target's page, **Grants** lists the granted clients and lets you
 grant among the clients currently connected (those on the account page's connected-clients
-list) or remove a grant, which also closes that client's sessions on the target. Disconnecting a
-client on the account page removes every grant it holds, so a reconnected client starts with
-none. A grant never widens a token: the client still needs the connector's scope
+list) or remove a grant, which also closes that client's sessions on the target.
+
+The connected-clients list on the account page shows the same grants from the other side: each
+client's row has a **Targets** column listing the targets it may act on, with a **Remove** button
+per grant and a picker for the targets it does not yet hold. Granting or removing from there does
+exactly what the target's own page does — the same checks, the same audit event — and returns you
+to the target concerned.
+
+Disconnecting a client on the account page removes every grant it holds, so a reconnected client
+starts with none. A grant never widens a token: the client still needs the connector's scope
 (`actions:http`) at consent.
 
 ## Sessions, calls and the audit trail
 
 The target's page shows its open sessions (browser sessions, a later milestone) with a **Close
 sessions** button, and the last 50 calls with their time, tool, operation, classification,
-outcome, elicitation result, output size and client. Results are never stored; the arguments
-are, scrubbed, so an unexpected write can be read back.
+outcome, elicitation result, output size and client. **The whole call history** below that table
+pages back through the rest, 50 at a time, newest first, following **Older calls** until the
+trail ends. Results are never stored; the arguments are, scrubbed, so an unexpected write can be
+read back.
+
+**Unexpected writes**, linked from the Actions section, is the same trail across every target,
+narrowed to the calls that matter when something has gone wrong: every call that was not a read
+and that no human accepted through a confirmation, newest first, with the time, the target, the
+client, the tool, the classification, the outcome and an excerpt of the arguments. A target that
+asks for confirmation on every non-read call appears here only when one was declined, cancelled,
+expired or refused; a target with the confirmation off appears here for every write it makes,
+which is the point. The rows of a deleted target stay (the audit trail outlives the target) and
+name it without a link.
 
 Every change to a target records an `actions.*` audit event with the target name, the
 connector, your operator id and, for an edit, the names of the fields that changed (the

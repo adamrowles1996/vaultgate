@@ -9,6 +9,8 @@
  */
 import { cell, type Html, html, tableHead, when } from '../../identity/pages/template.ts';
 
+import { targetPath, UNEXPECTED_PATH } from './paths.ts';
+
 import type { ConnectorKind } from '../../config/actions.ts';
 
 export interface LastCall {
@@ -43,10 +45,6 @@ const COLUMNS = [
   'Last call',
   'Sessions',
 ] as const;
-
-export function targetPath(id: string): string {
-  return `/account/actions/${encodeURIComponent(id)}`;
-}
 
 /**
 ACT-1: a stored row that fails its schema is marked with the reasons; it refuses every call.
@@ -98,5 +96,9 @@ export function renderActionsSection(view: SectionView): Html {
     <ul>
       ${links}
     </ul>
+    <p>
+      <a href="${UNEXPECTED_PATH}">Unexpected writes</a>: every call that changed something without
+      a human confirmation, across every target.
+    </p>
   </section>`;
 }

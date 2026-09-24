@@ -7,18 +7,19 @@
  */
 import { z } from 'zod';
 
-import { listActionCalls } from '../../audit/actions-query.ts';
 import { countOpenSessions } from '../sessions.ts';
 import { validateTarget } from '../targets-schemas.ts';
 
+import { lastCall, targetCalls } from './calls-view.ts';
 import { defaultValues, type FormValues, valuesFromDocuments } from './form-values.ts';
 import { editableConnectors, formFor } from './forms.ts';
-import { DESCRIPTION_FIELD, INTERNAL_FIELD, ITEM_ID_FIELD } from './target-form.ts';
+import { type FieldProblems, groupProblems, NO_PROBLEMS } from './messages.ts';
+import { DESCRIPTION_FIELD, drawnPaths, INTERNAL_FIELD, ITEM_ID_FIELD } from './target-form.ts';
 
 import type { ConnectorForm, FormSwitches } from './descriptors.ts';
-import type { LastCall, SectionView, TargetListItem } from './section.ts';
-import type { CallItem, ClientChoice, GrantItem, TargetPageView } from './target-page.ts';
-import type { SensitiveAction, SessionState } from '../../identity/index.ts';
+import type { SectionView, TargetListItem } from './section.ts';
+import type { ClientChoice, GrantItem, TargetPageView } from './target-page.ts';
+import type { IdentityContext, SensitiveAction, SessionState } from '../../identity/index.ts';
 import type { VaultClient } from '../../vault/client.ts';
 import type { TargetsService, TargetSummary } from '../targets.ts';
 import type { DatabaseSync } from 'node:sqlite';
@@ -56,35 +57,13 @@ export interface PageExtras {
   readonly values?: FormValues | undefined;
 }
 
-const ALL_TIME = { from: 0, to: Number.MAX_SAFE_INTEGER };
-
 /**
 ACT-88: a target whose policy allows any command, whichever connector it belongs to.
 */
 const unrestrictedSchema = z.object({ any_command: z.literal(true) });
-const HISTORY_LIMIT = 50;
 
 function iso(ms: number): string {
   return new Date(ms).toISOString();
-}
-
-function lastCall(database: DatabaseSync, targetId: string): LastCall | undefined {
-  const call = listActionCalls(database, { ...ALL_TIME, limit: 1 }, { targetId }).records[0];
-  return call === undefined ? undefined : { at: iso(call.at), outcome: call.outcome };
-}
-
-function callHistory(database: DatabaseSync, targetId: string): readonly CallItem[] {
-  const page = listActionCalls(database, { ...ALL_TIME, limit: HISTORY_LIMIT }, { targetId });
-  return page.records.map((call) => ({
-    at: iso(call.at),
-    tool: call.tool,
-    operation: call.operation ?? '',
-    classification: call.classification ?? '',
-    outcome: call.outcome,
-    elicitation: call.elicitation,
-    outputBytes: call.outputBytes,
-    clientId: call.clientId,
-  }));
 }
 
 function clientNames(clients: readonly ClientChoice[]): ReadonlyMap<string, string> {
@@ -150,6 +129,30 @@ export function createValues(form: ConnectorForm): FormValues {
 }
 
 /**
+ACT-6: a rejected save's problems against the controls of the form that would have saved it.
+*/
+export function fieldProblems(
+  form: ConnectorForm,
+  problems: readonly string[] | undefined,
+): FieldProblems {
+  return problems === undefined ? NO_PROBLEMS : groupProblems(problems, drawnPaths(form));
+}
+
+/**
+ * ACT-49: the target allows an operation that is not a read and asks no
+ * human to confirm one. A row that fails its schema (ACT-1) refuses every
+ * call, so it needs no such note.
+ */
+function isUnconfirmed(target: TargetSummary): boolean {
+  const validated = validateTarget(target);
+  return (
+    validated.state === 'valid' &&
+    !validated.documents.common.confirm_writes &&
+    validated.schemas.allowsNonRead(validated.documents.policy)
+  );
+}
+
+/**
 ACT-4, ACT-54: the item's name, or the precise reason the operator (and only the operator) may see.
 */
 async function describeItem(vault: Pick<VaultClient, 'getItem'>, itemId: string): Promise<string> {
@@ -176,6 +179,20 @@ export function viewerOf(session: SessionState): Viewer {
   };
 }
 
+/**
+ * The signed-in operator a read-only page of this section needs, or the
+ * redirect to the login form that returns here afterwards. The writes go
+ * through the identity module's injected gate instead (ID-15, ID-18).
+ */
+export function signedIn(context: IdentityContext): Viewer | Response {
+  const session = context.get('session');
+  if (session === undefined) {
+    const url = new URL(context.req.url);
+    return context.redirect(`/login?next=${encodeURIComponent(url.pathname + url.search)}`, 303);
+  }
+  return viewerOf(session);
+}
+
 export async function targetPageView(
   dependencies: ActionsPagesDependencies,
   target: TargetSummary,
@@ -190,15 +207,16 @@ export async function targetPageView(
     csrfToken: viewer.csrfToken,
     isReauthenticated: viewer.isReauthenticated,
     isUnrestricted: unrestrictedSchema.safeParse(target.policy).success,
+    isUnconfirmed: isUnconfirmed(target),
     notice: extras.notice,
     error: extras.error,
-    problems: extras.problems ?? [],
+    fieldProblems: form === undefined ? NO_PROBLEMS : fieldProblems(form, extras.problems),
     target,
     itemName: await describeItem(dependencies.vault, target.credential.item_id),
     openSessions: countOpenSessions(dependencies.database, target.id),
     grants,
     candidates: clients.filter((client) => !granted.has(client.clientId)),
-    calls: callHistory(dependencies.database, target.id),
+    calls: targetCalls(dependencies.database, target.id).calls,
     form,
     values: extras.values ?? (form === undefined ? new Map() : targetValues(form, target)),
   };
