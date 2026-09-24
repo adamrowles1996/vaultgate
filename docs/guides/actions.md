@@ -654,40 +654,108 @@ Follow **Create a winrm target**. A `winrm` target runs a command on a Windows h
 WS-Management, the protocol behind `winrs` and PowerShell remoting. Like `ssh`, the account it
 signs in as and the list of commands it may run carry most of the safety.
 
-**No change to the Windows host is required.** A stock Windows 10 or 11 machine already runs a
-WinRM listener on port 5985 with `Negotiate` authentication enabled and `AllowUnencrypted` set to
-`false`, and that is exactly what vaultgate speaks. You do not need to install a certificate, you
-do not need to enable `Basic`, and you should not: leaving the machine as Windows configured it is
-both less work and more secure. If WinRM is off entirely, one elevated command turns it on:
+### Choosing the endpoint
+
+Three endpoints work, and they are not equally good. In order of preference:
+
+1. **`https://` on 5986 with the certificate pinned.** Aim for this one. TLS covers the whole
+   conversation — the SOAP bodies, the HTTP headers, the URL, the message sizes and the timings —
+   and the pin settles which host you are talking to before a byte of the credential is written.
+   It is available to anyone willing to create a certificate and a listener, which is three
+   elevated commands (below).
+2. **`https://` on 5986 with a certificate from an authority the vaultgate host already trusts.**
+   The same protection, and the better choice where a public key infrastructure already issues
+   certificates for your servers: renewal is then the certificate authority's business rather than
+   an edit to the target. Leave the fingerprint empty and the system certificate store decides.
+3. **`http://` on 5985 with Negotiate.** The fallback for a host you cannot or should not
+   reconfigure — a machine somebody else owns, a build agent under change control, a workgroup box
+   you were asked not to touch. That is a legitimate and common case, and vaultgate supports it
+   properly rather than grudgingly; what it protects and what it does not is set out below.
+
+**A self-signed certificate is not a reason to stay on the plain listener.** The usual objection to
+5986 in a small estate is that nobody is going to issue a certificate for a build agent, so it will
+be self-signed — and the usual warning about a self-signed certificate is a fair one: a client that
+accepts whatever it is handed has encryption without authentication, which is theatre, and anyone
+who can get between the two ends presents a certificate of his own and reads the lot.
+
+vaultgate's **certificate fingerprint is the answer to exactly that objection**. The pin
+_replaces_ the system certificate store for that target: one certificate is acceptable, it is
+compared before anything is sent, and anything else fails the call with `tls_error`. There is no
+`rejectUnauthorized: false`, no "ignore certificate errors" box and no `-SkipCACheck` anywhere in
+the schema, because with a pin there is nothing for one to do. A pinned self-signed certificate is
+_verified_, not trusted blindly — and it is a narrower statement about the host than a public
+certificate authority makes, because it names one certificate rather than every certificate that
+authority will ever sign.
+
+On the host, an elevated PowerShell:
+
+```powershell
+$certificate = New-SelfSignedCertificate -DnsName 'build-agent.example.com' -CertStoreLocation Cert:\LocalMachine\My
+New-Item -Path WSMan:\localhost\Listener -Transport HTTPS -Address * -CertificateThumbPrint $certificate.Thumbprint -Force
+New-NetFirewallRule -DisplayName 'WinRM HTTPS' -Direction Inbound -Protocol TCP -LocalPort 5986 -Action Allow
+```
+
+Leave `Basic` off while you do this. The authentication stays Negotiate; TLS is added underneath
+it, and the two are worth more together than either alone — the transport is sealed and
+authenticated, and the sign-in is additionally bound to the certificate the socket presented, so a
+relay cannot carry it elsewhere.
+
+Then read the fingerprint back **from the listener**, not from the certificate store, so what you
+pin is what the socket actually presents:
+
+```bash
+openssl s_client -connect build-agent.example.com:5986 </dev/null 2>/dev/null |
+  openssl x509 -noout -fingerprint -sha256
+```
+
+Paste the 64 hexadecimal digits into **Certificate fingerprint**, with or without the colons, in
+either case. Renewing the certificate means editing the target, which bumps its revision and voids
+any open confirmation; that is the cost of option 1 over option 2.
+
+### The plain listener on 5985
+
+**Option 3 needs no change to the Windows host at all.** A stock Windows 10 or 11 machine already
+runs a WinRM listener on port 5985 with `Negotiate` authentication enabled and `AllowUnencrypted`
+set to `false`, and that is exactly what vaultgate speaks. Measured against a stock Windows 11 Pro
+machine, the only listener is HTTP on 5985 with no certificate, `Service\Auth\Basic` is `false`,
+and `POST /wsman` answers `401 WWW-Authenticate: Negotiate` — and vaultgate runs a command over it
+with nothing on the host changed. That is not a misconfigured machine; it is the default, and the
+secure one. You do not need to install a certificate, and you must not enable `Basic`. If WinRM is
+off entirely, one elevated command turns it on:
 
 ```powershell
 Enable-PSRemoting -Force
 ```
 
+**What the plain endpoint protects.** The password never crosses the network: Negotiate is NTLM
+challenge-response, so the host sends a challenge, vaultgate answers it with a value computed from
+the password, and the password itself stays on the vaultgate machine. And the command and its
+output are encrypted: the exchange produces a session key, and every SOAP message after it is
+sealed with that key and signed, which is what `AllowUnencrypted=false` asks for. vaultgate refuses
+a reply whose signature does not verify rather than reading it anyway.
+
+**What it does not protect.** Everything outside the sealed body is in the clear — that there is a
+WS-Management conversation, between which addresses, how long it lasts, how large each message is
+and how often it happens. Nor is there a channel to bind the sign-in to, so the relay defence that
+an `https://` endpoint gets for free is absent. That is why vaultgate accepts a plain endpoint only
+on a target you have marked **internal**, the same rule every other connector follows for an
+address on your own network, and it is worth keeping it there.
+
+### Filling in the target
+
 **Destination.** The **WS-Management endpoint**, the **login name**, the **authentication**, the
 **shell**, and optionally the **certificate fingerprint**.
 
-The endpoint is the listener: `http://build-agent.example.com:5985/wsman` for the default one, or
-`https://build-agent.example.com:5986/wsman` if the host has been given a certificate. A plain
-`http://` endpoint is accepted only on a target you have marked **internal**, which is the same
-rule every other connector follows for an address on your own network.
+The endpoint is the listener: `https://build-agent.example.com:5986/wsman` once the host has a
+certificate, or `http://build-agent.example.com:5985/wsman` for the default one. A plain `http://`
+endpoint is accepted only on a target you have marked **internal**.
 
-**Authentication.** Leave it on **Negotiate**. Two things follow from it, and they are the reason
-the plain endpoint is safe:
-
-- **The password never crosses the network.** Negotiate is NTLM challenge-response: the host sends
-  a challenge, vaultgate answers it with a value computed from the password, and the password
-  itself stays on the vaultgate machine. Nothing on the wire can be replayed as a credential.
-- **The command and its output are encrypted.** The exchange produces a session key, and every
-  SOAP message after it is sealed with that key and signed. This is what `AllowUnencrypted=false`
-  asks for, and vaultgate refuses a reply whose signature does not verify rather than reading it
-  anyway.
-- **On an `https://` endpoint the exchange is bound to the connection.** vaultgate sends a
-  channel-binding token computed from the certificate the listener actually presented, so an
-  attacker who terminates TLS in front of the host cannot relay the sign-in on somewhere else.
-  Windows checks it at its default `CbtHardeningLevel` of `Relaxed`, so there is nothing to
-  configure. A plain `http://` endpoint has no TLS to bind to; that is why vaultgate only accepts
-  one on a target you marked **internal**, and it is worth keeping it that way.
+**Authentication.** Leave it on **Negotiate**, on either endpoint. The password never crosses the
+network and the SOAP body is sealed and signed either way, as above; on an `https://` endpoint the
+exchange is additionally **bound to the connection**. vaultgate sends a channel-binding token
+computed from the certificate the listener actually presented, so an attacker who terminates TLS
+in front of the host cannot relay the sign-in on somewhere else. Windows checks it at its default
+`CbtHardeningLevel` of `Relaxed`, so there is nothing to configure.
 
 Two things Negotiate does not do, which are worth knowing before you enable a `winrm` target.
 Anyone who captures an exchange can attack the password offline at their leisure — NTLM has no
@@ -695,25 +763,26 @@ defence against that, so the account below matters as much as the network does. 
 weaker than Kerberos: it never authenticates the host to vaultgate. If the machine is
 domain-joined and you have a stronger option, prefer it.
 
+**NTLM has a shelf life, and it is longer than the headlines suggest.** Microsoft deprecated every
+version of NTLM in June 2024 — "no longer under active feature development" — and says in the same
+breath that "use of NTLM will continue to work in the next release of Windows Server and the next
+annual release of Windows", with calls to NTLM to be replaced by calls to Negotiate, which is what
+vaultgate already speaks
+([Deprecated features in the Windows client](https://learn.microsoft.com/en-us/windows/whats-new/deprecated-features),
+checked 24 September 2026). The phase that blocks network NTLM by default is a future Windows
+Server release, and policy can still re-enable it; ACT-89 records the roadmap and what would
+replace NTLM here. Nothing about a `winrm` target you create today stops working on a supported
+Windows version.
+
 The **login name** is the account the command runs as. A bare name (`vaultgate`) is a local
 account on the host itself, which is what a workgroup machine has; `MACHINE\vaultgate` or
 `DOMAIN\vaultgate` names the authority the account belongs to, and `vaultgate@example.com` is a
 user principal name. Give it its own least-privilege account (below).
 
-**The certificate fingerprint.** Only relevant on an `https://` endpoint. Leave it empty if the
-listener's certificate comes from a certificate authority the vaultgate host already trusts. If it
-is self-signed, give its SHA-256 and vaultgate will accept that one certificate and nothing else:
-
-```bash
-openssl s_client -connect build-agent.example.com:5986 </dev/null 2>/dev/null |
-  openssl x509 -noout -fingerprint -sha256
-```
-
-Paste the 64 hexadecimal digits with or without the colons, in either case. The pin **replaces**
-the system certificate store: a host presenting any other certificate fails the call with
-`tls_error`, and because the socket is held closed until the certificate matches, nothing is sent
-to it. Renewing the certificate means editing the target, which bumps its revision and voids any
-open confirmation.
+**The certificate fingerprint.** Only relevant on an `https://` endpoint, and covered above: leave
+it empty for a certificate from an authority the vaultgate host trusts, fill it in for a
+self-signed one. A pin on a plain endpoint is refused at save, because there is no certificate for
+it to mean anything about.
 
 **Credential mapping.** The vault item id and the field holding the password (`password` unless
 you say otherwise). The login name lives in the destination, so one item can serve several
@@ -734,6 +803,25 @@ Get-ComputerInfo
 Get-Service -Name *
 Restart-Service -Name Spooler
 ```
+
+**Expect progress records on `stderr`, and judge the call by `exit_code`.** A remote PowerShell
+shell serialises its non-output streams as CLIXML, so a cmdlet that reports progress writes
+`#< CLIXML` and several kilobytes of `<Obj S="progress">` elements to `stderr` while exiting 0 —
+`Get-ComputerInfo` does exactly that. An agent that reads `stderr` as "something went wrong" will
+misread a perfectly successful call. Silence it in the command itself, which also saves the output
+cap for the answer:
+
+```text
+$ProgressPreference = 'SilentlyContinue'; Get-ComputerInfo
+```
+
+`$ProgressPreference` is a per-session preference variable
+([about_Preference_Variables](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_preference_variables)),
+and every call gets its own shell, so it has to be set in the command each time. Both `$` and `;`
+are shell metacharacters, so that line is accepted only on an **allow any command** target; an
+allowlisted target will see the CLIXML and there is nothing to configure away. Either way the rule
+is the same — a non-zero `exit_code` is how you tell a failure, and `stderr` is a stream rather
+than a verdict.
 
 ### Giving the target its own user
 
@@ -760,13 +848,11 @@ password means editing the vault item; the next call picks it up.
 `Basic` is kept for a listener whose owner has deliberately enabled it, and vaultgate accepts it
 **only on an `https://` endpoint** — saving a `basic` target on an `http://` URL is refused,
 because that combination is the one that really would send the password in the clear. Set the
-target's **Authentication** to Basic, and on the host:
+target's **Authentication** to Basic, build the HTTPS listener as above, and add the one command
+that turns `Basic` on:
 
 ```powershell
-$certificate = New-SelfSignedCertificate -DnsName 'build-agent.example.com' -CertStoreLocation Cert:\LocalMachine\My
-New-Item -Path WSMan:\localhost\Listener -Transport HTTPS -Address * -CertificateThumbPrint $certificate.Thumbprint -Force
 Set-Item -Path WSMan:\localhost\Service\Auth\Basic -Value $true
-New-NetFirewallRule -DisplayName 'WinRM HTTPS' -Direction Inbound -Protocol TCP -LocalPort 5986 -Action Allow
 ```
 
 `Basic` is safe there only because the transport is TLS — it is what carries the password — so

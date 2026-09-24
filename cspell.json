@@ -43,6 +43,7 @@
     "CIMD",
     "CLIENTID",
     "CLIENTSECRET",
+    "CLIXML",
     "cmdshell",
     "codeql",
     "collectionid",

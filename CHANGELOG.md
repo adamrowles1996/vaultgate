@@ -80,6 +80,35 @@ All notable changes to this project are documented here. The format follows
   wants it.
 - The `winrm_run` tool description no longer says "over HTTPS", because it is no longer only
   HTTPS.
+- **The actions guide now recommends an `https://` endpoint with the certificate pinned, and
+  documents the plain listener as the fallback.** The previous ordering led with `negotiate` over
+  `http://` because that is what reaches a stock host unmodified, which is right about
+  reachability and wrong as security guidance: TLS covers the whole transport and authenticates
+  the endpoint, where NTLM over 5985 seals the SOAP body and leaves the metadata in the clear.
+  The usual objection — that the certificate will be self-signed, which makes the encryption
+  theatre — is answered by `certificate_sha256`, and the guide now makes that argument rather
+  than listing the options: the pin replaces the system store, is compared before anything is
+  sent, and has no ignore-errors counterpart anywhere in the schema. The plain path keeps its
+  section, including the measurement against an unmodified Windows 11 Pro machine that is the
+  reason it exists, and what it does and does not protect is now stated explicitly.
+- ACT-89 and the post-1.0 candidates in `PLAN.md` record Microsoft's phased removal of NTLM
+  (deprecated June 2024; auditing today; IAKerb and a Local KDC in the second half of 2026;
+  network NTLM blocked by default, which policy can still re-enable, in the next major Windows
+  Server release) and name **Kerberos as the successor for `winrm`**, with IAKerb and the Local KDC as
+  the trigger rather than a date. Nothing in the connector stops working: NTLM remains available
+  by policy, and the blocking phase is a future server release.
+- T37 and the header of `src/actions/connectors/winrm/ntlm/ntlmv2.ts` now cite RFC 6151 §2.3 for
+  the HMAC-MD5 position — the attacks "do not seem to indicate a practical vulnerability when
+  used as a message authentication code", and "it may not be urgent to remove HMAC-MD5 from the
+  existing protocols", though a new design should not include it — because implementing an
+  existing protocol is a stronger position than "the protocol made me". T37 also records why the
+  CodeQL alerts are dismissed one at a time in public rather than filtered: a filter selects on
+  query metadata rather than paths, so it would blind the whole repository to the rule, including
+  a future misuse of MD5 somewhere it would matter.
+- The guide warns that a remote PowerShell shell serialises its progress records as CLIXML on
+  `stderr` while exiting 0 — `Get-ComputerInfo` emits several kilobytes of it — recommends
+  `$ProgressPreference = 'SilentlyContinue'` where the target's policy allows the statement, and
+  restates that `exit_code` is how a failure is told.
 
 ## [0.1.0-rc.11] - 2026-09-24
 

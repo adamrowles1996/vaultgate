@@ -312,6 +312,31 @@ agent must never see the client secret, the refresh token or the access token.
   bytes the destination chose, and anything malformed refused as `upstream_error` rather than
   worked around. No parse failure escapes as an exception.
 
+  **NTLM has a published sunset, and it is not imminent** (recorded 2026-09-24). Microsoft
+  deprecated every version of NTLM in June 2024 — "no longer under active feature development" —
+  and said in the same entry that "use of NTLM will continue to work in the next release of
+  Windows Server and the next annual release of Windows", with calls to NTLM to be replaced by
+  calls to Negotiate, which is what this connector speaks
+  ([Deprecated features in the Windows client](https://learn.microsoft.com/en-us/windows/whats-new/deprecated-features)).
+  The removal is phased. Phase 1, available now, is enhanced NTLM auditing in Windows 11 24H2 and
+  Windows Server 2025. Phase 2, in the second half of 2026, is IAKerb — Kerberos where the client
+  has no line of sight to a domain controller — and a Local KDC, which lets **local accounts**
+  authenticate with Kerberos and so removes one of the commonest reasons NTLM is used at all;
+  that is precisely the workgroup machine this connector serves today
+  ([Advancing Windows security: disabling NTLM by default](https://techcommunity.microsoft.com/blog/windows-itpro-blog/advancing-windows-security-disabling-ntlm-by-default/4489526),
+  [Reducing NTLM dependency: IAKerb and LocalKDC in Windows Insider Preview](https://techcommunity.microsoft.com/blog/windows-itpro-blog/reducing-ntlm-dependency-iakerb-and-localkdc-in-windows-insider-preview/4524615)).
+  Phase 3, the next major Windows Server release, blocks network NTLM by default and leaves explicit
+  policy able to re-enable it for the edge cases — an unregistered service principal name,
+  authentication by IP address. Separately, from October 2026 the `BlockNTLMv1SSO` default moves
+  from audit to enforce
+  ([Upcoming changes to NTLMv1](https://support.microsoft.com/en-us/topic/upcoming-changes-to-ntlmv1-in-windows-11-version-24h2-and-windows-server-2025-c0554217-cdbc-420f-b47c-e02b2db49b2e));
+  that one does not reach this connector, which negotiates NTLMv2 with extended session security
+  and never requests `NTLMSSP_NEGOTIATE_LM_KEY`. So: a `winrm` target created today keeps working
+  on every supported Windows version, and NTLM stays available by policy after phase 3. **The
+  successor is Kerberos**, and IAKerb and the Local KDC are the two pieces that would make it
+  viable for the hosts this connector currently reaches with NTLM. It is a post-1.0 candidate in
+  [`PLAN.md`](../PLAN.md); no date is promised.
+
   The M13 pull request evaluated the npm WinRM clients per QG-9 against a hand-written client;
   the hand-written client won, and the comparison is recorded under M13 in
   [`PLAN.md`](../PLAN.md). No dependency was added, for the NTLM work either. The client is the
