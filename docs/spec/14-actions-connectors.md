@@ -14,7 +14,7 @@
 
 Each connector is a sub-module of `src/actions/connectors/` implementing one interface
 (`src/actions/connectors/connector.ts`). Its static half, `ConnectorSchemas`, is present in
-every build so the account page can validate and edit targets of a connector whose runtime is
+every build so the operator pages can validate and edit targets of a connector whose runtime is
 not loaded; the runtime half is imported dynamically only when the connector is enabled (ACT-73).
 
 ```ts
@@ -31,7 +31,7 @@ interface ConnectorSchemas<Destination, Credential, Policy> {
   basicUsername?(destination: Destination): string | undefined;
   /** Save-time rules beyond the schemas (ACT-79, ACT-81); each problem is shown to the operator. */
   saveProblems(documents: TargetDocuments<Destination, Credential, Policy>): readonly string[];
-  /** The host (and database, base path or origin) for ACT-43 and the account page. */
+  /** The host (and database, base path or origin) for ACT-43 and the operator pages. */
   summariseDestination(destination: Destination): string;
 }
 

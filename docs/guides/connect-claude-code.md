@@ -43,7 +43,7 @@ connection yourself and continue. The rest of the consent page, the scope choice
 are as described in [Connect Claude](connect-claude.md).
 
 Tokens are stored by Claude Code and refreshed automatically. When the refresh token is rejected
-(after 30 days without use, or after you disconnect the client on the account page) `/mcp`
+(after 30 days without use, or after you disconnect the client on the Agents page) `/mcp`
 shows the server as needing authentication; run `/mcp` again. In non-interactive runs
 (`claude -p`), tools of a server that needs authentication are reported as unavailable until you
 authorize it from an interactive session.
@@ -58,7 +58,7 @@ claude mcp logout vaultgate
 ```
 
 `logout` discards the stored tokens locally; it does not revoke them. Disconnect the client on
-`https://<host>/account` when you mean to cut access.
+`https://<host>/account/agents` when you mean to cut access.
 
 ## Pre-registering the client
 

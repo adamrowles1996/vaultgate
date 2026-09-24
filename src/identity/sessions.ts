@@ -81,3 +81,15 @@ export function isRecentlyReauthenticated(
 ): boolean {
   return reauthenticatedAt !== undefined && now - reauthenticatedAt < REAUTHENTICATION_WINDOW_MS;
 }
+
+/**
+Whole minutes left in the ID-15 window, rounded up; 0 outside it.
+*/
+export function reauthenticationMinutesLeft(
+  reauthenticatedAt: number | undefined,
+  now: number,
+): number {
+  return reauthenticatedAt === undefined || !isRecentlyReauthenticated(reauthenticatedAt, now)
+    ? 0
+    : Math.ceil((reauthenticatedAt + REAUTHENTICATION_WINDOW_MS - now) / MS_PER_MINUTE);
+}

@@ -67,6 +67,11 @@ added without touching the OAuth layer (see `PLAN.md`).
   client, regenerating recovery codes, changing the password, changing the e-mail address,
   rotating TOTP, enabling `vault:write` from the account page, changing the vault connection
   (ID-25), exporting the audit log (OPS-5) and every change to an actions target (ACT-5).
+  The console's top bar says whether the window is open and for how many more minutes. A page
+  that needs it offers **Unlock editing** in place of its forms: `GET /account/unlock?next=<path>`
+  asks for the password on a page of its own, and `POST /account/reauthenticate` carries that
+  `next` (a local path, checked as the login's is; `/account` otherwise), returns there once the
+  password is confirmed, and shows the same form again with `401` when it is not.
 
 ## 4.5 Session cookie
 
@@ -94,8 +99,14 @@ added without touching the OAuth layer (see `PLAN.md`).
   referrer leaves the origin, and a same-origin form POST keeps its real `Origin` (under the
   stricter `no-referrer` a browser sends `Origin: null`, and until 0.1.0-rc.14 that made ID-18
   refuse every browser sign-in and consent with a bare `403`).
-  Pages contain no JavaScript. Styling is a single static stylesheet. A page another layer serves
-  (the Actions section of ACT-5) sets both itself, through the middleware identity hands it, so
+  Pages contain no JavaScript. Styling is a single static stylesheet, and type uses the
+  system's own fonts, since the policy loads none. A signed-in operator's pages share one frame,
+  the console: a sidebar with the sections (Computers, with one entry per kind, when the actions
+  layer is on; Agents; Activity; Vault), the vault's status and the operator; a top bar with the
+  breadcrumb and the ID-15 window; and the page itself. The pages around signing in (setup,
+  sign-in, recovery codes, consent, not found) are a single centred card. Every page holds at
+  phone width, where tables become stacked cards. A page another layer serves (the Computers
+  pages of ACT-5) sets both headers itself, through the middleware identity hands it, so
   the headers do not depend on the order in which the composition layer mounts the two.
   A query parameter that selects a page's notice is read as an own property of the notice table
   and nothing else; `constructor` and `toString` name no notice (ID-24).
@@ -125,16 +136,20 @@ interface IdentityProvider {
 
 ## 4.9 HTTP routes
 
-| Route                                             | Purpose                                                                                                                  |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `GET /`                                           | **ID-23** `303` to `/account` when the request carries a live operator session, otherwise to `/login`; `no-store`.       |
-| `GET /setup`, `POST /setup`                       | First-run bootstrap (ID-1 to ID-4).                                                                                      |
-| `GET /login`, `POST /login`, `POST /login/verify` | The two-step login (ID-12).                                                                                              |
-| `POST /logout`                                    | Ends the session (ID-17).                                                                                                |
-| `GET /account`, `POST /account/*`                 | The account page and its ID-15 actions, including `POST /account/email` (ID-3, ID-26) and `POST /account/vault` (ID-25). |
-| `GET /static/vaultgate.css`                       | The single stylesheet (ID-19).                                                                                           |
+| Route                                             | Purpose                                                                                                                                                                                                                                                     |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /`                                           | **ID-23** `303` to the console's home page when the request carries a live operator session (Computers, `/account/actions`, when the actions layer is on; Agents otherwise), else to `/login`; `no-store`. A sign-in with no `next` lands on the same page. |
+| `GET /setup`, `POST /setup`                       | First-run bootstrap (ID-1 to ID-4).                                                                                                                                                                                                                         |
+| `GET /login`, `POST /login`, `POST /login/verify` | The two-step login (ID-12).                                                                                                                                                                                                                                 |
+| `POST /logout`                                    | Ends the session (ID-17).                                                                                                                                                                                                                                   |
+| `GET /account`, `POST /account/*`                 | Account & security and its ID-15 actions, including `POST /account/email` (ID-3, ID-26).                                                                                                                                                                    |
+| `GET /account/agents`                             | Agents: the connected clients (OAUTH-30) and, with the actions layer, the grant matrix (ACT-9).                                                                                                                                                             |
+| `GET /account/activity`                           | Activity: the audit export (OPS-5) and, with the actions layer, the recent calls and the unexpected writes (ACT-63).                                                                                                                                        |
+| `GET /account/vault`, `POST /account/vault`       | Vault: the connection's status and form (ID-25).                                                                                                                                                                                                            |
+| `GET /account/unlock`                             | Unlock editing: the ID-15 password confirmation for the page named by `next`.                                                                                                                                                                               |
+| `GET /static/vaultgate.css`                       | The single stylesheet (ID-19).                                                                                                                                                                                                                              |
 
-- **ID-25** The account page has a "Vault connection" section: the status for any signed-in
+- **ID-25** The Vault page (`GET /account/vault`) shows the connection: the status for any signed-in
   operator (whether credentials are configured and where they came from, the server, the masked
   account e-mail from `bw serve`'s `/status`, readiness, last sync) and, after re-authentication
   (ID-15), a form with the server (optional; `bitwarden.eu` or an `https://` URL, validated by the
@@ -143,11 +158,12 @@ interface IdentityProvider {
   secret keeps the one in use (both are required while nothing is configured). `POST /account/vault`
   passes the ID-18 checks and ID-15, then stores the connection (STORE-9) and switches the backend to
   it in one step (VAULT-18): there is no separate "test" path, saving is the test. Success redirects
-  to the section with a notice; a failure re-renders the form with the backend's fixed reason
+  to the Vault page with a notice; a failure re-renders the form with the backend's fixed reason
   (`400` for input the page itself rejects, `503` when the backend refuses the connection) and
   without either secret. Every attempt records `vault.settings_updated` (`ok`/`failure`, the server
   and, on failure, the reason; never a secret). When setup completes (ID-3) while no connection is
-  configured, the recovery-codes page ends with a link to this section.
+  configured, the recovery-codes page ends with a link to this page, and the sidebar's vault status
+  (ready with the last sync, unavailable, or not connected) links to it from every console page.
 - **ID-24** Any other path answers `404`. When the `Accept` header prefers `text/html` the body is
   a short page rendered by the same escaping template and stylesheet as every other page, under
   the ID-19 policy and `Cache-Control: no-store`; otherwise (JSON accepted, `*/*`, or no `Accept`
@@ -163,6 +179,7 @@ interface IdentityProvider {
   `/account` is replaced by a "Set your e-mail address" page: after re-authentication (ID-15)
   the only action offered, and the only `POST /account/*` accepted besides
   `/account/reauthenticate` and `/logout`, is `POST /account/email`. Every other account action
-  answers `403` with a `request.denied` audit event. As soon as an address is set, login asks
+  answers `403` with a `request.denied` audit event, and every other console page redirects to
+  `/account`. As soon as an address is set, login asks
   for e-mail address and password like any other deployment. The audit events of a legacy login
   carry no `details.email`, because there is none to carry.

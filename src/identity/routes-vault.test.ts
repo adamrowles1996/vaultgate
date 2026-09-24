@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ENVIRONMENT_VAULT } from '../test-support/fake-vault-connection.ts';
 import {
+  compact,
   createHarness,
   csrfOf,
   type Harness,
@@ -33,16 +34,20 @@ function vaultAudits(harness: Harness) {
   return harness.audits.filter((event) => event.action === 'vault.settings_updated');
 }
 
-describe('GET /account vault connection', () => {
+describe('GET /account/vault', () => {
   it('ID-25 shows the unconfigured status and asks for the password before the form', async () => {
     const harness = createHarness();
     const { browser } = await setUpOperator(harness);
-    const markup = await pageText(browser, '/account');
-    expect(markup).toContain('<section id="vault">');
-    expect(markup).toContain('data-label="Value">not configured</td>');
+    const markup = compact(await pageText(browser, '/account/vault'));
+    expect(markup).toContain('<title>Vault · vaultgate</title>');
+    expect(markup).toContain('id="vault-status"');
+    expect(markup).toContain('<span class="pill pill-off">Not connected</span>');
+    expect(markup).toContain('>not configured<');
     expect(markup).toContain('>none since start-up<');
     expect(markup).toContain('>unknown until the vault is ready<');
-    expect(markup).toContain('Confirm your password above to change the vault connection.');
+    expect(markup).toContain(
+      'href="/account/unlock?next=%2Faccount%2Fvault">Confirm your password</a>',
+    );
     expect(markup).not.toContain('action="/account/vault"');
   });
 
@@ -50,18 +55,19 @@ describe('GET /account vault connection', () => {
     const harness = createHarness();
     harness.vault.current = ENVIRONMENT_VAULT;
     const { browser } = await setUpOperator(harness);
-    const markup = await pageText(browser, '/account');
+    const markup = compact(await pageText(browser, '/account/vault'));
     expect(markup).toContain('seeded from the environment; saving here takes over');
     expect(markup).toContain('>https://vault.example.test<');
     expect(markup).toContain('>a***@example.com<');
-    expect(markup).toContain('data-label="Value">yes</td>');
+    expect(markup).toContain('<span class="pill pill-ok">Ready</span>');
     expect(markup).toContain('>2026-09-22T11:00:00.000Z<');
+    expect(markup).toContain('>1 h ago<');
   });
 
   it('ID-15 ID-25 offers the form after re-authentication, with every secret field empty', async () => {
     const harness = createHarness();
     const { browser } = await confirmedBrowser(harness);
-    const markup = await pageText(browser, '/account');
+    const markup = await pageText(browser, '/account/vault');
     expect(markup).toContain('action="/account/vault"');
     expect(markup).toContain('placeholder="https://vault.bitwarden.com"');
     expect(markup).toContain('<code>bitwarden.eu</code>');
@@ -69,7 +75,7 @@ describe('GET /account vault connection', () => {
     expect(markup).toMatch(/<input name="master_password" type="password" autocomplete="off" \/>/);
     expect(markup).not.toContain('Leave a secret blank');
     harness.vault.current = ENVIRONMENT_VAULT;
-    expect(await pageText(browser, '/account')).toContain(
+    expect(await pageText(browser, '/account/vault')).toContain(
       'Leave a secret blank to keep the one in use.',
     );
   });
@@ -87,7 +93,7 @@ describe('POST /account/vault', () => {
       master_password: SECRETS.master_password,
     });
     expect(response.status).toBe(303);
-    expect(response.headers.get('location')).toBe('/account?notice=vault-updated#vault');
+    expect(response.headers.get('location')).toBe('/account/vault?notice=vault-updated');
     expect(harness.vault.calls).toStrictEqual([
       {
         input: {
@@ -99,7 +105,7 @@ describe('POST /account/vault', () => {
         operatorId: harness.stores.operators.findAny()?.id,
       },
     ]);
-    const markup = await pageText(browser, '/account?notice=vault-updated');
+    const markup = await pageText(browser, '/account/vault?notice=vault-updated');
     expect(markup).toContain('Vault connection saved. The backend is using it now.');
     expect(markup).toContain('>configured on this page<');
     expect(markup).toContain('>bitwarden.eu<');
@@ -195,7 +201,7 @@ describe('POST /account/vault', () => {
     expect(markup).toContain('action="/account/vault"');
     expect(markup).toContain('value="user.next"');
     expect(markup).toContain('value="https://vault.example.test"');
-    expect(markup).toContain('data-label="Value">not configured</td>');
+    expect(markup).toContain('>not configured<');
     expect(vaultAudits(harness)).toStrictEqual([
       expect.objectContaining({
         outcome: 'failure',
@@ -247,11 +253,11 @@ describe('POST /account/vault', () => {
 describe('POST /setup and the vault', () => {
   it('ID-3 ID-25 ends the first run with the way to connect the vault when none is configured', async () => {
     const unconfigured = await setUpOperator(createHarness());
-    expect(unconfigured.page).toContain('<a href="/account#vault">Connect the vault</a>');
+    expect(unconfigured.page).toContain('<a href="/account/vault">Connect the vault</a>');
     const harness = createHarness();
     harness.vault.current = ENVIRONMENT_VAULT;
     const configured = await setUpOperator(harness);
     expect(configured.page).not.toContain('Connect the vault');
-    expect(configured.page).toContain('Continue to your account');
+    expect(configured.page).toContain('Continue to the console');
   });
 });

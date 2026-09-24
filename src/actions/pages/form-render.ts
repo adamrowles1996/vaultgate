@@ -5,16 +5,26 @@
  * always drawn and their help says which mode uses them.
  */
 import { EMPTY, type Html, html, when } from '../../identity/pages/template.ts';
+import { cardHead } from '../../identity/pages/ui.ts';
 
 import { fieldName, type FormValues, optionName } from './form-values.ts';
 
 import type { ConnectorForm, DocumentName, FieldDescriptor } from './descriptors.ts';
 import type { FieldProblems } from './messages.ts';
 
-const DOCUMENT_LABELS: Readonly<Record<DocumentName, string>> = {
-  destination: 'Destination',
-  credential: 'Credential mapping',
-  policy: 'Policy',
+const DOCUMENT_LABELS: Readonly<Record<DocumentName, { title: string; note: string }>> = {
+  destination: {
+    title: 'Destination',
+    note: 'Where the computer is. Saving resolves it and checks every address; it does not connect.',
+  },
+  credential: {
+    title: 'Credential mapping',
+    note: 'Which of the vault item’s fields sign in. Field names only: values stay in the vault.',
+  },
+  policy: {
+    title: 'Rules',
+    note: 'What agents may do here, how much, and whether a person confirms each change.',
+  },
 };
 
 const DOCUMENTS: readonly DocumentName[] = ['destination', 'credential', 'policy'];
@@ -28,7 +38,7 @@ ACT-6: what a rejected save said about this one control, next to it.
 */
 export function fieldErrors(problems: FieldProblems, path: string): Html {
   const messages = problems.byPath.get(path) ?? [];
-  return html`${messages.map((message) => html`<p class="error">${message}</p>`)}`;
+  return html`${messages.map((message) => html`<p class="field-error">${message}</p>`)}`;
 }
 
 function textInput(field: FieldDescriptor & { readonly kind: 'text' }, value: string): Html {
@@ -121,7 +131,7 @@ function renderField(field: FieldDescriptor, values: FormValues, problems: Field
 }
 
 /**
-Every field of the form, one fieldset per document, showing `values`.
+Every field of the form, one card per document, showing `values`.
 */
 export function renderFields(
   form: ConnectorForm,
@@ -132,10 +142,11 @@ export function renderFields(
     const fields = form.fields
       .filter((field) => field.document === document)
       .map((field) => renderField(field, values, problems));
-    return html`<fieldset>
-      <legend>${DOCUMENT_LABELS[document]}</legend>
-      ${fields}
-    </fieldset>`;
+    const { title, note } = DOCUMENT_LABELS[document];
+    return html`<section class="card">
+      ${cardHead(title, note)}
+      <div class="fields">${fields}</div>
+    </section>`;
   });
   return html`${groups}`;
 }

@@ -1,9 +1,14 @@
 /**
- * Where each page and write of the Actions section lives (ACT-5). One module
+ * Where each page and write of the Computers pages lives (ACT-5). One module
  * so a renderer can link to a page without importing it, and so the route
  * templates and the links an operator follows cannot drift apart.
  */
 export const CREATE_PATH = '/account/actions';
+
+/**
+Where "Add computer" starts: the kinds to choose from, then the chosen connector's form.
+*/
+export const NEW_PATH = `${CREATE_PATH}/new`;
 
 /**
 ACT-63: the unexpected-write view, which belongs to no single target.
@@ -33,4 +38,11 @@ export function clientGrantsPath(clientId: string): string {
 
 export function clientGrantRevokePath(clientId: string): string {
   return `${clientGrantsPath(clientId)}/revoke`;
+}
+
+/**
+ACT-5: the page that edits a target, behind the same ID-15 window as every change.
+*/
+export function editPath(id: string): string {
+  return `${targetPath(id)}/edit`;
 }

@@ -7,7 +7,7 @@ The only difference is the server field of the vault connection. Specification:
 
 ## The server
 
-Enter it in the **Server** field of the account page's vault connection
+Enter it in the **Server** field of the Vault page's connection form
 ([First run, section 6](first-run.md#6-connect-the-vault)), or as `VAULTGATE_BW_SERVER` when
 seeding the first boot from the environment:
 
@@ -35,12 +35,12 @@ new-device e-mail. In the web vault:
 
 1. Sign in and open **Settings → Security → Keys**.
 2. Under **API key**, click **View API key** and confirm your master password.
-3. Copy `client_id` (`user.` followed by a UUID) and `client_secret` into the account page's
-   vault connection (or, to seed the first boot, into `VAULTGATE_BW_CLIENT_ID` and
+3. Copy `client_id` (`user.` followed by a UUID) and `client_secret` into the Vault page's
+   connection form (or, to seed the first boot, into `VAULTGATE_BW_CLIENT_ID` and
    `VAULTGATE_BW_CLIENT_SECRET`, the latter also through `VAULTGATE_BW_CLIENT_SECRET_FILE`).
 
 The same page has **Rotate API key**. Rotating invalidates the old key everywhere it is used:
-enter the new client id and secret on the account page, leave the master password blank, and
+enter the new client id and secret on the Vault page, leave the master password blank, and
 save. The CLI logs in again with the new key in a fresh directory; nothing to delete, no restart.
 
 Vaultwarden serves Bitwarden's web vault, so the path is the same there.
@@ -58,7 +58,7 @@ key is derived from the master password on the client. So two different things a
 
 Neither one alone gives access. Both are kept in the vaultgate process's memory for the
 connection in use, zero-filled when it is replaced or on shutdown, and never logged. When saved
-on the account page they are also stored in the database as AES-256-GCM ciphertext under keys
+on the Vault page they are also stored in the database as AES-256-GCM ciphertext under keys
 derived from `VAULTGATE_SECRET_KEY`, which is why that key is backed up separately from the
 database ([security model](security-model.md)). The CLI's own session key stays inside the
 `bw serve` child process on loopback.

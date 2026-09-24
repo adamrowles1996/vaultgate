@@ -134,6 +134,9 @@ const actionsPages =
             clientName: client.clientName,
           })),
         switches: { allowAnyCommand: config.actions.allowAnyCommand },
+        renderConsole: (session, page) => identity.renderConsole(session, page),
+        consoleAccess: (context) => identity.consoleAccess(context),
+        now: Date.now,
       });
 const oauth = createAuthorizationServer({
   config,
@@ -168,7 +171,15 @@ const identity = createIdentity({
   guards,
   passwordParameters: CURRENT_PARAMETERS,
   connectedClients: authorization.renderConnectedClients,
-  accountSections: actionsPages === undefined ? [] : [actionsPages.section],
+  // The console's Computers pages, and what they add to Agents and Activity
+  // (ACT-5), exist only with the actions layer; without it the console
+  // starts at the connected agents.
+  sections:
+    actionsPages === undefined
+      ? {}
+      : { agents: [actionsPages.agentsSection], activity: [actionsPages.activitySection] },
+  navigation: actionsPages?.navigation,
+  homePath: actionsPages === undefined ? undefined : '/account/actions',
   vaultConnection,
 });
 identity.bootstrap.ensureToken();

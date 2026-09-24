@@ -94,5 +94,5 @@ understand why it is needed; normally the fix is the reverse proxy configuration
 ## Cleaning up
 
 Clear the Inspector's stored tokens with **Clear OAuth state** (web), the **Auth** tab (TUI) or
-`--relogin` (CLI), and disconnect the client on `https://<host>/account` to revoke the tokens on
+`--relogin` (CLI), and disconnect the client on `https://<host>/account/agents` to revoke the tokens on
 the server side.

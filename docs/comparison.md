@@ -101,7 +101,7 @@ Checked against this repository at the same date. Sources: [security model](guid
 - Tokens: OAUTH-24 (opaque `vg_at_` / `vg_rt_`, SHA-256 at rest), OAUTH-25 (rotation, family
   revocation on replay), OAUTH-29 (RFC 7009 revocation), OAUTH-36 (no scope implies another).
 - Audit: "Every tool call, login, consent, token issue, refresh and revocation is an audit event",
-  exported from the account page or `node dist/cli.js audit export`.
+  exported from the console's Activity page or `node dist/cli.js audit export`.
 - Servers: COMPAT table 12.3: bitwarden.com, bitwarden.eu, self-hosted Bitwarden, Vaultwarden.
 - Actions: spec 13.1, "The actions layer lets an agent _use_ a credential without ever receiving
   it"; the engine's resolution order is ACT-16, scrubbing is section 13.9, and the layer and each

@@ -1,14 +1,20 @@
 /**
  * The one-button writes of a target (ACT-5, ACT-7, ACT-8, ACT-9): enable,
  * disable, delete, grant, revoke a grant, close sessions — from the target's
- * own page, and the two grant writes again from the account page's
- * connected-clients list, where the target is named in the form instead of
- * the path. Each is gated like every sensitive account action, then handed to
+ * own page, and the two grant writes again from the Agents page (its cards
+ * and its matrix), where the target is named in the form instead of the
+ * path. Each is gated like every sensitive account action, then handed to
  * the targets service, which records the event; a refused write re-renders
  * the target's page with the reason.
  */
-import { CLIENT_GRANT_REVOKE_TEMPLATE, CLIENT_GRANTS_TEMPLATE, targetPath } from './paths.ts';
-import { renderTargetPage } from './target-page.ts';
+import {
+  CLIENT_GRANT_REVOKE_TEMPLATE,
+  CLIENT_GRANTS_TEMPLATE,
+  CREATE_PATH,
+  targetPath,
+} from './paths.ts';
+import { AGENTS_PATH, RETURN_FIELD, RETURN_TO_AGENTS } from './return-to.ts';
+import { targetPage } from './target-page.ts';
 import { type ActionsPagesDependencies, targetPageView, viewerOf } from './view.ts';
 
 import type {
@@ -114,11 +120,16 @@ async function respond(
 ): Promise<Response> {
   const { target, gate, outcome, notice } = written;
   if (outcome.ok) {
-    return context.redirect(`${targetPath(target.id)}?notice=${notice}`, 303);
+    return context.redirect(
+      gate.form.get(RETURN_FIELD) === RETURN_TO_AGENTS
+        ? `${AGENTS_PATH}?notice=${notice}#access`
+        : `${targetPath(target.id)}?notice=${notice}`,
+      303,
+    );
   }
   const extras = { error: outcome.error.problems.join('; ') };
   const view = await targetPageView(dependencies, target, viewerOf(gate.session), extras);
-  return context.html(renderTargetPage(view), 400);
+  return context.html(await dependencies.renderConsole(gate.session, targetPage(view)), 400);
 }
 
 async function performWrite(
@@ -162,7 +173,7 @@ async function performClientGrant(
 }
 
 /**
-ACT-8: the target goes with its grants and sessions; its calls stay. Back to the account page.
+ACT-8: the target goes with its grants and sessions; its calls stay. Back to the Computers page.
 */
 async function remove(
   context: IdentityContext,
@@ -174,7 +185,7 @@ async function remove(
     return ready;
   }
   dependencies.targets.remove(ready.target.id, ready.gate.operatorId);
-  return context.redirect('/account#actions', 303);
+  return context.redirect(`${CREATE_PATH}?notice=deleted`, 303);
 }
 
 export function registerTargetWrites(

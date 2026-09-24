@@ -1,7 +1,7 @@
+import { accountResponse } from './account-response.ts';
 import { field, type IdentityContext, type IdentityEnvironment, readForm } from './browser.ts';
 import { normaliseEmail } from './email.ts';
-import { renderAccount } from './pages/account.ts';
-import { accountView, auditEvent, requireReauthenticated } from './routes-account.ts';
+import { auditEvent, requireReauthenticated } from './routes-account.ts';
 
 import type { IdentityServices } from './services.ts';
 import type { Hono } from 'hono';
@@ -21,8 +21,8 @@ async function changeEmail(context: IdentityContext, services: IdentityServices)
   const { operator } = authenticated;
   const email = normaliseEmail(field(form, 'email'));
   if (!email.ok) {
-    const view = await accountView(services, authenticated, { error: email.error.message });
-    return context.html(renderAccount(view), 400);
+    const options = { error: email.error.message, status: 400 } as const;
+    return accountResponse(context, services, authenticated, options);
   }
   services.stores.operators.updateEmail(operator.id, email.value);
   services.audit.record({

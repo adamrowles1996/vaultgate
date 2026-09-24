@@ -6,7 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- ID-19, ACT-5: **an operator console with a sidebar.** Every page a signed-in operator sees now
+  shares one frame: a sidebar with **Computers** (one entry per kind, with counts), **Agents**,
+  **Activity** and **Vault**, an **Add computer** button, the vault's state and the operator; a
+  top bar with the breadcrumb and how long editing stays unlocked; and the page. The account page
+  is split into pages of their own: `/account/agents` (connected agents, and a matrix of which
+  agent may use which computer), `/account/activity` (recent calls, unexpected writes, audit
+  export), `/account/vault` (the connection) and Account & security at `/account`. The Computers
+  page groups targets by kind (SQL Server, PostgreSQL, Windows · WinRM, Linux · SSH, HTTP APIs,
+  Microsoft Graph) and shows the vault item and fields each signs in with, secret fields as a
+  sealed chip bearing only the name. **Add computer** chooses the kind first and fills in its
+  defaults; a computer has a page of its own and a separate edit page. `GET /account/unlock`
+  confirms the password for the page you were on and brings you back (ID-15). Still no
+  JavaScript and one stylesheet, now with a dark scheme and stacked tables at phone width; type
+  uses the system's fonts, since the CSP loads none.
+
 ### Changed
+
+- ID-23: `/` and a sign-in with no return path lead to the Computers page when the actions layer
+  is on, and to Agents otherwise, rather than to `/account`.
+- ACT-9: grants are managed from each computer's page and from the Agents page's matrix; an
+  agent's card lists its computers as links rather than carrying its own grant forms.
+- ID-26: a signed-in operator with no e-mail address yet is sent to set one from every console
+  page, the Computers pages included.
 
 - ACT-92: the planned `browser` sidecar is deployed on Azure as a separate Container App with
   internal-only ingress, not as a second container of vaultgate's app. The containers of one app

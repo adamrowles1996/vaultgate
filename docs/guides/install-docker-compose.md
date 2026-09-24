@@ -18,7 +18,7 @@ Edit `.env`:
 - `VAULTGATE_DOMAIN`: the hostname Caddy serves, for example `vault.example.com`.
 - `VAULTGATE_PUBLIC_URL`: `https://` followed by that same hostname.
 - `VAULTGATE_VERSION`: a release such as `0.1.0`, or `latest`.
-- Optionally, to seed the Bitwarden connection from files rather than the account page:
+- Optionally, to seed the Bitwarden connection from files rather than the console's Vault page:
   `VAULTGATE_BW_CLIENT_ID`, the `user.…` client id of your personal API key, and
   `VAULTGATE_BW_SERVER` for bitwarden.eu, a self-hosted server or Vaultwarden.
 
@@ -36,7 +36,7 @@ chmod 0400 secrets/* && sudo chown 10001 secrets/*
 ```
 
 The two Bitwarden files are mounted either way; empty, they mean "not set" and you connect the
-vault from the account page after the first sign-in
+vault on the console's Vault page after the first sign-in
 ([First run, section 6](first-run.md#6-connect-the-vault)). To seed the connection from files
 instead, write the master password into `secrets/bw_password` and the API key client secret into
 `secrets/bw_client_secret` (`printf '%s' '…' > secrets/bw_password`) and set

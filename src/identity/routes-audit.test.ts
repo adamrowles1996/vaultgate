@@ -50,15 +50,17 @@ async function confirmed(harness: Harness): Promise<{ browser: Browser; csrf: st
   return { browser, csrf };
 }
 
-describe('GET /account audit log section', () => {
+describe('GET /account/activity audit log section', () => {
   it('ID-15 OPS-5 offers the export form only after re-authentication', async () => {
     const harness = createHarness();
     const { browser } = await setUpOperator(harness);
-    const before = await pageText(browser, '/account');
+    const before = await pageText(browser, '/account/activity');
     const csrf = csrfOf(before);
     await browser.submit('/account/reauthenticate', { csrf, password: PASSWORD });
-    const after = await pageText(browser, '/account');
-    expect(before).toContain('Confirm your password above to export the audit log.');
+    const after = await pageText(browser, '/account/activity');
+    expect(before).toContain(
+      'href="/account/unlock?next=%2Faccount%2Factivity">Confirm your password</a>',
+    );
     expect(before).not.toContain('action="/account/audit/export"');
     expect(after).toContain('action="/account/audit/export"');
     expect(after).toContain('<option value="csv">CSV</option>');

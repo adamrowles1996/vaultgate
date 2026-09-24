@@ -28,24 +28,36 @@ VAULTGATE_ACTIONS_ENABLE_WINRM=true
 ```
 
 Restart after changing them. With the master switch off nothing changes: no `actions:*` scope
-is advertised, no tool is listed and the account page has no Actions section. A connector switch
+is advertised, no tool is listed and the console has no Computers section. A connector switch
 set without the master switch is a start-up warning. Every variable is in
 [08 Configuration](../spec/08-configuration.md).
 
-## The Actions section
+## The Computers pages
 
-Sign in and open the account page. Below the vault connection, **Actions** lists every target
-with its connector, destination (host and base path only), whether it is enabled, the clients
-granted it, its last call and outcome, and the open sessions it holds, with a link to the page
-that manages it and a link to create a target per connector this build supports.
+Sign in: with the actions layer on, the console opens on **Computers**. It lists every target
+(the console calls one a _computer_) grouped by kind: SQL Server, PostgreSQL, Windows · WinRM,
+Linux · SSH, HTTP APIs and Microsoft Graph. Each row shows the address (host and base path
+only), the vault item and the fields it signs in with, what its policy allows, the agents granted
+it, its last call and its state. A secret field appears as a sealed chip bearing only its name;
+no value is ever shown. The sidebar has an entry per kind, and the filters above the table show
+one kind at a time.
 
-Below the table, **Unexpected writes** opens the cross-target review of every call that changed
-something without a human's confirmation; it is described under
+What needs attention comes first: a target that no longer passes validation, a target that
+changes things without asking a person, and this week's unexpected writes, which open the
+cross-target review described under
 [Sessions, calls and the audit trail](#sessions-calls-and-the-audit-trail).
 
+**Add computer**, at the top of the sidebar, asks what kind of computer it is, then shows that
+kind's form with its defaults filled in: a SQL Server starts on port 1433 with the SQL Server
+engine chosen, a PostgreSQL database on 5432, a Microsoft Graph target with Graph's base URL.
+Clicking a computer opens its page: where it points and its open sessions, what it signs in
+with, its rules, the agents with access, its recent calls, and closing its sessions or deleting
+it. **Edit** opens the form on a page of its own.
+
 Every change (create, edit, enable, disable, delete, grant, remove a grant, close sessions) needs
-a fresh password confirmation under **Sensitive actions**; the confirmation lasts five minutes,
-as for every other sensitive action. Until then the pages show the target but offer no form.
+a fresh password confirmation, which lasts five minutes as for every other sensitive action; the
+top bar shows how long is left. Until then the pages show the computer, and each form gives way
+to **Unlock editing**, which asks for your password and brings you back to the same page.
 
 A target whose stored documents no longer pass validation (for example after an upgrade that
 tightened a rule) is marked `target_invalid` with the reason, refuses every call, and can be
@@ -601,7 +613,7 @@ target genuinely needs one privileged command, grant that one command in `sudoer
 ### Why "allow any command" needs the deployment's consent
 
 An any-command target is a shell: whatever that login can do, a granted client can do. The
-account page only offers the box when the deployment sets
+form only offers the box when the deployment sets
 
 ```bash
 VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND=true
@@ -898,30 +910,30 @@ fault cannot hand the agent a decodable pair.
 ## Grants
 
 A target is usable by an OAuth client only while you have granted it, and only while that
-client's consent stands. On the target's page, **Grants** lists the granted clients and lets you
-grant among the clients currently connected (those on the account page's connected-clients
-list) or remove a grant, which also closes that client's sessions on the target.
+client's consent stands. On the computer's page, **Agents with access** lists the granted clients
+and lets you grant among the clients currently connected (those on the **Agents** page) or
+remove a grant, which also closes that client's sessions on the target.
 
-The connected-clients list on the account page shows the same grants from the other side: each
-client's row has a **Targets** column listing the targets it may act on, with a **Remove** button
-per grant and a picker for the targets it does not yet hold. Granting or removing from there does
-exactly what the target's own page does — the same checks, the same audit event — and returns you
-to the target concerned.
+The **Agents** page shows every grant at once under **Who can use what**: one row per computer,
+one column per connected agent, and a filled square where the agent may use the computer. Once
+your password is confirmed, each square is a button that grants or removes that one grant, with
+exactly the checks and the audit event of the computer's own page, and brings you back to the
+matrix. Each agent's card above it names the computers it may use, linking to them.
 
-Disconnecting a client on the account page removes every grant it holds, so a reconnected client
+Disconnecting a client on the Agents page removes every grant it holds, so a reconnected client
 starts with none. A grant never widens a token: the client still needs the connector's scope
 (`actions:http`) at consent.
 
 ## Sessions, calls and the audit trail
 
-The target's page shows its open sessions (browser sessions, a later milestone) with a **Close
-sessions** button, and the last 50 calls with their time, tool, operation, classification,
-outcome, elicitation result, output size and client. **The whole call history** below that table
+The computer's page shows its open sessions (browser sessions, a later milestone), with **Close
+sessions** under **Manage**, and the last 50 calls with their time, agent, tool, operation,
+classification, outcome, confirmation and output size. **Whole call history** above that table
 pages back through the rest, 50 at a time, newest first, following **Older calls** until the
 trail ends. Results are never stored; the arguments are, scrubbed, so an unexpected write can be
 read back.
 
-**Unexpected writes**, linked from the Actions section, is the same trail across every target,
+**Unexpected writes**, linked from the Activity page and from the Computers page when there are some, is the same trail across every target,
 narrowed to the calls that matter when something has gone wrong: every call that was not a read
 and that no human accepted through a confirmation, newest first, with the time, the target, the
 client, the tool, the classification, the outcome and an excerpt of the arguments; an excerpt

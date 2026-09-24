@@ -2,15 +2,15 @@
 
 ## Assets
 
-| Asset                                   | Impact if compromised                                                                                                                                                                                 |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bitwarden master password and API key   | Total vault compromise. Held in vaultgate process memory and, once saved on the account page, as AES-256-GCM ciphertext in `vault_settings` under keys derived from `VAULTGATE_SECRET_KEY` (STORE-9). |
-| Unlocked `bw serve` session             | Total vault read/write from the host. Loopback only.                                                                                                                                                  |
-| Access and refresh tokens               | Scoped vault access for their lifetime. Opaque, hashed, revocable.                                                                                                                                    |
-| Operator password, TOTP secret, session | Ability to approve new agents. Hashed / encrypted / hashed.                                                                                                                                           |
-| `VAULTGATE_SECRET_KEY`                  | Decrypts the stored TOTP secret and the stored vault credentials. No vault access by itself; with the database it yields the master password and API key.                                             |
-| Audit log                               | Forensic integrity.                                                                                                                                                                                   |
-| Vault contents in transit               | Leak to an agent beyond its scope.                                                                                                                                                                    |
+| Asset                                   | Impact if compromised                                                                                                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bitwarden master password and API key   | Total vault compromise. Held in vaultgate process memory and, once saved on the console's Vault page, as AES-256-GCM ciphertext in `vault_settings` under keys derived from `VAULTGATE_SECRET_KEY` (STORE-9). |
+| Unlocked `bw serve` session             | Total vault read/write from the host. Loopback only.                                                                                                                                                          |
+| Access and refresh tokens               | Scoped vault access for their lifetime. Opaque, hashed, revocable.                                                                                                                                            |
+| Operator password, TOTP secret, session | Ability to approve new agents. Hashed / encrypted / hashed.                                                                                                                                                   |
+| `VAULTGATE_SECRET_KEY`                  | Decrypts the stored TOTP secret and the stored vault credentials. No vault access by itself; with the database it yields the master password and API key.                                                     |
+| Audit log                               | Forensic integrity.                                                                                                                                                                                           |
+| Vault contents in transit               | Leak to an agent beyond its scope.                                                                                                                                                                            |
 
 Planned with the actions layer (spec 13, 14; ADR 0007):
 
@@ -113,7 +113,7 @@ Planned with the actions layer (spec 13, 14):
 
 ## Residual risks (accepted, documented)
 
-- Once the vault connection has been saved on the account page, the database and
+- Once the vault connection has been saved on the Vault page, the database and
   `VAULTGATE_SECRET_KEY` together yield the master password and the API key. This is the same
   class as the TOTP seed, which the key has always protected, and the reason STORE-8 has the key
   backed up separately from the database; an operator who prefers never to have the vault

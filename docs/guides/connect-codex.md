@@ -63,7 +63,7 @@ codex mcp --help
 ```
 
 Removing the server from `config.toml` discards Codex's copy of the tokens but does not revoke
-them; disconnect the client on `https://<host>/account` when you mean to cut access.
+them; disconnect the client on `https://<host>/account/agents` when you mean to cut access.
 
 ## Codex cloud
 

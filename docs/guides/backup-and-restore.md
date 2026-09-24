@@ -12,7 +12,7 @@ vaultgate's state is one SQLite file plus one key. Specification:
 
 Back them up together and keep the key outside the backup of the database if you can, since the
 two together are what an attacker would need to impersonate the operator and, once the vault
-connection has been saved on the account page, to read the master password and API key as well.
+connection has been saved on the Vault page, to read the master password and API key as well.
 
 What you do **not** need:
 
@@ -95,7 +95,7 @@ decrypted:
 
 1. Sign in with your e-mail address, password and a **recovery code** (they are hashes, not
    ciphertext, so they still work).
-2. On the account page confirm your password, then **Set up a new authenticator**.
+2. On **Account & security** confirm your password, then **Set up a new authenticator**.
 3. **Generate new recovery codes** while you are there.
 
 Rotating the key deliberately follows the same steps; nothing else needs to change.

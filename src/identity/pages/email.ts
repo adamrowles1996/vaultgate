@@ -1,4 +1,5 @@
 import { document, errorBanner, hidden, type Html, html, noticeBanner, when } from './template.ts';
+import { cardHead } from './ui.ts';
 
 /**
 What the e-mail pages need from the account view; `email` is `undefined` in legacy mode (ID-26).
@@ -26,9 +27,8 @@ function emailForm(csrfToken: string, label: string): Html {
 The "Change e-mail address" section of the sensitive actions (ID-15); shown once re-authenticated.
 */
 export function changeEmailSection(email: string, csrfToken: string): Html {
-  return html`<section>
-    <h3>E-mail address</h3>
-    <p>You sign in with this address; it is <strong>${email}</strong> now.</p>
+  return html`<section class="card">
+    ${cardHead('E-mail address', html`You sign in with this address; it is <strong>${email}</strong> now.`)}
     ${emailForm(csrfToken, 'Change e-mail address')}
   </section>`;
 }

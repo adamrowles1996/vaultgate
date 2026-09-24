@@ -28,7 +28,7 @@ VAULTGATE_ENABLE_WRITE_SCOPE=true
 ```
 
 then restarts. Clients can request `vault:write` from that point; existing consents are not
-widened, so a client connected earlier must be disconnected on the account page and connected
+widened, so a client connected earlier must be disconnected on the console's Agents page and connected
 again with the scope ticked. Setting the variable back to `false` takes effect on restart for
 every existing token at once, without revoking anything: a token that still holds `vault:write`
 simply no longer has it in effect.
@@ -172,7 +172,7 @@ a connector tool by target name. Specification: [13 Actions](../spec/13-actions.
 [13a Actions in operation](../spec/13a-actions-operations.md),
 [14 Action connectors](../spec/14-actions-connectors.md) and
 [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md). The engine, the scopes, the MCP
-tool surface below and the operator pages (the account page's Actions section, described in the
+tool surface below and the operator pages (the console's Computers pages, described in the
 [Actions guide](actions.md)) exist today, and so do the `http` connector with `http_request`
 (M9) and its Microsoft Graph credential adapter (M10), the `sql` connector with `sql_query`
 and `sql_execute` (M11), the `ssh` connector with `ssh_run` (M12) and the `winrm` connector with
@@ -351,7 +351,7 @@ its user before every call; the server never relies on that prompt.
 
 ### Confirmation
 
-When a target's policy sets `confirm_writes` — which the account page turns on for every new
+When a target's policy sets `confirm_writes` — which the create form turns on for every new
 target, whatever the connector — every non-read call needs a human's approval
 through MCP form-mode elicitation. On protocol `2026-07-28` the call answers with an
 `input_required` result carrying one `elicitation/create` request (a single boolean, "Allow this
@@ -380,7 +380,7 @@ once, during `initialize`; vaultgate serves every request with a fresh stateless
 never sees that message and has no open channel on which a server-to-client prompt could be
 delivered or answered. Reads on the same target and the same wire are unaffected. If your client
 is on the older revision, either use one on `2026-07-28` or set `confirm_writes: false` and
-review the target's writes under **Unexpected writes** on the account page. Spec
+review the target's writes under **Unexpected writes** on the console's Activity page. Spec
 [ACT-48](../spec/13-actions.md) records the whole finding.
 
 ### Actions error codes
@@ -395,7 +395,7 @@ every code has one fixed message and `detail` is the only variable part.
 | `policy_denied`                                                                                                                                      | The target policy refused the operation; `detail.reason` is `method`, `path`, `header`, `body_size`, `command`, `command_metacharacter` (a shell operator in a command on a target that is not an any-command one) and so on. |
 | `rate_limited`                                                                                                                                       | Per-target or per-client limit; `detail.retry_after_s`.                                                                                                                                                                       |
 | `confirmation_unavailable`, `confirmation_declined`, `confirmation_cancelled`, `confirmation_expired`, `confirmation_invalid`, `confirmation_reused` | The confirmation of the section above did not happen, was refused, or the retried state was stale, altered or replayed.                                                                                                       |
-| `credential_unavailable`                                                                                                                             | The vault is locked or the item or field is missing; the operator sees why on the account page.                                                                                                                               |
+| `credential_unavailable`                                                                                                                             | The vault is locked or the item or field is missing; the operator sees why on the target's page.                                                                                                                              |
 | `destination_refused`, `connection_failed`, `tls_error`, `host_key_mismatch`, `authentication_failed`, `timeout`, `upstream_error`                   | The destination could not be reached, presented an SSH host key or a TLS certificate other than the pinned one, or answered with an error; `detail` carries a scrubbed, capped message where one exists.                      |
 | `connector_fault`                                                                                                                                    | The call failed inside vaultgate rather than at the destination, which may never have been contacted; `detail.reason` says which.                                                                                             |
 

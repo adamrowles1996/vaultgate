@@ -38,8 +38,8 @@ describe('OAuth contract with the MCP client SDK', () => {
     }
     const { tokens } = await handshake(harness, new TestProvider({ cimd: true }), browser);
     expect(await mcpStatus(harness, tokens.access_token)).toBe(200);
-    const account = await browser.get('/account');
-    expect(await account.text()).toContain('<td data-label="Client">CIMD Agent</td>');
+    const agents = await browser.get('/account/agents');
+    expect(await agents.text()).toContain('<h3>CIMD Agent</h3>');
   });
 
   it('completes the DCR handshake, minting a vg_c_ client without a secret', async () => {

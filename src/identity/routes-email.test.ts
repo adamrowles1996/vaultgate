@@ -154,7 +154,7 @@ describe('legacy mode (account created before the operator-email migration)', ()
     expect(set.headers.get('location')).toBe('/account?notice=email-set');
     expect(after).toContain('E-mail address saved.');
     expect(after).toContain(`Signed in as <strong>${NEW_EMAIL}</strong>`);
-    expect(after).toContain('Connected clients');
+    expect(after).toContain('<h2>Sessions</h2>');
     expect(loginPage).toContain('name="email"');
     expect(status).toBe(200);
     expect(

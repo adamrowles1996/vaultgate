@@ -59,12 +59,13 @@ describe('GET /account', () => {
     const markup = await response.text();
     expect(response.status).toBe(200);
     expect(markup).toContain('Signed in as <strong>ada@example.com</strong>');
+    expect(markup).toContain('<title>Account &amp; security · vaultgate</title>');
     expect(markup.match(/data-label="Started"/g)).toHaveLength(2);
-    expect(markup.match(/\(this one\)/g)).toHaveLength(1);
+    expect(markup.match(/>This one</g)).toHaveLength(1);
     expect(markup).toContain('action="/account/reauthenticate"');
+    expect(markup).toContain('<input type="hidden" name="next" value="/account" />');
     expect(markup).not.toContain('action="/account/password"');
     expect(markup).not.toContain('class="notice"');
-    expect(markup).toContain('Connected clients');
     expect(markup).toContain('<td data-label="Address">unknown</td>');
     for (const heading of ['Started', 'Last seen', 'Browser']) {
       expect(markup).toContain(`<th>${heading}</th>`);

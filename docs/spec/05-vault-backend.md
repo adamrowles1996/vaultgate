@@ -61,7 +61,7 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
   may still be wanted is never deleted, and `bw/1` survives restarts so an unchanged connection
   reuses its session (VAULT-4).
 - **VAULT-18** Credential source and reconfiguration. At start-up the backend resolves its
-  credentials in this order: the connection stored by the account page (`vault_settings`,
+  credentials in this order: the connection stored by the Vault page (ID-25; `vault_settings`,
   STORE-9, decrypted under `VAULTGATE_SECRET_KEY`); otherwise the environment seed when all
   three of `VAULTGATE_BW_CLIENT_ID`, `VAULTGATE_BW_CLIENT_SECRET` and `VAULTGATE_BW_PASSWORD` are
   set (a partial set is logged and ignored; a stored row that does not decrypt is logged and

@@ -95,7 +95,7 @@ connect again.
 
 ## Revoking
 
-Sign in at `https://<host>/account`. **Connected clients** lists each client with its
+Sign in at `https://<host>/account/agents`. **Agents** lists each client with its
 permissions, when it connected and when it was last used. **Disconnect** revokes the consent and
 every access and refresh token issued under it; Claude's next call fails with `401` and the
 connector shows as needing reconnection. Revoking is a sensitive action, so vaultgate asks you to
@@ -117,7 +117,7 @@ request after authorization. Causes, in order of likelihood:
   header. See [Reverse proxy](reverse-proxy.md).
 - `VAULTGATE_TRUST_PROXY` is unset behind a proxy, so vaultgate sees `Host` or `X-Forwarded-Host`
   values that do not match the public URL and answers `403`.
-- The consent was revoked on the account page. Reconnect.
+- The consent was revoked on the Agents page. Reconnect.
 
 **`redirect_uri` mismatch, or an "Authorization request rejected" page.** vaultgate compares the
 redirect URI Claude sends at authorize time with the one it registered, exactly. If Anthropic
@@ -127,7 +127,7 @@ page rather than a redirect, so no code can leak.
 
 **`insufficient_scope`.** A tool needs a scope the token does not carry: either you unticked it
 at consent, or the deployment has since disabled `vault:write`. vaultgate answers `403` and lists
-every scope the call needs. Disconnect on the account page and connect again, ticking the scope.
+every scope the call needs. Disconnect on the Agents page and connect again, ticking the scope.
 Tools outside the token's scopes are not even listed, so Claude normally does not try them; the
 exception is `create_item`/`update_item` with an explicit `password`, which additionally needs
 `vault:reveal`.

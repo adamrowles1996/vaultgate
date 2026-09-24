@@ -1,9 +1,10 @@
 /**
- * The routes of the Actions pages (ACT-5): two pages and the
- * `POST /account/actions/*` writes, every write behind the identity
+ * The routes of the Computers pages (ACT-5): the list, "Add computer" (the
+ * kinds, then a connector's form), a computer's page and its edit page, and
+ * the `POST /account/actions/*` writes, every write behind the identity
  * module's injected gate (ID-18 and the ID-15 window) and every change made
  * through the targets service so its ACT-7 event is recorded there. A
- * rejected create or edit answers `400` with the page re-rendered, every
+ * rejected create or edit answers `400` with the form re-rendered, every
  * problem listed and the submitted values shown again (ACT-6).
  */
 import { Hono } from 'hono';
@@ -11,10 +12,14 @@ import { Hono } from 'hono';
 import { CONNECTOR_KINDS } from '../../config/actions.ts';
 
 import { registerCallPages } from './call-routes.ts';
-import { renderCreatePage } from './create-page.ts';
+import { computersView } from './computers-view.ts';
+import { computersPage } from './computers.ts';
+import { createPage, editPage, kindChooserPage } from './form-pages.ts';
 import { documentsFromForm, type FormValues } from './form-values.ts';
 import { deploymentProblems, formFor } from './forms.ts';
-import { CREATE_PATH, targetPath } from './paths.ts';
+import { isComputerKind, kindOf } from './kinds.ts';
+import { CREATE_PATH, NEW_PATH, targetPath } from './paths.ts';
+import { formKind, kindChoices, prefilled } from './prefill.ts';
 import {
   CONNECTOR_FIELD,
   DESCRIPTION_FIELD,
@@ -22,14 +27,15 @@ import {
   ITEM_ID_FIELD,
   NAME_FIELD,
 } from './target-form.ts';
-import { renderTargetPage } from './target-page.ts';
+import { targetPage } from './target-page.ts';
 import { registerTargetWrites } from './target-writes.ts';
 import {
   type ActionsPagesDependencies,
-  createValues,
   fieldProblems,
   signedIn,
   targetPageView,
+  targetValues,
+  type Viewer,
   viewerOf,
 } from './view.ts';
 
@@ -38,13 +44,14 @@ import type { IdentityContext, IdentityEnvironment } from '../../identity/index.
 import type { TargetSummary } from '../targets.ts';
 
 const NOTICES: Readonly<Record<string, string>> = {
-  created: 'Target created.',
-  updated: 'Target saved; its revision has moved on and open confirmations are void.',
-  enabled: 'Target enabled.',
-  disabled: 'Target disabled; agents no longer see it.',
+  created: 'Computer created.',
+  updated: 'Computer saved; its revision has moved on and open confirmations are void.',
+  enabled: 'Computer enabled.',
+  disabled: 'Computer disabled; agents no longer see it.',
   granted: 'Grant added.',
-  'grant-revoked': 'Grant removed and the client’s sessions on this target closed.',
-  'sessions-closed': 'Every open session on this target was closed.',
+  'grant-revoked': 'Grant removed and the agent’s sessions on this computer closed.',
+  'sessions-closed': 'Every open session on this computer was closed.',
+  deleted: 'Computer deleted. Its calls stay in the audit trail.',
 };
 
 /**
@@ -90,32 +97,60 @@ export function targetInputFromForm(
     : changes;
 }
 
-function showCreate(
-  context: IdentityContext,
-  dependencies: ActionsPagesDependencies,
-): Response | Promise<Response> {
-  const viewer = signedIn(context);
+async function showComputers(context: IdentityContext, dependencies: ActionsPagesDependencies) {
+  const viewer = signedIn(context, dependencies.consoleAccess);
   if (viewer instanceof Response) {
     return viewer;
   }
-  const form = editableForm(dependencies, context.req.query(CONNECTOR_FIELD));
+  const kind = context.req.query('kind');
+  const filter = isComputerKind(kind) ? kind : undefined;
+  const view = await computersView(dependencies, viewer.operatorId, filter);
+  const page = computersPage({ ...view, notice: noticeFor(context.req.query('notice')) });
+  return context.html(await dependencies.renderConsole(viewer.session, page));
+}
+
+interface CreateRequest {
+  readonly form: ConnectorForm;
+  readonly values: FormValues;
+  readonly problems?: readonly string[];
+}
+
+async function renderCreate(
+  dependencies: ActionsPagesDependencies,
+  viewer: Viewer,
+  request: CreateRequest,
+): Promise<string> {
+  const { form, values } = request;
+  const page = createPage({
+    csrfToken: viewer.csrfToken,
+    isReauthenticated: viewer.isReauthenticated,
+    problems: fieldProblems(form, request.problems),
+    form,
+    values,
+    kind: formKind(form, values),
+  });
+  return dependencies.renderConsole(viewer.session, page);
+}
+
+async function showCreate(context: IdentityContext, dependencies: ActionsPagesDependencies) {
+  const viewer = signedIn(context, dependencies.consoleAccess);
+  if (viewer instanceof Response) {
+    return viewer;
+  }
+  const connector = context.req.query(CONNECTOR_FIELD);
+  if (connector === undefined) {
+    const page = kindChooserPage(kindChoices());
+    return context.html(await dependencies.renderConsole(viewer.session, page));
+  }
+  const form = editableForm(dependencies, connector);
   if (form === undefined) {
     return context.notFound();
   }
-  return context.html(
-    renderCreatePage({
-      ...viewer,
-      problems: fieldProblems(form, undefined),
-      form,
-      values: createValues(form),
-    }),
-  );
+  const values = prefilled(form, context.req.query('kind'));
+  return context.html(await renderCreate(dependencies, viewer, { form, values }));
 }
 
-async function create(
-  context: IdentityContext,
-  dependencies: ActionsPagesDependencies,
-): Promise<Response> {
+async function create(context: IdentityContext, dependencies: ActionsPagesDependencies) {
   const gate = await dependencies.sensitiveAction(context);
   if (gate instanceof Response) {
     return gate;
@@ -124,15 +159,11 @@ async function create(
   if (form === undefined) {
     return context.notFound();
   }
+  const viewer = viewerOf(gate.session);
   const refused = deploymentProblems(gate.form, dependencies.switches);
   if (refused.length > 0) {
-    const denied = {
-      ...viewerOf(gate.session),
-      problems: fieldProblems(form, refused),
-      form,
-      values: gate.form,
-    };
-    return context.html(renderCreatePage(denied), 400);
+    const request = { form, values: gate.form, problems: refused };
+    return context.html(await renderCreate(dependencies, viewer, request), 400);
   }
   const created = await dependencies.targets.create(
     targetInputFromForm(form, gate.form, true),
@@ -141,13 +172,8 @@ async function create(
   if (created.ok) {
     return context.redirect(`${targetPath(created.value.id)}?notice=created`, 303);
   }
-  const view = {
-    ...viewerOf(gate.session),
-    problems: fieldProblems(form, created.error.problems),
-    form,
-    values: gate.form,
-  };
-  return context.html(renderCreatePage(view), 400);
+  const request = { form, values: gate.form, problems: created.error.problems };
+  return context.html(await renderCreate(dependencies, viewer, request), 400);
 }
 
 async function showTarget(
@@ -155,7 +181,7 @@ async function showTarget(
   dependencies: ActionsPagesDependencies,
   id: string,
 ): Promise<Response> {
-  const viewer = signedIn(context);
+  const viewer = signedIn(context, dependencies.consoleAccess);
   if (viewer instanceof Response) {
     return viewer;
   }
@@ -165,7 +191,7 @@ async function showTarget(
   }
   const notice = noticeFor(context.req.query('notice'));
   const view = await targetPageView(dependencies, target, viewer, { notice });
-  return context.html(renderTargetPage(view));
+  return context.html(await dependencies.renderConsole(viewer.session, targetPage(view)));
 }
 
 /**
@@ -178,6 +204,41 @@ function editable(
   const target = dependencies.targets.get(id);
   const form = target === undefined ? undefined : formFor(target.connector, dependencies.switches);
   return target === undefined || form === undefined ? undefined : { target, form };
+}
+
+async function renderEdit(
+  dependencies: ActionsPagesDependencies,
+  viewer: Viewer,
+  current: { readonly target: TargetSummary; readonly form: ConnectorForm },
+  submitted?: { readonly values: FormValues; readonly problems: readonly string[] },
+): Promise<string> {
+  const { target, form } = current;
+  const page = editPage({
+    csrfToken: viewer.csrfToken,
+    isReauthenticated: viewer.isReauthenticated,
+    problems: fieldProblems(form, submitted?.problems),
+    form,
+    values: submitted?.values ?? targetValues(form, target),
+    kind: kindOf(target),
+    targetId: target.id,
+    targetName: target.name,
+  });
+  return dependencies.renderConsole(viewer.session, page);
+}
+
+async function showEdit(
+  context: IdentityContext,
+  dependencies: ActionsPagesDependencies,
+  id: string,
+) {
+  const viewer = signedIn(context, dependencies.consoleAccess);
+  if (viewer instanceof Response) {
+    return viewer;
+  }
+  const current = editable(dependencies, id);
+  return current === undefined
+    ? context.notFound()
+    : context.html(await renderEdit(dependencies, viewer, current));
 }
 
 async function update(
@@ -193,24 +254,22 @@ async function update(
   if (current === undefined) {
     return context.notFound();
   }
-  const { target, form } = current;
+  const viewer = viewerOf(gate.session);
   const refused = deploymentProblems(gate.form, dependencies.switches);
   if (refused.length > 0) {
-    const denied = { problems: refused, values: gate.form };
-    const page = await targetPageView(dependencies, target, viewerOf(gate.session), denied);
-    return context.html(renderTargetPage(page), 400);
+    const submitted = { values: gate.form, problems: refused };
+    return context.html(await renderEdit(dependencies, viewer, current, submitted), 400);
   }
   const updated = await dependencies.targets.update(
-    target.id,
-    targetInputFromForm(form, gate.form, false),
+    current.target.id,
+    targetInputFromForm(current.form, gate.form, false),
     gate.operatorId,
   );
   if (updated.ok) {
-    return context.redirect(`${targetPath(target.id)}?notice=updated`, 303);
+    return context.redirect(`${targetPath(current.target.id)}?notice=updated`, 303);
   }
-  const extras = { problems: updated.error.problems, values: gate.form };
-  const view = await targetPageView(dependencies, target, viewerOf(gate.session), extras);
-  return context.html(renderTargetPage(view), 400);
+  const submitted = { values: gate.form, problems: updated.error.problems };
+  return context.html(await renderEdit(dependencies, viewer, current, submitted), 400);
 }
 
 export function createActionsRoutes(
@@ -222,10 +281,14 @@ export function createActionsRoutes(
   app.use(`${CREATE_PATH}/*`, dependencies.pageHeaders);
   app.use(CREATE_PATH, dependencies.pageHeaders);
   registerCallPages(app, dependencies);
-  app.get(`${CREATE_PATH}/new`, (context) => showCreate(context, dependencies));
+  app.get(CREATE_PATH, (context) => showComputers(context, dependencies));
+  app.get(NEW_PATH, (context) => showCreate(context, dependencies));
   app.post(CREATE_PATH, (context) => create(context, dependencies));
   app.get(`${CREATE_PATH}/:id`, (context) =>
     showTarget(context, dependencies, context.req.param('id')),
+  );
+  app.get(`${CREATE_PATH}/:id/edit`, (context) =>
+    showEdit(context, dependencies, context.req.param('id')),
   );
   app.post(`${CREATE_PATH}/:id`, (context) =>
     update(context, dependencies, context.req.param('id')),

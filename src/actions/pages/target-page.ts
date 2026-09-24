@@ -1,44 +1,36 @@
 /**
- * One target's page (ACT-5, ACT-63 basic): its status with the vault item's
- * name and any validation problem (ACT-1), the sessions and calls it has
- * seen, and, inside the re-authentication window (ID-15), the forms that
- * edit, enable, disable and delete it, manage its grants (ACT-9) and close
- * its sessions. Every form posts to `/account/actions/...` (ID-18).
+ * One computer's page (ACT-5, ACT-63): its state with any validation problem
+ * (ACT-1) and standing warnings (ACT-49, ACT-88), then cards for where it
+ * points, what it signs in with (the vault item's name and the fields it
+ * maps, secret ones sealed), what its policy allows, the agents granted it
+ * (ACT-9) and its recent calls. Inside the re-authentication window (ID-15)
+ * the page offers Edit, the grant forms and the lifecycle buttons; outside
+ * it, the way to confirm the password and come back here. Every form posts
+ * to `/account/actions/...` (ID-18).
  */
+import { unlockPath } from '../../identity/pages/console.ts';
+import { icon } from '../../identity/pages/icons.ts';
 import {
-  cell,
-  document,
+  EMPTY,
   errorBanner,
   hidden,
   type Html,
   html,
   noticeBanner,
-  tableHead,
   when,
 } from '../../identity/pages/template.ts';
+import { cardHead, fieldChip, pill, relativeTime, sealed, tag } from '../../identity/pages/ui.ts';
 
-import { type CallItem, renderCallTable } from './calls.ts';
-import { callsPath, targetPath } from './paths.ts';
-import { renderProblems, renderTargetForm } from './target-form.ts';
+import { renderCallTable } from './calls.ts';
+import { KINDS } from './kinds.ts';
+import { callsPath, CREATE_PATH, editPath, targetPath } from './paths.ts';
+import { grantsCard, manageCard } from './target-grants.ts';
 
-import type { ConnectorForm } from './descriptors.ts';
-import type { FormValues } from './form-values.ts';
-import type { FieldProblems } from './messages.ts';
+import type { CallItem } from './calls.ts';
+import type { ComputerSummary } from './summary.ts';
+import type { ClientChoice, GrantItem } from './target-grants.ts';
+import type { ConsolePage } from '../../identity/index.ts';
 import type { TargetSummary } from '../targets.ts';
-
-export interface GrantItem {
-  readonly clientId: string;
-  readonly clientName: string;
-  readonly grantedAt: string;
-}
-
-/**
-A client holding a consent (ACT-9), as the OAuth layer lists it through the injected lister.
-*/
-export interface ClientChoice {
-  readonly clientId: string;
-  readonly clientName: string | undefined;
-}
 
 export interface TargetPageView {
   readonly csrfToken: string;
@@ -53,8 +45,8 @@ export interface TargetPageView {
   readonly isUnconfirmed: boolean;
   readonly notice: string | undefined;
   readonly error: string | undefined;
-  readonly fieldProblems: FieldProblems;
   readonly target: TargetSummary;
+  readonly summary: ComputerSummary;
   /**
   The vault item's name (ACT-4), or why it could not be read.
   */
@@ -64,16 +56,11 @@ export interface TargetPageView {
   readonly candidates: readonly ClientChoice[];
   readonly calls: readonly CallItem[];
   /**
-  Absent when this build cannot edit the connector's documents (a later milestone's connector).
+  False when this build cannot edit the connector's documents (a later milestone's connector).
   */
-  readonly form: ConnectorForm | undefined;
-  readonly values: FormValues;
+  readonly isEditable: boolean;
+  readonly now: number;
 }
-
-const STATUS_COLUMNS = ['Setting', 'Value'] as const;
-const GRANT_COLUMNS = ['Client', 'Granted', ''] as const;
-
-const REAUTHENTICATION_ANCHOR = '/account#sensitive-actions';
 
 /**
 ACT-88: the standing warning an any-command target carries, shown whether or not it is being edited.
@@ -90,160 +77,172 @@ const UNCONFIRMED_NOTE =
   'targets ask for a confirmation on every non-read call; this one relies on the grant and on ' +
   'the prompt the client may show. Review the unexpected writes below.';
 
-function statusRow(label: string, value: string | Html): Html {
-  return html`<tr>
-    ${cell(STATUS_COLUMNS[0], label)} ${cell(STATUS_COLUMNS[1], value)}
-  </tr>`;
-}
-
-function statusTable(view: TargetPageView): Html {
-  const { target } = view;
-  const state =
-    target.state === 'valid'
-      ? html`valid`
-      : html`<code>target_invalid</code>: ${target.problems.join('; ')}`;
-  const rows = [
-    statusRow('Connector', target.connector),
-    statusRow('Destination', target.destinationSummary ?? 'not readable'),
-    statusRow('Enabled', target.enabled ? 'yes' : 'no'),
-    statusRow('State', state),
-    statusRow('Vault item', `${target.credential.item_id} (${view.itemName})`),
-    statusRow('Revision', String(target.revision)),
-    statusRow('Updated', new Date(target.updatedAt).toISOString()),
-    statusRow('Open sessions', String(view.openSessions)),
-  ];
-  return html`<table>
-    ${tableHead(STATUS_COLUMNS)}
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>`;
-}
-
-function actionForm(action: string, csrfToken: string, label: string, body: Html = html``): Html {
+function actionForm(action: string, view: TargetPageView, button: Html, body: Html = EMPTY): Html {
   return html`<form method="post" action="${action}">
-    ${hidden('csrf', csrfToken)} ${body}
-    <button type="submit">${label}</button>
+    ${hidden('csrf', view.csrfToken)} ${body} ${button}
   </form>`;
 }
 
-function lifecycleForms(view: TargetPageView): Html {
+function stateTags(view: TargetPageView): Html {
+  const { summary } = view;
+  const state =
+    summary.state === 'invalid'
+      ? pill('bad', 'Needs fixing')
+      : pill(
+          summary.state === 'enabled' ? 'ok' : 'off',
+          summary.state === 'enabled' ? 'Enabled' : 'Disabled',
+        );
+  const confirmation = {
+    confirmed: tag('A person confirms every write', 'green', 'shield'),
+    unconfirmed: tag('Writes are not confirmed', 'amber', 'alert'),
+    reads: tag('Reads only'),
+  }[summary.confirmation];
+  return html`${state} ${confirmation}`;
+}
+
+function headerActions(view: TargetPageView): Html {
   const base = targetPath(view.target.id);
+  if (!view.isReauthenticated) {
+    return html`<a class="button" href="${unlockPath(base)}">${icon('lock')}Unlock editing</a>`;
+  }
   const toggle = view.target.enabled
-    ? actionForm(`${base}/disable`, view.csrfToken, 'Disable target')
-    : actionForm(`${base}/enable`, view.csrfToken, 'Enable target');
-  return html`${toggle} ${actionForm(`${base}/sessions/close`, view.csrfToken, 'Close sessions')}
-  ${actionForm(`${base}/delete`, view.csrfToken, 'Delete target')}`;
+    ? actionForm(
+        `${base}/disable`,
+        view,
+        html`<button type="submit">${icon('pause')}Disable</button>`,
+      )
+    : actionForm(
+        `${base}/enable`,
+        view,
+        html`<button type="submit">${icon('play')}Enable</button>`,
+      );
+  return html`${toggle}
+  ${when(
+    view.isEditable,
+    () =>
+      html`<a class="button primary" href="${editPath(view.target.id)}">${icon('pencil')}Edit</a>`,
+  )}`;
 }
 
-function grantsSection(view: TargetPageView): Html {
-  const base = targetPath(view.target.id);
-  const rows = view.grants.map(
-    (grant) =>
-      html`<tr>
-        ${cell(GRANT_COLUMNS[0], grant.clientName)} ${cell(GRANT_COLUMNS[1], grant.grantedAt)}
-        ${cell(
-          GRANT_COLUMNS[2],
-          when(view.isReauthenticated, () =>
-            actionForm(
-              `${base}/grants/revoke`,
-              view.csrfToken,
-              'Remove',
-              hidden('client_id', grant.clientId),
-            ),
-          ),
-        )}
-      </tr>`,
+function header(view: TargetPageView): Html {
+  const kind = KINDS[view.summary.kind];
+  return html`<header class="page-head">
+    <div class="cell-with-tile">
+      <span class="kind-tile large kind-${view.summary.kind}" title="${kind.label}"
+        >${icon(kind.icon)}</span
+      >
+      <div class="cell-main">
+        <div class="toolbar">
+          <h1 class="mono">${view.target.name}</h1>
+          ${stateTags(view)}
+        </div>
+        <p class="intro">${view.target.description}</p>
+      </div>
+    </div>
+    <div class="page-actions">${headerActions(view)}</div>
+  </header>`;
+}
+
+function banners(view: TargetPageView): Html {
+  const invalid = when(view.target.state === 'invalid', () =>
+    errorBanner(`target_invalid: ${view.target.problems.join('; ')}`),
   );
-  const options = view.candidates.map(
-    (client) =>
-      html`<option value="${client.clientId}">${client.clientName ?? client.clientId}</option>`,
-  );
-  const add = html`<label
-    >Client
-    <select name="client_id">
-      ${options}
-    </select>
-  </label>`;
-  return html`<section>
-    <h3>Grants</h3>
-    ${when(view.grants.length === 0, () => html`<p>No client is granted this target.</p>`)}
-    ${when(
-      view.grants.length > 0,
-      () =>
-        html`<table>
-          ${tableHead(GRANT_COLUMNS)}
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>`,
-    )}
-    ${when(
-      view.isReauthenticated && view.candidates.length > 0,
-      () => html`${actionForm(`${base}/grants`, view.csrfToken, 'Grant', add)}`,
-    )}
-    ${when(
-      view.isReauthenticated && view.candidates.length === 0,
-      () => html`<p>Every connected client already holds a grant, or none is connected.</p>`,
-    )}
+  return html`${errorBanner(view.error)} ${invalid}
+  ${when(view.isUnrestricted, () => errorBanner(UNRESTRICTED_WARNING))}
+  ${when(view.isUnconfirmed, () => errorBanner(UNCONFIRMED_NOTE))} ${noticeBanner(view.notice)}`;
+}
+
+function connectionCard(view: TargetPageView): Html {
+  const { target, summary } = view;
+  return html`<section class="card">
+    ${cardHead('Connection', undefined, tag(KINDS[summary.kind].label))}
+    <dl class="kv">
+      <dt>Destination</dt>
+      <dd class="mono">${summary.address}</dd>
+      <dt>Network</dt>
+      <dd>${summary.addressDetail}</dd>
+      <dt>Revision</dt>
+      <dd>${target.revision} · updated ${relativeTime(target.updatedAt, view.now)}</dd>
+      <dt>Open sessions</dt>
+      <dd>${view.openSessions}</dd>
+    </dl>
   </section>`;
 }
 
-/**
-ACT-63: the last 50 calls here; the history page pages back through the rest.
-*/
-function callsSection(view: TargetPageView): Html {
-  return html`<section>
-    <h3>Recent calls</h3>
+function credentialCard(view: TargetPageView): Html {
+  const fields = view.summary.fields.map(
+    (field) =>
+      html`<dt>${field.isSecret ? 'Secret' : 'Username'}</dt>
+        <dd>${field.isSecret ? sealed(field.selector) : fieldChip(field.selector)}</dd>`,
+  );
+  return html`<section class="card">
+    ${cardHead(
+      'Signs in with',
+      'The vault item and the fields vaultgate reads at the moment of each call. Values never appear here.',
+    )}
+    <dl class="kv">
+      <dt>Vault item</dt>
+      <dd>
+        ${icon('vault')} ${view.itemName}
+        <span class="mono cell-sub">${view.target.credential.item_id}</span>
+      </dd>
+      ${fields}
+    </dl>
+  </section>`;
+}
+
+function rulesCard(view: TargetPageView): Html {
+  const { summary } = view;
+  const confirm = {
+    confirmed: 'A person confirms every write',
+    unconfirmed: 'Writes run without asking anyone',
+    reads: 'Nothing to confirm: the policy allows reads only',
+  }[summary.confirmation];
+  return html`<section class="card">
+    ${cardHead('Rules')}
+    <dl class="kv">
+      <dt>Allows</dt>
+      <dd>${summary.allows === '' ? 'see the policy' : summary.allows}</dd>
+      <dt>Confirmation</dt>
+      <dd>${confirm}</dd>
+    </dl>
+  </section>`;
+}
+
+function callsCard(view: TargetPageView): Html {
+  return html`<section class="card flush">
+    ${cardHead(
+      'Recent calls',
+      'Arguments are kept, scrubbed of every injected value; results are never stored.',
+      html`<a class="button small" href="${callsPath(view.target.id)}">Whole call history</a>`,
+    )}
     ${renderCallTable(view.calls)}
-    <p><a href="${callsPath(view.target.id)}">The whole call history</a></p>
   </section>`;
 }
 
-function editSection(view: TargetPageView): Html {
-  return html`<section>
-    <h3>Edit</h3>
-    ${renderProblems(view.fieldProblems)}
-    ${when(
-      view.form === undefined,
-      () => html`<p>This build cannot edit ${view.target.connector} targets yet.</p>`,
-    )}
-    ${
-      view.form === undefined
-        ? html``
-        : renderTargetForm({
-            action: targetPath(view.target.id),
-            csrfToken: view.csrfToken,
-            form: view.form,
-            values: view.values,
-            problems: view.fieldProblems,
-            isNew: false,
-            submitLabel: 'Save target',
-          })
-    }
-    ${lifecycleForms(view)}
-  </section>`;
+export function targetPage(view: TargetPageView): ConsolePage {
+  const { target } = view;
+  const context = {
+    targetId: target.id,
+    csrfToken: view.csrfToken,
+    isReauthenticated: view.isReauthenticated,
+  };
+  return {
+    title: target.name,
+    active: 'computers',
+    crumbs: [
+      { label: 'Computers', href: CREATE_PATH },
+      { label: KINDS[view.summary.kind].plural, href: `${CREATE_PATH}?kind=${view.summary.kind}` },
+      { label: html`<span class="mono">${target.name}</span>` },
+    ],
+    body: html`${header(view)} ${banners(view)}
+      <div class="grid-2">
+        ${connectionCard(view)} ${credentialCard(view)} ${rulesCard(view)}
+        ${grantsCard({ ...context, grants: view.grants, candidates: view.candidates })}
+      </div>
+      ${callsCard(view)} ${manageCard({ ...context, isEnabled: target.enabled })}`,
+    returnTo: targetPath(target.id),
+  };
 }
 
-export function renderTargetPage(view: TargetPageView): string {
-  return document(
-    `Target ${view.target.name}`,
-    html`<h2>Target <code>${view.target.name}</code></h2>
-      ${errorBanner(view.error)}
-      ${when(view.isUnrestricted, () => errorBanner(UNRESTRICTED_WARNING))}
-      ${when(view.isUnconfirmed, () => errorBanner(UNCONFIRMED_NOTE))} ${noticeBanner(view.notice)}
-      <p><a href="/account#actions">Back to the account page</a></p>
-      <p>${view.target.description}</p>
-      ${statusTable(view)}
-      ${when(
-        !view.isReauthenticated,
-        () =>
-          html`<p>
-            To change this target, first
-            <a href="${REAUTHENTICATION_ANCHOR}">confirm your password</a> under Sensitive actions.
-          </p>`,
-      )}
-      ${when(view.isReauthenticated, () => editSection(view))} ${grantsSection(view)}
-      ${callsSection(view)}`,
-  );
-}
+export type { ClientChoice, GrantItem } from './target-grants.ts';

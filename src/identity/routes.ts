@@ -4,6 +4,7 @@ import { type IdentityEnvironment, pageHeaders } from './browser.ts';
 import { STYLESHEET } from './pages/stylesheet.ts';
 import { registerAccountRoutes } from './routes-account.ts';
 import { registerAuditRoutes } from './routes-audit.ts';
+import { registerConsoleRoutes } from './routes-console.ts';
 import { registerEmailRoutes } from './routes-email.ts';
 import { registerLoginRoutes } from './routes-login.ts';
 import { registerSetupRoutes } from './routes-setup.ts';
@@ -28,9 +29,9 @@ export function createIdentityRoutes(services: IdentityServices): Hono<IdentityE
   app.use('/account/*', pageHeaders);
   app.use('/account', pageHeaders);
 
-  // -- ID-23: the bare address goes to the account page or, without a session, to login --
+  // -- ID-23: the bare address goes to the console's home or, without a session, to login --
   app.get('/', (context) =>
-    context.redirect(context.get('session') === undefined ? '/login' : '/account', 303),
+    context.redirect(context.get('session') === undefined ? '/login' : services.homePath, 303),
   );
 
   app.get('/static/vaultgate.css', (context) =>
@@ -43,6 +44,7 @@ export function createIdentityRoutes(services: IdentityServices): Hono<IdentityE
   registerSetupRoutes(app, services);
   registerLoginRoutes(app, services);
   registerAccountRoutes(app, services);
+  registerConsoleRoutes(app, services);
   registerAuditRoutes(app, services);
   registerEmailRoutes(app, services);
   registerVaultRoutes(app, services);

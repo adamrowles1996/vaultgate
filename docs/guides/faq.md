@@ -13,7 +13,7 @@ instead of your credentials ([ADR 0002](../adr/0002-own-authorization-server.md)
 
 Yes, at targets you define. That is what the actions layer is for: a credential an agent reads in
 order to use it ends up in the model's context, the chat transcript and the client's logs. With
-the layer enabled, you define a target on the account page (an HTTP API, Microsoft Graph, a SQL
+the layer enabled, you add a computer (a target) on the console's Computers page (an HTTP API, Microsoft Graph, a SQL
 Server or PostgreSQL database, an SSH or WinRM host), the vault item that signs in there and what
 is allowed; the agent names the target and describes the operation, and vaultgate performs it and
 returns the result with every injected value scrubbed out
@@ -40,9 +40,9 @@ deployment each. Multi-user and multi-vault are not planned for v1.
 
 Operators are identified by e-mail address since 0.1.0-rc.4; the display name is gone. An account
 created by an earlier release has no address yet, so its login page asks for the password alone,
-and after the authenticator step the account page asks you to confirm your password and set an
-address before it shows anything else. From then on, sign in with that address. It is a login
-identifier only: vaultgate never sends mail to it. You can change it from the account page after
+and after the authenticator step the console asks you to confirm your password and set an address
+before it shows anything else. From then on, sign in with that address. It is a login
+identifier only: vaultgate never sends mail to it. You can change it on **Account & security** after
 confirming your password.
 
 ## Does it work with organisations and collections?
@@ -74,7 +74,7 @@ you defined (plus the Microsoft sign-in endpoint for a Graph target).
 
 Yes. The process hands it to `bw serve` over loopback to unlock the vault, keeps it in memory
 for as long as that connection is in use and zero-fills it when the connection is replaced or on
-shutdown. It is never logged. When you save the connection on the account page it is also stored
+shutdown. It is never logged. When you save the connection on the Vault page it is also stored
 in the database, as AES-256-GCM ciphertext under a key derived from `VAULTGATE_SECRET_KEY`; the
 database and that key together would reveal it, which is why the key is backed up separately.
 Seeding the credentials through the environment and never saving the form keeps them out of the
@@ -112,14 +112,14 @@ providers' published IP ranges is possible but is your firewall's job, not vault
 ## What if I lose my authenticator?
 
 Sign in with one of the eight recovery codes you were shown at setup, confirm your password on
-the account page, and set up a new authenticator; then generate new recovery codes. If you have
+**Account & security**, and set up a new authenticator; then generate new recovery codes. If you have
 no recovery codes either, there is no reset: the password alone does not sign you in. Stop the
 service, move the database aside and start again to get a fresh bootstrap URL; every agent will
 need to be connected again ([Backup and restore](backup-and-restore.md#if-the-database-is-lost)).
 
 ## How long does an agent stay connected?
 
-Until you disconnect it on the account page, or until it goes 30 days without use. Access tokens
+Until you disconnect it on the Agents page, or until it goes 30 days without use. Access tokens
 last an hour and are refreshed silently; refresh tokens are rotated on every use and expire 30
 days after issue. Both lifetimes are configurable within bounds. See
 [Security model](security-model.md#lifetimes).
@@ -135,7 +135,7 @@ so most clients need nothing pre-registered.
 
 In the database, for `VAULTGATE_AUDIT_RETENTION_DAYS`: every tool call, login, consent, token
 and revocation is one row with the client, token id, tool, outcome, item id and field, but never
-arguments or results. Export it from the account page (**Audit log**, after confirming your
+arguments or results. Export it from the Activity page (**Audit log**, after confirming your
 password) as JSON Lines or CSV for a date range, or from the host with
 `node dist/cli.js audit export --from 2026-01-01 --to 2026-02-01 [--format csv]` under the same
 configuration as the server (`npm run audit:export -- …` from a source checkout). The window is

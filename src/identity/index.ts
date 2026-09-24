@@ -2,12 +2,14 @@ import { createSecretBox, STATE_COOKIE_INFO, TOTP_SECRET_INFO } from '../crypto/
 
 import { type Bootstrap, createBootstrap } from './bootstrap.ts';
 import { attachSession, pageHeaders } from './browser.ts';
+import { type ConsoleRenderer, createConsoleRenderer } from './console-chrome.ts';
 import { createLoginThrottle } from './login-throttle.ts';
 import { notFound } from './not-found.ts';
 import { EMPTY } from './pages/template.ts';
 import { createLocalProvider, type IdentityProvider } from './provider.ts';
 import { createIdentityStores } from './repositories/index.ts';
 import { type SensitiveAction, sensitiveAction } from './routes-account.ts';
+import { type ConsoleAccess, consoleAccess } from './routes-console.ts';
 import { createIdentityRoutes } from './routes.ts';
 import { createSessionManager } from './session-manager.ts';
 import { cookiePolicyFor, type CookiePolicy } from './sessions.ts';
@@ -18,9 +20,10 @@ import type { Guards } from './guards.ts';
 import type { ScryptParameters } from './password.ts';
 import type { Clock, Delay, RandomSource } from './primitives.ts';
 import type {
-  AccountSectionRenderer,
   ConnectedClientsRenderer,
+  ConsoleSections,
   IdentityServices,
+  NavigationProvider,
 } from './services.ts';
 import type { AuditSink } from '../audit/event.ts';
 import type { Config } from '../config/index.ts';
@@ -31,7 +34,16 @@ import type { DatabaseSync } from 'node:sqlite';
 
 export type { IdentityContext, IdentityEnvironment, IdentityVariables } from './context.ts';
 export type { SensitiveAction, SensitiveActionContext } from './routes-account.ts';
-export type { AccountSectionRenderer, ConnectedClientsRenderer } from './services.ts';
+export type { ConsoleAccess } from './routes-console.ts';
+export type { ConsoleRenderer } from './console-chrome.ts';
+export type {
+  ConnectedClientsRenderer,
+  ConsoleNavigation,
+  ConsoleSectionRenderer,
+  ConsoleSections,
+  NavigationProvider,
+} from './services.ts';
+export type { ConsolePage, NavChild } from './pages/console.ts';
 export type { SessionState } from './session-manager.ts';
 export { createGuards, type Guards } from './guards.ts';
 export { CURRENT_PARAMETERS } from './password.ts';
@@ -57,9 +69,17 @@ export interface IdentityDependencies {
   */
   readonly connectedClients?: ConnectedClientsRenderer | undefined;
   /**
-  Further account-page sections (the actions targets, ACT-5); none by default.
+  Sections other layers add to the Agents, Activity and Vault pages (ACT-5); none by default.
   */
-  readonly accountSections?: readonly AccountSectionRenderer[] | undefined;
+  readonly sections?: ConsoleSections | undefined;
+  /**
+  The console navigation other layers add (the actions layer's Computers, ACT-5); none by default.
+  */
+  readonly navigation?: NavigationProvider | undefined;
+  /**
+  Where `/` and a sign-in without a destination lead (ID-23); the Agents page by default.
+  */
+  readonly homePath?: string | undefined;
   /**
   Status and changes of the vault connection for the account page (ID-25).
   */
@@ -89,7 +109,22 @@ export interface Identity {
    * page keeps them whatever order the composition layer mounts it in.
    */
   readonly pageHeaders: MiddlewareHandler<IdentityEnvironment>;
+  /**
+  ID-19: a page another layer serves, drawn inside the console's frame for the session's operator.
+  */
+  readonly renderConsole: ConsoleRenderer;
+  /**
+  Who may read a page another layer serves (ACT-5): a signed-in operator with an address (ID-26).
+  */
+  readonly consoleAccess: ConsoleAccess;
 }
+
+/**
+Without another layer's sections the console starts at the connected agents (ID-23).
+*/
+export const DEFAULT_HOME_PATH = '/account/agents';
+
+const NO_NAVIGATION: NavigationProvider = () => ({ items: [] });
 
 /**
  * Wires spec 04 together over an open, migrated database. Entropy, the
@@ -138,7 +173,9 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     passwordParameters: dependencies.passwordParameters,
     absoluteSessionTtlMs: config.sessionTtlMs,
     connectedClients: dependencies.connectedClients ?? (() => EMPTY),
-    accountSections: dependencies.accountSections ?? [],
+    sections: dependencies.sections ?? {},
+    navigation: dependencies.navigation ?? NO_NAVIGATION,
+    homePath: dependencies.homePath ?? DEFAULT_HOME_PATH,
     vaultConnection: dependencies.vaultConnection,
   };
   return {
@@ -150,5 +187,7 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     cookiePolicy,
     sensitiveAction: sensitiveAction(services),
     pageHeaders,
+    renderConsole: createConsoleRenderer(services),
+    consoleAccess: consoleAccess(services),
   };
 }
