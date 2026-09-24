@@ -258,9 +258,19 @@ sidecar produces a scrubbed snapshot and a masked screenshot, recorded in the pu
 - PostgreSQL store for multi-replica deployments.
 - Prometheus metrics.
 - Organisation collections filtering and per-client item allowlists.
-- Actions follow-ups: `http_get` with `readOnlyHint: true`, Graph national clouds, Kerberos for
-  WinRM (NTLM landed; see ACT-89), further connectors only with a policy model as tight as
-  spec 14.
+- Actions follow-ups: `http_get` with `readOnlyHint: true`, Graph national clouds, further
+  connectors only with a policy model as tight as spec 14.
+- **Kerberos for `winrm`**, the successor to the NTLM that landed in M13. Microsoft deprecated
+  every version of NTLM in June 2024 and is removing it in phases: auditing today, IAKerb and a
+  Local KDC in the second half of 2026, and network NTLM blocked by default — policy can still
+  re-enable it — in the next major Windows Server release
+  ([Deprecated features in the Windows client](https://learn.microsoft.com/en-us/windows/whats-new/deprecated-features),
+  [Advancing Windows security: disabling NTLM by default](https://techcommunity.microsoft.com/blog/windows-itpro-blog/advancing-windows-security-disabling-ntlm-by-default/4489526),
+  recorded 2026-09-24). IAKerb and the Local KDC are what make Kerberos viable for the hosts this
+  connector reaches with NTLM today — the workgroup machine with a local account, and the client
+  with no line of sight to a domain controller — so they are the trigger for this work rather
+  than a date. Nothing is promised, and nothing in ACT-89 stops working meanwhile: NTLM remains
+  available by policy, and the blocking phase is a future server release.
 
 ## Test environments
 

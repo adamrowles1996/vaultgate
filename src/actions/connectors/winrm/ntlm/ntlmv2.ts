@@ -5,6 +5,14 @@
  * server chose, and what crosses the network is an HMAC over that challenge
  * and a client-chosen one, never the secret itself.
  *
+ * That proof is an HMAC-MD5 chain because MS-NLMP says so, and the position
+ * is not merely that the protocol mandates it: RFC 6151 §2.3 concludes that
+ * "the attacks on HMAC-MD5 do not seem to indicate a practical vulnerability
+ * when used as a message authentication code" and that "it may not be urgent
+ * to remove HMAC-MD5 from the existing protocols", while a new protocol
+ * design should not include it. This is an existing protocol, implemented,
+ * not a new one designed. See T37 in `docs/THREAT_MODEL.md`.
+ *
  * `ntlmv2.test.ts` checks every value here against the worked example in
  * MS-NLMP 4.2.4, so the arithmetic is proved against the specification rather
  * than against vaultgate's own fake destination.
