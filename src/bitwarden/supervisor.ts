@@ -168,15 +168,28 @@ class Supervisor implements VaultSupervisor {
         path: '/lock',
         schema: messageDataSchema,
       });
-      if (locked.ok) {
-        this.#logger.info('vault locked');
-      } else {
-        this.#logger.warn({ err: locked.error }, 'vault lock failed');
-      }
+      this.#recordLock(locked);
       await this.#stopServe();
       this.#logger.info('bw serve stopped');
     }
     await this.#loop;
+  }
+
+  /**
+   * A lock on the way down (VAULT-7). A backend that has gone cannot be
+   * locked and need not be, its session having died with it, so a clean stop
+   * logs no warning; a reachable vault that refuses still does.
+   */
+  #recordLock(locked: Result<unknown, VaultError>): void {
+    if (locked.ok) {
+      this.#logger.info('vault locked');
+      return;
+    }
+    if (locked.error.code === 'vault_unavailable') {
+      this.#logger.info('vault backend already stopped; its session went with it');
+      return;
+    }
+    this.#logger.warn({ err: locked.error }, 'vault lock failed');
   }
 
   /**

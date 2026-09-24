@@ -184,6 +184,27 @@ describe('startVaultSupervisor stop', () => {
     expect(harness.serveChild().signals).toStrictEqual(['SIGTERM']);
   });
 
+  it('VAULT-7 a backend that has already stopped is not a lock failure, so a clean shutdown logs no warning', async () => {
+    const fake = new FakeBwServe({ state: 'locked' });
+    // What a real shutdown does: the child is gone before the lock lands, so
+    // the call cannot connect and fails `vault_unavailable`. Its session went
+    // with it, which is the outcome the lock was for.
+    const harness = new SupervisorHarness({
+      fake,
+      fetch: (input, init) =>
+        input.endsWith('/lock')
+          ? Promise.reject(new Error('connect ECONNREFUSED'))
+          : fake.fetch(input, init),
+    });
+    const supervisor = harness.start();
+    await harness.until(() => supervisor.isReady());
+    await supervisor.stop();
+    expect(harness.messages()).toContain('vault backend already stopped; its session went with it');
+    expect(harness.linesFor('vault lock failed')).toStrictEqual([]);
+    expect(harness.logs.lines().filter((line) => Number(line['level']) >= 40)).toStrictEqual([]);
+    expect(harness.messages()).toContain('bw serve stopped');
+  });
+
   it('VAULT-8 never runs bw logout', async () => {
     const harness = new SupervisorHarness();
     const supervisor = harness.start();
