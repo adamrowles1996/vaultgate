@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- ACT-88: a target submission naming a deployment-gated policy field is now refused and told why,
+  instead of being dropped in silence. The account page does not draw the any-command field where
+  `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` is off, so an ordinary browser never sends one; a
+  hand-made request that did was saved as an ordinary restricted target, and the same request with
+  an empty command allowlist was answered "give at least one command pattern, or set any_command",
+  advising the operator to do the very thing the deployment forbids. The switch could never be
+  defeated, so this was an honesty defect rather than a security one, but the service's own
+  refusal was unreachable on the only path that writes a target. Found by the M12 live test.
+
 ## [0.1.0-rc.9] - 2026-09-24
 
 ### Added
