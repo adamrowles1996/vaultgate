@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { HOST_KEYS } from '../../../test-support/fake-ssh-client.ts';
+import { MAX_COMMAND_BYTES } from '../command.ts';
 
 import { createAuthorize, createCapabilities, describeOperation } from './authorize.ts';
-import { MAX_COMMAND_BYTES, SSH_RUN_TOOL } from './operation.ts';
+import { SSH_RUN_TOOL } from './operation.ts';
 import {
   sshCredentialSchema,
   sshDestinationSchema,
