@@ -16,11 +16,13 @@ import { fieldName } from './form-values.ts';
 import { httpForm } from './http-form.ts';
 import { sqlForm } from './sql-form.ts';
 import { sshForm } from './ssh-form.ts';
+import { winrmForm } from './winrm-form.ts';
 
 const FORMS: Partial<Readonly<Record<ConnectorKind, ConnectorForm>>> = {
   http: httpForm,
   sql: sqlForm,
   ssh: sshForm,
+  winrm: winrmForm,
 };
 
 /**

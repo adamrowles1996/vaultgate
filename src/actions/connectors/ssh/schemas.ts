@@ -2,13 +2,14 @@
  * The `ssh` connector's target documents (spec §14.5). The schemas are the
  * static half every build carries so the account page can validate and edit
  * targets; the runtime is `./index.ts`. The host key is required and parsed
- * here, so a target that could never be verified cannot be saved (ACT-87),
- * and a policy names either command patterns or `any_command`, never both
- * and never neither (ACT-88).
+ * here, so a target that could never be verified cannot be saved (ACT-87);
+ * the policy is the shared command policy of `../command.ts`, which names
+ * either command patterns or `any_command`, never both and never neither
+ * (ACT-88).
  */
 import { z } from 'zod';
 
-import { commonPolicySchema } from '../../policy.ts';
+import { commandPolicyProblems, commandPolicySchema, type CommandPolicy } from '../command.ts';
 
 import { hostKeyProblem } from './host-key.ts';
 
@@ -52,17 +53,11 @@ export const sshCredentialSchema = z.discriminatedUnion('auth', [
   }),
 ]);
 
-export const sshPolicySchema = commonPolicySchema.extend({
-  allowed_commands: z.array(z.string().min(1)).default([]),
-  /**
-  ACT-88: accepted at save only on a deployment with `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND=true`.
-  */
-  any_command: z.boolean().default(false),
-});
+export const sshPolicySchema = commandPolicySchema;
 
 export type SshDestination = z.output<typeof sshDestinationSchema>;
 export type SshCredential = z.output<typeof sshCredentialSchema>;
-export type SshPolicy = z.output<typeof sshPolicySchema>;
+export type SshPolicy = CommandPolicy;
 
 /**
 ACT-57: the SSH transport is always encrypted, so an `ssh` target never needs `internal` for that reason.
@@ -87,20 +82,6 @@ function credentialFields(credential: SshCredential): readonly CredentialField[]
     : [field(credential.key_field), field(credential.passphrase_field)];
 }
 
-/**
-ACT-88: exactly one of the two; a target with neither would allow nothing and is a mistake, not a lock.
-*/
-function commandProblems(policy: SshPolicy): readonly string[] {
-  if (policy.any_command) {
-    return policy.allowed_commands.length === 0
-      ? []
-      : ['policy: set either allowed_commands or any_command, not both'];
-  }
-  return policy.allowed_commands.length === 0
-    ? ['policy.allowed_commands: give at least one command pattern, or set any_command']
-    : [];
-}
-
 export const sshSchemas: ConnectorSchemas<SshDestination, SshCredential, SshPolicy> = {
   kind: 'ssh',
   destinationSchema: sshDestinationSchema,
@@ -109,7 +90,7 @@ export const sshSchemas: ConnectorSchemas<SshDestination, SshCredential, SshPoli
   endpoints,
   credentialFields,
   saveProblems({ policy }) {
-    return commandProblems(policy);
+    return commandPolicyProblems(policy);
   },
   summariseDestination(destination) {
     return `${destination.username}@${destination.host}:${destination.port}`;

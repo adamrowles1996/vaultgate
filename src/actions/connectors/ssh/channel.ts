@@ -6,45 +6,12 @@
  * only thing a call opens on the connection, and it ends with the call.
  */
 import { ActionError } from '../../errors.ts';
+import { Capture } from '../capture.ts';
 
 import { channelFailure } from './failures.ts';
 
 import type { SshDriverChannel } from './driver.ts';
 import type { SshCommand, SshResult } from './session.ts';
-
-/**
-Bytes from one stream, kept to the limit; anything beyond it is dropped and reported as truncated.
-*/
-class Capture {
-  readonly #limit: number;
-  readonly #chunks: Buffer[] = [];
-  #bytes = 0;
-  #isTruncated = false;
-
-  constructor(limit: number) {
-    this.#limit = limit;
-  }
-
-  add(chunk: Buffer): void {
-    const room = this.#limit - this.#bytes;
-    if (room <= 0) {
-      this.#isTruncated = true;
-      return;
-    }
-    const fitted = chunk.subarray(0, room);
-    this.#chunks.push(fitted);
-    this.#bytes += fitted.length;
-    this.#isTruncated ||= fitted.length < chunk.length;
-  }
-
-  get bytes(): Buffer {
-    return Buffer.concat(this.#chunks);
-  }
-
-  get isTruncated(): boolean {
-    return this.#isTruncated;
-  }
-}
 
 /**
 ACT-59: the remote command is signalled, not merely abandoned, when the call runs out of time.

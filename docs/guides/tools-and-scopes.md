@@ -175,9 +175,9 @@ a connector tool by target name. Specification: [13 Actions](../spec/13-actions.
 tool surface below and the operator pages (the account page's Actions section, described in the
 [Actions guide](actions.md)) exist today, and so do the `http` connector with `http_request`
 (M9) and its Microsoft Graph credential adapter (M10), the `sql` connector with `sql_query`
-and `sql_execute` (M11) and the `ssh` connector with `ssh_run` (M12); the other connector
-runtimes land with M13 to M15 in [`PLAN.md`](../PLAN.md), and until a connector's runtime lands
-its tool is not listed on any deployment.
+and `sql_execute` (M11), the `ssh` connector with `ssh_run` (M12) and the `winrm` connector with
+`winrm_run` (M13); the `browser` runtime lands with M15 in [`PLAN.md`](../PLAN.md), and until a
+connector's runtime lands its tool is not listed on any deployment.
 
 ### Actions scopes
 
@@ -192,7 +192,7 @@ off takes effect for every existing token at once, exactly as for `vault:write`.
 | `actions:sql.read`  | Read-only queries against granted `sql` targets              | `sql_query`       |
 | `actions:sql.write` | Data changes on granted `sql` targets whose policy allows it | `sql_execute`     |
 | `actions:ssh`       | One allowlisted command on a granted `ssh` target            | `ssh_run`         |
-| `actions:winrm`     | One allowlisted command on a granted `winrm` target          | `winrm_run` (M13) |
+| `actions:winrm`     | One allowlisted command on a granted `winrm` target          | `winrm_run`       |
 | `actions:browser`   | A signed-in browser session confined to allowed origins      | `browser_*` (M15) |
 
 A token holding any of these also gets `actions_list_targets`. Calling it without one is
@@ -313,6 +313,31 @@ or broke. Every `ssh_run` is a shell operation, so the operator may require a hu
 for every call (see below), and every injected value in every encoding is replaced by
 `[redacted:<field>]` before the result, the error detail or the audit row leaves the engine.
 
+### `winrm_run` (`actions:winrm`)
+
+`target` (a name from `actions_list_targets`), `command` (at most 16 KiB, no NUL byte and no
+other control character, and no newline or carriage return unless the target is an any-command
+one) and an optional `stdin` (at most 64 KiB, written to the command and then closed) in.
+
+The command is matched **whole** against the patterns the operator allowed on the target, before
+anything connects, exactly as for `ssh_run`. The target says which shell runs it: a PowerShell
+target sends the command as an `-EncodedCommand`, so quoting reaches the host unchanged and no
+`cmd.exe` re-parses it; a cmd target sends a `cmd.exe` command line. Then one HTTPS connection is
+opened to the address the host resolved to; where the operator pinned the listener's certificate,
+a host presenting any other certificate is `tls_error` before the credential is sent. One
+WS-Management shell is created for the call and deleted when it ends: there is no session, so
+nothing survives to the next call.
+
+Out: `exit_code` (an integer, or `null` when the shell ended without one), `stdout` and `stderr`
+captured separately and each cut at the target's output limit, `truncated` and `duration_ms`. A
+non-zero exit code is a result, not an error; errors are reserved for the connection:
+`tls_error`, `authentication_failed` (a 401 from the listener), `connection_failed`, `timeout`
+(which signals `terminate` to the command and then deletes the shell) and `upstream_error` for a
+fault the service reported, with its reason scrubbed and capped. Every `winrm_run` is a shell
+operation, so the operator may require a human confirmation for every call (see below), and every
+injected value in every encoding is replaced by `[redacted:<field>]` before the result, the error
+detail or the audit row leaves the engine.
+
 ### Connector tools
 
 Every connector tool takes `target` first and resolves it in a fixed order, stopping at the first
@@ -343,16 +368,16 @@ runs and the prompt is issued again.
 Failures are `{ "error": "<code>", "message": "…", "detail"?: { … } }` with `isError: true`;
 every code has one fixed message and `detail` is the only variable part.
 
-| Code                                                                                                                                                 | Meaning                                                                                                                                                                             |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unknown_target`, `not_granted`, `target_disabled`, `target_invalid`, `connector_disabled`, `actions_disabled`                                       | The target cannot be used by this client on this deployment; `actions_list_targets` shows what can.                                                                                 |
-| `invalid_arguments`                                                                                                                                  | The arguments do not match the tool schema; `detail.problems` says where.                                                                                                           |
-| `policy_denied`                                                                                                                                      | The target policy refused the operation; `detail.reason` is `method`, `path`, `header`, `body_size`, `command` and so on.                                                           |
-| `rate_limited`                                                                                                                                       | Per-target or per-client limit; `detail.retry_after_s`.                                                                                                                             |
-| `confirmation_unavailable`, `confirmation_declined`, `confirmation_cancelled`, `confirmation_expired`, `confirmation_invalid`, `confirmation_reused` | The confirmation of the section above did not happen, was refused, or the retried state was stale, altered or replayed.                                                             |
-| `credential_unavailable`                                                                                                                             | The vault is locked or the item or field is missing; the operator sees why on the account page.                                                                                     |
-| `destination_refused`, `connection_failed`, `tls_error`, `host_key_mismatch`, `authentication_failed`, `timeout`, `upstream_error`                   | The destination could not be reached, presented an SSH host key other than the pinned one, or answered with an error; `detail` carries a scrubbed, capped message where one exists. |
-| `connector_fault`                                                                                                                                    | The call failed inside vaultgate rather than at the destination, which may never have been contacted; `detail.reason` says which.                                                   |
+| Code                                                                                                                                                 | Meaning                                                                                                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknown_target`, `not_granted`, `target_disabled`, `target_invalid`, `connector_disabled`, `actions_disabled`                                       | The target cannot be used by this client on this deployment; `actions_list_targets` shows what can.                                                                                                      |
+| `invalid_arguments`                                                                                                                                  | The arguments do not match the tool schema; `detail.problems` says where.                                                                                                                                |
+| `policy_denied`                                                                                                                                      | The target policy refused the operation; `detail.reason` is `method`, `path`, `header`, `body_size`, `command` and so on.                                                                                |
+| `rate_limited`                                                                                                                                       | Per-target or per-client limit; `detail.retry_after_s`.                                                                                                                                                  |
+| `confirmation_unavailable`, `confirmation_declined`, `confirmation_cancelled`, `confirmation_expired`, `confirmation_invalid`, `confirmation_reused` | The confirmation of the section above did not happen, was refused, or the retried state was stale, altered or replayed.                                                                                  |
+| `credential_unavailable`                                                                                                                             | The vault is locked or the item or field is missing; the operator sees why on the account page.                                                                                                          |
+| `destination_refused`, `connection_failed`, `tls_error`, `host_key_mismatch`, `authentication_failed`, `timeout`, `upstream_error`                   | The destination could not be reached, presented an SSH host key or a TLS certificate other than the pinned one, or answered with an error; `detail` carries a scrubbed, capped message where one exists. |
+| `connector_fault`                                                                                                                                    | The call failed inside vaultgate rather than at the destination, which may never have been contacted; `detail.reason` says which.                                                                        |
 
 ## Secret-handling rules, in plain words
 

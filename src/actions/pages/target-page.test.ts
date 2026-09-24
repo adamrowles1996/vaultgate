@@ -114,7 +114,9 @@ describe('GET /account/actions/:id', () => {
         policy: 'nope',
       }),
     );
-    repo.insert(fixtureTargetRow({ id: 'row-2', name: 'db', connector: 'winrm', internal: true }));
+    repo.insert(
+      fixtureTargetRow({ id: 'row-2', name: 'db', connector: 'browser', internal: true }),
+    );
     const { browser } = await signedInOperator(harness);
     const broken = await browser.get('/account/actions/row-1');
     const brokenMarkup = await broken.text();
@@ -128,7 +130,7 @@ describe('GET /account/actions/:id', () => {
     );
     const later = await browser.get('/account/actions/row-2');
     const laterMarkup = await later.text();
-    expect(laterMarkup).toContain('This build cannot edit winrm targets yet.');
+    expect(laterMarkup).toContain('This build cannot edit browser targets yet.');
     expect(laterMarkup).not.toContain('action="/account/actions/row-2"');
     expect(laterMarkup).toContain('action="/account/actions/row-2/delete"');
     harness.actions.vault.failWith(new VaultError('vault_unavailable', 'locked'));

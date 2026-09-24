@@ -2,6 +2,9 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest, type RequestOptions } from 'node:https';
 import { isIP, type LookupFunction } from 'node:net';
 import { Readable } from 'node:stream';
+import { connect as tlsConnect } from 'node:tls';
+
+import { pinnedConnection, type CertificateCheck, type TlsConnect } from './certificate-pin.ts';
 
 import type { IncomingHttpHeaders } from 'node:http';
 
@@ -13,9 +16,10 @@ export type PinnedMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' 
  * still names the TLS server (SNI, certificate check) and the `Host`
  * header; only the socket address is fixed, so no second DNS resolution can
  * redirect the connection to a different address. The scheme picks the
- * transport: `https:` verifies the certificate against the system store with
- * no insecure option (ACT-57); `http:` is plain `node:http` to the pinned
- * address, which only an `internal` action target may name.
+ * transport: `https:` verifies the certificate against the system store, or
+ * against the caller's `certificate` pin where the destination has one, with
+ * no insecure option either way (ACT-57); `http:` is plain `node:http` to the
+ * pinned address, which only an `internal` action target may name.
  */
 export interface PinnedRequest {
   readonly url: string;
@@ -27,6 +31,10 @@ export interface PinnedRequest {
   Aborting it fails the request, and any body read still in progress, with an `AbortError`.
   */
   readonly signal: AbortSignal;
+  /**
+  ACT-57: judges the leaf certificate in place of the system store; nothing is sent until it passes.
+  */
+  readonly certificate?: CertificateCheck | undefined;
 }
 
 export type PinnedFetch = (request: PinnedRequest) => Promise<Response>;
@@ -54,11 +62,12 @@ export type RequestFunction = (
 ) => InFlight;
 
 /**
-One request function per scheme.
+One request function per scheme, and the TLS connector a pinned certificate needs.
 */
 export interface RequestFunctions {
   readonly https: RequestFunction;
   readonly http: RequestFunction;
+  readonly connect: TlsConnect;
 }
 
 /**
@@ -79,6 +88,31 @@ function pinnedLookup(address: string): LookupFunction {
     } else {
       callback(null, address, family);
     }
+  };
+}
+
+const HTTPS_PORT = 443;
+
+/**
+ * ACT-57: the request options that carry a certificate pin, or nothing when
+ * the destination has none and the system store verifies it.
+ */
+function pinnedCertificateOptions(
+  connect: TlsConnect,
+  pinned: PinnedRequest,
+  url: URL,
+): RequestOptions {
+  if (pinned.certificate === undefined) {
+    return {};
+  }
+  return {
+    agent: false,
+    createConnection: pinnedConnection(connect, {
+      address: pinned.address,
+      port: url.port === '' ? HTTPS_PORT : Number(url.port),
+      servername: url.hostname,
+      check: pinned.certificate,
+    }),
   };
 }
 
@@ -112,10 +146,16 @@ function toResponse(message: ResponseMessage): Response {
  * here; the caller decides what a redirect means.
  */
 export function createPinnedHttpsFetch(requests: Partial<RequestFunctions> = {}): PinnedFetch {
-  const functions: RequestFunctions = { https: httpsRequest, http: httpRequest, ...requests };
+  const functions: RequestFunctions = {
+    https: httpsRequest,
+    http: httpRequest,
+    connect: tlsConnect,
+    ...requests,
+  };
   return (pinned) =>
     new Promise((resolve, reject) => {
-      const request = new URL(pinned.url).protocol === 'http:' ? functions.http : functions.https;
+      const url = new URL(pinned.url);
+      const request = url.protocol === 'http:' ? functions.http : functions.https;
       const inFlight = request(
         pinned.url,
         {
@@ -123,6 +163,7 @@ export function createPinnedHttpsFetch(requests: Partial<RequestFunctions> = {})
           headers: pinned.headers,
           lookup: pinnedLookup(pinned.address),
           signal: pinned.signal,
+          ...pinnedCertificateOptions(functions.connect, pinned, url),
         },
         (message) => {
           try {

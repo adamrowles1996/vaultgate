@@ -1,14 +1,15 @@
 # 13 Actions: typed, policy-gated use of vault credentials
 
-> **Status: M9, M10, M11 and M12 landed.** This section specifies the actions
+> **Status: M9, M10, M11, M12 and M13 landed.** This section specifies the actions
 > layer decided in [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as
 > milestones M9 to M15 in [`PLAN.md`](../PLAN.md). Everything it specifies has landed except what
 > "not yet" names below: M9 brought the engine with the resolution order of ACT-16, the tool
 > surface of 13.6, the account pages of 13.3.2, the `action_calls` trail and the `http` connector
 > (14.2) with `http_request`; M10 the `graph` credential adapter (14.3; ACT-81…83); M11 the `sql`
 > connector (14.4) with `sql_query` and `sql_execute` (13.6.4) and the classification of 13.7.2
-> (ACT-36…38); and M12 the `ssh` connector (14.5) with `ssh_run` (13.6.5; ACT-27, ACT-28, ACT-87,
-> ACT-88). Not yet: the remaining connectors (no tool is listed until
+> (ACT-36…38); M12 the `ssh` connector (14.5) with `ssh_run` (13.6.5; ACT-27, ACT-28, ACT-87,
+> ACT-88); and M13 the `winrm` connector (14.6) with `winrm_run` (13.6.5; ACT-89, ACT-90). Not
+> yet: the remaining connectors (no tool is listed until
 > its runtime lands), ACT-63's "unexpected write" view (M14), and ACT-48's in-band fallback for
 > the 2025 wire (M14): until then a client on that wire, whose capabilities the stateless handler
 > never sees, is refused a confirmed target with `confirmation_unavailable`. The per-connector
@@ -279,8 +280,11 @@ operations, confirm_writes, engine?, unrestricted? }` where `operations` is the 
 
 ### 13.6.5 `ssh_run` and `winrm_run`
 
-- **ACT-27** Input for both: `target`; `command` (string ≤ 16 KiB; no NUL byte; a newline or
-  carriage return is allowed only on a target with `any_command: true`); `stdin` (optional string
+- **ACT-27** Input for both: `target`; `command` (string ≤ 16 KiB; no NUL byte and no other C0
+  control character — tab, carriage return and line feed are the only ones accepted, because XML
+  1.0 cannot carry the rest even as a character reference and `winrm_run` sends the command in a
+  SOAP envelope; a newline or carriage return is allowed only on a target with
+  `any_command: true`); `stdin` (optional string
   ≤ 64 KiB, written to the process's standard input and then closed). Output for both:
   `exit_code` (integer, or `null` when the channel closed without one), `stdout`, `stderr`,
   `truncated`, `duration_ms`. `stdout` and `stderr` are captured separately and each is capped at
@@ -288,8 +292,9 @@ operations, confirm_writes, engine?, unrestricted? }` where `operations` is the 
 - **ACT-28** `ssh_run` opens one exec channel per call, requests no PTY, no agent forwarding, no
   X11, no environment variables and no port forwarding, and closes the connection when the call
   ends. `winrm_run` creates one WS-Management shell per call (`cmd` or `powershell` per the
-  target's `shell`; for `powershell` the command is sent as an encoded command), collects output,
-  signals termination on timeout and deletes the shell.
+  target's `shell`; for `powershell` the command is sent as an encoded command, and
+  `WINRS_SKIP_CMD_SHELL` is set so no `cmd.exe` re-parses it), writes `stdin` as one `Send` and
+  closes it, collects output, signals termination on timeout and deletes the shell.
 
 ### 13.6.6 `browser_*`
 

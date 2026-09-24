@@ -75,11 +75,11 @@ describe('save-time checks', () => {
   it('14.1 refuses a connector whose schemas have not landed in this build', async () => {
     const harness = createActionsHarness();
     const result = await harness.engine.targets.create(
-      { ...targetInput(), connector: 'winrm' },
+      { ...targetInput(), connector: 'browser' },
       OPERATOR_ID,
     );
     expect(unwrapFail(result).problems).toStrictEqual([
-      'connector: winrm is not available in this build',
+      'connector: browser is not available in this build',
     ]);
   });
 

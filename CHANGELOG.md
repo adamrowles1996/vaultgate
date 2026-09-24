@@ -6,6 +6,46 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `winrm` connector runtime and `winrm_run` (spec 14 §14.6 and spec 13 §13.6.5, M13; ACT-27,
+  ACT-28, ACT-89, ACT-90): the tool is listed on a deployment with `VAULTGATE_ENABLE_ACTIONS=true`
+  and `VAULTGATE_ACTIONS_ENABLE_WINRM=true` for tokens holding `actions:winrm`. A `winrm` target
+  names the WS-Management endpoint (`https://host:5986/wsman`; a plain `http://` one only on an
+  `internal` target, which the save-time check insists on), the login name the command runs as,
+  the shell (`powershell` by default, or `cmd`) and optionally the SHA-256 of the listener's leaf
+  certificate. That pin replaces the system certificate store rather than adding to it, which is
+  what a listener with its own certificate needs: the socket is held corked until the certificate
+  presented matches, so nothing — least of all the credential — is sent to a host that fails the
+  check, and a mismatch is `tls_error`. The credential is a password from the vault item, sent as
+  `Basic` over TLS. The policy names either a list of command patterns or `any_command`, exactly
+  as `ssh`. The WS-Management client is written here rather than taken from npm — the M13 spike
+  compared the published clients against it and is recorded under M13 in `docs/PLAN.md` — so the
+  connector adds no dependency: six SOAP exchanges (`Create` the shell, `Command`, `Send` for
+  standard input, `Receive` polled until the command state is `Done`, `Signal terminate`,
+  `Delete`) over the pinned transport, and a reader written for exactly the elements those
+  responses carry, which refuses a DOCTYPE, an entity of any kind, a comment, a CDATA section, an
+  over-deep or over-wide document and a stream that is not base64. A PowerShell command is sent as
+  an `-EncodedCommand` with `WINRS_SKIP_CMD_SHELL`, so nothing re-parses the quoting the agent
+  wrote; a `cmd` command is the command line `cmd.exe` parses. The policy timeout signals
+  `terminate` and then deletes the shell, both on a short deadline of their own. Contract tests
+  drive the connector against a fake WS-Management destination that scripts all six operations,
+  asserts the exact `Command`, `Send` and `Signal` envelopes, polls slowly, faults, answers 401
+  and a body that cannot be read, and echoes the password back for the canary suite. A JavaScript
+  fault escaping the connector is `connector_fault`, never `upstream_error`. Operator
+  guide: `docs/guides/actions.md` ("Creating a `winrm` target", "Calling a `winrm` target"); tool
+  reference: `docs/guides/tools-and-scopes.md`.
+- The account page can create and edit `winrm` targets, with the same standing warning on a
+  target that allows any command (ACT-88).
+- The pinned HTTPS transport can pin a destination to its leaf certificate
+  (`src/net/certificate-pin.ts`, ACT-57). Only a caller that supplies a certificate check gets the
+  behaviour; the CIMD fetcher and the `http` connector are unchanged and keep verifying against
+  the system store.
+- ACT-57, T33: the certificate guard treats a peer that presented no certificate as a failed
+  pin rather than asking for the digest of nothing, which would have thrown inside the socket's
+  own event listener, an uncaught exception rather than a failed call. The socket was already
+  left corked, so no credential could have reached such a peer either way.
+
 ### Fixed
 
 - ACT-88: a target submission naming a deployment-gated policy field is now refused and told why,
@@ -60,6 +100,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `ssh` and `winrm` share one command policy (`src/actions/connectors/command.ts`): the ACT-27
+  argument shape, the ACT-88 allowlist-or-`any_command` rule, the ACT-39 decision, the ACT-43
+  summary and the ACT-19 capabilities are now written once, so the two connectors cannot drift
+  apart. Behaviour is unchanged except as below.
+- `ssh_run` and `winrm_run` refuse a command containing a C0 control character other than tab,
+  carriage return or line feed (`invalid_arguments`), not only a NUL byte. XML 1.0 cannot carry
+  one even as a character reference, so a `winrm` command holding one could never be sent; on
+  `ssh` it is a mistake or a terminal escape. ACT-27 is updated to say so.
 - The audited `classification` of a call is now scrubbed like its arguments, because an
   any-command `ssh` target records the whole command there (ACT-60, ACT-61, ACT-88): the 4 KiB
   cap on `arguments` could otherwise cut the very command an operator needs to read back.

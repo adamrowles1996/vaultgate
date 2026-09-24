@@ -183,6 +183,41 @@ Exit: the contract suite drives the five SOAP operations against a fake; a live
 `Get-ComputerInfo` runs on a Windows host of the maintainer's over HTTPS with a pinned
 certificate.
 
+#### Spike result: the WS-Management client is hand-written (decided 2026-09-24)
+
+`npm search winrm` returns five candidates with any plausible claim to the job. Each was
+resolved with `npm install --package-lock-only` for its true transitive count and its published
+source read for what it does on the wire. "Pinned address + separate SNI host" is ACT-55: the
+socket must go to the one address the engine resolved and validated, while the URL's host name
+stays the TLS server name. "Leaf certificate" is ACT-57's `certificate_sha256` pin: the client
+must let vaultgate see the DER the server presented, before the credential is written.
+
+| Package                     | Version, last publish | Deps (transitive)                                      | Native | TLS options                                             | Pinned address + separate SNI | Leaf certificate | Other baggage                                             |
+| --------------------------- | --------------------- | ------------------------------------------------------ | ------ | ------------------------------------------------------- | ----------------------------- | ---------------- | --------------------------------------------------------- |
+| `nodejs-winrm`              | 1.1.3, Sep 2020       | `uuid@3`, `js2xmlparser@3`, `xml2js@0.4` (7 packages)  | no     | none: `src/http.js` requires `node:http` only           | no                            | no               | `xml2js@0.4` predates the 0.5 prototype-pollution fix     |
+| `@netcuras/nodejs-winrm`    | 1.4.0, Aug 2026       | `js2xmlparser@3`, `uuid@11`, `xml2js@0.6` (7 packages) | no     | whatever is passed through as `requestOptions`/`agent`  | not offered; would be a leak  | no               | no types shipped and none on DefinitelyTyped              |
+| `winrm-client`              | 0.0.12, Mar 2026      | `fast-xml-parser`, `js-md4`, `uuid` (5 packages)       | no     | `rejectUnauthorized` — the option ACT-57 forbids having | no                            | no               | NTLM/SPNEGO with a hand-rolled MD4; `console` logger; 0.x |
+| `node-winrm`                | 0.1.3, Dec 2016       | `edge` → `edge-cs` → `nan` (4 packages)                | yes    | n/a                                                     | no                            | no               | compiles a native addon and needs a .NET/Mono runtime     |
+| `@devolutions/ironposh-web` | 0.6.0, Jul 2026       | none (1 package, 4.9 MB)                               | WASM   | none of its own (browser `fetch`)                       | no                            | no               | PSRP for WebAssembly, not a WS-Management shell client    |
+
+Against those, the hand-written client: five SOAP operations (`Create`, `Command`, `Receive`,
+`Signal`, `Delete`) built as five template literals over escaped text, driven through the pinned
+transport that `http` already uses, and read by a parser written for exactly the elements the
+five responses carry. No new dependency, no XML feature vaultgate does not need, and the two
+things every package lacks — the pinned socket with a separate SNI host, and the leaf
+certificate — come free, because the transport is the repository's own.
+
+**Decision: hand-written**, as ACT-89 expected, and the evidence is stronger than the guess. The
+disqualifications are not matters of taste: `nodejs-winrm` cannot speak HTTPS at all (its `https`
+line is commented out), `node-winrm` fails QG-9's no-native-addons rule at the first hurdle,
+`@devolutions/ironposh-web` is a different protocol for a different runtime, and `winrm-client`
+would put an `rejectUnauthorized: false` switch and a hand-rolled MD4 into the tree for a
+protocol subset vaultgate uses none of. `@netcuras/nodejs-winrm` is the only real contender —
+maintained, small, HTTPS-capable — and it still cannot pin a socket, cannot show the certificate
+it was given, and ships no types, so every call site would need the `any` the lint bans. Adopting
+it would mean wrapping it in as much code as writing the five envelopes, and then owning the
+wrapper as well as the dependency.
+
 ### M14 Policy UI polish and elicitation hardening (ACT-5…7, 41…49, 63)
 
 1. `feat(actions)`: per-target call history and the "unexpected write" view, grant management

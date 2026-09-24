@@ -2,6 +2,8 @@ import { Readable } from 'node:stream';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { fakeTlsSocket } from '../test-support/fake-tls-socket.ts';
+
 import {
   createPinnedHttpsFetch,
   type PinnedRequest,
@@ -10,8 +12,24 @@ import {
   type ResponseMessage,
 } from './pinned-https.ts';
 
+import type { TlsConnect } from './certificate-pin.ts';
 import type { IncomingHttpHeaders } from 'node:http';
 import type { RequestOptions } from 'node:https';
+import type { ConnectionOptions } from 'node:tls';
+
+/**
+Node's `createConnection` callback, which the pinned connection never uses: it answers at once.
+*/
+function ignoreCallback(): void {
+  // The socket is returned synchronously.
+}
+
+/**
+A certificate check that is happy with anything; `certificate-pin.test.ts` proves the pin itself.
+*/
+function accepts(): undefined {
+  // Nothing to refuse.
+}
 
 const PUBLIC = '93.184.216.34';
 const PUBLIC_V6 = '2606:2800:220:1:248:1893:25c8:1946';
@@ -118,6 +136,9 @@ describe('createPinnedHttpsFetch', () => {
       single: [null, PUBLIC, 4],
       all: [null, [{ address: PUBLIC, family: 4 }]],
     });
+    // ACT-57: with no pin the system store verifies, so the transport opens no socket of its own.
+    expect(call?.options.createConnection).toBeUndefined();
+    expect(call?.options.agent).toBeUndefined();
   });
 
   it('OAUTH-8 pins an IPv6 address with its family', async () => {
@@ -162,6 +183,26 @@ describe('createPinnedHttpsFetch', () => {
 
   it('OAUTH-8 defaults to node:https', () => {
     expect(typeof createPinnedHttpsFetch()).toBe('function');
+  });
+
+  it('ACT-55 ACT-57 gives a pinned destination its own TLS connection, on the URL port and host', async () => {
+    const opened: ConnectionOptions[] = [];
+    const connect: TlsConnect = (options) => {
+      opened.push(options);
+      return fakeTlsSocket();
+    };
+    for (const url of ['https://win.example.com:5986/wsman', 'https://agent.example.com/c.json']) {
+      const { request, calls } = answering(() => message([], 200));
+      await createPinnedHttpsFetch({ https: request, connect })(
+        pinned({ url, certificate: accepts }),
+      );
+      expect(calls[0]?.options.agent).toBe(false);
+      calls[0]?.options.createConnection?.({}, ignoreCallback);
+    }
+    expect(opened).toStrictEqual([
+      { host: PUBLIC, port: 5986, servername: 'win.example.com', rejectUnauthorized: false },
+      { host: PUBLIC, port: 443, servername: 'agent.example.com', rejectUnauthorized: false },
+    ]);
   });
 
   it('ACT-80 sends any method with a body, pinned the same way', async () => {

@@ -4,65 +4,28 @@
  * description (ACT-17) and the annotations of the 13.6.1 row (ACT-18). The
  * MCP layer puts `target` in front of the arguments.
  */
-import { z } from 'zod';
+import { commandArguments, commandOutput, type CommandOperation } from '../command.ts';
 
 import type { OutputSchema } from '../../../mcp/tools/definition.ts';
 import type { ConnectorTool } from '../connector.ts';
 
 export const SSH_RUN_TOOL = 'ssh_run';
 
-export const MAX_COMMAND_BYTES = 16 * 1024;
-
-const MAX_STDIN_BYTES = 64 * 1024;
-const NUL = '\u{0}';
-
-const commandSchema = z
-  .string()
-  .min(1)
-  .superRefine((command, context) => {
-    if (Buffer.byteLength(command, 'utf8') > MAX_COMMAND_BYTES) {
-      context.addIssue({ code: 'custom', message: 'must be at most 16 KiB' });
-    }
-    if (command.includes(NUL)) {
-      context.addIssue({ code: 'custom', message: 'must not contain a NUL byte' });
-    }
-  })
-  .describe(
+export const sshRunSchema = commandArguments({
+  command:
     'The command line to run, as the login shell of the target account will parse it. It is ' +
-      'matched whole against the allowlist, so write it exactly as the operator allowed it. A ' +
-      'newline or carriage return is refused unless the target is an any-command one.',
-  );
-
-const stdinSchema = z
-  .string()
-  .max(MAX_STDIN_BYTES)
-  .optional()
-  .describe(
+    'matched whole against the allowlist, so write it exactly as the operator allowed it. A ' +
+    'newline or carriage return is refused unless the target is an any-command one.',
+  stdin:
     'Optional standard input, written to the command and then closed, so a command that reads ' +
-      'until end of file finishes. At most 64 KiB.',
-  );
-
-export const sshRunSchema = z.strictObject({ command: commandSchema, stdin: stdinSchema });
-
-export type SshOperation = z.output<typeof sshRunSchema>;
-
-export const sshRunOutputSchema: OutputSchema = z.strictObject({
-  exit_code: z
-    .number()
-    .int()
-    .nullable()
-    .describe(
-      'The exit status the command ended with, or null when the channel closed without one.',
-    ),
-  stdout: z.string().describe('Everything the command wrote to standard output.'),
-  stderr: z.string().describe('Everything the command wrote to standard error.'),
-  truncated: z
-    .boolean()
-    .describe(
-      'True when either stream was longer than the output limit of the target and was cut.',
-    ),
-  duration_ms: z.number().int(),
+    'until end of file finishes. At most 64 KiB.',
 });
+
+export type SshOperation = CommandOperation;
+
+export const sshRunOutputSchema: OutputSchema = commandOutput(
+  'The exit status the command ended with, or null when the channel closed without one.',
+);
 
 export const SSH_RUN_DESCRIPTION =
   'Runs one command on a server the operator configured, over SSH, signed in with a credential ' +
