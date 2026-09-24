@@ -8,6 +8,7 @@ import { fail, ok, type Result } from '../result.ts';
 import { transaction } from '../storage/query.ts';
 
 import { closeSessions } from './sessions.ts';
+import { checkChanges } from './targets-checks.ts';
 import {
   recordTargetEvent,
   summariseTarget,
@@ -16,12 +17,19 @@ import {
   type TargetSummary,
   withTarget,
 } from './targets-context.ts';
-import { createTarget, removeTarget, setTargetEnabled, updateTarget } from './targets-lifecycle.ts';
+import {
+  checkNewTarget,
+  createTarget,
+  removeTarget,
+  setTargetEnabled,
+  updateTarget,
+} from './targets-lifecycle.ts';
 import { createTargetsRepo, type TargetsRepo } from './targets-repo.ts';
 import { TargetProblems } from './targets-schemas.ts';
 
 import type { ActionsAuditSink } from './audit.ts';
-import type { CheckDependencies } from './targets-checks.ts';
+import type { CheckDependencies, CheckReport } from './targets-checks.ts';
+import type { TargetRow } from './targets-schemas.ts';
 import type { DatabaseSync } from 'node:sqlite';
 
 export type { TargetResult, TargetSummary } from './targets-context.ts';
@@ -50,6 +58,14 @@ export interface TargetsService {
   ACT-5's "close sessions": every open session on the target, recorded as `sessions_closed` (ACT-7).
   */
   closeSessions(id: string, operatorId: string): TargetResult;
+  /**
+  ACT-118: the checks `create` would run on `input`, and what each found; nothing is written.
+  */
+  checkNew(input: unknown): Promise<CheckReport>;
+  /**
+  ACT-118: the checks an edit of a `connector` target would run on `input`, or a saved one's own.
+  */
+  checkChanges(connector: TargetRow['connector'], input: unknown): Promise<CheckReport>;
   /**
   ACT-10: wired by composition into the OAuth consent revocation path; revokes the client's grants and closes its sessions.
   */
@@ -136,6 +152,8 @@ export function createTargetsService(dependencies: TargetsServiceDependencies): 
     grant: (id, clientId, operatorId) => grantTarget(context, id, clientId, operatorId),
     revokeGrant: (id, clientId, operatorId) => revokeTargetGrant(context, id, clientId, operatorId),
     closeSessions: (id, operatorId) => closeTargetSessions(context, id, operatorId),
+    checkNew: (input) => checkNewTarget(context, input),
+    checkChanges: (connector, input) => checkChanges(context.checks, connector, input),
     onConsentRevoked(clientId) {
       const at = now();
       return transaction(database, () => ({

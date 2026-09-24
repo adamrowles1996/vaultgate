@@ -9,6 +9,7 @@
  * metadata only.
  */
 import { applyAddress } from './address-source.ts';
+import { CHECK_INTENT, INTENT_FIELD, withRefusals } from './check-report.ts';
 import { editableForm, targetInputFromForm, text, withParameters } from './form-input.ts';
 import {
   createFrame,
@@ -35,6 +36,7 @@ import {
 } from './view.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
+import type { FormPageView } from './form-pages.ts';
 import type { FormValues } from './form-values.ts';
 import type { IdentityContext } from '../../identity/index.ts';
 import type { TargetSummary } from '../targets.ts';
@@ -53,6 +55,11 @@ interface CreateRequest {
   readonly form: ConnectorForm;
   readonly values: FormValues;
   readonly problems?: readonly string[];
+  readonly check?: FormPageView['check'];
+}
+
+function isCheck(values: FormValues): boolean {
+  return values.get(INTENT_FIELD) === CHECK_INTENT;
 }
 
 async function renderCreate(
@@ -74,6 +81,7 @@ async function renderCreate(
     form,
     values,
     item: await chosenItem(dependencies, itemId, restart),
+    ...(request.check !== undefined && { check: request.check }),
   });
   return dependencies.renderConsole(viewer.session, page);
 }
@@ -129,6 +137,13 @@ async function create(
   const viewer = viewerOf(gate.session);
   const { values, problems } = applyAddress(form, gate.form);
   const refused = [...deploymentProblems(gate.form, dependencies.switches), ...problems];
+  if (isCheck(gate.form)) {
+    const found = await dependencies.targets.checkNew(targetInputFromForm(form, values, true));
+    const report = withRefusals(found, refused);
+    const check = { report, at: dependencies.now() };
+    const request = { form, values, problems: report.problems, check };
+    return context.html(await renderCreate(dependencies, viewer, request));
+  }
   if (refused.length > 0) {
     const request = { form, values, problems: refused };
     return context.html(await renderCreate(dependencies, viewer, request), 400);
@@ -161,6 +176,7 @@ function editable(dependencies: ActionsPagesDependencies, id: string): Editable 
 interface EditRequest {
   readonly values: FormValues;
   readonly problems?: readonly string[];
+  readonly check?: FormPageView['check'];
 }
 
 async function renderEdit(
@@ -181,6 +197,7 @@ async function renderEdit(
     item: await chosenItem(dependencies, itemId, changeHref),
     targetId: target.id,
     kind: kindOf(target),
+    ...(request.check !== undefined && { check: request.check }),
   });
   return dependencies.renderConsole(viewer.session, page);
 }
@@ -238,6 +255,14 @@ async function update(
   const viewer = viewerOf(gate.session);
   const { values, problems } = applyAddress(current.form, gate.form);
   const refused = [...deploymentProblems(gate.form, dependencies.switches), ...problems];
+  if (isCheck(gate.form)) {
+    const input = targetInputFromForm(current.form, values, false);
+    const found = await dependencies.targets.checkChanges(current.target.connector, input);
+    const report = withRefusals(found, refused);
+    const check = { report, at: dependencies.now() };
+    const request = { values, problems: report.problems, check };
+    return context.html(await renderEdit(dependencies, viewer, current, request));
+  }
   if (refused.length > 0) {
     const request = { values, problems: refused };
     return context.html(await renderEdit(dependencies, viewer, current, request), 400);

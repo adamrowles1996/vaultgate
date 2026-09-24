@@ -9,7 +9,7 @@ import { fail, ok } from '../result.ts';
 import { transaction } from '../storage/query.ts';
 
 import { closeSessions } from './sessions.ts';
-import { changedFields, prepareChanges } from './targets-checks.ts';
+import { type CheckReport, changedFields, checkChanges, prepareChanges } from './targets-checks.ts';
 import {
   bumped,
   recordTargetEvent,
@@ -23,6 +23,14 @@ import { targetInputSchema, TargetProblems, type TargetRow } from './targets-sch
 
 import type { Result } from '../result.ts';
 
+const NAME_TAKEN = 'name: a target of that name already exists';
+
+function shapeProblems(error: {
+  readonly issues: readonly { path: PropertyKey[]; message: string }[];
+}) {
+  return error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
+}
+
 export async function createTarget(
   context: TargetsContext,
   input: unknown,
@@ -30,15 +38,11 @@ export async function createTarget(
 ): Promise<TargetResult> {
   const shape = targetInputSchema.safeParse(input);
   if (!shape.success) {
-    return fail(
-      new TargetProblems(
-        shape.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`),
-      ),
-    );
+    return fail(new TargetProblems(shapeProblems(shape.error)));
   }
   const { name, connector, enabled, ...changes } = shape.data;
   if (context.repo.findByName(name) !== undefined) {
-    return fail(new TargetProblems(['name: a target of that name already exists']));
+    return fail(new TargetProblems([NAME_TAKEN]));
   }
   const prepared = await prepareChanges(context.checks, connector, changes);
   if (!prepared.ok) {
@@ -59,6 +63,32 @@ export async function createTarget(
   context.repo.insert(row);
   recordTargetEvent(context, { action: 'target_created', row, operatorId });
   return ok(summariseTarget(context.repo, row));
+}
+
+/**
+ * ACT-118: every check a create would run and what each found, the name's
+ * as well; nothing is written. Unlike a save, a taken name does not stop
+ * the rest, so one check reports everything at once.
+ */
+export async function checkNewTarget(
+  context: TargetsContext,
+  input: unknown,
+): Promise<CheckReport> {
+  const shape = targetInputSchema.safeParse(input);
+  if (!shape.success) {
+    const problems = shapeProblems(shape.error);
+    return { problems, endpoints: [], rules: problems };
+  }
+  const { name, connector, ...rest } = shape.data;
+  const { enabled: _enabled, ...changes } = rest;
+  const report = await checkChanges(context.checks, connector, changes);
+  return context.repo.findByName(name) === undefined
+    ? report
+    : {
+        ...report,
+        problems: [NAME_TAKEN, ...report.problems],
+        rules: [NAME_TAKEN, ...report.rules],
+      };
 }
 
 /**

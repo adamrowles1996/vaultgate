@@ -81,6 +81,21 @@ that names no field — the destination as a whole, the vault item's fields, a c
 is listed under the banner at the top. The form is re-shown with exactly what you submitted, so
 nothing has to be typed again.
 
+### Checking before you save
+
+**Check without saving**, beside the save button on the create and edit forms, runs every check a
+save runs and saves nothing. It resolves each host and applies the private-range rule, finds the
+vault item and each field the mapping names, and applies the connector's rules, then shows the
+result above the form. You see the address each host would be pinned to, or why it is refused,
+the item's name, each mapped field (a secret one sealed, by name only) and anything else a save
+would refuse. Problems are also shown against their fields. It needs the same password
+confirmation as a save and records nothing in the audit log.
+
+**Check now** on a computer's page runs the same checks on what is saved, at any time and
+without the password confirmation. A DNS record that moved, or a vault item that lost a field
+since the computer was saved, shows up there before an agent's call fails on it. Neither check
+connects to the computer or reads a secret.
+
 ### Confirmation is on for a new target
 
 **Ask a human to confirm every non-read call** starts on for every new target, whatever the

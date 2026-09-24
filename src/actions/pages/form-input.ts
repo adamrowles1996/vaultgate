@@ -11,6 +11,7 @@ import { formFor } from './forms.ts';
 import { DESCRIPTION_FIELD, INTERNAL_FIELD, ITEM_ID_FIELD, NAME_FIELD } from './target-form.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
+import type { TargetRow } from '../targets-schemas.ts';
 import type { ActionsPagesDependencies } from './view.ts';
 
 export function editableForm(
@@ -48,4 +49,12 @@ export function targetInputFromForm(
 
 export function withParameters(path: string, parameters: Readonly<Record<string, string>>): string {
   return `${path}?${new URLSearchParams(parameters).toString()}`;
+}
+
+/**
+A saved target's editable fields as the service takes them, for a check of what is saved (ACT-118).
+*/
+export function savedInput(target: TargetRow): unknown {
+  const { description, destination, internal, credential, policy } = target;
+  return { description, destination, internal, credential, policy };
 }

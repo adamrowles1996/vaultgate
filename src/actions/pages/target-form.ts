@@ -19,6 +19,7 @@ import {
 import { cardHead } from '../../identity/pages/ui.ts';
 
 import { addressCandidates } from './address-source.ts';
+import { CHECK_INTENT, INTENT_FIELD } from './check-report.ts';
 import { fieldErrors, renderFields } from './form-render.ts';
 import { fieldName, type FormValues } from './form-values.ts';
 import { itemFields } from './item-fields.ts';
@@ -165,9 +166,15 @@ function connectorField(view: TargetFormView): Html {
   return when(view.isNew, () => hidden(CONNECTOR_FIELD, view.form.kind));
 }
 
+/**
+The save comes first, so Enter in a field saves; the check (ACT-118) saves nothing.
+*/
 function submitRow(view: TargetFormView): Html {
   return html`<div class="form-actions">
     <button type="submit" class="primary">${view.submitLabel}</button>
+    <button type="submit" name="${INTENT_FIELD}" value="${CHECK_INTENT}">
+      ${icon('check')} Check without saving
+    </button>
   </div>`;
 }
 
