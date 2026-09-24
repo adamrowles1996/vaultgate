@@ -52,7 +52,7 @@
   reads it.
 - **STORE-4** No table stores a raw token, code, session id, password or TOTP secret; hashes or
   ciphertext only.
-- **STORE-9** The vault connection saved on the account page (ID-25) is the single
+- **STORE-9** The vault connection saved on the Vault page (ID-25) is the single
   `vault_settings` row. The API key client secret and the master password are sealed by the
   same AES-256-GCM secret box as the TOTP secret (ID-9) under two further HKDF purposes of
   `VAULTGATE_SECRET_KEY`, `vaultgate/vault-client-secret/v1` and
@@ -84,5 +84,5 @@
 - **STORE-8** `VAULTGATE_SECRET_KEY` (used for TOTP-secret encryption, the stored vault
   connection, STORE-9, and session-binding HMACs) MUST be backed up with the database; without it
   stored TOTP secrets are unrecoverable, the operator must use a recovery code and re-enrol, and
-  the vault connection must be entered again on the account page. The database together with the
+  the vault connection must be entered again on the Vault page. The database together with the
   key yields the vault credentials, which is why the key is backed up separately.

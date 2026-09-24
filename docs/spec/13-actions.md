@@ -10,7 +10,7 @@
 > (ACT-36…38); M12 the `ssh` connector (14.5) with `ssh_run` (13.6.5; ACT-27, ACT-28, ACT-87,
 > ACT-88); and M13 the `winrm` connector (14.6) with `winrm_run` (13.6.5; ACT-89, ACT-90). M14
 > brought the per-target call history and ACT-63's "unexpected write" view, grant management from
-> the connected-clients list, the per-field validation messages of ACT-6, the `confirm_writes`
+> the connected-clients list (since moved to the Agents page's matrix, ACT-9), the per-field validation messages of ACT-6, the `confirm_writes`
 > default of ACT-49 and the proof behind ACT-48's rewritten second half: the in-band fallback for
 > the 2025 wire is unimplementable under MCP-1, so a client on that wire is refused a confirmed
 > target with `confirmation_unavailable` and the clause now says why. Not yet: the `browser`
@@ -71,7 +71,7 @@ Design rules, in priority order:
 - **ACT-1** A target is one row of `action_targets` (13.13) with the fields below. `destination`,
   `credential` and `policy` are JSON documents whose shape depends on `connector`; every
   document is validated by a zod schema on write and again on read, and a row that fails
-  validation is reported on the account page and refuses every call with `target_invalid`.
+  validation is reported on the target's page and refuses every call with `target_invalid`.
 
 | Field                                    | Type                                                       | Rules                                                                                                                                                       |
 | ---------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -88,7 +88,7 @@ Design rules, in priority order:
 | `created_at`, `updated_at`, `updated_by` | ms epoch, ms epoch, operator id                            | Conventions of section 07.                                                                                                                                  |
 
 - **ACT-2** A target's `destination` and `credential.item_id` MUST refer to things the operator
-  typed or chose on the account page. No tool creates, edits or deletes a target; there is no
+  typed or chose on the operator pages (ACT-5). No tool creates, edits or deletes a target; there is no
   API for targets other than the operator pages.
 - **ACT-3** Saving a target validates the destination the same way a call does (13.10): each
   host is resolved and checked against the private-range rule for the target's `internal` flag,
@@ -101,12 +101,26 @@ Design rules, in priority order:
 
 ### 13.3.2 Operator pages
 
-- **ACT-5** The account page gains an **Actions** section, present only when
-  `VAULTGATE_ENABLE_ACTIONS=true`. It lists targets (name, connector, destination summary,
-  enabled, grants, last call, open sessions) and offers create, edit, disable, enable, delete,
-  grant management and "close sessions". Every write is a `POST /account/actions/*` route behind
-  the ID-18 checks and re-authentication (ID-15); the re-authentication window is the same
-  5 minutes.
+- **ACT-5** The console (ID-19) gains a **Computers** section, present only when
+  `VAULTGATE_ENABLE_ACTIONS=true`, and then the console's home page (ID-23); the pages call a
+  target a _computer_. `GET /account/actions` lists the targets grouped by kind (SQL Server,
+  PostgreSQL, Windows · WinRM, Linux · SSH, HTTP APIs, Microsoft Graph: the `sql` connector split
+  by engine, and `http` targets with a Graph mapping set apart), each with its name and
+  description, destination summary, the vault item and the fields it maps (a secret field shown
+  sealed, by name only; no value is ever drawn), what its policy allows, the granted clients, its
+  last call and its state. `?kind=` shows one kind, and the sidebar has an entry per kind with its
+  count. What needs attention comes first: an invalid target (ACT-1), a target that writes without
+  confirmation (ACT-49), and the unexpected writes of the last seven days (ACT-63). **Add
+  computer** (`GET /account/actions/new`) chooses the kind, then shows that connector's form with
+  the kind's defaults filled in (the SQL Server engine and port, for example).
+  `GET /account/actions/:id` is the target's page (where it points, what it signs in with, its
+  rules, its grants, its recent calls, and closing its sessions or deleting it), and
+  `GET /account/actions/:id/edit` edits it on a page of its own. The pages offer create, edit,
+  disable, enable, delete, grant management and "close sessions". Every write is a
+  `POST /account/actions/*` route behind the ID-18 checks and re-authentication (ID-15); the
+  re-authentication window is the same 5 minutes, and outside it each form gives way to ID-15's
+  **Unlock editing**, which comes back to the page. An account with no e-mail address yet is sent
+  to set one first (ID-26).
 - **ACT-6** Pages follow ID-19: no JavaScript, one stylesheet, escaped templates. Policy
   allowlists are edited as one pattern per line. Connector-specific fields are validated
   server-side with the same zod schemas as ACT-1, and a rejected form re-renders with every
@@ -127,7 +141,10 @@ Design rules, in priority order:
 - **ACT-9** A target is usable by an OAuth client only while a row in `action_grants` joins
   them and neither the grant nor the client's consent is revoked. Grants are per client (the
   `oauth_clients.client_id`, the identifier every consent and token row carries), not per token, and are managed from the target's page by choosing among
-  the clients that currently hold a consent. A client with no grant sees the target nowhere and
+  the clients that currently hold a consent, or from the access matrix on the console's Agents
+  page: one row per target, one column per such client, each square granting or removing that one
+  grant through the same checks and the same ACT-7 event. The connected-clients list names each
+  client's targets, linking to them. A client with no grant sees the target nowhere and
   a call to it answers `not_granted`.
 - **ACT-10** Revoking a client's consent (OAUTH-30) MUST also revoke that client's grants and
   close its sessions, so a reconnected client starts with none.
@@ -537,7 +554,7 @@ args_sha256, issued_at, expires_at }` and `expires_at` is `issued_at + 120 000`.
 
 - **ACT-49** A target with `confirm_writes: false` relies on the client-side prompt the
   annotations invite (13.6.1) and on the operator's grant; `actions_list_targets` reports the
-  difference so an agent can warn its user. The account page defaults `confirm_writes` to
+  difference so an agent can warn its user. The create form defaults `confirm_writes` to
   `true` for every new target whose policy allows a non-read operation.
 
 ## 13.9 Secret handling
@@ -579,7 +596,7 @@ args_sha256, issued_at, expires_at }` and `expires_at` is `issued_at + 120 000`.
 - **ACT-54** The layer never reveals through timing or errors whether a vault item exists to a
   client that is not granted the target (ACT-16 ordering), and `credential_unavailable` carries
   one fixed message for a locked vault, a missing item and a missing field alike; the operator
-  sees the precise reason on the account page.
+  sees the precise reason on the target's page.
 
 Sections 13.10 to 13.18 — destinations and the network, the limits, the audit trail, the
 storage, the configuration, the module layout, the error codes, the non-goals and the

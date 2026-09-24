@@ -112,7 +112,7 @@ describe('createApp', () => {
     expect(markup).not.toContain('<script');
   });
 
-  it('ID-23 redirects the bare root to login without a session and to the account with one', async () => {
+  it('ID-23 redirects the bare root to login without a session and to the console’s home with one', async () => {
     const { app } = appWithLogSink();
     const anonymous = await app.request('/', { headers: { accept: BROWSER_ACCEPT } });
     expect(anonymous.status).toBe(303);
@@ -120,7 +120,7 @@ describe('createApp', () => {
     const { identity, cookie } = await signedInCookie();
     const signedIn = await identity.request('/', { headers: { accept: BROWSER_ACCEPT, cookie } });
     expect(signedIn.status).toBe(303);
-    expect(signedIn.headers.get('location')).toBe('/account');
+    expect(signedIn.headers.get('location')).toBe('/account/agents');
   });
 
   it('leaves /mcp and the metadata routes to their own answers whatever the Accept', async () => {

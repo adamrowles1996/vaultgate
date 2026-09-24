@@ -131,7 +131,7 @@ scope, resource}` with `Cache-Control: no-store`.
   `200 {}` (RFC 7009 §2.2), and revokes: an access token (itself), a refresh token (its family and
   all access tokens issued from it). It is rate limited like the token endpoint (60 requests per
   IP per minute, `429` with `Retry-After`).
-- **OAUTH-30** The operator's account page lists connected clients with last-used time and can
+- **OAUTH-30** The console's Agents page (ID-19) lists connected clients with last-used time and can
   revoke a client's consent (`POST /oauth/consents/<id>/revoke`, guarded like every account
   action), which revokes all of its tokens.
 

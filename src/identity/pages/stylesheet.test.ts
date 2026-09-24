@@ -29,8 +29,29 @@ describe('stylesheet', () => {
 
   it('ID-19 keeps inputs at the base size and gives touch screens 44px targets', () => {
     expect(STYLESHEET).toContain(':root {\n  font-size: 100%;');
-    expect(STYLESHEET).toContain('select {\n  font: inherit;');
+    expect(STYLESHEET).toContain('input,\nselect,\ntextarea,\nbutton {\n  font: inherit;');
     const touch = rulesOf('@media (max-width: 640px), (pointer: coarse) {');
     expect(touch).toContain('min-height: 44px;');
+  });
+
+  it('ID-19 folds the console’s sidebar into a bar across the top on a narrow screen', () => {
+    const console = rulesOf('@media (max-width: 960px) {');
+    expect(console).toContain('.shell {\n    grid-template-columns: minmax(0, 1fr);');
+    expect(console).toContain('.nav .nav-sub {\n    display: none;');
+  });
+
+  it('ID-19 follows the system’s dark setting and colours every kind of computer', () => {
+    expect(rulesOf('@media (prefers-color-scheme: dark) {')).toContain('--bg: #0f1114;');
+    for (const kind of ['mssql', 'postgres', 'winrm', 'ssh', 'http', 'graph']) {
+      expect(STYLESHEET).toContain(`.kind-tile.kind-${kind} {`);
+      expect(STYLESHEET).toContain(`.kind-dot.kind-${kind},`);
+    }
+    expect(STYLESHEET).toContain('.monogram.tone-3 {');
+  });
+
+  it('ID-19 loads nothing of its own: no web font, no image and no other stylesheet', () => {
+    expect(STYLESHEET).not.toContain('url(');
+    expect(STYLESHEET).not.toContain('@import');
+    expect(STYLESHEET).not.toContain('@font-face');
   });
 });

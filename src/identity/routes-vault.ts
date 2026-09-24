@@ -8,8 +8,8 @@ import {
   type IdentityEnvironment,
   readForm,
 } from './browser.ts';
-import { renderAccount } from './pages/account.ts';
-import { accountView, auditEvent, requireReauthenticated } from './routes-account.ts';
+import { auditEvent, requireReauthenticated } from './routes-account.ts';
+import { vaultResponse } from './routes-console.ts';
 
 import type { VaultFormValues } from './pages/vault-connection.ts';
 import type { IdentityServices } from './services.ts';
@@ -83,12 +83,10 @@ async function updateVault(context: IdentityContext, services: IdentityServices)
   const status = await services.vaultConnection.status();
   const input = parseVaultForm(form, status.configured);
   const vaultForm = submittedValues(form);
+  const { session } = authenticated;
   if (!input.ok) {
-    const view = await accountView(services, authenticated, {
-      error: input.error.message,
-      vaultForm,
-    });
-    return context.html(renderAccount(view), 400);
+    const options = { error: input.error.message, vaultForm, status: 400 } as const;
+    return vaultResponse(context, session, services, options);
   }
   const operatorId = authenticated.operator.id;
   const outcome = await services.vaultConnection.configure(input.value, operatorId);
@@ -99,13 +97,14 @@ async function updateVault(context: IdentityContext, services: IdentityServices)
     details: outcome.ok ? { server } : { server, reason: outcome.error.message },
   });
   if (!outcome.ok) {
-    const view = await accountView(services, authenticated, {
+    const options = {
       error: outcome.error.message,
       vaultForm,
-    });
-    return context.html(renderAccount(view), UNAVAILABLE_STATUS);
+      status: UNAVAILABLE_STATUS,
+    } as const;
+    return vaultResponse(context, session, services, options);
   }
-  return context.redirect('/account?notice=vault-updated#vault', 303);
+  return context.redirect('/account/vault?notice=vault-updated', 303);
 }
 
 export function registerVaultRoutes(

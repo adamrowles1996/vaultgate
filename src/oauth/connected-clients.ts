@@ -1,33 +1,22 @@
-import {
-  cell,
-  EMPTY,
-  hidden,
-  type Html,
-  html,
-  tableHead,
-  when,
-} from '../identity/pages/template.ts';
+import { unlockPath } from '../identity/pages/console.ts';
+import { EMPTY, hidden, type Html, html, when } from '../identity/pages/template.ts';
+import { formatInstant, monogram } from '../identity/pages/ui.ts';
 
 import type { ConnectedClient } from './repositories/consents.ts';
 
 export const CONSENT_REVOKE_PATH = '/oauth/consents/:id/revoke' as const;
 
 /**
-The anchor of the account page's re-authentication form (ID-15).
+Where the Agents page sends an operator to confirm the password (ID-15) and come back.
 */
-const REAUTHENTICATION_ANCHOR = '/account#sensitive-actions';
-
-/**
-The last column holds the Disconnect form and has no heading.
-*/
-const COLUMNS = ['Client', 'Permissions', 'Connected', 'Last used', 'Targets', ''] as const;
+const AGENTS_PATH = '/account/agents';
 
 /**
  * ACT-9: draws the action targets one client is granted, with the forms that
  * grant and revoke them, so an operator can manage a grant from this list as
  * well as from the target's page. Supplied by the composition layer only
  * when the actions layer is enabled; this module never imports it (ACT-70),
- * and without it the column stays empty.
+ * and without it the card has no computers row.
  */
 export type ClientTargetsRenderer = (clientId: string, view: ConnectedClientsView) => Html;
 
@@ -49,27 +38,44 @@ function revokePath(consentId: string): string {
 function revokeForm(client: ConnectedClient, csrfToken: string): Html {
   return html`<form method="post" action="${revokePath(client.id)}">
     ${hidden('csrf', csrfToken)}
-    <button type="submit">Disconnect</button>
+    <button type="submit" class="danger small">Disconnect</button>
   </form>`;
 }
 
-function row(
+/**
+The actions scopes are the ones that act on other systems (ACT-13), so they stand out.
+*/
+function scopeChip(scope: string): Html {
+  const tone = scope.startsWith('actions:') ? 'tag-brass' : 'tag-plain';
+  return html`<span class="tag ${tone} mono">${scope}</span>`;
+}
+
+function card(
   client: ConnectedClient,
   view: ConnectedClientsView,
   targets: ClientTargetsRenderer,
 ): Html {
+  const name = client.clientName ?? client.clientId;
   const lastUsed =
-    client.lastUsedAt === undefined ? 'never' : new Date(client.lastUsedAt).toISOString();
-  return html`<tr>
-    ${cell(COLUMNS[0], client.clientName ?? client.clientId)}
-    ${cell(COLUMNS[1], client.scopes.join(' '))}
-    ${cell(COLUMNS[2], new Date(client.grantedAt).toISOString())} ${cell(COLUMNS[3], lastUsed)}
-    ${cell(COLUMNS[4], targets(client.clientId, view))}
-    ${cell(
-      COLUMNS[5],
-      when(view.isReauthenticated, () => revokeForm(client, view.csrfToken)),
-    )}
-  </tr>`;
+    client.lastUsedAt === undefined
+      ? 'not used yet'
+      : `last used ${formatInstant(client.lastUsedAt)}`;
+  return html`<article class="agent-card">
+    <div class="cell-with-tile">
+      ${monogram(client.clientId, name, 'large')}
+      <div class="cell-main">
+        <h3>${name}</h3>
+        <span class="cell-sub">Connected ${formatInstant(client.grantedAt)}; ${lastUsed}</span>
+      </div>
+    </div>
+    <div class="chips" aria-label="Permissions">
+      ${client.scopes.map((scope) => scopeChip(scope))}
+    </div>
+    ${targets(client.clientId, view)}
+    <div class="agent-foot">
+      ${when(view.isReauthenticated, () => revokeForm(client, view.csrfToken))}
+    </div>
+  </article>`;
 }
 
 /**
@@ -78,33 +84,27 @@ The column a deployment without the actions layer draws: nothing at all.
 export const NO_CLIENT_TARGETS: ClientTargetsRenderer = () => EMPTY;
 
 /**
- * OAUTH-30: the account page's connected clients with their last-used time,
- * the action targets each is granted (ACT-9) and, once the password has been
- * confirmed (ID-15), a revoke form per consent; until then a note pointing at
- * the re-authentication form.
+ * OAUTH-30: the Agents page's connected clients, each with its permissions,
+ * when it connected and was last used, the action targets it is granted
+ * (ACT-9) and, once the password has been confirmed (ID-15), a Disconnect
+ * form; until then a note that leads to confirming it.
  */
 export function renderConnectedClients(
   clients: readonly ConnectedClient[],
   view: ConnectedClientsView,
   targets: ClientTargetsRenderer = NO_CLIENT_TARGETS,
 ): Html {
-  return html`${when(clients.length === 0, () => html`<p>No clients are connected.</p>`)}
+  return html`${when(clients.length === 0, () => html`<p class="empty">No clients are connected.</p>`)}
   ${when(
     clients.length > 0 && !view.isReauthenticated,
     () =>
-      html`<p>
-        To disconnect a client, first
-        <a href="${REAUTHENTICATION_ANCHOR}">confirm your password</a> under Sensitive actions.
+      html`<p class="card-note">
+        To disconnect an agent, first
+        <a href="${unlockPath(AGENTS_PATH)}">confirm your password</a>.
       </p>`,
   )}
   ${when(
     clients.length > 0,
-    () =>
-      html`<table>
-        ${tableHead(COLUMNS)}
-        <tbody>
-          ${clients.map((client) => row(client, view, targets))}
-        </tbody>
-      </table>`,
+    () => html`<div class="cards">${clients.map((client) => card(client, view, targets))}</div>`,
   )}`;
 }

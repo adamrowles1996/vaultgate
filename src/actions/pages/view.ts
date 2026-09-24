@@ -10,16 +10,18 @@ import { z } from 'zod';
 import { countOpenSessions } from '../sessions.ts';
 import { validateTarget } from '../targets-schemas.ts';
 
-import { lastCall, targetCalls } from './calls-view.ts';
+import { targetCalls } from './calls-view.ts';
 import { defaultValues, type FormValues, valuesFromDocuments } from './form-values.ts';
-import { editableConnectors, formFor } from './forms.ts';
+import { formFor } from './forms.ts';
 import { type FieldProblems, groupProblems, NO_PROBLEMS } from './messages.ts';
+import { summarise } from './summary.ts';
 import { DESCRIPTION_FIELD, drawnPaths, INTERNAL_FIELD, ITEM_ID_FIELD } from './target-form.ts';
 
 import type { ConnectorForm, FormSwitches } from './descriptors.ts';
-import type { SectionView, TargetListItem } from './section.ts';
 import type { ClientChoice, GrantItem, TargetPageView } from './target-page.ts';
 import type {
+  ConsoleAccess,
+  ConsoleRenderer,
   IdentityContext,
   IdentityEnvironment,
   SensitiveAction,
@@ -63,16 +65,23 @@ export interface ActionsPagesDependencies {
   The deployment switches the forms depend on (§13.14, ACT-88).
   */
   readonly switches: FormSwitches;
+  /**
+  ID-19: the console's frame around every page, injected from identity (ACT-70).
+  */
+  readonly renderConsole: ConsoleRenderer;
+  /**
+  Who may read these pages (ID-26), from identity the same way (ACT-70).
+  */
+  readonly consoleAccess: ConsoleAccess;
+  readonly now: () => number;
 }
 
 /**
-What a page adds to a target's view: a notice, an error, the problems and values of a rejected edit.
+What a page adds to a target's view: a notice, or the error of a refused write.
 */
 export interface PageExtras {
   readonly notice?: string | undefined;
   readonly error?: string | undefined;
-  readonly problems?: readonly string[] | undefined;
-  readonly values?: FormValues | undefined;
 }
 
 /**
@@ -80,42 +89,21 @@ ACT-88: a target whose policy allows any command, whichever connector it belongs
 */
 const unrestrictedSchema = z.object({ any_command: z.literal(true) });
 
-function iso(ms: number): string {
-  return new Date(ms).toISOString();
-}
-
-function clientNames(clients: readonly ClientChoice[]): ReadonlyMap<string, string> {
+export function clientNames(clients: readonly ClientChoice[]): ReadonlyMap<string, string> {
   return new Map(clients.map((client) => [client.clientId, client.clientName ?? client.clientId]));
 }
 
-function activeGrants(target: TargetSummary, names: ReadonlyMap<string, string>): GrantItem[] {
+export function activeGrants(
+  target: TargetSummary,
+  names: ReadonlyMap<string, string>,
+): GrantItem[] {
   return target.grants
     .filter((grant) => grant.revokedAt === undefined)
     .map((grant) => ({
       clientId: grant.clientId,
       clientName: names.get(grant.clientId) ?? grant.clientId,
-      grantedAt: iso(grant.grantedAt),
+      grantedAt: grant.grantedAt,
     }));
-}
-
-export function sectionView(
-  dependencies: ActionsPagesDependencies,
-  operatorId: string,
-): SectionView {
-  const names = clientNames(dependencies.listClients(operatorId));
-  const targets: TargetListItem[] = dependencies.targets.list().map((target) => ({
-    id: target.id,
-    name: target.name,
-    connector: target.connector,
-    destinationSummary: target.destinationSummary,
-    enabled: target.enabled,
-    state: target.state,
-    problems: target.problems,
-    grantNames: activeGrants(target, names).map((grant) => grant.clientName),
-    lastCall: lastCall(dependencies.database, target.id),
-    openSessions: countOpenSessions(dependencies.database, target.id),
-  }));
-  return { targets, connectors: editableConnectors() };
 }
 
 /**
@@ -173,7 +161,10 @@ function isUnconfirmed(target: TargetSummary): boolean {
 /**
 ACT-4, ACT-54: the item's name, or the precise reason the operator (and only the operator) may see.
 */
-async function describeItem(vault: Pick<VaultClient, 'getItem'>, itemId: string): Promise<string> {
+export async function describeItem(
+  vault: Pick<VaultClient, 'getItem'>,
+  itemId: string,
+): Promise<string> {
   const item = await vault.getItem(itemId);
   if (item.ok) {
     return item.value.name;
@@ -184,6 +175,7 @@ async function describeItem(vault: Pick<VaultClient, 'getItem'>, itemId: string)
 }
 
 export interface Viewer {
+  readonly session: SessionState;
   readonly operatorId: string;
   readonly csrfToken: string;
   readonly isReauthenticated: boolean;
@@ -191,6 +183,7 @@ export interface Viewer {
 
 export function viewerOf(session: SessionState): Viewer {
   return {
+    session,
     operatorId: session.operatorId,
     csrfToken: session.csrfToken,
     isReauthenticated: session.isReauthenticated,
@@ -199,16 +192,13 @@ export function viewerOf(session: SessionState): Viewer {
 
 /**
  * The signed-in operator a read-only page of this section needs, or the
- * redirect to the login form that returns here afterwards. The writes go
+ * identity module's redirect: to the login form that returns here
+ * afterwards, or to set an e-mail address first (ID-26). The writes go
  * through the identity module's injected gate instead (ID-15, ID-18).
  */
-export function signedIn(context: IdentityContext): Viewer | Response {
-  const session = context.get('session');
-  if (session === undefined) {
-    const url = new URL(context.req.url);
-    return context.redirect(`/login?next=${encodeURIComponent(url.pathname + url.search)}`, 303);
-  }
-  return viewerOf(session);
+export function signedIn(context: IdentityContext, access: ConsoleAccess): Viewer | Response {
+  const session = access(context);
+  return session instanceof Response ? session : viewerOf(session);
 }
 
 export async function targetPageView(
@@ -218,9 +208,9 @@ export async function targetPageView(
   extras: PageExtras = {},
 ): Promise<TargetPageView> {
   const clients = dependencies.listClients(viewer.operatorId);
-  const grants = activeGrants(target, clientNames(clients));
+  const names = clientNames(clients);
+  const grants = activeGrants(target, names);
   const granted = new Set(grants.map((grant) => grant.clientId));
-  const form = formFor(target.connector, dependencies.switches);
   return {
     csrfToken: viewer.csrfToken,
     isReauthenticated: viewer.isReauthenticated,
@@ -228,14 +218,14 @@ export async function targetPageView(
     isUnconfirmed: isUnconfirmed(target),
     notice: extras.notice,
     error: extras.error,
-    fieldProblems: form === undefined ? NO_PROBLEMS : fieldProblems(form, extras.problems),
     target,
+    summary: summarise(target),
     itemName: await describeItem(dependencies.vault, target.credential.item_id),
     openSessions: countOpenSessions(dependencies.database, target.id),
     grants,
     candidates: clients.filter((client) => !granted.has(client.clientId)),
-    calls: targetCalls(dependencies.database, target.id).calls,
-    form,
-    values: extras.values ?? (form === undefined ? new Map() : targetValues(form, target)),
+    calls: targetCalls(dependencies.database, target.id, undefined, names).calls,
+    isEditable: formFor(target.connector, dependencies.switches) !== undefined,
+    now: dependencies.now(),
   };
 }

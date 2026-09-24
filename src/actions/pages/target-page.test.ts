@@ -9,6 +9,7 @@ import {
 } from '../../test-support/actions-fixtures.ts';
 import { createPagesHarness, signedInOperator } from '../../test-support/actions-pages.ts';
 import { fixtureTargetRow } from '../../test-support/actions-store-fixtures.ts';
+import { compact, pageText, statusOf } from '../../test-support/identity-app.ts';
 import { createSqlTarget } from '../../test-support/sql-connector.ts';
 import { createSshTarget } from '../../test-support/ssh-connector.ts';
 import { createWinrmTarget } from '../../test-support/winrm-connector.ts';
@@ -66,7 +67,7 @@ async function pageMarkup(harness: PagesHarness, path: string): Promise<string> 
 }
 
 describe('GET /account/actions/:id', () => {
-  it('ACT-4 ACT-5 shows the status with the vault item name, the edit form with the policy in force, the grants and the calls', async () => {
+  it('ACT-4 ACT-5 shows where it points, the vault item and sealed fields it signs in with, its rules, grants and calls', async () => {
     const harness = createPagesHarness();
     harness.clients.push(
       { clientId: CLIENT_ID, clientName: 'Agent One' },
@@ -75,13 +76,48 @@ describe('GET /account/actions/:id', () => {
     const target = await createHttpTarget(harness.actions, { internal: true });
     await harness.actions.engine.call(caller(), httpInvocation());
     await harness.actions.engine.call(caller({ clientId: OTHER_CLIENT_ID }), httpInvocation());
-    const markup = await pageMarkup(harness, `/account/actions/${target.id}`);
-    expect(markup).toContain('<title>Target api · vaultgate</title>');
+    const markup = compact(await pageMarkup(harness, `/account/actions/${target.id}`));
+    expect(markup).toContain('<title>api · vaultgate</title>');
+    expect(markup).toContain('<h1 class="mono">api</h1><span class="pill pill-ok">Enabled</span>');
+    expect(markup).toContain('<dt>Destination</dt><dd class="mono">api.example.com/v1</dd>');
+    expect(markup).toContain('<dt>Network</dt><dd>internal · encrypted</dd>');
+    expect(markup).toContain('<dt>Revision</dt><dd>1 · updated just now</dd>');
+    expect(markup).toContain('Example Login');
+    expect(markup).toContain('<span class="mono cell-sub">item-login</span>');
+    expect(markup).toContain('<dt>Secret</dt><dd><span class="sealed"');
+    expect(markup).not.toContain('CANARY');
+    expect(markup).toContain('<dt>Allows</dt><dd>GET, HEAD</dd>');
+    expect(markup).toContain('href="/account/actions/id-1/edit"');
+    expect(markup).toContain('action="/account/actions/id-1/disable"');
+    expect(markup).toContain('action="/account/actions/id-1/sessions/close"');
+    expect(markup).toContain('action="/account/actions/id-1/delete"');
+    expect(markup).toContain(
+      '<span>Agent One</span><span class="cell-sub">Granted 2026-09-22 12:00 UTC</span>',
+    );
+    expect(markup).toContain('<input type="hidden" name="client_id" value="vg_c_agent" />');
+    expect(markup).toContain('<option value="vg_c_other">vg_c_other</option>');
+    expect(markup).not.toContain('<option value="vg_c_agent">');
+    expect(markup).toContain(
+      '<td data-label="Time">2026-09-22T12:00:00.000Z</td> <td data-label="Agent">Agent One</td>',
+    );
+    expect(markup).toContain(
+      '<td data-label="Operation">read</td> <td data-label="Classification">GET</td>',
+    );
+    expect(markup).toContain('<span class="tag tag-green">ok</span>');
+    expect(markup).toContain('<td data-label="Agent">vg_c_other</td>');
+    expect(markup).toContain('<span class="tag tag-amber">denied:not_granted</span>');
+    expect(markup).toContain('href="/account/actions/id-1/calls"');
+  });
+
+  it('ACT-5 ACT-49 edits on a page of its own, with the policy in force and the name fixed', async () => {
+    const harness = createPagesHarness();
+    const target = await createHttpTarget(harness.actions, { internal: true });
+    const markup = await pageMarkup(harness, `/account/actions/${target.id}/edit`);
+    expect(markup).toContain('<title>Edit api · vaultgate</title>');
+    expect(markup).toContain(
+      '<form method="post" action="/account/actions/id-1" class="target-form">',
+    );
     expect(markup).toContain('name="internal" type="checkbox" checked');
-    expect(markup).toContain('data-label="Value">item-login (Example Login)</td>');
-    expect(markup).toContain('data-label="Setting">State</td> <td data-label="Value">valid</td>');
-    expect(markup).toContain('data-label="Setting">Revision</td> <td data-label="Value">1</td>');
-    expect(markup).toContain('<form method="post" action="/account/actions/id-1">');
     expect(markup).not.toContain('name="name"');
     expect(markup).toContain('name="destination.base_url" value="https://api.example.com/v1"');
     expect(markup).toContain('name="policy.allowed_methods.GET" type="checkbox" checked');
@@ -90,25 +126,7 @@ describe('GET /account/actions/:id', () => {
     expect(markup).toContain('name="policy.timeout_ms"');
     expect(markup).toContain('value="30000"');
     expect(markup).toContain('name="policy.confirm_writes" type="checkbox"  />');
-    expect(markup).toContain('action="/account/actions/id-1/disable"');
-    expect(markup).toContain('action="/account/actions/id-1/sessions/close"');
-    expect(markup).toContain('action="/account/actions/id-1/delete"');
-    expect(markup).toContain('data-label="Client">Agent One</td>');
-    expect(markup).toContain('<input type="hidden" name="client_id" value="vg_c_agent" />');
-    expect(markup).toContain('<option value="vg_c_other">vg_c_other</option>');
-    expect(markup).not.toContain('<option value="vg_c_agent">');
-    expect(markup).toContain(
-      '<td data-label="Time">2026-09-22T12:00:00.000Z</td> <td data-label="Tool">http_request</td>',
-    );
-    expect(markup).toContain(
-      'data-label="Operation">read</td> <td data-label="Classification">GET</td>',
-    );
-    expect(markup).toContain(
-      'data-label="Outcome">ok</td> <td data-label="Elicitation">not_required</td>',
-    );
-    expect(markup).toContain('data-label="Client">vg_c_agent</td>');
-    expect(markup).toContain('data-label="Operation"></td> <td data-label="Classification"></td>');
-    expect(markup).toContain('data-label="Outcome">denied:not_granted</td>');
+    expect(markup).toContain('<button type="submit" class="primary">Save changes</button>');
   });
 
   it('ACT-1 ACT-4 ACT-54 shows the stored documents of an invalid row for repair, and the precise vault reason', async () => {
@@ -126,25 +144,22 @@ describe('GET /account/actions/:id', () => {
       fixtureTargetRow({ id: 'row-2', name: 'db', connector: 'browser', internal: true }),
     );
     const { browser } = await signedInOperator(harness);
-    const broken = await browser.get('/account/actions/row-1');
-    const brokenMarkup = await broken.text();
-    expect(brokenMarkup).toContain('<code>target_invalid</code>: credential.mapping.field:');
-    expect(brokenMarkup).toContain('data-label="Value">item-nope (no such item in the vault)</td>');
-    expect(brokenMarkup).toContain('<option value="header" selected>header</option>');
-    expect(brokenMarkup).toContain('name="credential.name" value="X-Key"');
-    expect(brokenMarkup).toContain('<textarea name="policy.allowed_paths" rows="4"></textarea>');
-    expect(brokenMarkup).toContain(
-      'data-label="Setting">Destination</td> <td data-label="Value">not readable</td>',
-    );
-    const later = await browser.get('/account/actions/row-2');
-    const laterMarkup = await later.text();
-    expect(laterMarkup).toContain('This build cannot edit browser targets yet.');
-    expect(laterMarkup).not.toContain('action="/account/actions/row-2"');
+    const brokenMarkup = compact(await pageText(browser, '/account/actions/row-1'));
+    expect(brokenMarkup).toContain('target_invalid: credential.mapping.field:');
+    expect(brokenMarkup).toContain('no such item in the vault');
+    expect(brokenMarkup).toContain('<span class="pill pill-bad">Needs fixing</span>');
+    expect(brokenMarkup).toContain('<dd class="mono">not readable</dd>');
+    const repair = await pageText(browser, '/account/actions/row-1/edit');
+    expect(repair).toContain('<option value="header" selected>header</option>');
+    expect(repair).toContain('name="credential.name" value="X-Key"');
+    expect(repair).toContain('<textarea name="policy.allowed_paths" rows="4"></textarea>');
+    const laterMarkup = await pageText(browser, '/account/actions/row-2');
+    expect(laterMarkup).not.toContain('href="/account/actions/row-2/edit"');
     expect(laterMarkup).toContain('action="/account/actions/row-2/delete"');
+    expect(await statusOf(browser, '/account/actions/row-2/edit')).toBe(404);
     harness.actions.vault.failWith(new VaultError('vault_unavailable', 'locked'));
-    const locked = await browser.get('/account/actions/row-1');
-    const lockedMarkup = await locked.text();
-    expect(lockedMarkup).toContain('(the item could not be checked: vault_unavailable)');
+    const lockedMarkup = await pageText(browser, '/account/actions/row-1');
+    expect(lockedMarkup).toContain('the item could not be checked: vault_unavailable');
     const edit = await browser.submit('/account/actions/row-2', { csrf: '' });
     expect(edit.status).toBe(403);
   });
@@ -181,16 +196,22 @@ describe('GET /account/actions/:id', () => {
     expect(noted).toStrictEqual([true, false, false, false, true, true, false]);
   });
 
-  it('ID-15 offers no form before the password is confirmed and points at the confirmation', async () => {
+  it('ID-15 offers no change before the password is confirmed and leads to confirming it and back', async () => {
     const harness = createPagesHarness();
     harness.clients.push({ clientId: CLIENT_ID, clientName: 'Agent One' });
     const target = await createHttpTarget(harness.actions);
     const { browser } = await signedInOperator(harness, false);
-    const page = await browser.get(`/account/actions/${target.id}`);
-    const markup = await page.text();
-    expect(markup).toContain('<a href="/account#sensitive-actions">confirm your password</a>');
-    expect(markup).not.toContain('<form');
-    expect(markup).toContain('data-label="Client">Agent One</td>');
+    const markup = compact(await pageText(browser, `/account/actions/${target.id}`));
+    expect(markup).toContain('href="/account/unlock?next=%2Faccount%2Factions%2Fid-1"');
+    expect(markup).not.toContain('action="/account/actions/');
+    expect(markup).not.toContain('id="manage"');
+    expect(markup).toContain('<span>Agent One</span>');
+    const edit = compact(await pageText(browser, `/account/actions/${target.id}/edit`));
+    expect(edit).toContain(
+      'Changing a computer needs your password, confirmed in the last five minutes.',
+    );
+    expect(edit).toContain('href="/account/unlock?next=%2Faccount%2Factions%2Fid-1%2Fedit"');
+    expect(edit).not.toContain('action="/account/actions/id-1"');
   });
 });
 
@@ -239,12 +260,12 @@ describe('POST /account/actions/:id', () => {
     ]);
     expect(JSON.stringify(harness.actions.audit)).not.toContain('X-Api-Key');
     const page = await browser.get('/account/actions/id-1?notice=updated');
-    const markup = await page.text();
-    expect(markup).toContain('Target saved; its revision has moved on');
-    expect(markup).toContain('data-label="Setting">Revision</td> <td data-label="Value">2</td>');
+    const markup = compact(await page.text());
+    expect(markup).toContain('Computer saved; its revision has moved on');
+    expect(markup).toContain('<dt>Revision</dt><dd>2 · updated just now</dd>');
   });
 
-  it('ACT-6 re-renders the page with every problem and the submitted values when the edit is rejected', async () => {
+  it('ACT-6 re-renders the edit page with every problem and the submitted values when the edit is rejected', async () => {
     const harness = createPagesHarness();
     const target = await createHttpTarget(harness.actions);
     const { browser, csrf } = await signedInOperator(harness);
@@ -258,9 +279,14 @@ describe('POST /account/actions/:id', () => {
     );
     const markup = await response.text();
     expect(response.status).toBe(400);
-    expect(markup).toContain('<p class="error">must not carry a query string or fragment</p>');
     expect(markup).toContain(
-      '<p class="error">How long one call may run, in milliseconds: 1000 to 300000. (Too small',
+      'The computer was not saved; fix the problems shown against each field',
+    );
+    expect(markup).toContain(
+      '<p class="field-error">must not carry a query string or fragment</p>',
+    );
+    expect(markup).toContain(
+      '<p class="field-error">How long one call may run, in milliseconds: 1000 to 300000. (Too small',
     );
     expect(markup).toContain('name="destination.base_url" value="https://api.example.com/v1?x=1"');
     expect(markup).toContain('value="5"');

@@ -79,14 +79,16 @@
   elsewhere).
 - **ACT-62** `action_calls` rows are append-only from the application's point of view, retained
   for `VAULTGATE_AUDIT_RETENTION_DAYS` like `audit_events` (MCP-15, STORE-6), and included in the
-  audit export (OPS-5) as a second stream (`--stream actions`; the account page export offers both).
+  audit export (OPS-5) as a second stream (`--stream actions`; the Activity page's export offers both).
   The one exception is a call's own row: it is reserved (outcome `error:interrupted`, the nonce
   consumed) before the connector runs and completed with the outcome, output size and duration
   when the call ends. That completion is the only update path, and nothing deletes a row before
   retention.
-- **ACT-63** The account page shows, per target, the last 50 calls with their outcome and
-  elicitation result, open sessions, and an "unexpected write" view listing every non-read call
-  whose elicitation is not `accepted`, so a target with `confirm_writes: false` is reviewable.
+- **ACT-63** A target's page shows its last 50 calls with their outcome and elicitation result,
+  and its open sessions. The console's Activity page shows the latest calls across targets and
+  links to an "unexpected write" view listing every non-read call whose elicitation is not
+  `accepted`, so a target with `confirm_writes: false` is reviewable; the Computers page and the
+  sidebar count those of the last seven days.
 
 ## 13.13 Storage
 
@@ -204,7 +206,7 @@ src/actions/
   remain unacceptable; a package whose install compiles or downloads anything is rejected.
 - **ACT-73** The engine is constructed only when `VAULTGATE_ENABLE_ACTIONS=true`; otherwise
   `src/main.ts` passes no engine, the MCP tool registry registers no actions tool, the scope
-  registry advertises no actions scope, the account page renders no section, and the connectors'
+  registry advertises no actions scope, the console has no Computers section, and the connectors'
   modules are never imported (dynamic import at engine construction, so knip and the module-graph
   rules still see them).
 

@@ -174,7 +174,7 @@ async function passwordStep(
   if (state instanceof Response) {
     return state;
   }
-  const next = safeNextPath(form.get('next'));
+  const next = safeNextPath(form.get('next'), services.homePath);
   const password = field(form, 'password');
   const claim = claimFrom(services, context, form);
   const { operator } = claim;
@@ -210,7 +210,7 @@ async function secondStep(context: IdentityContext, services: IdentityServices):
   if (operator === undefined) {
     return services.guards.deny(context, 'password step not completed');
   }
-  const next = safeNextPath(form.get('next'));
+  const next = safeNextPath(form.get('next'), services.homePath);
   const subjects = subjectsFor(services, context, operator);
   await services.delay(services.throttle.delayFor(subjects));
   const method = verifySecondFactor(services, operator, field(form, 'code'));
@@ -248,7 +248,7 @@ export function registerLoginRoutes(
   const fallbackHash = fallbackHashSource(services);
 
   app.get('/login', (context) => {
-    const next = safeNextPath(context.req.query('next'));
+    const next = safeNextPath(context.req.query('next'), services.homePath);
     if (context.get('session') !== undefined) {
       return context.redirect(next, 303);
     }

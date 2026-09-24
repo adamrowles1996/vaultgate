@@ -2,8 +2,8 @@ import { exportLines, type ExportRequest, parseExportRequest } from '../audit/ex
 import { FORMATS } from '../audit/format.ts';
 
 import { type IdentityContext, type IdentityEnvironment, readForm } from './browser.ts';
-import { renderAccount } from './pages/account.ts';
-import { accountView, auditEvent, requireReauthenticated } from './routes-account.ts';
+import { auditEvent, requireReauthenticated } from './routes-account.ts';
+import { activityResponse } from './routes-console.ts';
 
 import type { IdentityServices } from './services.ts';
 import type { Hono } from 'hono';
@@ -44,8 +44,7 @@ async function exportAudit(context: IdentityContext, services: IdentityServices)
     stream: form.get('stream'),
   });
   if (!request.ok) {
-    const view = await accountView(services, authenticated, { error: request.error.message });
-    return context.html(renderAccount(view), 400);
+    return activityResponse(context, authenticated.session, services, request.error.message);
   }
   const { from, to, format, stream } = request.value;
   services.audit.record({

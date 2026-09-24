@@ -3,6 +3,8 @@
  * interpolated string, and a document wrapper. No template engine, no
  * inline script, no inline style (ID-19).
  */
+import { BRAND_MARK } from './icons.ts';
+
 export interface Html {
   readonly markup: string;
 }
@@ -46,6 +48,11 @@ export function when(isShown: boolean, content: () => Html): Html {
   return isShown ? content() : EMPTY;
 }
 
+/**
+ * A page outside the console: setup, sign-in, recovery codes, consent and
+ * the not-found page, each one card under the name. Console pages use
+ * `consoleDocument` in `console.ts` instead.
+ */
 export function document(title: string, body: Html): string {
   return html`<!doctype html>
     <html lang="en">
@@ -55,10 +62,10 @@ export function document(title: string, body: Html): string {
         <title>${title} · vaultgate</title>
         <link rel="stylesheet" href="/static/vaultgate.css" />
       </head>
-      <body>
-        <main>
-          <h1>vaultgate</h1>
-          ${body}
+      <body class="plain">
+        <main class="plain-main">
+          <h1 class="plain-brand">${BRAND_MARK}vaultgate</h1>
+          <div class="plain-card">${body}</div>
         </main>
       </body>
     </html> `.markup;

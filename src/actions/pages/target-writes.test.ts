@@ -17,7 +17,7 @@ import {
   openSession,
   sessionRows,
 } from '../../test-support/actions-store-fixtures.ts';
-import { makeLegacy } from '../../test-support/identity-app.ts';
+import { compact, makeLegacy } from '../../test-support/identity-app.ts';
 
 import type { PagesHarness } from '../../test-support/actions-pages.ts';
 
@@ -50,8 +50,8 @@ describe('the one-button writes', () => {
     expect(disabled.headers.get('location')).toBe('/account/actions/id-1?notice=disabled');
     const page = await browser.get('/account/actions/id-1?notice=disabled');
     const markup = await page.text();
-    expect(markup).toContain('Target disabled; agents no longer see it.');
-    expect(markup).toContain('data-label="Setting">Enabled</td> <td data-label="Value">no</td>');
+    expect(markup).toContain('Computer disabled; agents no longer see it.');
+    expect(markup).toContain('<span class="pill pill-off">Disabled</span>');
     expect(markup).toContain('action="/account/actions/id-1/enable"');
     const enabled = await browser.submit(`/account/actions/${target.id}/enable`, { csrf });
     expect(enabled.headers.get('location')).toBe('/account/actions/id-1?notice=enabled');
@@ -66,7 +66,7 @@ describe('the one-button writes', () => {
     expect(actionsAudit(harness)[0]?.operatorId).toBe(operatorId(harness));
   });
 
-  it('ACT-8 deletes a target with its grants and sessions, keeps its calls and returns to the account page', async () => {
+  it('ACT-8 deletes a target with its grants and sessions, keeps its calls and returns to the Computers page', async () => {
     const harness = createPagesHarness();
     const target = await createHttpTarget(harness.actions);
     openSession(harness.actions.database, 'session-1', target.id, CLIENT_ID);
@@ -75,7 +75,7 @@ describe('the one-button writes', () => {
     const { browser, csrf } = await signedInOperator(harness);
     const response = await browser.submit(`/account/actions/${target.id}/delete`, { csrf });
     expect(response.status).toBe(303);
-    expect(response.headers.get('location')).toBe('/account#actions');
+    expect(response.headers.get('location')).toBe('/account/actions?notice=deleted');
     expect(harness.actions.engine.targets.get(target.id)).toBeUndefined();
     expect(grantRows(harness.actions.database, target.id)).toStrictEqual([]);
     expect(sessionRows(harness.actions.database)).toStrictEqual([
@@ -92,9 +92,9 @@ describe('the one-button writes', () => {
         details: { target: 'api', connector: 'http', sessions: 1 },
       },
     ]);
-    const account = await browser.get('/account');
-    const markup = await account.text();
-    expect(markup).toContain('No targets are defined.');
+    const list = await browser.get('/account/actions?notice=deleted');
+    const markup = await list.text();
+    expect(markup).toContain('<strong>No computers yet.</strong>');
     const again = await browser.submit(`/account/actions/${target.id}/delete`, { csrf });
     expect(again.status).toBe(404);
   });
@@ -114,9 +114,9 @@ describe('the one-button writes', () => {
     });
     expect(granted.headers.get('location')).toBe('/account/actions/id-1?notice=granted');
     const page = await browser.get('/account/actions/id-1?notice=granted');
-    const markup = await page.text();
+    const markup = compact(await page.text());
     expect(markup).toContain('<p class="notice">Grant added.</p>');
-    expect(markup).toContain('data-label="Client">Agent Two</td>');
+    expect(markup).toContain('<span>Agent Two</span>');
     expect(markup).toContain('<option value="vg_c_agent">Agent One</option>');
     expect(markup).not.toContain('<option value="vg_c_other">');
     openSession(harness.actions.database, 'session-1', target.id, OTHER_CLIENT_ID);
@@ -153,12 +153,12 @@ describe('the one-button writes', () => {
     expect(unnamed.headers.get('location')).toBe('/account/actions/id-1?notice=grant-revoked');
     const cleared = await browser.get('/account/actions/id-1');
     const clearedMarkup = await cleared.text();
-    expect(clearedMarkup).toContain('No client is granted this target.');
+    expect(clearedMarkup).toContain('No agent is granted this computer.');
     harness.clients.length = 0;
     const nobody = await browser.get('/account/actions/id-1');
     const nobodyMarkup = await nobody.text();
     expect(nobodyMarkup).toContain(
-      'Every connected client already holds a grant, or none is connected.',
+      'Every connected agent already holds a grant, or none is connected.',
     );
   });
 
@@ -170,10 +170,8 @@ describe('the one-button writes', () => {
     harness.actions.audit.length = 0;
     const { browser, csrf } = await signedInOperator(harness);
     const before = await browser.get(`/account/actions/${target.id}`);
-    const beforeMarkup = await before.text();
-    expect(beforeMarkup).toContain(
-      'data-label="Setting">Open sessions</td> <td data-label="Value">2</td>',
-    );
+    const beforeMarkup = compact(await before.text());
+    expect(beforeMarkup).toContain('<dt>Open sessions</dt><dd>2</dd>');
     const closed = await browser.submit(`/account/actions/${target.id}/sessions/close`, { csrf });
     expect(closed.headers.get('location')).toBe('/account/actions/id-1?notice=sessions-closed');
     expect(sessionRows(harness.actions.database)).toStrictEqual([
@@ -189,11 +187,9 @@ describe('the one-button writes', () => {
       },
     ]);
     const after = await browser.get('/account/actions/id-1?notice=sessions-closed');
-    const afterMarkup = await after.text();
-    expect(afterMarkup).toContain('Every open session on this target was closed.');
-    expect(afterMarkup).toContain(
-      'data-label="Setting">Open sessions</td> <td data-label="Value">0</td>',
-    );
+    const afterMarkup = compact(await after.text());
+    expect(afterMarkup).toContain('Every open session on this computer was closed.');
+    expect(afterMarkup).toContain('<dt>Open sessions</dt><dd>0</dd>');
   });
 
   it('ID-15 ID-18 refuses every write without re-authentication, without the ID-18 checks and in legacy mode', async () => {
@@ -256,12 +252,12 @@ describe('call history', () => {
       targetId: other.id,
       targetName: 'other',
     });
-    const markup = await pageMarkup(harness, `/account/actions/${target.id}`);
+    const markup = compact(await pageMarkup(harness, `/account/actions/${target.id}`));
     const times = Array.from(markup.matchAll(/data-label="Time">([^<]+)</g), (match) => match[1]);
     expect(times).toHaveLength(50);
     expect(times[0]).toBe(new Date(1051).toISOString());
     expect(times.at(-1)).toBe(new Date(1002).toISOString());
-    expect(markup).toContain('data-label="Outcome">denied:policy_denied</td>');
+    expect(markup).toContain('<span class="tag tag-amber">denied:policy_denied</span>');
     expect(markup).not.toContain(new Date(9000).toISOString());
     const countRow = z.object({ n: z.number() });
     const kept = all(harness.actions.database, 'SELECT COUNT(*) AS n FROM action_calls', countRow);

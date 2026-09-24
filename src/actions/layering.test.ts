@@ -32,7 +32,7 @@ describe('actions layering', () => {
     );
     expect(CRUISER).toContain(
       "from: { path: '^src/actions/' },\n      to: {\n        path: '^src/(identity|mcp)/',\n" +
-        '        pathNot: [String.raw`^src/identity/pages/template\\.ts$`],\n' +
+        '        pathNot: [String.raw`^src/identity/pages/(template|icons|ui|console)\\.ts$`],\n' +
         "        dependencyTypesNot: ['type-only'],\n      },",
     );
     expect(CRUISER).toContain(

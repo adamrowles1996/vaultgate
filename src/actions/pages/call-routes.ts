@@ -6,14 +6,9 @@
  * `calls-view.ts`, never SQL.
  */
 import { targetCalls, unexpectedCalls } from './calls-view.ts';
-import {
-  type CallCursor,
-  parseCursor,
-  renderCallHistoryPage,
-  renderUnexpectedPage,
-} from './calls.ts';
+import { callHistoryPage, type CallCursor, parseCursor, unexpectedPage } from './calls.ts';
 import { CREATE_PATH, UNEXPECTED_PATH } from './paths.ts';
-import { type ActionsPagesDependencies, signedIn } from './view.ts';
+import { type ActionsPagesDependencies, clientNames, signedIn } from './view.ts';
 
 import type { IdentityContext, IdentityEnvironment } from '../../identity/index.ts';
 import type { Hono } from 'hono';
@@ -24,25 +19,26 @@ function cursorOf(context: IdentityContext): CallCursor | undefined {
   return parseCursor(context.req.query(CURSOR_PARAMETER));
 }
 
-function showUnexpected(
+async function showUnexpected(
   context: IdentityContext,
   dependencies: ActionsPagesDependencies,
-): Response | Promise<Response> {
-  const viewer = signedIn(context);
+): Promise<Response> {
+  const viewer = signedIn(context, dependencies.consoleAccess);
   if (viewer instanceof Response) {
     return viewer;
   }
   const live = new Set(dependencies.targets.list().map((target) => target.id));
-  const page = unexpectedCalls(dependencies.database, live, cursorOf(context));
-  return context.html(renderUnexpectedPage(page));
+  const names = clientNames(dependencies.listClients(viewer.operatorId));
+  const page = unexpectedCalls(dependencies.database, live, cursorOf(context), names);
+  return context.html(await dependencies.renderConsole(viewer.session, unexpectedPage(page)));
 }
 
-function showHistory(
+async function showHistory(
   context: IdentityContext,
   dependencies: ActionsPagesDependencies,
   id: string,
-): Response | Promise<Response> {
-  const viewer = signedIn(context);
+): Promise<Response> {
+  const viewer = signedIn(context, dependencies.consoleAccess);
   if (viewer instanceof Response) {
     return viewer;
   }
@@ -50,10 +46,10 @@ function showHistory(
   if (target === undefined) {
     return context.notFound();
   }
-  const page = targetCalls(dependencies.database, target.id, cursorOf(context));
-  return context.html(
-    renderCallHistoryPage({ targetId: target.id, targetName: target.name, ...page }),
-  );
+  const names = clientNames(dependencies.listClients(viewer.operatorId));
+  const calls = targetCalls(dependencies.database, target.id, cursorOf(context), names);
+  const page = callHistoryPage({ targetId: target.id, targetName: target.name, ...calls });
+  return context.html(await dependencies.renderConsole(viewer.session, page));
 }
 
 export function registerCallPages(

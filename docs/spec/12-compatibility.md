@@ -53,12 +53,12 @@ it renders the prompt, is unverified — not assumed either way.
 
 ## 12.3 Bitwarden servers
 
-| Server                | Supported | Notes                                                                |
-| --------------------- | --------- | -------------------------------------------------------------------- |
-| bitwarden.com (US)    | yes       | default                                                              |
-| bitwarden.eu          | yes       | server `bitwarden.eu` (account page or `VAULTGATE_BW_SERVER`)        |
-| Self-hosted Bitwarden | yes       | server `https://…` (account page or `VAULTGATE_BW_SERVER`)           |
-| Vaultwarden           | yes       | server `https://…` (account page or seed); personal API key required |
+| Server                | Supported | Notes                                                              |
+| --------------------- | --------- | ------------------------------------------------------------------ |
+| bitwarden.com (US)    | yes       | default                                                            |
+| bitwarden.eu          | yes       | server `bitwarden.eu` (Vault page or `VAULTGATE_BW_SERVER`)        |
+| Self-hosted Bitwarden | yes       | server `https://…` (Vault page or `VAULTGATE_BW_SERVER`)           |
+| Vaultwarden           | yes       | server `https://…` (Vault page or seed); personal API key required |
 
 - **COMPAT-1** The minimum Bitwarden CLI version is recorded in `src/bitwarden/versions.ts`; the
   release pinned in the Dockerfile and in `install.sh` is kept equal, and at or above that

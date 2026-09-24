@@ -54,7 +54,7 @@ problem, not just the first.
   error (ACT-67).
 - **CFG-4** `.env` files are loaded only by `npm run dev` (Node's `--env-file-if-exists`); the
   production entrypoint reads the process environment only.
-- **CFG-5** The Bitwarden connection is operator data, not configuration: the account page
+- **CFG-5** The Bitwarden connection is operator data, not configuration: the Vault page
   (ID-25) is its canonical source and stores it encrypted (STORE-9). The four `VAULTGATE_BW_*`
   connection variables are optional seeds for the first boot, honoured only while no connection
   has been stored and only when the three credential variables are all set (VAULT-18). Changing

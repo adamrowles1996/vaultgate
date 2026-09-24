@@ -28,7 +28,7 @@ describe('GET /login', () => {
     const markup = await response.text();
     expect(response.status).toBe(200);
     expect(csrfOf(markup)).toMatch(/^[\w-]{43}$/);
-    expect(markup).toContain('name="next" value="/account"');
+    expect(markup).toContain('name="next" value="/account/agents"');
     expect(browser.cookies.has('__Host-vg_state')).toBe(true);
   });
 
@@ -194,7 +194,7 @@ describe('POST /login/verify', () => {
       next: '//evil.example/x',
     });
     expect(safeDone.headers.get('location')).toBe('/oauth/authorize/x');
-    expect(unsafeDone.headers.get('location')).toBe('/account');
+    expect(unsafeDone.headers.get('location')).toBe('/account/agents');
   });
 
   it('ID-12 refuses when the operator vanished or has no authenticator secret', async () => {

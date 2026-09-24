@@ -14,11 +14,11 @@ Every start follows the same order (spec §2.3.3):
 2. Open the SQLite database in `VAULTGATE_DATA_DIR` and apply pending migrations.
 3. If no operator account exists, mint a bootstrap token and log the setup URL once.
 4. Start the Bitwarden backend in the background, if it has credentials: the connection saved on
-   the account page wins, otherwise the three `VAULTGATE_BW_*` seed variables when all are set.
+   the Vault page wins, otherwise the three `VAULTGATE_BW_*` seed variables when all are set.
    With credentials it checks `bw --version`, logs in with the API key if the CLI is not yet
    logged in, starts `bw serve` on a loopback port, unlocks it with the master password and runs a
-   first sync; this takes a few seconds to a minute. Without any, it waits for the account page
-   (step 6 below), whose Vault connection section says so.
+   first sync; this takes a few seconds to a minute. Without any, it waits for the Vault page
+   (step 6 below), which says so.
 5. Listen on `VAULTGATE_HOST:VAULTGATE_PORT`. The listener comes up before the vault is ready;
    `/readyz` reports the difference.
 
@@ -91,13 +91,14 @@ never accepted twice. If your device clock is more than a minute out, the code i
 Submitting the form creates the account and shows **eight recovery codes**, each ten characters,
 exactly once. Store them where you keep other break-glass material, outside the vault this
 deployment fronts. Each code signs you in once in place of an authenticator code; case, spaces
-and dashes are ignored when you type one. You can generate a fresh set from the account page,
+and dashes are ignored when you type one. You can generate a fresh set on **Account & security**,
 which invalidates the old set.
 
-## 5. Sign in and the account page
+## 5. Sign in and the console
 
-Opening the bare address (`https://vault.example.com/`) takes you to the login page, or straight
-to the account page when you are already signed in.
+Opening the bare address (`https://vault.example.com/`) takes you to the login page or, when you
+are already signed in, into the console: the **Computers** page when the actions layer is on,
+otherwise **Agents**. A sign-in with no page to return to lands there too.
 
 `/login` asks for the e-mail address and password, then for a six-digit authenticator code or a
 recovery code. Failure messages are identical for an unknown e-mail address, a wrong password and
@@ -106,24 +107,34 @@ address, further attempts are delayed exponentially (1 s, 2 s, 4 s, up to 60 s);
 permanent lockout.
 
 An account created by a release before 0.1.0-rc.4 has no e-mail address yet. Its login page asks
-for the password only; once signed in, the account page asks you to confirm your password and set
-an address before anything else, and from then on login asks for e-mail address and password.
+for the password only; once signed in, the console asks you to confirm your password and set an
+address before anything else, and from then on login asks for e-mail address and password.
 
 Sessions last 12 hours (`VAULTGATE_SESSION_TTL`, 15 minutes to 7 days) and expire after an hour
-of inactivity. `/account` shows:
+of inactivity. Every page of the console has the same sidebar:
 
-- the connected OAuth clients, each with a **Disconnect** button (once the authorization server is
-  deployed, see [Connect Claude](connect-claude.md));
-- your browser sessions with start time, last activity, address and browser;
-- the **sensitive actions**: change e-mail address, change password (signs out every other
-  session), set up a new authenticator, generate new recovery codes. Each first asks you to
-  confirm your password; the confirmation lasts five minutes;
-- the **vault connection** (next section).
+- **Computers**, when the actions layer is on: the servers and APIs agents may use without seeing
+  a password; see [Actions](actions.md).
+- **Agents**: the connected OAuth clients, each with a **Disconnect** button (once the
+  authorization server is deployed, see [Connect Claude](connect-claude.md)) and, with the
+  actions layer on, which agent may use which computer.
+- **Activity**: the audit log export and, with the actions layer on, the latest calls and the
+  unexpected writes.
+- **Vault**: the vault connection (next section). The foot of the sidebar shows the vault's state
+  on every page.
+- **Account & security**, under your address at the foot of the sidebar: your browser sessions
+  with start time, last activity, address and browser, and the **sensitive actions**: change
+  e-mail address, change password (signs out every other session), set up a new authenticator,
+  generate new recovery codes.
+
+Every change asks you to confirm your password first; the confirmation lasts five minutes, and
+the top bar shows how long it has left. A page whose forms need it offers **Unlock editing**,
+which asks for the password and brings you back to the same page.
 
 ## 6. Connect the vault
 
 The recovery-codes page ends with a **Connect the vault** link when nothing is connected yet;
-it is the **Vault connection** section of the account page. It always shows the state: whether
+it is the console's **Vault** page (`/account/vault`). It always shows the state: whether
 credentials are configured and where they came from, the server, the masked account e-mail once
 `bw serve` is up, whether the vault is ready, and the last sync. To change anything, confirm your
 password first (the same five-minute confirmation as the other sensitive actions), then fill in:
@@ -148,7 +159,7 @@ master password or the API key on its own without a restart.
 The second way is to seed the first boot from the environment: set all three of
 `VAULTGATE_BW_CLIENT_ID`, `VAULTGATE_BW_CLIENT_SECRET` and `VAULTGATE_BW_PASSWORD` (and
 `VAULTGATE_BW_SERVER` if needed) before the first start, as the install guides describe. The
-account page shows such a connection as _seeded from the environment_. It keeps working until you
+Vault page shows such a connection as _seeded from the environment_. It keeps working until you
 save the form, after which the stored connection is the one that counts and the variables are
 ignored; a partial set of the three is logged and ignored.
 
@@ -158,7 +169,7 @@ Two things, together:
 
 - **`VAULTGATE_SECRET_KEY`** (or the file it points at; on a Debian or Ubuntu install the `_FILE`
   secrets live in `/etc/vaultgate/secrets/`, owned by the `vaultgate` user). It encrypts the stored TOTP secret and the
-  vault connection saved on the account page. Without it the database still opens and every token
+  vault connection saved on the Vault page. Without it the database still opens and every token
   and session still works, but the authenticator cannot be verified (you would sign in with a
   recovery code and enrol a new one) and the vault connection has to be entered again.
 - **The database**, `vaultgate.sqlite` in `VAULTGATE_DATA_DIR` (`/data` in the container,
@@ -187,11 +198,11 @@ Two unauthenticated probes, neither revealing a version or configuration:
 The vault detail is not public. With your operator session cookie (a browser that is signed in,
 or `curl -b` with it) `/readyz` also carries `vault`: `configured` is `false` while nothing is
 connected, and `lastSyncAt` is the time of the last successful sync since start-up, or `null`
-before the first one; a failed sync does not change `ready`. The account page's Vault connection
-section shows the same.
+before the first one; a failed sync does not change `ready`. The console's Vault page shows
+the same, and the foot of its sidebar shows the state on every page.
 
 While `vault` is failing, MCP tool calls return the error code `vault_unavailable` rather than a
-result. The vault does not need to be ready for the setup, login and account pages.
+result. The vault does not need to be ready for the setup, login and console pages.
 
 ### When `vault` keeps failing
 
@@ -206,7 +217,7 @@ is retrying. Look for these lines:
 | `bw serve is still settling; retrying unlock`         | Debug level. A freshly started `bw serve` answered `/unlock` with something other than its JSON envelope; the unlock is retried every 250 ms for up to 10 s before it counts as a failure.       |
 | `vault backend unavailable`                           | The same, at `error` level after ten consecutive failures.                                                                                                                                       |
 | `logging in to bitwarden with the api key`            | The CLI reported `unauthenticated`, so `bw login --apikey` runs (after `bw config server` when the connection names a server, or to reset a reused directory to the default).                    |
-| `vault reconfigured` / `vault reconfiguration failed` | The account page changed the connection: the new generation is ready, or it failed (`err` says why) and the previous connection is back.                                                         |
+| `vault reconfigured` / `vault reconfiguration failed` | The Vault page changed the connection: the new generation is ready, or it failed (`err` says why) and the previous connection is back.                                                           |
 | `initial vault sync failed`                           | Login and unlock worked but the first sync did not. Readiness is unaffected; reads serve from the cached vault and the sync is retried on the schedule.                                          |
 | `vault synced`                                        | A sync succeeded; `kind` says whether it was the `initial` or a `scheduled` one and `durationMs` how long it took.                                                                               |
 | `vault sync failed`                                   | A scheduled sync failed; `err` says why. Readiness is unaffected and the next sync runs on schedule.                                                                                             |
@@ -216,7 +227,7 @@ is retrying. Look for these lines:
 
 Typical causes: the wrong server for an EU or self-hosted account, a client secret that was
 pasted with a trailing space, a master password that has since been changed, or a Vaultwarden
-account that does not yet exist. All of them are fixed from the account page's vault connection
+account that does not yet exist. All of them are fixed from the Vault page's connection form
 (section 6) without a restart; rotating the master password in Bitwarden means entering the new
 one there and leaving the client secret blank.
 

@@ -2,12 +2,13 @@ import { Hono } from 'hono';
 import { requestId } from 'hono/request-id';
 
 import {
-  type AccountSectionRenderer,
   type ConnectedClientsRenderer,
+  type ConsoleSections,
   createGuards,
   createIdentity,
   type Guards,
   type Identity,
+  type NavigationProvider,
 } from '../identity/index.ts';
 import { createIdentityStores, type IdentityStores } from '../identity/repositories/index.ts';
 
@@ -71,9 +72,17 @@ export interface HarnessOptions {
   */
   readonly connectedClients?: ConnectedClientsRenderer;
   /**
-  Further account-page sections (the actions targets, ACT-5).
+  The sections the actions layer adds to the Agents and Activity pages (ACT-5).
   */
-  readonly accountSections?: readonly AccountSectionRenderer[];
+  readonly sections?: ConsoleSections | undefined;
+  /**
+  The actions layer's Computers entry of the console navigation (ACT-5).
+  */
+  readonly navigation?: NavigationProvider | undefined;
+  /**
+  Where `/` leads once signed in (ID-23); the Agents page by default.
+  */
+  readonly homePath?: string | undefined;
   /**
   The vault as the account page sees it; a fresh unconfigured fake by default.
   */
@@ -153,7 +162,9 @@ export function createHarness(options: HarnessOptions = {}): Harness {
     guards,
     passwordParameters: FAST_SCRYPT,
     connectedClients: options.connectedClients,
-    accountSections: options.accountSections,
+    sections: options.sections,
+    navigation: options.navigation,
+    homePath: options.homePath,
     vaultConnection: vault,
   });
   const app = new Hono<IdentityEnvironment>();
@@ -262,4 +273,13 @@ export async function signIn(harness: Harness, code: string, next?: string): Pro
   await browser.submit('/login', { csrf, ...emailField, password: PASSWORD, ...nextField });
   await browser.submit('/login/verify', { csrf, code, ...nextField });
   return browser;
+}
+
+/**
+ * Markup with the template's line breaks inside tags and between them taken
+ * out, so a test can look for `<span title="x">y</span>` however the
+ * formatter wrapped the source that drew it.
+ */
+export function compact(markup: string): string {
+  return markup.replaceAll(/[ \t]*\n\s*>/g, '>').replaceAll(/>[ \t]*\n\s*</g, '><');
 }

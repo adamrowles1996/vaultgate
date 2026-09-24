@@ -72,10 +72,18 @@ export function createPagesHarness(options: PagesHarnessOptions = {}): PagesHarn
           pageHeaders: (context, next) => identity.identity.pageHeaders(context, next),
           listClients: () => clients,
           switches: { allowAnyCommand: isAnyCommandAllowed },
+          renderConsole: (session, page) => identity.identity.renderConsole(session, page),
+          consoleAccess: (context) => identity.identity.consoleAccess(context),
+          now: () => identity.now(),
         });
   const identity = createIdentityHarness({
     database,
-    accountSections: pages === undefined ? [] : [pages.section],
+    sections:
+      pages === undefined
+        ? {}
+        : { agents: [pages.agentsSection], activity: [pages.activitySection] },
+    navigation: pages?.navigation,
+    homePath: pages === undefined ? undefined : '/account/actions',
   });
   const app = createTestApp({ identity: identity.identity, actionsPages: pages?.routes });
   return {

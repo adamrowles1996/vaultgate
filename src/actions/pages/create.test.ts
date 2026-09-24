@@ -65,16 +65,16 @@ describe('GET /account/actions/new', () => {
     const { browser } = await signedInOperator(harness, false);
     const before = await browser.get('/account/actions/new?connector=http');
     const beforeMarkup = await before.text();
-    expect(beforeMarkup).toContain('<title>New http target · vaultgate</title>');
+    expect(beforeMarkup).toContain('<title>Add HTTP API · vaultgate</title>');
     expect(beforeMarkup).toContain(
-      '<a href="/account#sensitive-actions">confirm your password</a>',
+      'href="/account/unlock?next=%2Faccount%2Factions%2Fnew%3Fconnector%3Dhttp"',
     );
     expect(beforeMarkup).not.toContain('action="/account/actions"');
     const csrf = csrfOf(await pageText(browser, '/account'));
     await browser.submit('/account/reauthenticate', { csrf, password: PASSWORD });
     const after = await browser.get('/account/actions/new?connector=http');
     const markup = await after.text();
-    expect(markup).toContain('<form method="post" action="/account/actions">');
+    expect(markup).toContain('<form method="post" action="/account/actions" class="target-form">');
     expect(markup).toContain('name="name"');
     expect(markup).toContain('pattern="[a-z0-9][a-z0-9-]{0,62}"');
     expect(markup).toContain('name="policy.confirm_writes" type="checkbox" checked');
@@ -157,9 +157,10 @@ describe('POST /account/actions', () => {
     ]);
     const page = await browser.get('/account/actions/id-1?notice=created');
     const markup = await page.text();
-    expect(markup).toContain('<p class="notice">Target created.</p>');
-    expect(markup).toContain('data-label="Value">item-login (Example Login)</td>');
-    expect(markup).toContain(
+    expect(markup).toContain('<p class="notice">Computer created.</p>');
+    expect(markup).toContain('Example Login');
+    const edit = await pageText(browser, '/account/actions/id-1/edit');
+    expect(edit).toContain(
       '<textarea name="policy.allowed_paths" rows="4">/v1/**\n/health</textarea>',
     );
   });
@@ -174,18 +175,18 @@ describe('POST /account/actions', () => {
     const cases: readonly [Record<string, string>, string][] = [
       [
         { name: 'Bad Name' },
-        '<p class="error">must be 1 to 63 lower-case letters, digits or hyphens',
+        '<p class="field-error">must be 1 to 63 lower-case letters, digits or hyphens',
       ],
       [
         { 'destination.base_url': 'ftp://crm.example.com' },
-        '<p class="error">must be an https:// (or, on an internal target, http://) URL</p>',
+        '<p class="field-error">must be an https:// (or, on an internal target, http://) URL</p>',
       ],
       [{ 'destination.base_url': 'https://private.example.com' }, '<li>destination: '],
       [
         { 'destination.base_url': 'https://home.example.com', internal: 'on' },
         'which is refused always',
       ],
-      [{ 'credential.item_id': 'item-nope' }, '<p class="error">no such item in the vault</p>'],
+      [{ 'credential.item_id': 'item-nope' }, 'field-error">no such item in the vault</p>'],
       [
         { 'credential.field': 'custom.nope' },
         '<li>credential.mapping: the item has no &quot;custom.nope&quot; field</li>',
@@ -208,10 +209,12 @@ describe('POST /account/actions', () => {
       const markup = await response.text();
       expect(response.status).toBe(400);
       expect(markup).toContain(
-        'The target was not saved; fix the problems shown against each field and try again.',
+        'The computer was not saved; fix the problems shown against each field and try again.',
       );
       expect(markup).toContain(problem);
-      expect(markup).toContain('<form method="post" action="/account/actions">');
+      expect(markup).toContain(
+        '<form method="post" action="/account/actions" class="target-form">',
+      );
     }
     const last = await browser.submit('/account/actions', {
       csrf,
@@ -224,7 +227,7 @@ describe('POST /account/actions', () => {
       internal: 'on',
     });
     const markup = await last.text();
-    expect(markup).toContain('<p class="error">must be 1 to 63 lower-case letters');
+    expect(markup).toContain('<p class="field-error">must be 1 to 63 lower-case letters');
     expect(markup).toContain('value="Bad Name"');
     expect(markup).toContain('value="nope"');
     expect(markup).toContain('<option value="header" selected>header</option>');
@@ -234,8 +237,8 @@ describe('POST /account/actions', () => {
     const empty = await browser.submit('/account/actions', { csrf, connector: 'http' });
     const emptyMarkup = await empty.text();
     expect(empty.status).toBe(400);
-    expect(emptyMarkup).toContain('<p class="error">must be 1 to 63 lower-case letters');
-    expect(emptyMarkup).toContain('<p class="error">Too small: expected string to have &gt;=1');
+    expect(emptyMarkup).toContain('<p class="field-error">must be 1 to 63 lower-case letters');
+    expect(emptyMarkup).toContain('field-error">Too small: expected string to have &gt;=1');
     expect(harness.actions.engine.targets.list()).toStrictEqual([]);
     expect(actionsAudit(harness)).toStrictEqual([]);
   });

@@ -11,8 +11,15 @@ import {
 } from '../../audit/actions-query.ts';
 
 import type { CallCursor, CallItem } from './calls.ts';
-import type { LastCall } from './section.ts';
 import type { DatabaseSync } from 'node:sqlite';
+
+/**
+A target's newest call, for the Computers page (ACT-5).
+*/
+export interface LastCall {
+  readonly at: string;
+  readonly outcome: string;
+}
 
 /**
 ACT-63: the page size of both call views; older rows are one link away.
@@ -53,7 +60,14 @@ function linkTo(call: StoredActionCall, live: ReadonlySet<string>): string | und
   return call.targetId !== undefined && live.has(call.targetId) ? call.targetId : undefined;
 }
 
-function toItem(call: StoredActionCall, live: ReadonlySet<string>): CallItem {
+/**
+Agent names by client id, for the Agent column; a client no longer connected shows its id.
+*/
+export type ClientNames = ReadonlyMap<string, string>;
+
+const NO_NAMES: ClientNames = new Map();
+
+function toItem(call: StoredActionCall, live: ReadonlySet<string>, names: ClientNames): CallItem {
   return {
     at: iso(call.at),
     targetId: linkTo(call, live),
@@ -65,22 +79,26 @@ function toItem(call: StoredActionCall, live: ReadonlySet<string>): CallItem {
     elicitation: call.elicitation,
     outputBytes: call.outputBytes,
     clientId: call.clientId,
+    clientName: names.get(call.clientId) ?? call.clientId,
     argumentsExcerpt: excerpt(call),
   };
 }
 
-function page(
-  database: DatabaseSync,
-  filter: CallFilter,
-  cursor: CallCursor | undefined,
-  live: ReadonlySet<string>,
-): CallPage {
+interface PageRequest {
+  readonly filter: CallFilter;
+  readonly cursor: CallCursor | undefined;
+  readonly live: ReadonlySet<string>;
+  readonly names: ClientNames;
+}
+
+function page(database: DatabaseSync, request: PageRequest): CallPage {
+  const { filter, cursor, live, names } = request;
   const found = listActionCalls(database, { ...ALL_TIME, limit: HISTORY_LIMIT, cursor }, filter);
-  return { calls: found.records.map((call) => toItem(call, live)), older: found.next };
+  return { calls: found.records.map((call) => toItem(call, live, names)), older: found.next };
 }
 
 /**
-The account section's "last call" column: the newest row of the target, or nothing.
+The Computers page's "last call" column: the newest row of the target, or nothing.
 */
 export function lastCall(database: DatabaseSync, targetId: string): LastCall | undefined {
   const call = listActionCalls(database, { ...ALL_TIME, limit: 1 }, { targetId }).records[0];
@@ -91,8 +109,9 @@ export function targetCalls(
   database: DatabaseSync,
   targetId: string,
   cursor?: CallCursor,
+  names: ClientNames = NO_NAMES,
 ): CallPage {
-  return page(database, { targetId }, cursor, new Set([targetId]));
+  return page(database, { filter: { targetId }, cursor, live: new Set([targetId]), names });
 }
 
 /**
@@ -104,6 +123,32 @@ export function unexpectedCalls(
   database: DatabaseSync,
   live: ReadonlySet<string>,
   cursor?: CallCursor,
+  names: ClientNames = NO_NAMES,
 ): CallPage {
-  return page(database, { unexpectedOnly: true }, cursor, live);
+  return page(database, { filter: { unexpectedOnly: true }, cursor, live, names });
+}
+
+/**
+ * ACT-63: every call across targets, newest first, for the Activity page.
+ * `live` is the targets that still exist, as for the unexpected writes.
+ */
+export function recentCalls(
+  database: DatabaseSync,
+  live: ReadonlySet<string>,
+  names: ClientNames = NO_NAMES,
+): CallPage {
+  return page(database, { filter: {}, cursor: undefined, live, names });
+}
+
+/**
+The most unexpected writes the console counts; beyond it the badge says the cap and a plus.
+*/
+export const UNEXPECTED_COUNT_CAP = 100;
+
+/**
+ACT-63: how many unexpected writes there were since `since`, counted up to the cap.
+*/
+export function countUnexpectedSince(database: DatabaseSync, since: number): number {
+  const window = { from: since, to: ALL_TIME.to, limit: UNEXPECTED_COUNT_CAP };
+  return listActionCalls(database, window, { unexpectedOnly: true }).records.length;
 }

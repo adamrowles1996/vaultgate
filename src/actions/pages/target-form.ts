@@ -4,6 +4,8 @@
  * the connector's fields from its descriptors, re-shown with every problem
  * after a rejected submission. There is no secret in any of these forms.
  */
+import { unlockPath } from '../../identity/pages/console.ts';
+import { icon } from '../../identity/pages/icons.ts';
 import {
   EMPTY,
   errorBanner,
@@ -12,6 +14,7 @@ import {
   html,
   when,
 } from '../../identity/pages/template.ts';
+import { cardHead } from '../../identity/pages/ui.ts';
 
 import { fieldErrors, renderFields } from './form-render.ts';
 import { fieldName, type FormValues } from './form-values.ts';
@@ -72,8 +75,9 @@ function nameField(view: TargetFormView): Html {
 
 function commonFields(view: TargetFormView): Html {
   const isInternal = view.values.get(INTERNAL_FIELD) === 'on';
-  return html`${when(view.isNew, () => nameField(view))}
-    ${fieldErrors(view.problems, DESCRIPTION_FIELD)}
+  return html`<section class="card">
+    ${cardHead('The computer', 'How agents know it, and whether it lives on your own network.')}
+    ${when(view.isNew, () => nameField(view))} ${fieldErrors(view.problems, DESCRIPTION_FIELD)}
     <label
       >Description
       <textarea name="${DESCRIPTION_FIELD}" rows="2" maxlength="200">
@@ -89,6 +93,12 @@ ${view.values.get(DESCRIPTION_FIELD) ?? ''}</textarea>
       Internal destination (may resolve to a private address; loopback and link-local are refused
       whatever this says)</label
     >
+  </section>`;
+}
+
+function itemField(view: TargetFormView): Html {
+  return html`<section class="card">
+    ${cardHead('Vault item', 'The Bitwarden item that holds the sign-in. Its fields are mapped below.')}
     ${fieldErrors(view.problems, ITEM_ID_FIELD)}
     <label
       >Vault item id
@@ -100,9 +110,10 @@ ${view.values.get(DESCRIPTION_FIELD) ?? ''}</textarea>
       />
       <small
         >The id of the vault item holding the credential; it must exist and carry every mapped
-        field. Its name is shown once the target is saved.</small
+        field. Its name is shown once the computer is saved.</small
       >
-    </label>`;
+    </label>
+  </section>`;
 }
 
 /**
@@ -115,7 +126,7 @@ export function renderProblems(problems: FieldProblems): Html {
   }
   const items = problems.rest.map((problem) => html`<li>${problem}</li>`);
   return html`${errorBanner(
-    'The target was not saved; fix the problems shown against each field and try again.',
+    'The computer was not saved; fix the problems shown against each field and try again.',
   )}
   ${when(
     problems.rest.length > 0,
@@ -135,10 +146,29 @@ function connectorField(view: TargetFormView): Html {
   return when(view.isNew, () => hidden(CONNECTOR_FIELD, view.form.kind));
 }
 
+function submitRow(view: TargetFormView): Html {
+  return html`<div class="form-actions">
+    <button type="submit" class="primary">${view.submitLabel}</button>
+  </div>`;
+}
+
+/**
+ * ID-15: without a fresh confirmation the page offers the way to one instead
+ * of the form, so nothing typed is lost on the way; confirming the password
+ * comes back to `returnTo`.
+ */
+export function lockedForm(returnTo: string, what: string): Html {
+  return html`<section class="card narrow">
+    ${cardHead('Unlock editing first', `${what} needs your password, confirmed in the last five minutes.`)}
+    <p>
+      <a class="button primary" href="${unlockPath(returnTo)}">${icon('lock')}Unlock editing</a>
+    </p>
+  </section>`;
+}
+
 export function renderTargetForm(view: TargetFormView): Html {
-  return html`<form method="post" action="${view.action}">
+  return html`<form method="post" action="${view.action}" class="target-form">
     ${hidden('csrf', view.csrfToken)} ${connectorField(view)} ${commonFields(view)}
-    ${renderFields(view.form, view.values, view.problems)}
-    <button type="submit">${view.submitLabel}</button>
+    ${itemField(view)} ${renderFields(view.form, view.values, view.problems)} ${submitRow(view)}
   </form>`;
 }

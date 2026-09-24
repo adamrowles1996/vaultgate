@@ -21,18 +21,18 @@
 - **OPS-4** Both probes are unauthenticated, cacheless and reveal no version or configuration;
   to an anonymous caller `/readyz` says only which component is not ready. The vault detail
   (whether any credentials are configured, the time of the last sync) is included only for a
-  signed-in operator, who can also read it on the account page.
+  signed-in operator, who can also read it on the Vault page (ID-25).
 
 ## 10.3 Audit export
 
-- **OPS-5** The operator account page offers audit export as JSON Lines or CSV for a date range,
+- **OPS-5** The console's Activity page offers audit export as JSON Lines or CSV for a date range,
   gated by re-authentication (ID-15), of the audit events or, when the actions layer is in use,
   of the `action_calls` trail (ACT-62). The same export is available as
   `node dist/cli.js audit export --from --to [--stream audit|actions]` for scripted retention. The window is half-open
   (`from` inclusive, `to` exclusive, ISO 8601, UTC), rows are newest first, CSV follows RFC 4180
   with a header row, and the CLI opens the store read-only under the server's configuration (a
   store that was never created exports as empty). On a network filesystem the server holds the
-  exclusive lock (STORE-2), so use the account page export while it runs.
+  exclusive lock (STORE-2), so use the Activity page's export while it runs.
 
 ## 10.4 Rate limits (summary)
 
@@ -66,9 +66,9 @@
 
 | Situation                             | Action                                                                                                                                                                                                   |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A token may have leaked               | Account page → revoke the client, or `POST /oauth/revoke`. Family revocation cuts refresh too.                                                                                                           |
-| The operator password may have leaked | Account page → change password (invalidates all sessions).                                                                                                                                               |
+| A token may have leaked               | Agents → disconnect the client, or `POST /oauth/revoke`. Family revocation cuts refresh too.                                                                                                             |
+| The operator password may have leaked | Account & security → change password (invalidates all sessions).                                                                                                                                         |
 | `VAULTGATE_SECRET_KEY` leaked         | Rotate the key, restart; TOTP re-enrolment and re-entering the vault connection are required (STORE-8), tokens are unaffected. Rotate the Bitwarden API key too if the database may have leaked with it. |
-| Master password rotated in Bitwarden  | Account page → Vault connection → enter the new master password, leave the client secret blank, save (ID-25). No restart.                                                                                |
-| API key rotated in Bitwarden          | Account page → Vault connection → enter the new client id and secret, leave the master password blank, save. The CLI session is replaced (VAULT-8).                                                      |
+| Master password rotated in Bitwarden  | Vault → Vault connection → enter the new master password, leave the client secret blank, save (ID-25). No restart.                                                                                       |
+| API key rotated in Bitwarden          | Vault → Vault connection → enter the new client id and secret, leave the master password blank, save. The CLI session is replaced (VAULT-8).                                                             |
 | Compromise suspected                  | Stop the service (locks the vault), rotate the API key in Bitwarden, review the audit export.                                                                                                            |

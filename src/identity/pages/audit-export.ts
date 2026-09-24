@@ -1,4 +1,6 @@
+import { unlockPath } from './console.ts';
 import { hidden, type Html, html, when } from './template.ts';
+import { cardHead } from './ui.ts';
 
 export interface AuditExportView {
   readonly csrfToken: string;
@@ -6,7 +8,7 @@ export interface AuditExportView {
 }
 
 function exportForm(csrfToken: string): Html {
-  return html`<form method="post" action="/account/audit/export">
+  return html`<form method="post" action="/account/audit/export" class="form-row">
     ${hidden('csrf', csrfToken)}
     <label
       >From (UTC date, inclusive)
@@ -30,22 +32,29 @@ function exportForm(csrfToken: string): Html {
         <option value="actions">Action calls</option>
       </select>
     </label>
-    <button type="submit">Download</button>
+    <button type="submit" class="primary">Download</button>
   </form>`;
 }
 
 /**
- * The account page's audit export (OPS-5): the audit events or, as a second
+ * The Activity page's audit export (OPS-5): the audit events or, as a second
  * stream over the same window, the actions layer's call trail (ACT-62). Like
  * the other sensitive actions it needs a fresh password confirmation (ID-15);
  * until then the section says so instead of offering the form.
  */
 export function auditExportSection(view: AuditExportView): Html {
-  return html`<section>
-    <h3>Audit log</h3>
+  return html`<section class="card" id="audit-export">
+    ${cardHead(
+      'Audit log',
+      'Export every audit event, or every action call, for a date range as JSON Lines or CSV.',
+    )}
     ${when(
       !view.isReauthenticated,
-      () => html`<p>Confirm your password above to export the audit log.</p>`,
+      () =>
+        html`<p>
+          <a href="${unlockPath('/account/activity')}">Confirm your password</a> to export the audit
+          log.
+        </p>`,
     )}
     ${when(view.isReauthenticated, () => exportForm(view.csrfToken))}
   </section>`;

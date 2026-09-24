@@ -10,6 +10,7 @@ import {
   OPERATOR_ID,
 } from '../../test-support/actions-fixtures.ts';
 import { createPagesHarness, signedInOperator } from '../../test-support/actions-pages.ts';
+import { compact } from '../../test-support/identity-app.ts';
 
 import { parseCursor } from './calls.ts';
 
@@ -67,9 +68,9 @@ describe('GET /account/actions/:id/calls', () => {
     const target = await createHttpTarget(harness.actions);
     const { browser } = await signedInOperator(harness);
     const page = await pageMarkup(browser, `/account/actions/${target.id}`);
-    expect(page).toContain(`<a href="/account/actions/${target.id}/calls">`);
+    expect(page).toContain(`<a class="button small" href="/account/actions/${target.id}/calls">`);
     const history = await pageMarkup(browser, `/account/actions/${target.id}/calls`);
-    expect(history).toContain('<p>No calls yet.</p>');
+    expect(history).toContain('<p class="empty">No calls yet.</p>');
   });
 
   it('ACT-63 answers 404 for an unknown target and sends a visitor with no session to the login form', async () => {
@@ -104,9 +105,13 @@ describe('GET /account/actions/unexpected', () => {
     const markup = await pageMarkup(browser, '/account/actions/unexpected');
     expect(markup).toContain('<title>Unexpected writes · vaultgate</title>');
     expect(rowsOf(markup)).toHaveLength(2);
-    expect(markup).toContain('data-label="Target"><a href="/account/actions/id-1">api</a>');
-    expect(markup).toContain('data-label="Target"><a href="/account/actions/id-2">other</a>');
-    expect(markup).toContain(`data-label="Client">${CLIENT_ID}</td>`);
+    expect(markup).toContain(
+      'data-label="Computer"><a class="mono" href="/account/actions/id-1">api</a>',
+    );
+    expect(markup).toContain(
+      'data-label="Computer"><a class="mono" href="/account/actions/id-2">other</a>',
+    );
+    expect(markup).toContain(`data-label="Agent">${CLIENT_ID}</td>`);
     expect(markup).toContain('data-label="Classification">POST</td>');
     expect(markup).toContain('&quot;path&quot;:&quot;/v1/pay&quot;');
     expect(markup).toContain('This is the whole trail kept for these calls.');
@@ -144,18 +149,18 @@ describe('GET /account/actions/unexpected', () => {
     harness.actions.engine.targets.remove(target.id, OPERATOR_ID);
     const markup = await pageMarkup(browser, '/account/actions/unexpected');
     expect(rowsOf(markup)).toHaveLength(1);
-    expect(markup).toContain('data-label="Target">api</td>');
-    expect(markup).not.toContain('data-label="Target"><a');
+    expect(markup).toContain('data-label="Computer"><span class="mono">api</span></td>');
+    expect(markup).not.toContain('data-label="Computer"><a');
   });
 
-  it('ACT-5 sends a visitor with no session to the login form and links the view from the account page', async () => {
+  it('ACT-5 sends a visitor with no session to the login form and links the view from the Activity page', async () => {
     const harness = createPagesHarness();
     const anonymous = await harness.app.app.request('/account/actions/unexpected');
     expect(anonymous.status).toBe(303);
     expect(anonymous.headers.get('location')).toBe('/login?next=%2Faccount%2Factions%2Funexpected');
     const { browser } = await signedInOperator(harness);
-    expect(await pageMarkup(browser, '/account')).toContain(
-      '<a href="/account/actions/unexpected">Unexpected writes</a>',
+    expect(await pageMarkup(browser, '/account/activity')).toContain(
+      '<a class="button small" href="/account/actions/unexpected">Unexpected writes',
     );
   });
 
@@ -180,5 +185,47 @@ describe('the older-calls cursor', () => {
     expect(parseCursor('later.id-1')).toBeUndefined();
     expect(parseCursor('1700000000000.')).toBeUndefined();
     expect(parseCursor('1700000000000.id-1')).toStrictEqual({ at: 1_700_000_000_000, id: 'id-1' });
+  });
+});
+
+describe('the Activity page', () => {
+  it('ACT-63 lists the latest calls across computers and flags this week’s unexpected writes', async () => {
+    const harness = createPagesHarness();
+    await createHttpTarget(harness.actions, WRITABLE);
+    await harness.actions.engine.call(caller(), httpInvocation());
+    await harness.actions.engine.call(caller(), httpInvocation({ method: 'POST', body: 'x' }));
+    const { browser } = await signedInOperator(harness);
+    const markup = await pageMarkup(browser, '/account/activity');
+    expect(markup).toContain('<section class="card flush" id="recent-calls">');
+    const recent = markup.slice(markup.indexOf('id="recent-calls"'));
+    expect(rowsOf(recent)).toHaveLength(2);
+    expect(markup).toContain('1 this week');
+    expect(markup).toContain('id="audit-export"');
+  });
+
+  it('ACT-47 ACT-60 colours a failure red and an accepted confirmation green on a computer’s calls', async () => {
+    const harness = createPagesHarness();
+    const target = await createHttpTarget(harness.actions, {
+      policy: { allowed_methods: ['GET', 'POST'], confirm_writes: true },
+    });
+    const post = httpInvocation({ method: 'POST', body: 'x' });
+    const pending = confirmationOf(await harness.actions.engine.call(caller(), post));
+    await harness.actions.engine.call(
+      caller({
+        confirmation: {
+          requestState: pending.requestState,
+          result: { action: 'accept', content: { confirm: true } },
+        },
+      }),
+      post,
+    );
+    harness.actions.connector.behaviour.mode = 'fail';
+    harness.actions.connector.behaviour.failWith = 'connection_failed';
+    await harness.actions.engine.call(caller(), httpInvocation());
+    const { browser } = await signedInOperator(harness);
+    const markup = compact(await pageMarkup(browser, `/account/actions/${target.id}`));
+    expect(markup).toContain('<span class="tag tag-green"><svg class="icon"');
+    expect(markup).toContain('</svg>accepted</span>');
+    expect(markup).toContain('<span class="tag tag-red">error:connection_failed</span>');
   });
 });

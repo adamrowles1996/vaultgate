@@ -1,5 +1,6 @@
 import { transaction } from '../storage/query.ts';
 
+import { accountResponse, type Authenticated } from './account-response.ts';
 import {
   clearStateCookie,
   field,
@@ -10,19 +11,19 @@ import {
   readState,
   setStateCookie,
 } from './browser.ts';
+import { renderConsolePage } from './console-chrome.ts';
 import { accountSubject, ipSubject } from './login-throttle.ts';
-import { type AccountView, renderAccount, renderTotpRotation } from './pages/account.ts';
+import { renderTotpRotation } from './pages/account.ts';
+import { unlockPage } from './pages/console-pages.ts';
 import { renderRecoveryCodes } from './pages/recovery-codes.ts';
-import { EMPTY_VAULT_FORM, type VaultFormValues } from './pages/vault-connection.ts';
 import { checkPasswordPolicy, hashPassword, isCorrectPassword } from './password.ts';
-import { loginLocation } from './provider.ts';
+import { loginLocation, safeNextPath } from './provider.ts';
 import { generateRecoveryCodes, hashRecoveryCode } from './recovery-codes.ts';
 import { describeEnrolment, generateTotpSecret, verifyTotp } from './totp.ts';
 
-import type { AuditEvent } from '../audit/event.ts';
-import type { OperatorRecord } from './repositories/operators.ts';
 import type { IdentityServices } from './services.ts';
 import type { SessionState } from './session-manager.ts';
+import type { AuditEvent } from '../audit/event.ts';
 import type { Hono } from 'hono';
 
 /**
@@ -34,54 +35,14 @@ const NOTICES: Readonly<Record<string, string>> = {
   'totp-rotated': 'Your authenticator has been replaced.',
   'email-set': 'E-mail address saved. Sign in with it from now on.',
   'email-changed': 'E-mail address changed. Sign in with the new one from now on.',
-  'vault-updated': 'Vault connection saved. The backend is using it now.',
 };
+
+const ACCOUNT_PATH = '/account';
 
 /**
 Legacy mode (ID-26): until an e-mail address exists, only setting one (and confirming) is allowed.
 */
 const LEGACY_ALLOWED_PATHS = new Set(['/account/reauthenticate', '/account/email']);
-
-export interface Authenticated {
-  readonly session: SessionState;
-  readonly operator: OperatorRecord;
-}
-
-export interface AccountViewOptions {
-  readonly notice?: string | undefined;
-  readonly error?: string | undefined;
-  /**
-  The vault form as submitted, shown again with the error; secrets are never part of it.
-  */
-  readonly vaultForm?: VaultFormValues;
-}
-
-export async function accountView(
-  services: IdentityServices,
-  authenticated: Authenticated,
-  options: AccountViewOptions = {},
-): Promise<AccountView> {
-  const { session, operator } = authenticated;
-  const sessions = services.sessions.list(operator.id).map((record) => ({
-    createdAt: new Date(record.createdAt).toISOString(),
-    lastSeenAt: new Date(record.lastSeenAt).toISOString(),
-    ip: record.ip ?? 'unknown',
-    userAgent: record.userAgent ?? 'unknown',
-    isCurrent: record.idHash === session.idHash,
-  }));
-  return {
-    email: operator.email,
-    csrfToken: session.csrfToken,
-    isReauthenticated: session.isReauthenticated,
-    sessions,
-    notice: options.notice,
-    error: options.error,
-    connectedClients: services.connectedClients(session),
-    extraSections: services.accountSections.map((render) => render(session)),
-    vault: await services.vaultConnection.status(),
-    vaultForm: options.vaultForm ?? EMPTY_VAULT_FORM,
-  };
-}
 
 /**
 A signed-in operator whose form passed the ID-18 checks; otherwise the 403.
@@ -170,6 +131,26 @@ export function auditEvent(
   };
 }
 
+const REAUTHENTICATION_REFUSED = 'That password was not recognised.';
+
+/**
+A wrong password shows the form it came from again: the account page, or Unlock editing (ID-15).
+*/
+async function refusedReauthentication(
+  context: IdentityContext,
+  services: IdentityServices,
+  authenticated: Authenticated,
+  next: string,
+): Promise<Response> {
+  if (next === ACCOUNT_PATH || authenticated.operator.email === undefined) {
+    const options = { error: REAUTHENTICATION_REFUSED, status: 401 } as const;
+    return accountResponse(context, services, authenticated, options);
+  }
+  const { session } = authenticated;
+  const page = unlockPage({ csrfToken: session.csrfToken, next, error: REAUTHENTICATION_REFUSED });
+  return context.html(await renderConsolePage(services, session, page), 401);
+}
+
 async function reauthenticate(context: IdentityContext, services: IdentityServices) {
   const form = await readForm(context);
   const authenticated = requireAuthenticated(context, services, form);
@@ -177,6 +158,7 @@ async function reauthenticate(context: IdentityContext, services: IdentityServic
     return authenticated;
   }
   const { session, operator } = authenticated;
+  const next = safeNextPath(form.get('next'), ACCOUNT_PATH);
   const subjects = [ipSubject(services.guards.clientInfo(context).ip), accountSubject(operator)];
   await services.delay(services.throttle.delayFor(subjects));
   const isCorrect = await isCorrectPassword(field(form, 'password'), operator.passwordHash);
@@ -186,12 +168,11 @@ async function reauthenticate(context: IdentityContext, services: IdentityServic
       ...auditEvent(context, services, 'reauthentication.failed', operator.id),
       outcome: 'failure',
     });
-    const error = 'That password was not recognised.';
-    return context.html(renderAccount(await accountView(services, authenticated, { error })), 401);
+    return refusedReauthentication(context, services, authenticated, next);
   }
   services.sessions.markReauthenticated(session.idHash);
   services.audit.record(auditEvent(context, services, 'reauthentication.succeeded', operator.id));
-  return context.redirect('/account?notice=reauthenticated', 303);
+  return context.redirect(next === ACCOUNT_PATH ? '/account?notice=reauthenticated' : next, 303);
 }
 
 async function changePassword(context: IdentityContext, services: IdentityServices) {
@@ -203,8 +184,8 @@ async function changePassword(context: IdentityContext, services: IdentityServic
   const { session, operator } = authenticated;
   const password = checkPasswordPolicy(field(form, 'password'));
   if (!password.ok) {
-    const view = await accountView(services, authenticated, { error: password.error.message });
-    return context.html(renderAccount(view), 400);
+    const options = { error: password.error.message, status: 400 } as const;
+    return accountResponse(context, services, authenticated, options);
   }
   const hash = await hashPassword(password.value, services.random, services.passwordParameters);
   services.stores.operators.updatePasswordHash(operator.id, hash, services.clock());
@@ -285,9 +266,7 @@ export function registerAccountRoutes(
     }
     const name = context.req.query('notice') ?? '';
     const notice = Object.hasOwn(NOTICES, name) ? NOTICES[name] : undefined;
-    return context.html(
-      renderAccount(await accountView(services, { session, operator }, { notice })),
-    );
+    return accountResponse(context, services, { session, operator }, { notice });
   });
   app.post('/account/reauthenticate', (context) => reauthenticate(context, services));
   app.post('/account/password', (context) => changePassword(context, services));

@@ -6,6 +6,7 @@ import {
   OTHER_CLIENT_ID,
 } from '../../test-support/actions-fixtures.ts';
 import { createPagesHarness, signedInOperator } from '../../test-support/actions-pages.ts';
+import { compact, pageText, PASSWORD } from '../../test-support/identity-app.ts';
 
 import { createClientTargets } from './client-grants.ts';
 
@@ -24,8 +25,8 @@ function auditOf(harness: PagesHarness) {
     .map((event) => ({ action: event.action, clientId: event.clientId }));
 }
 
-describe('the targets cell of the connected-clients list', () => {
-  it('ACT-9 shows the targets a client is granted with a Remove form, and offers the rest', async () => {
+describe('the computers row of an agent’s card', () => {
+  it('ACT-9 lists the computers an agent is granted, each a link to the computer', async () => {
     const harness = createPagesHarness();
     await createHttpTarget(harness.actions);
     await createHttpTarget(harness.actions, {
@@ -33,27 +34,52 @@ describe('the targets cell of the connected-clients list', () => {
       base_url: 'https://other.example.com',
       grantTo: [],
     });
-    const markup = render(harness, CLIENT_ID);
-    expect(markup).toContain('<code>api</code> (http)');
-    expect(markup).toContain(
-      `<form method="post" action="/account/actions/clients/${CLIENT_ID}/grants/revoke">`,
-    );
-    expect(markup).toContain('<input type="hidden" name="target_id" value="id-1" />');
-    expect(markup).toContain(
-      `<form method="post" action="/account/actions/clients/${CLIENT_ID}/grants">`,
-    );
-    expect(markup).toContain('<option value="id-2">other</option>');
-    expect(markup).not.toContain('<option value="id-1">');
+    const markup = compact(render(harness, CLIENT_ID));
+    expect(markup).toContain('<a class="tag mono" href="/account/actions/id-1">api</a>');
+    expect(markup).not.toContain('other');
+    expect(markup).not.toContain('<form');
   });
 
-  it('ACT-9 says so for a client with no grant and offers nothing at all until the password is confirmed', async () => {
+  it('ACT-9 says so for an agent with no grant, whether or not the password is confirmed', async () => {
     const harness = createPagesHarness();
     await createHttpTarget(harness.actions);
-    expect(render(harness, OTHER_CLIENT_ID)).toContain('<p>No target.</p>');
-    const unconfirmed = render(harness, CLIENT_ID, UNCONFIRMED);
-    expect(unconfirmed).toContain('<code>api</code> (http)');
-    expect(unconfirmed).not.toContain('<form');
-    expect(render(harness, CLIENT_ID)).not.toContain('<select');
+    expect(render(harness, OTHER_CLIENT_ID)).toContain('<p class="card-note">No computer yet.</p>');
+    expect(render(harness, CLIENT_ID, UNCONFIRMED)).toContain('>api</a>');
+  });
+});
+
+describe('the Agents page’s matrix of grants', () => {
+  it('ACT-9 ID-15 draws who may use what, and turns each square into a grant or removal once the password is confirmed', async () => {
+    const harness = createPagesHarness();
+    harness.clients.push(
+      { clientId: CLIENT_ID, clientName: 'Agent One' },
+      { clientId: OTHER_CLIENT_ID, clientName: undefined },
+    );
+    await createHttpTarget(harness.actions);
+    const locked = await signedInOperator(harness, false);
+    const before = compact(await pageText(locked.browser, '/account/agents'));
+    expect(before).toContain('<section class="card flush" id="access">');
+    expect(before).toContain('<td data-label="Agent One"><span class="square is-granted"');
+    expect(before).toContain('<span class="visually-hidden">Granted</span>');
+    expect(before).toContain('<span class="visually-hidden">Not granted</span>');
+    expect(before).not.toContain('action="/account/actions/clients/');
+    await locked.browser.submit('/account/reauthenticate', {
+      csrf: locked.csrf,
+      password: PASSWORD,
+    });
+    const markup = compact(await pageText(locked.browser, '/account/agents'));
+    expect(markup).toContain(`action="/account/actions/clients/${CLIENT_ID}/grants/revoke"`);
+    expect(markup).toContain(`action="/account/actions/clients/${OTHER_CLIENT_ID}/grants"`);
+    expect(markup).toContain('<input type="hidden" name="return_to" value="agents" />');
+    expect(markup).toContain('aria-label="Remove api from Agent One"');
+    expect(markup).toContain('aria-label="Grant api to vg_c_other"');
+  });
+
+  it('ACT-9 says what is missing when there is no computer or no connected agent yet', async () => {
+    const harness = createPagesHarness();
+    const { browser } = await signedInOperator(harness);
+    const markup = await pageText(browser, '/account/agents');
+    expect(markup).toContain('Grants appear here once there is a computer and a connected agent.');
   });
 });
 
@@ -68,7 +94,7 @@ describe('POST /account/actions/clients/:clientId/grants', () => {
     });
     expect(granted.status).toBe(303);
     expect(granted.headers.get('location')).toBe(`/account/actions/${target.id}?notice=granted`);
-    expect(render(harness, CLIENT_ID)).toContain('<code>api</code>');
+    expect(render(harness, CLIENT_ID)).toContain('>api</a>');
     const revoked = await browser.submit(`/account/actions/clients/${CLIENT_ID}/grants/revoke`, {
       csrf,
       target_id: target.id,
@@ -77,8 +103,24 @@ describe('POST /account/actions/clients/:clientId/grants', () => {
     expect(revoked.headers.get('location')).toBe(
       `/account/actions/${target.id}?notice=grant-revoked`,
     );
-    expect(render(harness, CLIENT_ID)).toContain('<p>No target.</p>');
+    expect(render(harness, CLIENT_ID)).toContain('No computer yet.');
+    const fromMatrix = await browser.submit(`/account/actions/clients/${CLIENT_ID}/grants`, {
+      csrf,
+      target_id: target.id,
+      return_to: 'agents',
+    });
+    expect(fromMatrix.headers.get('location')).toBe('/account/agents?notice=granted#access');
+    const elsewhere = await browser.submit(`/account/actions/clients/${CLIENT_ID}/grants/revoke`, {
+      csrf,
+      target_id: target.id,
+      return_to: 'https://attacker.example',
+    });
+    expect(elsewhere.headers.get('location')).toBe(
+      `/account/actions/${target.id}?notice=grant-revoked`,
+    );
     expect(auditOf(harness)).toStrictEqual([
+      { action: 'grant_added', clientId: CLIENT_ID },
+      { action: 'grant_removed', clientId: CLIENT_ID },
       { action: 'grant_added', clientId: CLIENT_ID },
       { action: 'grant_removed', clientId: CLIENT_ID },
     ]);

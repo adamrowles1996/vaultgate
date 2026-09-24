@@ -155,6 +155,6 @@ export function createConsentRevokeHandler(
     }
     return revokeConsent(dependencies, session.operatorId, consentId) === undefined
       ? dependencies.guards.deny(context, 'unknown consent')
-      : context.redirect('/account', 303);
+      : context.redirect('/account/agents?notice=disconnected', 303);
   };
 }

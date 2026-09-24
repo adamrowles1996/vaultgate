@@ -29,10 +29,10 @@ export function renderRecoveryCodes(
         options.connectVault === true,
         () =>
           html`<p>
-            The vault is not connected yet. <a href="/account#vault">Connect the vault</a> from your
-            account page with your Bitwarden API key and master password.
+            The vault is not connected yet. <a href="/account/vault">Connect the vault</a> on the
+            Vault page with your Bitwarden API key and master password.
           </p>`,
       )}
-      <p><a href="/account">Continue to your account</a></p>`,
+      <p><a class="button primary" href="/">Continue to the console</a></p>`,
   );
 }

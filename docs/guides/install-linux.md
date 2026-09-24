@@ -61,7 +61,7 @@ world-readable secret file is reported as a warning at start-up. `VAULTGATE_BW_C
 a secret and has no `_FILE` form.
 
 This seeding is optional. The usual way is to leave the three Bitwarden lines commented out,
-start the service, create the operator account, and connect the vault from the account page
+start the service, create the operator account, and connect the vault on the console's Vault page
 ([First run, section 6](first-run.md#6-connect-the-vault)); the connection is stored encrypted
 in the database and takes effect without a restart. Once saved there, the environment values are
 ignored.
