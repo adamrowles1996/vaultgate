@@ -47,12 +47,20 @@ changes things without asking a person, and this week's unexpected writes, which
 cross-target review described under
 [Sessions, calls and the audit trail](#sessions-calls-and-the-audit-trail).
 
-**Add computer**, at the top of the sidebar, asks what kind of computer it is, then shows that
-kind's form with its defaults filled in: a SQL Server starts on port 1433 with the SQL Server
-engine chosen, a PostgreSQL database on 5432, a Microsoft Graph target with Graph's base URL.
+**Add computer**, at the top of the sidebar, asks what kind of computer it is, then which vault
+item signs in there. Search by the item's name, its username or an address it holds (with nothing
+typed, the vault's first 20 items are listed), or paste an item id. Each result shows the item's
+login name, its first address and its fields, a secret field as a sealed chip bearing only its
+name. Choosing one opens that kind's form with its defaults filled in: a SQL Server starts on port
+1433 with the SQL Server engine chosen, a PostgreSQL database on 5432, a Microsoft Graph target
+with Graph's base URL. Every field that names a vault field is a list of the chosen item's
+fields with the usual one selected; one the item does not carry is flagged, and saving it would be
+refused.
+
 Clicking a computer opens its page: where it points and its open sessions, what it signs in
 with, its rules, the agents with access, its recent calls, and closing its sessions or deleting
-it. **Edit** opens the form on a page of its own.
+it. **Edit** opens the form on a page of its own, where **Choose another item** runs the same
+search.
 
 Every change (create, edit, enable, disable, delete, grant, remove a grant, close sessions) needs
 a fresh password confirmation, which lasts five minutes as for every other sensitive action; the
@@ -104,8 +112,8 @@ string or fragment (`http://` only on an internal target). Every request path th
 appended to it and must stay under it after normalisation. Saving resolves the host and checks
 every address against the private-range rule; it does not connect.
 
-**Credential mapping.** The **vault item id** (find it with `search_items` or in the Bitwarden
-web vault's URL) and how the secret is injected:
+**Credential mapping.** The vault item, chosen before the form (see [The Computers pages](#the-computers-pages)), and
+how the secret is injected:
 
 | Mode     | What is sent                                                                              | Fields                                                                                                                                                                         |
 | -------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -115,10 +123,8 @@ web vault's URL) and how the secret is injected:
 | `query`  | `<name>=<url-encoded value>` appended to the query string, after the agent's own query    | the secret field, the parameter name, an optional prefix; the policy must allow query credentials                                                                              |
 | `graph`  | A Microsoft Graph access token obtained server-side (client credentials or refresh token) | tenant id, application id, grant, scope, the client secret field and, for the refresh grant, the refresh token field (see [Microsoft Graph targets](#microsoft-graph-targets)) |
 
-A secret field is a `get_secret` selector: `password`, `totp`, `notes`, `custom.<name>` for a
-hidden custom field, `card.number`, `card.code`, `identity.<field>` or `sshKey.privateKey`. Saving
-checks that the item exists and carries every mapped field (through the vault's metadata; no
-secret is read), and the target's page then shows the item's name beside its id.
+Each field is picked from the chosen item's own fields, a secret one
+by its name with "secret" beside it and never its value. If the item cannot be read, the form falls back to typing a `get_secret` selector: `password`, `totp`, `notes`, `custom.<name>` for a hidden custom field, `card.number`, `card.code`, `identity.<field>` or `sshKey.privateKey`. Saving checks that the item exists and carries every mapped field (through the vault's metadata; no secret is read), and the target's page then shows the item's name beside its id.
 
 Nothing in these forms is a secret: the row holds the item id and field _names_. The vault
 stays the only secret store.
@@ -198,9 +204,7 @@ carries it too. Any other answer from the token endpoint is `upstream_error` wit
 
 A target's vault item must be one vaultgate has already synced. The vault is synced on the
 interval `VAULTGATE_BW_SYNC_INTERVAL` sets (15 minutes by default), so an item created in the
-vault moments earlier is not yet visible and saving the target is refused with
-`credential.item_id: no such item in the vault`. Wait for the next sync, which the log records as
-`vault synced`, and save again.
+vault moments earlier is not yet listed by the item search, and saving a target that names it is refused with `credential.item_id: no such item in the vault`. Press **Sync now** on the Vault page, or wait for the next sync (the log records either as `vault synced`), and try again.
 
 ## Calling an `http` target
 
@@ -314,9 +318,8 @@ target with `tls: "disable"` and accept plain transport knowingly.
 Saving resolves the host and checks every address against the private-range rule; it does not
 connect.
 
-**Credential mapping.** The vault item id, the field holding the **login name**
-(`login.username` by default) and the field holding the **password** (`password` by default).
-Both are `get_secret` selectors, so a hidden custom field (`custom.<name>`) works for either.
+**Credential mapping.** The vault item, the field holding the **login name** (`login.username`
+by default) and the field holding the **password** (`password` by default), both picked from the item's fields, so a hidden custom field works for either.
 
 **Policy.** `operations`: `read` alone for a reporting replica, `read` and `write` for a target
 an agent may change (a target that allows `write` must allow `read` too). Then **maximum rows**
@@ -546,7 +549,7 @@ vaultgate offers the library's modern algorithms with `ssh-rsa` (the SHA-1 signa
 removed, so a server that can only do `ssh-rsa` cannot be reached; `rsa-sha2-256` and
 `rsa-sha2-512` on the same RSA host key are fine.
 
-**Credential mapping.** The vault item id, and either a key or a password.
+**Credential mapping.** The vault item, and either a key or a password.
 
 - **key** (the better choice) reads the private key from the item's `sshKey.privateKey` — a
   Bitwarden **SSH key** item — and, when the key has one, a passphrase from a field you name
@@ -796,8 +799,8 @@ it empty for a certificate from an authority the vaultgate host trusts, fill it 
 self-signed one. A pin on a plain endpoint is refused at save, because there is no certificate for
 it to mean anything about.
 
-**Credential mapping.** The vault item id and the field holding the password (`password` unless
-you say otherwise). The login name lives in the destination, so one item can serve several
+**Credential mapping.** The vault item and the field holding the password (`password` unless you
+pick another). The login name lives in the destination, so one item can serve several
 targets.
 
 **Shell.** `powershell` (the default) sends the command as a PowerShell `-EncodedCommand`, so

@@ -1,17 +1,19 @@
 /**
  * The pages that create and edit a computer (ACT-2, ACT-5, ACT-6): first the
- * kind of computer to add, then that connector's form; after a rejected
- * submission, every problem and the submitted values again. Saving needs the
- * password confirmed within five minutes (ID-15); until then the form is
- * shown with the way to confirm it in place of the save button.
+ * kind of computer to add, then the vault item (`item-picker.ts`), then that
+ * connector's form; after a rejected submission, every problem and the
+ * submitted values again. Every step after the kind needs the password
+ * confirmed within five minutes (ID-15); outside that window a step shows the
+ * way to confirm it, which comes back to the same step, and reads nothing
+ * from the vault.
  */
 import { icon } from '../../identity/pages/icons.ts';
-import { html } from '../../identity/pages/template.ts';
+import { type Html, html } from '../../identity/pages/template.ts';
 import { pageHead } from '../../identity/pages/ui.ts';
 
 import { type ComputerKind, KINDS } from './kinds.ts';
-import { CREATE_PATH, editPath, NEW_PATH, targetPath } from './paths.ts';
-import { lockedForm, renderProblems, renderTargetForm } from './target-form.ts';
+import { CREATE_PATH, NEW_PATH, targetPath } from './paths.ts';
+import { type ChosenItem, lockedForm, renderProblems, renderTargetForm } from './target-form.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
 import type { FormValues } from './form-values.ts';
@@ -20,15 +22,78 @@ import type { ConsolePage } from '../../identity/index.ts';
 
 export interface FormPageView {
   readonly csrfToken: string;
-  readonly isReauthenticated: boolean;
   readonly problems: FieldProblems;
   readonly form: ConnectorForm;
   readonly values: FormValues;
-  readonly kind: ComputerKind;
+  readonly item: ChosenItem;
 }
 
 /**
-One kind of computer an operator can add, and the form it opens.
+What every step of one create or one edit shares: title, heading, breadcrumb, and its own address.
+*/
+export interface StepFrame {
+  readonly title: string;
+  readonly heading: string;
+  readonly crumbs: ConsolePage['crumbs'];
+  /**
+  Where Unlock editing comes back to (ID-15): this step, as it was asked for.
+  */
+  readonly returnTo: string;
+}
+
+export function createFrame(kind: ComputerKind, returnTo: string): StepFrame {
+  const { label } = KINDS[kind];
+  return {
+    title: `Add ${label}`,
+    heading: `Add ${label}`,
+    crumbs: [
+      { label: 'Computers', href: CREATE_PATH },
+      { label: 'Add computer', href: NEW_PATH },
+      { label },
+    ],
+    returnTo,
+  };
+}
+
+export function editFrame(
+  target: { readonly id: string; readonly name: string },
+  returnTo: string,
+): StepFrame {
+  return {
+    title: `Edit ${target.name}`,
+    heading: `Edit ${target.name}`,
+    crumbs: [
+      { label: 'Computers', href: CREATE_PATH },
+      { label: html`<span class="mono">${target.name}</span>`, href: targetPath(target.id) },
+      { label: 'Edit' },
+    ],
+    returnTo,
+  };
+}
+
+export function stepPage(frame: StepFrame, intro: string, body: Html): ConsolePage {
+  return {
+    title: frame.title,
+    active: 'computers',
+    crumbs: frame.crumbs,
+    body: html`${pageHead(frame.heading, intro)} ${body}`,
+    returnTo: frame.returnTo,
+  };
+}
+
+/**
+ID-15: outside the window a step offers the way to confirm the password and nothing else.
+*/
+export function lockedPage(frame: StepFrame, what: string): ConsolePage {
+  return stepPage(
+    frame,
+    'Changes to computers need your password, confirmed in the last five minutes.',
+    lockedForm(frame.returnTo, what),
+  );
+}
+
+/**
+One kind of computer an operator can add, and the step it opens.
 */
 export interface KindChoice {
   readonly kind: ComputerKind;
@@ -67,75 +132,43 @@ export function kindChooserPage(choices: readonly KindChoice[]): ConsolePage {
   };
 }
 
-export function createPage(view: FormPageView): ConsolePage {
-  const kind = KINDS[view.kind];
-  const returnTo = `${NEW_PATH}?connector=${view.form.kind}`;
-  return {
-    title: `Add ${kind.label}`,
-    active: 'computers',
-    crumbs: [
-      { label: 'Computers', href: CREATE_PATH },
-      { label: 'Add computer', href: NEW_PATH },
-      { label: kind.label },
-    ],
-    body: html`${pageHead(
-      `Add ${kind.label}`,
-      'Name it for your agents, point it at the vault item that signs in, then set what agents may do. Nothing here is a secret: vaultgate stores the item and field names only.',
-    )}
-    ${
-      view.isReauthenticated
-        ? html`${renderProblems(view.problems)}
-          ${renderTargetForm({
-            action: CREATE_PATH,
-            csrfToken: view.csrfToken,
-            form: view.form,
-            values: view.values,
-            problems: view.problems,
-            isNew: true,
-            submitLabel: 'Create computer',
-          })}`
-        : lockedForm(returnTo, 'Adding a computer')
-    }`,
-    returnTo,
-  };
+export function createPage(frame: StepFrame, view: FormPageView): ConsolePage {
+  return stepPage(
+    frame,
+    'Name it for your agents, say where it is and which of the item’s fields sign in, then set what agents may do. Nothing here is a secret: vaultgate stores the item and field names only.',
+    html`${renderProblems(view.problems)}
+    ${renderTargetForm({
+      action: CREATE_PATH,
+      csrfToken: view.csrfToken,
+      form: view.form,
+      values: view.values,
+      problems: view.problems,
+      isNew: true,
+      submitLabel: 'Create computer',
+      item: view.item,
+    })}`,
+  );
 }
 
 export interface EditPageView extends FormPageView {
   readonly targetId: string;
-  readonly targetName: string;
+  readonly kind: ComputerKind;
 }
 
-export function editPage(view: EditPageView): ConsolePage {
-  const kind = KINDS[view.kind];
-  return {
-    title: `Edit ${view.targetName}`,
-    active: 'computers',
-    crumbs: [
-      { label: 'Computers', href: CREATE_PATH },
-      {
-        label: html`<span class="mono">${view.targetName}</span>`,
-        href: targetPath(view.targetId),
-      },
-      { label: 'Edit' },
-    ],
-    body: html`${pageHead(
-      `Edit ${view.targetName}`,
-      `A ${kind.label} computer. Saving moves its revision on, so any confirmation still open for it is void.`,
-    )}
-    ${
-      view.isReauthenticated
-        ? html`${renderProblems(view.problems)}
-          ${renderTargetForm({
-            action: targetPath(view.targetId),
-            csrfToken: view.csrfToken,
-            form: view.form,
-            values: view.values,
-            problems: view.problems,
-            isNew: false,
-            submitLabel: 'Save changes',
-          })}`
-        : lockedForm(editPath(view.targetId), 'Changing a computer')
-    }`,
-    returnTo: editPath(view.targetId),
-  };
+export function editPage(frame: StepFrame, view: EditPageView): ConsolePage {
+  return stepPage(
+    frame,
+    `A ${KINDS[view.kind].label} computer. Saving moves its revision on, so any confirmation still open for it is void.`,
+    html`${renderProblems(view.problems)}
+    ${renderTargetForm({
+      action: targetPath(view.targetId),
+      csrfToken: view.csrfToken,
+      form: view.form,
+      values: view.values,
+      problems: view.problems,
+      isNew: false,
+      submitLabel: 'Save changes',
+      item: view.item,
+    })}`,
+  );
 }

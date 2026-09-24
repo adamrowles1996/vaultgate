@@ -1,15 +1,18 @@
 /**
  * Draws a connector form from its descriptors (ACT-6): one control per
  * field, grouped by document, showing the values given (a stored target, or
- * a rejected submission). No JavaScript (ID-19): a mode's own fields are
- * always drawn and their help says which mode uses them.
+ * a rejected submission). A field that names a vault field becomes a list of
+ * the chosen item's fields (ACT-4), secret ones by name only. No JavaScript
+ * (ID-19): a mode's own fields are always drawn and their help says which
+ * mode uses them.
  */
 import { EMPTY, type Html, html, when } from '../../identity/pages/template.ts';
 import { cardHead } from '../../identity/pages/ui.ts';
 
 import { fieldName, type FormValues, optionName } from './form-values.ts';
+import { type ItemField, offeredFields, pickedSelector } from './item-fields.ts';
 
-import type { ConnectorForm, DocumentName, FieldDescriptor } from './descriptors.ts';
+import type { ConnectorForm, DocumentName, FieldDescriptor, FieldPicker } from './descriptors.ts';
 import type { FieldProblems } from './messages.ts';
 
 const DOCUMENT_LABELS: Readonly<Record<DocumentName, { title: string; note: string }>> = {
@@ -47,6 +50,52 @@ function textInput(field: FieldDescriptor & { readonly kind: 'text' }, value: st
     >${field.label}
     <input name="${fieldName(field)}" value="${value}" autocomplete="off" ${required} />
     ${help(field)}
+  </label>`;
+}
+
+type PickerField = FieldDescriptor & { readonly kind: 'text'; readonly picker: FieldPicker };
+
+function pickerOption(value: string, label: string, isSelected: boolean): Html {
+  return html`<option value="${value}" ${when(isSelected, () => html`selected`)}>${label}</option>`;
+}
+
+const PICKER_HELP: Readonly<Record<FieldPicker['role'], string>> = {
+  username: 'The item’s field that holds the login name.',
+  secret:
+    'The item’s field that holds it. vaultgate reads the value at the moment of each call and never shows it.',
+};
+
+function describe(field: ItemField): string {
+  return field.isSecret ? `${field.label} · secret` : `${field.label} · ${field.value}`;
+}
+
+/**
+ * ACT-4 as the operator picks: the item's own fields, the one in use
+ * selected. A name the item does not carry stays selected and is flagged, so
+ * a save cannot quietly map a different field.
+ */
+function fieldPicker(field: PickerField, value: string, fields: readonly ItemField[]): Html {
+  const offered = offeredFields(fields, field.picker);
+  const chosen = pickedSelector(value, field.picker);
+  const isMissing = chosen !== '' && offered.every((candidate) => candidate.selector !== chosen);
+  const options = [
+    ...('optional' in field.picker ? [pickerOption('', 'None', chosen === '')] : []),
+    ...(isMissing ? [pickerOption(chosen, `${chosen} · not on this item`, true)] : []),
+    ...offered.map((candidate) =>
+      pickerOption(candidate.selector, describe(candidate), candidate.selector === chosen),
+    ),
+  ];
+  const note = isMissing
+    ? html`<small class="warn"
+        >The item has no ${chosen} field; choose the one that holds it.</small
+      >`
+    : html`<small>${PICKER_HELP[field.picker.role]}</small>`;
+  return html`<label
+    >${field.label}
+    <select name="${fieldName(field)}">
+      ${options}
+    </select>
+    ${note}
   </label>`;
 }
 
@@ -102,11 +151,17 @@ function set(field: FieldDescriptor & { readonly kind: 'set' }, values: FormValu
   </fieldset>`;
 }
 
-function control(field: FieldDescriptor, values: FormValues): Html {
+function control(
+  field: FieldDescriptor,
+  values: FormValues,
+  fields: readonly ItemField[] | undefined,
+): Html {
   const value = values.get(fieldName(field)) ?? '';
   switch (field.kind) {
     case 'text': {
-      return textInput(field, value);
+      return fields === undefined || field.picker === undefined
+        ? textInput(field, value)
+        : fieldPicker({ ...field, picker: field.picker }, value, fields);
     }
     case 'number': {
       return numberInput(field, value);
@@ -126,22 +181,31 @@ function control(field: FieldDescriptor, values: FormValues): Html {
   }
 }
 
-function renderField(field: FieldDescriptor, values: FormValues, problems: FieldProblems): Html {
-  return html`${fieldErrors(problems, fieldName(field))} ${control(field, values)}`;
+/**
+What the form is drawn from: the values shown, the problems of a rejected save, the item's fields.
+*/
+export interface FieldsView {
+  readonly values: FormValues;
+  readonly problems: FieldProblems;
+  /**
+  The chosen item's fields (ACT-4); without them a field that names one is a text box.
+  */
+  readonly itemFields: readonly ItemField[] | undefined;
+}
+
+function renderField(field: FieldDescriptor, view: FieldsView): Html {
+  return html`${fieldErrors(view.problems, fieldName(field))}
+  ${control(field, view.values, view.itemFields)}`;
 }
 
 /**
-Every field of the form, one card per document, showing `values`.
+Every field of the form, one card per document.
 */
-export function renderFields(
-  form: ConnectorForm,
-  values: FormValues,
-  problems: FieldProblems,
-): Html {
+export function renderFields(form: ConnectorForm, view: FieldsView): Html {
   const groups = DOCUMENTS.map((document) => {
     const fields = form.fields
       .filter((field) => field.document === document)
-      .map((field) => renderField(field, values, problems));
+      .map((field) => renderField(field, view));
     const { title, note } = DOCUMENT_LABELS[document];
     return html`<section class="card">
       ${cardHead(title, note)}

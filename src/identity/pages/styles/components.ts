@@ -217,6 +217,7 @@ ul.error {
 .chips {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.3rem;
 }
 .kind-tile {

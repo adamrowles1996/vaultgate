@@ -57,7 +57,13 @@ describe('Add computer', () => {
       '<a class="choice" href="/account/actions/new?connector=sql&amp;kind=mssql">',
     );
     expect(chooser).toContain('<span class="choice-title">Microsoft Graph</span>');
-    const form = compact(await pageText(browser, '/account/actions/new?connector=sql&kind=mssql'));
+    const picker = compact(
+      await pageText(browser, '/account/actions/new?connector=sql&kind=mssql'),
+    );
+    expect(picker).toContain('<title>Add SQL Server · vaultgate</title>');
+    const pick = '/account/actions/new?connector=sql&kind=mssql&item=item-login';
+    expect(picker).toContain(`href="${pick.replaceAll('&', '&amp;')}">Use this item</a>`);
+    const form = compact(await pageText(browser, pick));
     expect(form).toContain('<title>Add SQL Server · vaultgate</title>');
     expect(form).toContain('<option value="mssql" selected>mssql</option>');
     expect(form).toContain('value="1433"');

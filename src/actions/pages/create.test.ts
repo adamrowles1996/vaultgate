@@ -72,7 +72,7 @@ describe('GET /account/actions/new', () => {
     expect(beforeMarkup).not.toContain('action="/account/actions"');
     const csrf = csrfOf(await pageText(browser, '/account'));
     await browser.submit('/account/reauthenticate', { csrf, password: PASSWORD });
-    const after = await browser.get('/account/actions/new?connector=http');
+    const after = await browser.get('/account/actions/new?connector=http&item=item-login');
     const markup = await after.text();
     expect(markup).toContain('<form method="post" action="/account/actions" class="target-form">');
     expect(markup).toContain('name="name"');
@@ -96,7 +96,7 @@ describe('GET /account/actions/new', () => {
   it('ACT-2 ACT-6 posts what the rendered form carries: a submission of exactly its controls creates the target', async () => {
     const harness = createPagesHarness();
     const { browser } = await signedInOperator(harness);
-    const markup = await pageText(browser, '/account/actions/new?connector=http');
+    const markup = await pageText(browser, '/account/actions/new?connector=http&item=item-login');
     // Every control a browser would send: the hidden fields, the text inputs
     // and selects filled in, the checkboxes the page renders as checked.
     const submitted: Record<string, string> = {

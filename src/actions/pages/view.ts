@@ -46,9 +46,9 @@ export interface ActionsPagesDependencies {
   readonly targets: TargetsService;
   readonly database: DatabaseSync;
   /**
-  ACT-4: the item's name is shown once a target is saved; metadata only.
+  ACT-4: the item's name and fields, and the search that finds one; metadata only.
   */
-  readonly vault: Pick<VaultClient, 'getItem'>;
+  readonly vault: Pick<VaultClient, 'getItem' | 'searchItems'>;
   /**
   The identity module's ID-18 and ID-15 gate, injected by the composition layer (ACT-70).
   */

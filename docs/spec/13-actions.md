@@ -111,8 +111,15 @@ Design rules, in priority order:
   last call and its state. `?kind=` shows one kind, and the sidebar has an entry per kind with its
   count. What needs attention comes first: an invalid target (ACT-1), a target that writes without
   confirmation (ACT-49), and the unexpected writes of the last seven days (ACT-63). **Add
-  computer** (`GET /account/actions/new`) chooses the kind, then shows that connector's form with
-  the kind's defaults filled in (the SQL Server engine and port, for example).
+  computer** (`GET /account/actions/new`) chooses the kind, then the vault item (`?q=` searches
+  item summaries by name, username and address, at most 20 at a time, each shown with its login
+  name, first address and field names, a secret field sealed; `?item=` takes the chosen or pasted
+  id), then shows that connector's form with the kind's defaults filled in (the SQL Server engine
+  and port, for example). Every field that names a vault field (ACT-4) is offered as a list of the
+  chosen item's fields, never their secret values, with the schema's default selected; a
+  selection the item does not carry is flagged rather than replaced. The edit page's **Choose
+  another item** (`?change=item`) runs the same search. Every step after the kind reads the vault
+  only inside the ID-15 window, and only its metadata.
   `GET /account/actions/:id` is the target's page (where it points, what it signs in with, its
   rules, its grants, its recent calls, and closing its sessions or deleting it), and
   `GET /account/actions/:id/edit` edits it on a page of its own. The pages offer create, edit,
