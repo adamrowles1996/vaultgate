@@ -242,7 +242,8 @@ reason in `scripts/check-requirement-citations.mjs`, which `npm run quality` enf
 
 1. `build(docker)`: the optional `browser` Compose profile with the pinned Playwright image,
    internal network, seccomp, capability, filesystem and resource limits; the Azure template's
-   `deployBrowserSidecar` parameter and second container.
+   `deployBrowserSidecar` parameter as a separate internal-ingress Container App, never a second
+   container of vaultgate's app (ACT-92).
 2. `feat(actions)`: `playwright-core` over CDP, per-session contexts, the sign-in sequence with
    URI match and TOTP, origin interception, download and pop-up policy, snapshot and screenshot
    masking, the session registry with every close path; the six `browser_*` tools;
@@ -282,8 +283,7 @@ recorded in the pull request.
 - Actions follow-ups: `http_get` with `readOnlyHint: true`, Graph national clouds, further
   connectors only with a policy model as tight as spec 14.
 - `code` follow-ups: GitHub Enterprise Server, GitLab and Gitea or Forgejo forges, each with its
-  own archive and redirect rules (ADR 0008); revisiting the Azure placement of the `browser`
-  sidecar, which ACT-92 puts on the loopback `bw serve` shares.
+  own archive and redirect rules (ADR 0008).
 - **Kerberos for `winrm`**, the successor to the NTLM that landed in M13. Microsoft deprecated
   every version of NTLM in June 2024 and is removing it in phases: auditing today, IAKerb and a
   Local KDC in the second half of 2026, and network NTLM blocked by default — policy can still
