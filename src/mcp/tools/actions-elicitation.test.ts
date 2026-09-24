@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ACTION_ERROR_MESSAGES } from '../../actions/errors.ts';
 import {
   type ActionsApp,
+  connectLegacySdkClient,
   connectSdkClient,
   createActionsApp,
   rawCall,
@@ -225,5 +226,49 @@ describe('canaries on the wire', () => {
     ].join('\n');
     const leaked = variantsOf(CANARY.password).filter((variant) => surfaces.includes(variant));
     expect(leaked).toStrictEqual([]);
+  });
+});
+
+/**
+ * ACT-48, ACT-76 second behaviour. The 2025 wire declares elicitation once, at
+ * `initialize`; the stateless handler of MCP-1 builds a fresh server per HTTP
+ * request and never sees that message, so the declaration cannot reach the
+ * call. These tests pin what actually happens rather than what the earlier
+ * wording hoped for.
+ */
+describe('a client on the 2025 wire (ACT-48)', () => {
+  it('ACT-76 ACT-48 is refused a confirmed target with confirmation_unavailable even though it declared form elicitation at initialize', async () => {
+    const { app, token, harness } = await confirmedApp();
+    harness.vault.failWith(new VaultError('vault_unavailable', 'locked'));
+    harness.lookups.length = 0;
+    const script = scriptedElicitation([ACCEPT]);
+    const client = await connectLegacySdkClient(app, { token, elicitation: script.handler });
+    const result = await client.callTool({ name: 'http_request', arguments: POST });
+    expect(result.structuredContent).toStrictEqual({
+      error: 'confirmation_unavailable',
+      message: ACTION_ERROR_MESSAGES.confirmation_unavailable,
+    });
+    // The client offered to show a prompt and was never asked to.
+    expect(script.shown).toStrictEqual([]);
+    expect(harness.lookups).toStrictEqual([]);
+    expect(storedCalls(harness.database)).toMatchObject([
+      { outcome: 'denied:confirmation_unavailable', elicitation: 'unavailable' },
+    ]);
+    await client.close();
+  });
+
+  it('ACT-76 ACT-48 serves a read on the same target and the same wire, so only the confirmation is out of reach', async () => {
+    const { app, token, harness } = await confirmedApp();
+    const client = await connectLegacySdkClient(app, { token, elicitation: 'none' });
+    const read = await client.callTool({
+      name: 'http_request',
+      arguments: { target: 'api', method: 'GET', path: '/v1/me' },
+    });
+    expect(read.isError).toBeFalsy();
+    expect(read.structuredContent).toMatchObject({ status: 200 });
+    expect(storedCalls(harness.database)).toMatchObject([
+      { outcome: 'ok', elicitation: 'not_required', operation: 'read' },
+    ]);
+    await client.close();
   });
 });

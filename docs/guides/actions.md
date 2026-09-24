@@ -71,6 +71,12 @@ elicitation prompt, and runs only once a human ticks the box; see
 allows anything but a read, its page carries a standing note saying so, and every such call
 appears in **Unexpected writes**.
 
+The confirmation needs a client on MCP protocol revision `2026-07-28`. A client on an older
+revision is refused every non-read call on that target with `confirmation_unavailable`, and no
+fallback is possible — the older wire declares elicitation only during `initialize`, which
+vaultgate's stateless per-request handler never sees. Reads still work. If your agent's client is
+older, use one on `2026-07-28` or turn the confirmation off and review the writes here.
+
 ## Creating an `http` target
 
 Follow **Create an http target**. The form has four parts.

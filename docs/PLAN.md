@@ -223,12 +223,18 @@ wrapper as well as the dependency.
 1. `feat(actions)`: per-target call history and the "unexpected write" view, grant management
    from the connected-clients list, form validation messages for every policy field, a
    `confirm_writes` default-on for new writable targets.
-2. `feat(actions)`: the older-protocol in-band elicitation fallback (ACT-48), a confirmation
-   message rendering test per connector, and the compatibility-suite evidence of which clients
-   render form-mode elicitation (12.2).
+2. `feat(actions)`: a confirmation message rendering test per connector, the compatibility-suite
+   evidence of which clients render form-mode elicitation (12.2), and — in place of the
+   older-protocol in-band elicitation fallback this milestone originally planned — the proof that
+   the fallback is unimplementable under MCP-1 and the rewrite of ACT-48 that records why. The
+   2025 wire declares elicitation once, at `initialize`, which a stateless per-request handler
+   never sees; the SDK's own legacy shim refuses with "per-request legacy serving cannot receive
+   server-to-client requests". The `confirmation_unavailable` refusal stays, and a test drives a
+   real SDK client on the older version to pin what it actually gets.
 
-Exit: every ACT id in sections 13 and 14 up to ACT-90 is cited by a test or marked
-documentation-only; the guides (`tools-and-scopes.md`, a new `actions.md`) describe the layer.
+Exit: every ACT id in sections 13 and 14 up to ACT-90 is cited by a test or allowlisted with its
+reason in `scripts/check-requirement-citations.mjs`, which `npm run quality` enforces; the guides
+(`tools-and-scopes.md`, `actions.md`) describe the layer.
 
 ### M15 `browser` (ACT-29…33, 91…102)
 
