@@ -40,7 +40,25 @@ All notable changes to this project are documented here. The format follows
   than worked around. A signature that does not verify fails the call; an answer sent in the
   clear where the exchange requires encryption is refused rather than read.
 - `KeptConnection` in `src/net/`: one socket held across the requests of an authenticated
-  session, released when the session ends.
+  session, released when the session ends. It now also remembers the leaf certificate its peer
+  presented, which is the only place a later layer can read one.
+- **`winrm` targets on an `https://` endpoint bind their NTLM exchange to the TLS connection**
+  (spec 14 §14.6, ACT-89, threat T35). Nothing in an NTLM exchange names the channel it travels,
+  so an attacker able to terminate TLS in front of the destination could relay the handshake and
+  sign in as the operator's account elsewhere. The authenticate message now carries the RFC 5929
+  `tls-server-end-point` channel binding in `MsvAvChannelBindings`: the leaf certificate the
+  socket's peer actually presented, digested with SHA-384 or SHA-512 where the certificate is
+  signed with one and SHA-256 otherwise, marshalled into the `gss_channel_bindings_struct` and
+  MD5'd as MS-NLMP requires. Windows verifies it at its default `CbtHardeningLevel` of `Relaxed`,
+  so there is **nothing to configure on the host**. A plain `http://` endpoint has no channel to
+  bind to and sends no such attribute, which is correct — there the mitigation is that such a
+  destination must be `internal: true` (ACT-56).
+- The threat model covers the NTLM path: relay (T35), offline cracking of a captured exchange
+  (T36) and the protocol-mandated weak primitives (T37), plus an on-path attacker to a
+  destination, the MIC's dependence on the server's `MsvAvTimestamp`, and the accepted residual
+  that NTLM is weaker than Kerberos. The actions guide now says plainly that a `winrm` account
+  should be dedicated, low-privilege and given a long random password, for the same reason the
+  `ssh` guidance insists on a restricted key.
 
 ### Fixed
 

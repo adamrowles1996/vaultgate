@@ -44,7 +44,24 @@ export type PinnedTlsSocket = Duplex & GuardedSocket;
 */
 export type TlsConnect = (options: ConnectionOptions) => PinnedTlsSocket;
 
-export interface PinnedConnection {
+/**
+ * What the guard does with the certificate the peer presents: judge it, when
+ * the destination named a pin, and hand it to the caller either way — an NTLM
+ * exchange over this connection binds itself to that certificate (RFC 5929),
+ * and it can only be read here, from the socket that presented it.
+ */
+export interface CertificateGuard {
+  /**
+  ACT-57: replaces the system store, or `undefined` to leave the store in charge.
+  */
+  readonly check: CertificateCheck | undefined;
+  /**
+  `undefined` for a request that keeps no connection: its socket outlives nothing that could use one.
+  */
+  readonly record: ((certificate: Buffer) => void) | undefined;
+}
+
+export interface TlsPlan {
   /**
   ACT-55: the address the engine resolved and validated; the socket goes here.
   */
@@ -54,50 +71,68 @@ export interface PinnedConnection {
   ACT-55: the URL's host name, kept for SNI so the server picks the right certificate.
   */
   readonly servername: string;
-  readonly check: CertificateCheck;
+  readonly guard: CertificateGuard;
 }
 
 /**
- * Holds the request until the leaf certificate has been checked, and fails
- * the connection with the check's own error when it is not the pinned one.
+The pin's verdict: uncork on a match, and fail the connection with its own error otherwise.
+*/
+function judge(socket: GuardedSocket, check: CertificateCheck, raw: Buffer | undefined): void {
+  // A peer that sent no certificate has not satisfied the pin, and asking the
+  // digest of nothing would throw inside the listener, which is an uncaught
+  // exception rather than a failed call (T33).
+  const problem = raw === undefined ? missingCertificate() : check(raw);
+  if (problem === undefined) {
+    socket.uncork();
+    return;
+  }
+  socket.destroy(problem);
+}
+
+/**
+ * Records the leaf certificate the peer presents and, where the destination
+ * named a pin, holds the request corked until that certificate has passed it.
+ * An unpinned socket is never corked: the system store is verifying it, and
+ * nothing here would add to that.
  */
 export function guardCertificate<Socket extends GuardedSocket>(
   socket: Socket,
-  check: CertificateCheck,
+  guard: CertificateGuard,
 ): Socket {
-  socket.cork();
+  const { check } = guard;
+  if (check !== undefined) {
+    socket.cork();
+  }
   socket.once('secureConnect', () => {
-    // A peer that sent no certificate has not satisfied the pin, and asking
-    // the digest of nothing would throw inside this listener, which is an
-    // uncaught exception rather than a failed call (T33).
     const { raw } = socket.getPeerCertificate();
-    const problem = raw === undefined ? missingCertificate() : check(raw);
-    if (problem === undefined) {
-      socket.uncork();
-      return;
+    if (raw !== undefined) {
+      guard.record?.(raw);
     }
-    socket.destroy(problem);
+    if (check !== undefined) {
+      judge(socket, check, raw);
+    }
   });
   return socket;
 }
 
 /**
- * The `createConnection` an `https.request` uses when its destination is
- * pinned to a certificate: the socket goes to the validated address, the host
- * name is the TLS server name only, and the chain is judged by the pin rather
- * than by the system store.
+ * The `createConnection` an `https.request` uses when its destination holds
+ * its socket or pins its certificate: the socket goes to the validated
+ * address, the host name is the TLS server name only, and the chain is judged
+ * by the pin where there is one and by the system store where there is not.
  */
-export function pinnedConnection(connect: TlsConnect, plan: PinnedConnection): () => Duplex {
+export function tlsConnection(connect: TlsConnect, plan: TlsPlan): () => Duplex {
   return () =>
     guardCertificate(
       connect({
         host: plan.address,
         port: plan.port,
         servername: plan.servername,
-        // The pin is the verification (ACT-57); `guardCertificate` writes nothing until it passes.
-        rejectUnauthorized: false,
+        // A pin *is* the verification (ACT-57), and `guardCertificate` writes
+        // nothing until it passes; without one the system store verifies.
+        rejectUnauthorized: plan.guard.check === undefined,
       }),
-      plan.check,
+      plan.guard,
     );
 }
 

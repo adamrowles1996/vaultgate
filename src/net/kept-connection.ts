@@ -18,34 +18,23 @@
 import { Agent as HttpAgent } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
 
-import { pinnedConnection, type CertificateCheck, type TlsConnect } from './certificate-pin.ts';
+import { tlsConnection, type TlsPlan, type TlsConnect } from './certificate-pin.ts';
 
 import type { Agent, AgentOptions } from 'node:http';
 import type { Duplex } from 'node:stream';
 
-export interface ConnectionPlan {
-  /**
-  ACT-55: the address the engine resolved and validated; the socket goes here.
-  */
-  readonly address: string;
-  readonly port: number;
-  /**
-  ACT-55: the URL's host name, kept for SNI and for the certificate check.
-  */
-  readonly servername: string;
+export interface ConnectionPlan extends TlsPlan {
   readonly isTls: boolean;
-  /**
-  ACT-57: the pin that replaces the system store, or `undefined` to let the store verify.
-  */
-  readonly check: CertificateCheck | undefined;
 }
 
 /**
- * An agent whose sockets are the corked, pin-checked TLS connections of
+ * An agent whose sockets are the guarded TLS connections of
  * `certificate-pin.ts`. Overriding `createConnection` is the one place Node
- * consults for a custom socket once an agent is in play.
+ * consults for a custom socket once an agent is in play, and it is also how
+ * the leaf certificate becomes readable at all: the default agent hands back
+ * a response and keeps the socket to itself.
  */
-class PinnedAgent extends HttpsAgent {
+class TlsAgent extends HttpsAgent {
   readonly #open: () => Duplex;
 
   constructor(options: AgentOptions, open: () => Duplex) {
@@ -59,33 +48,39 @@ class PinnedAgent extends HttpsAgent {
 }
 
 /**
-The agent a request needs: plain, TLS verified by the system store, or TLS judged by a pin.
+The agent a request needs: plain, or a TLS socket this module opened and watched itself.
 */
 export function agentFor(connect: TlsConnect, plan: ConnectionPlan, options: AgentOptions): Agent {
-  if (!plan.isTls) {
-    return new HttpAgent(options);
-  }
-  if (plan.check === undefined) {
-    return new HttpsAgent(options);
-  }
-  return new PinnedAgent(
-    options,
-    pinnedConnection(connect, {
-      address: plan.address,
-      port: plan.port,
-      servername: plan.servername,
-      check: plan.check,
-    }),
-  );
+  return plan.isTls ? new TlsAgent(options, tlsConnection(connect, plan)) : new HttpAgent(options);
 }
 
 /**
  * One socket, held for as long as the caller needs it. The transport fills it
  * on the first request and every request after that travels the same
  * connection; `release` closes it, which is what ends an NTLM session.
+ *
+ * It also remembers the leaf certificate that connection's peer presented,
+ * because a protocol that authenticates the socket may need to bind itself to
+ * the channel it is authenticating over (RFC 5929) and no later layer can see
+ * it.
  */
 export class KeptConnection {
   #agent: Agent | undefined;
+  #certificate: Buffer | undefined;
+
+  /**
+  The peer's leaf certificate, or `undefined` while the connection is plain or unopened.
+  */
+  get certificate(): Buffer | undefined {
+    return this.#certificate;
+  }
+
+  /**
+  Called by the connection's own socket once the peer has presented a certificate.
+  */
+  record(certificate: Buffer): void {
+    this.#certificate = certificate;
+  }
 
   use(make: () => Agent): Agent {
     this.#agent ??= make();
@@ -95,5 +90,6 @@ export class KeptConnection {
   release(): void {
     this.#agent?.destroy();
     this.#agent = undefined;
+    this.#certificate = undefined;
   }
 }

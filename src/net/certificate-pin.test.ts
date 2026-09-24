@@ -6,7 +6,8 @@ import {
   certificateDigest,
   guardCertificate,
   pinnedCertificateCheck,
-  pinnedConnection,
+  tlsConnection,
+  type CertificateGuard,
   type TlsConnect,
 } from './certificate-pin.ts';
 
@@ -22,10 +23,22 @@ function accepts(): undefined {
   // Nothing to refuse.
 }
 
+/**
+Collects what the guard hands back, which is what a channel binding is computed over.
+*/
+function guard(check: CertificateGuard['check'], recorded: Buffer[] = []): CertificateGuard {
+  return {
+    check,
+    record: (certificate) => {
+      recorded.push(certificate);
+    },
+  };
+}
+
 describe('guardCertificate', () => {
   it('ACT-57 corks the socket at once and uncorks it only after the certificate passes', () => {
     const socket = fakeTlsSocket(LEAF);
-    const guarded = guardCertificate(socket, accepts);
+    const guarded = guardCertificate(socket, guard(accepts));
     expect(guarded).toBe(socket);
     expect(socket.events).toStrictEqual(['cork']);
     socket.handshake();
@@ -36,7 +49,10 @@ describe('guardCertificate', () => {
   it('ACT-57 destroys the socket with the check error and never uncorks it on a mismatch', () => {
     const socket = fakeTlsSocket(LEAF);
     const refusal = new Error('refused');
-    guardCertificate(socket, () => refusal);
+    guardCertificate(
+      socket,
+      guard(() => refusal),
+    );
     socket.handshake();
     expect(socket.events).toStrictEqual(['cork', 'secureConnect', 'destroy']);
     expect(socket.destroyedWith).toStrictEqual([refusal]);
@@ -48,7 +64,7 @@ describe('guardCertificate', () => {
     const recordingCheck = (): undefined => {
       wasChecked = true;
     };
-    guardCertificate(socket, recordingCheck);
+    guardCertificate(socket, guard(recordingCheck));
     // Asking the digest of nothing would throw here, and a throw inside a
     // socket event listener is an uncaught exception, not a failed call.
     expect(() => {
@@ -64,8 +80,42 @@ describe('guardCertificate', () => {
 
   it('ACT-57 leaves the socket corked when the handshake never completes', () => {
     const socket = fakeTlsSocket(LEAF);
-    guardCertificate(socket, accepts);
+    guardCertificate(socket, guard(accepts));
     expect(socket.events).toStrictEqual(['cork']);
+  });
+
+  it('ACT-89 hands the leaf certificate back, which is what a channel binding is taken over', () => {
+    const recorded: Buffer[] = [];
+    const socket = fakeTlsSocket(LEAF);
+    guardCertificate(socket, guard(accepts, recorded));
+    socket.handshake();
+    expect(recorded).toStrictEqual([LEAF]);
+  });
+
+  it('ACT-57 asks for no record on a connection nothing will keep', () => {
+    const socket = fakeTlsSocket(LEAF);
+    guardCertificate(socket, { check: accepts, record: undefined });
+    socket.handshake();
+    expect(socket.events).toStrictEqual(['cork', 'secureConnect', 'uncork']);
+  });
+
+  it('ACT-89 records nothing when the peer presented no certificate', () => {
+    const recorded: Buffer[] = [];
+    const socket = fakeTlsSocketWithoutCertificate();
+    guardCertificate(socket, guard(undefined, recorded));
+    socket.handshake();
+    expect(recorded).toStrictEqual([]);
+  });
+
+  it('ACT-57 never corks an unpinned socket, which the system store is already verifying', () => {
+    const recorded: Buffer[] = [];
+    const socket = fakeTlsSocket(LEAF);
+    guardCertificate(socket, guard(undefined, recorded));
+    expect(socket.events).toStrictEqual([]);
+    socket.handshake();
+    expect(socket.events).toStrictEqual(['secureConnect']);
+    expect(socket.destroyedWith).toStrictEqual([]);
+    expect(recorded).toStrictEqual([LEAF]);
   });
 });
 
@@ -90,23 +140,29 @@ describe('pinnedCertificateCheck', () => {
   });
 });
 
-describe('pinnedConnection', () => {
-  it('ACT-55 ACT-57 connects to the pinned address with the host name as the server name', () => {
-    const options: ConnectionOptions[] = [];
-    const socket = fakeTlsSocket(LEAF);
-    const connect: TlsConnect = (given) => {
+function connecting(): { readonly options: ConnectionOptions[]; readonly connect: TlsConnect } {
+  const options: ConnectionOptions[] = [];
+  return {
+    options,
+    connect: (given) => {
       options.push(given);
-      return socket;
-    };
-    const connection = pinnedConnection(connect, {
+      return fakeTlsSocket(LEAF);
+    },
+  };
+}
+
+describe('tlsConnection', () => {
+  it('ACT-55 ACT-57 connects to the pinned address with the host name as the server name', () => {
+    const { options, connect } = connecting();
+    const pin = pinnedCertificateCheck(certificateDigest(LEAF));
+    const connection = tlsConnection(connect, {
       address: '93.184.216.34',
       port: 5986,
       servername: 'win.example.com',
-      check: pinnedCertificateCheck(certificateDigest(LEAF)),
+      guard: guard(pin),
     });
     expect(options).toStrictEqual([]);
     const opened = connection();
-    expect(opened).toBe(socket);
     expect(options).toStrictEqual([
       {
         host: '93.184.216.34',
@@ -115,7 +171,24 @@ describe('pinnedConnection', () => {
         rejectUnauthorized: false,
       },
     ]);
-    socket.handshake();
-    expect(socket.events).toStrictEqual(['cork', 'secureConnect', 'uncork']);
+    expect(opened).toBeDefined();
+  });
+
+  it('ACT-57 leaves an unpinned connection to the system store', () => {
+    const { options, connect } = connecting();
+    tlsConnection(connect, {
+      address: '93.184.216.34',
+      port: 5986,
+      servername: 'win.example.com',
+      guard: guard(undefined),
+    })();
+    expect(options).toStrictEqual([
+      {
+        host: '93.184.216.34',
+        port: 5986,
+        servername: 'win.example.com',
+        rejectUnauthorized: true,
+      },
+    ]);
   });
 });

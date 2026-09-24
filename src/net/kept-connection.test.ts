@@ -1,11 +1,13 @@
 import { Agent as HttpAgent } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
+import { Readable } from 'node:stream';
 
 import { describe, expect, it } from 'vitest';
 
 import { fakeTlsSocket } from '../test-support/fake-tls-socket.ts';
 
 import { agentFor, KeptConnection, type ConnectionPlan } from './kept-connection.ts';
+import { createPinnedHttpsFetch, type RequestFunction } from './pinned-https.ts';
 
 import type { TlsConnect } from './certificate-pin.ts';
 import type { ConnectionOptions } from 'node:tls';
@@ -25,10 +27,12 @@ function plan(overrides: Partial<ConnectionPlan> = {}): ConnectionPlan {
     port: 5986,
     servername: 'win.example.com',
     isTls: true,
-    check: undefined,
+    guard: { check: undefined, record: recorded.push.bind(recorded) },
     ...overrides,
   };
 }
+
+const recorded: Buffer[] = [];
 
 describe('agentFor', () => {
   it('ACT-55 uses a plain agent for a plain endpoint and a TLS one otherwise', () => {
@@ -38,7 +42,7 @@ describe('agentFor', () => {
 
   it('ACT-57 opens the pinned socket itself, on the validated address and the URL host name', () => {
     const { connect, opened } = fakeConnect();
-    const agent = agentFor(connect, plan({ check: accepts }), {});
+    const agent = agentFor(connect, plan({ guard: { check: accepts, record: undefined } }), {});
     expect(agent.createConnection({})).toBeDefined();
     expect(opened).toStrictEqual([
       { host: PUBLIC, port: 5986, servername: 'win.example.com', rejectUnauthorized: false },
@@ -77,7 +81,50 @@ describe('KeptConnection', () => {
     expect(kept.use(() => new HttpAgent())).not.toBe(agent);
     kept.release();
   });
+
+  it('ACT-89 leaves the leaf certificate of a kept TLS connection where an exchange can bind to it', async () => {
+    const kept = new KeptConnection();
+    const leaf = Buffer.from('canary-leaf-certificate-der', 'utf8');
+    const socket = fakeTlsSocket(leaf);
+    await createPinnedHttpsFetch({ https: answering, connect: () => socket })({
+      url: 'https://win.example.com:5986/wsman',
+      address: PUBLIC,
+      method: 'GET',
+      headers: {},
+      signal: AbortSignal.timeout(4000),
+      connection: kept,
+    });
+    expect(kept.certificate).toBeUndefined();
+    // Node asks the agent for a socket when it needs one; the fake completes
+    // its handshake here, which is the moment a peer presents a certificate.
+    kept.use(() => new HttpAgent()).createConnection({});
+    socket.handshake();
+    expect(kept.certificate).toStrictEqual(leaf);
+    kept.release();
+  });
+
+  it('ACT-89 remembers the leaf certificate its socket saw and forgets it on release', () => {
+    const leaf = Buffer.from('canary-leaf-certificate-der', 'utf8');
+    const kept = new KeptConnection();
+    expect(kept.certificate).toBeUndefined();
+    kept.record(leaf);
+    expect(kept.certificate).toBe(leaf);
+    kept.release();
+    expect(kept.certificate).toBeUndefined();
+  });
 });
+
+function ignore(): void {
+  // The request is finished with as soon as the agent has been chosen.
+}
+
+/**
+A request function that answers every call with an empty 200, so the agent is all that matters.
+*/
+const answering: RequestFunction = (_url, _options, callback) => {
+  callback(Object.assign(Readable.from([]), { statusCode: 200, headers: {} }));
+  return { once: ignore, end: ignore };
+};
 
 function fakeConnect(): { connect: TlsConnect; opened: ConnectionOptions[] } {
   const opened: ConnectionOptions[] = [];

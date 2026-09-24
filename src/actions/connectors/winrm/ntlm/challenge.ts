@@ -30,6 +30,10 @@ const TIMESTAMP_BYTES = 8;
 export const AV_EOL = 0x00_00;
 export const AV_FLAGS = 0x00_06;
 export const AV_TIMESTAMP = 0x00_07;
+/**
+RFC 5929: the client adds this one; it binds the exchange to the TLS connection it travelled.
+*/
+export const AV_CHANNEL_BINDINGS = 0x00_0a;
 
 /**
 MS-NLMP 2.2.2.1: the client sets this in `MsvAvFlags` to say the third message carries a MIC.
@@ -168,12 +172,20 @@ export function withMicAnnounced(pairs: readonly AvPair[]): readonly AvPair[] {
 }
 
 /**
-The attribute list the client puts in the blob: the server's, with the MIC announced where one is due.
-*/
-export function blobAttributes(challenge: Challenge): Buffer {
-  return writeAttributes(
+ * The attribute list the client puts in the blob: the server's, with the MIC
+ * announced where one is due and the channel binding appended where there is
+ * a channel to bind to. Both are attributes MS-NLMP expects a client to add
+ * to the list it echoes; a plain `http://` connection has no channel, so the
+ * pair is omitted rather than sent empty.
+ */
+export function blobAttributes(challenge: Challenge, channelBinding: Buffer | undefined): Buffer {
+  const announced =
     challenge.timestamp === undefined
       ? challenge.attributes
-      : withMicAnnounced(challenge.attributes),
+      : withMicAnnounced(challenge.attributes);
+  return writeAttributes(
+    channelBinding === undefined
+      ? announced
+      : [...announced, { id: AV_CHANNEL_BINDINGS, value: channelBinding }],
   );
 }

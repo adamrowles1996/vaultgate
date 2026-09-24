@@ -9,7 +9,10 @@
  * so that the contract tests are a check and not an echo: only the two
  * primitives (`md4`, `rc4`), each proved against its own specification's test
  * vectors, are shared. The NTLMv2 arithmetic itself is proved separately
- * against the worked example in MS-NLMP 4.2.4.
+ * against the worked example in MS-NLMP 4.2.4. The channel binding it demands
+ * is computed here from the certificate it was told the connection presents,
+ * by its own reading of RFC 5929, so a client that agrees with it has agreed
+ * with the specification rather than with itself.
  */
 import { createHash, createHmac } from 'node:crypto';
 
@@ -34,6 +37,47 @@ const SERVER_FLAGS =
 
 export const FAKE_SERVER_CHALLENGE = Buffer.from('0123456789abcdef', 'hex');
 export const FAKE_TIMESTAMP = Buffer.from('0011223344556677', 'hex');
+
+const AV_CHANNEL_BINDINGS = 0x00_0a;
+/**
+The blob's fixed head: version, timestamp, client challenge and a reserved word, before the attributes.
+*/
+const BLOB_ATTRIBUTES_AT = 28;
+
+/**
+ * RFC 5929 `tls-server-end-point` inside the `gss_channel_bindings_struct`,
+ * MD5'd as MS-NLMP 2.2.2.1 asks. SHA-256 is the digest for every certificate
+ * these tests use; the production reader's choice between SHA-256, SHA-384
+ * and SHA-512 is proved in `channel-binding.test.ts`.
+ */
+export function fakeChannelBinding(certificate: Buffer): Buffer {
+  const endPointData = Buffer.concat([
+    Buffer.from('tls-server-end-point:', 'ascii'),
+    createHash('sha256').update(certificate).digest(),
+  ]);
+  const head = Buffer.alloc(20);
+  head.writeUInt32LE(endPointData.length, 16);
+  return createHash('md5')
+    .update(Buffer.concat([head, endPointData]))
+    .digest();
+}
+
+/**
+The attribute list the client echoed back inside its blob, by identifier.
+*/
+function blobAttributes(blob: Buffer): ReadonlyMap<number, Buffer> {
+  const pairs = new Map<number, Buffer>();
+  for (let at = BLOB_ATTRIBUTES_AT; at + 4 <= blob.length;) {
+    const id = blob.readUInt16LE(at);
+    if (id === 0) {
+      return pairs;
+    }
+    const length = blob.readUInt16LE(at + 2);
+    pairs.set(id, blob.subarray(at + 4, at + 4 + length));
+    at += 4 + length;
+  }
+  return pairs;
+}
 
 function hmac(key: Buffer, data: Buffer): Buffer {
   return createHmac('md5', key).update(data).digest();
@@ -69,6 +113,13 @@ export interface FakeNtlmOptions {
   Flags the destination answers with, for the downgrade cases; the supported set by default.
   */
   readonly flags?: number;
+  /**
+   * The leaf certificate this destination presents on its TLS connection. Set
+   * it and the destination insists on the matching RFC 5929 channel binding,
+   * the way a Windows host with `CbtHardeningLevel = Strict` does; leave it
+   * out and it is a plain listener, which has no channel to bind to.
+   */
+  readonly channelBinding?: Buffer;
 }
 
 /**
@@ -133,9 +184,24 @@ export class FakeNtlm {
   readonly #options: FakeNtlmOptions;
   #negotiate: Buffer = Buffer.alloc(0);
   #challenge: Buffer = Buffer.alloc(0);
+  #channelBinding: Buffer | undefined;
 
   constructor(options: FakeNtlmOptions) {
     this.#options = options;
+  }
+
+  /**
+   * Whether the client bound its exchange to this destination's own
+   * certificate. A destination that presents none accepts a client that sends
+   * none, exactly as `CbtHardeningLevel = Relaxed` does.
+   */
+  #verifyChannelBinding(blob: Buffer): boolean {
+    this.#channelBinding = blobAttributes(blob).get(AV_CHANNEL_BINDINGS);
+    const { channelBinding } = this.#options;
+    return (
+      channelBinding === undefined ||
+      this.#channelBinding?.equals(fakeChannelBinding(channelBinding)) === true
+    );
   }
 
   #verifyMic(authenticate: Buffer, exported: Buffer): void {
@@ -153,6 +219,13 @@ export class FakeNtlm {
   #flags(): number {
     const offered = this.#options.flags ?? SERVER_FLAGS;
     return this.#options.keyExchange === false ? offered & ~KEY_EXCHANGE : offered;
+  }
+
+  /**
+  What the client actually sent as `MsvAvChannelBindings`, for a test that asserts its absence.
+  */
+  get channelBinding(): Buffer | undefined {
+    return this.#channelBinding;
   }
 
   /**
@@ -198,6 +271,9 @@ export class FakeNtlm {
     const proof = nt.subarray(0, 16);
     const blob = nt.subarray(16);
     if (!hmac(key, Buffer.concat([FAKE_SERVER_CHALLENGE, blob])).equals(proof)) {
+      return undefined;
+    }
+    if (!this.#verifyChannelBinding(blob)) {
       return undefined;
     }
     const base = hmac(key, proof);

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { FakeNtlm } from '../../../../test-support/fake-ntlm.ts';
 
 import { authenticateMessage } from './authenticate.ts';
-import { parseChallenge } from './challenge.ts';
+import { AV_CHANNEL_BINDINGS, parseChallenge, readAttributes } from './challenge.ts';
 import { FLAG, NEGOTIATE_FLAGS, NTLM_SIGNATURE } from './flags.ts';
 import { negotiateMessage } from './negotiate.ts';
 
@@ -22,7 +22,7 @@ interface Exchange {
 }
 
 function exchange(
-  options: { timestamped?: boolean; keyExchange?: boolean } = {},
+  options: { timestamped?: boolean; keyExchange?: boolean; channelBinding?: Buffer } = {},
   login = String.raw`DOMAIN\vaultgate`,
   password = PASSWORD,
 ): Exchange {
@@ -36,10 +36,22 @@ function exchange(
         : { username: login.slice(separator + 1), domain: login.slice(0, separator), password },
     challenge: parseChallenge(server.challenge(negotiate)),
     negotiate,
+    channelBinding: options.channelBinding,
     random,
     now: () => NOW,
   });
   return { server, negotiate, ...authentication };
+}
+
+/**
+The attribute list inside the NTLMv2 blob: past the proof, the header, the timestamp and the reserved word.
+*/
+function blobAttributesOf(message: Buffer): readonly { readonly id: number }[] {
+  const nt = message.subarray(
+    message.readUInt32LE(24),
+    message.readUInt32LE(24) + message.readUInt16LE(20),
+  );
+  return readAttributes(nt.subarray(16 + 28));
 }
 
 describe('the NTLM negotiate message', () => {
@@ -103,6 +115,17 @@ describe('the NTLM authenticate message', () => {
 
   it('ACT-89 leaves the MIC zero when the destination sent no timestamp', () => {
     expect(exchange({}).message.subarray(72, 88)).toStrictEqual(Buffer.alloc(16));
+  });
+
+  it('ACT-89 carries the channel binding in the blob when the connection had a certificate', () => {
+    const token = Buffer.alloc(16, 0x5a);
+    const bound = blobAttributesOf(exchange({ channelBinding: token }).message);
+    expect(bound.at(-1)).toStrictEqual({ id: AV_CHANNEL_BINDINGS, value: token });
+  });
+
+  it('ACT-89 carries no channel binding over a plain connection, which has no channel to bind', () => {
+    const plain = blobAttributesOf(exchange().message);
+    expect(plain.map((pair) => pair.id)).not.toContain(AV_CHANNEL_BINDINGS);
   });
 
   it('ACT-89 sends the session key sealed when key exchange is offered, and none when it is not', () => {

@@ -25,6 +25,13 @@ export interface NegotiateOptions extends FakeNtlmOptions {
   */
   readonly sealed?: boolean;
   /**
+   * The leaf certificate this destination puts on the connection, as a TLS
+   * socket would. It is recorded on the kept connection rather than handed to
+   * the connector, so a channel binding computed from it proves the connector
+   * read the certificate of the socket it was actually talking over.
+   */
+  readonly presents?: Buffer;
+  /**
   Rewrites the destination's encrypted reply, for the tampering case.
   */
   readonly tamper?: (body: Buffer) => Buffer;
@@ -40,6 +47,10 @@ export interface FakeNegotiate {
   What the destination received as plaintext SOAP, in order.
   */
   readonly plaintext: string[];
+  /**
+  The `MsvAvChannelBindings` the connector sent, or `undefined` when it sent none.
+  */
+  channelBinding(): Buffer | undefined;
 }
 
 function unwrap(body: Buffer, security: FakeSecurity): string {
@@ -120,6 +131,9 @@ export function negotiating(inner: FakeWsman, options: NegotiateOptions): FakeNe
   let security: FakeSecurity | undefined;
   const transport: PinnedFetch = async (request) => {
     connections.push(request.connection);
+    if (options.presents !== undefined) {
+      request.connection?.record(options.presents);
+    }
     const authorization = request.headers['authorization'];
     if (authorization?.startsWith(NEGOTIATE) === true) {
       const token = Buffer.from(authorization.slice(NEGOTIATE.length), 'base64');
@@ -137,5 +151,5 @@ export function negotiating(inner: FakeWsman, options: NegotiateOptions): FakeNe
     plaintext.push(soap);
     return answer(inner, { request, soap }, security, options);
   };
-  return { transport, connections, plaintext };
+  return { transport, connections, plaintext, channelBinding: () => server.channelBinding };
 }
