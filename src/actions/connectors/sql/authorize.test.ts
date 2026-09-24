@@ -119,6 +119,26 @@ describe('the sql policy decision for sql_execute', () => {
     ).toStrictEqual({ allowed: true, operation: 'write', class: 'ddl' });
   });
 
+  it('ACT-36 ACT-34 a bare carriage return does not smuggle a second statement past the classifier or the allowlist', () => {
+    const smuggled = 'DELETE FROM sessions WHERE id = 1 --\r; DROP TABLE customers';
+    expect(decide(SQL_EXECUTE_TOOL, smuggled, WRITES)).toStrictEqual({
+      allowed: false,
+      reason: 'statement_count',
+    });
+    expect(
+      decide(SQL_EXECUTE_TOOL, smuggled, {
+        ...WRITES,
+        statement_allowlist: ['DELETE FROM sessions WHERE *'],
+      }),
+    ).toStrictEqual({ allowed: false, reason: 'statement_count' });
+  });
+
+  it('ACT-23 refuses a statement holding a NUL byte or another control character but tab, CR and LF', () => {
+    expect(sqlOperationSchema.safeParse({ statement: 'SELECT 1\u{0} 2' }).success).toBe(false);
+    expect(sqlOperationSchema.safeParse({ statement: 'SELECT 1\u{1B}[0m' }).success).toBe(false);
+    expect(sqlOperationSchema.safeParse({ statement: 'SELECT\t1\r\n FROM t' }).success).toBe(true);
+  });
+
   it('ACT-38 a write_classes of ddl only refuses dml', () => {
     const only = { ...WRITES, write_classes: ['ddl'] };
     expect(decide(SQL_EXECUTE_TOOL, 'DELETE FROM t', only)).toStrictEqual({

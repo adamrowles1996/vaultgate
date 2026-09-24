@@ -8,6 +8,8 @@
  */
 import { z } from 'zod';
 
+import { hasControlCharacter, hasNul } from '../control-characters.ts';
+
 import type { OutputSchema } from '../../../mcp/tools/definition.ts';
 import type { ConnectorTool } from '../connector.ts';
 
@@ -19,17 +21,31 @@ const MAX_PARAMETERS = 100;
 
 export const sqlScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
+/**
+ACT-23: at most 64 KiB, never a NUL byte and never another control character but tab, CR and LF.
+*/
+function statementIssues(statement: string, context: z.RefinementCtx): void {
+  if (Buffer.byteLength(statement, 'utf8') > MAX_STATEMENT_BYTES) {
+    context.addIssue({ code: 'custom', message: 'must be at most 64 KiB' });
+  }
+  if (hasNul(statement)) {
+    context.addIssue({ code: 'custom', message: 'must not contain a NUL byte' });
+  } else if (hasControlCharacter(statement)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'must not contain a control character other than tab, carriage return or newline',
+    });
+  }
+}
+
 const statementSchema = z
   .string()
   .min(1)
-  .superRefine((statement, context) => {
-    if (Buffer.byteLength(statement, 'utf8') > MAX_STATEMENT_BYTES) {
-      context.addIssue({ code: 'custom', message: 'must be at most 64 KiB' });
-    }
-  })
+  .superRefine(statementIssues)
   .describe(
     'Exactly one SQL statement. Values go in params, never in the text: there is no ' +
-      'interpolation path. Anything after a statement separator is refused.',
+      'interpolation path. Anything after a statement separator is refused. No NUL byte and ' +
+      'no control character other than tab, carriage return and newline.',
   );
 
 const parametersSchema = z
