@@ -14,7 +14,7 @@ describe('createSecretHolder', () => {
     expect(password.equals(Buffer.alloc(7, 0))).toBe(true);
   });
 
-  it('ACT-51 redacts a value added during the call, and widens the guard band for it', () => {
+  it('ACT-51 redacts a value added during the call in text, in raw bytes and in base64, and widens the guard band for it', () => {
     const holder = createSecretHolder(
       [{ field: 'password', value: Buffer.from('short') }],
       undefined,
@@ -31,6 +31,13 @@ describe('createSecretHolder', () => {
     });
     expect(holder.scrub.buffer(Buffer.from('a-much-longer-token'), 1024).text).toBe(
       '[redacted:graph.access_token]',
+    );
+    const binary = Buffer.concat([Buffer.from([0xff]), Buffer.from('a-much-longer-token', 'utf8')]);
+    expect(holder.scrub.bytes(binary).toString('latin1')).toBe(
+      '\u{FF}[redacted:graph.access_token]',
+    );
+    expect(Buffer.from(holder.scrub.base64(binary, 1024).text, 'base64').toString('latin1')).toBe(
+      '\u{FF}[redacted:graph.access_token]',
     );
   });
 

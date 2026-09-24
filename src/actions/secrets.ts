@@ -44,7 +44,9 @@ export function createSecretHolder(
         return scrubber.guardBytes;
       },
       text: (input) => scrubber.text(input),
+      bytes: (input) => scrubber.bytes(input),
       buffer: (input, maxBytes) => scrubber.buffer(input, maxBytes),
+      base64: (input, maxBytes) => scrubber.base64(input, maxBytes),
       deep: (value) => scrubber.deep(value),
     },
     add(entry) {

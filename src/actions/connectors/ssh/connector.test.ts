@@ -40,6 +40,28 @@ describe('the ssh connector through the engine', () => {
     expect(variants.filter((variant) => everything.includes(variant))).toStrictEqual([]);
   });
 
+  it('ACT-53 ACT-51 no variant of the private key survives a stdout that is not text, at any byte offset', async () => {
+    const leaked: string[] = [];
+    for (let offset = 0; offset < 6; offset += 1) {
+      const raw = Buffer.concat([
+        Buffer.alloc(offset, 0xff),
+        bytes(CANARY.sshPrivateKey),
+        Buffer.from([0xfe, 0x80]),
+      ]);
+      const { harness } = harnessOverSsh({ answers: [{ stdout: raw, stderr: Buffer.alloc(0) }] });
+      await createSshTarget(harness);
+      const result = resultOf(await harness.engine.call(caller(SSH), sshInvocation()));
+      expect(String(result['stdout'])).toContain('[redacted:sshKey.privateKey]');
+      const everything = surfaces(harness, [result]);
+      leaked.push(
+        ...scrubVariants(CANARY.sshPrivateKey, undefined).filter((variant) =>
+          everything.includes(variant),
+        ),
+      );
+    }
+    expect(leaked).toStrictEqual([]);
+  });
+
   it('ACT-53 ACT-88 the full command of an any-command target is audited, scrubbed, even when it quotes the key', async () => {
     const command = `echo ${CANARY.sshPrivateKey} && ${'x'.repeat(5000)}`;
     const { harness } = harnessOverSsh({}, { allowAnyCommand: true });

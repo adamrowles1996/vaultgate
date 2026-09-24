@@ -19,7 +19,7 @@ import type {
   RunSupport,
 } from './connectors/connector.ts';
 import type { ResolvedCall } from './engine-resolve.ts';
-import type { InjectedEntry, Scrubber } from './scrub.ts';
+import type { CappedText, InjectedEntry, Scrubber } from './scrub.ts';
 import type { Logger } from '../logger.ts';
 import type { Lookup } from '../net/ip-ranges.ts';
 import type { SecretField, VaultClient } from '../vault/client.ts';
@@ -107,7 +107,9 @@ export async function fetchCredential(
       entries.push({ field: field.name, value: Buffer.from(fetched.value, 'utf8') });
     }
   }
-  return ok(createSecretHolder(entries, username));
+  return ok(
+    createSecretHolder(entries, username ?? schemas.basicUsername?.(documents.destination)),
+  );
 }
 
 /**
@@ -131,15 +133,33 @@ export async function pinDestination(
   return ok(pinned);
 }
 
+/**
+ * ACT-52: each captured stream scrubbed and cut at the limit; ACT-51: a stream
+ * the connector marked `base64` is scrubbed as bytes and encoded here, after
+ * the scrubber has seen it.
+ */
+function capture(
+  output: ConnectorOutput,
+  scrub: Scrubber,
+  maxBytes: number,
+): readonly (readonly [string, CappedText])[] {
+  const encoded = new Set<string>(output.base64);
+  return Object.entries(output.captured).map(
+    ([key, buffer]) =>
+      [
+        key,
+        encoded.has(key) ? scrub.base64(buffer, maxBytes) : scrub.buffer(buffer, maxBytes),
+      ] as const,
+  );
+}
+
 function assemble(
   output: ConnectorOutput,
   scrub: Scrubber,
   maxBytes: number,
   durationMs: number,
 ): RunOutput {
-  const captured = Object.entries(output.captured).map(
-    ([key, buffer]) => [key, scrub.buffer(buffer, maxBytes)] as const,
-  );
+  const captured = capture(output, scrub, maxBytes);
   const isOutputTruncated =
     output.result['truncated'] === true || captured.some(([, capped]) => capped.truncated);
   const result = scrub.deep({

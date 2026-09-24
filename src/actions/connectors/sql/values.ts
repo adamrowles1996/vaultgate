@@ -1,25 +1,33 @@
 /**
- * Result values as JSON scalars (ACT-24): dates as ISO 8601, binary as
- * base64, 64-bit integers and decimals as strings (a JSON number cannot hold
- * either without losing digits), everything else as the scalar it is. And
+ * Result values as JSON scalars (ACT-24): dates as ISO 8601, 64-bit integers
+ * and decimals as strings (a JSON number cannot hold either without losing
+ * digits), everything else as the scalar it is. Binary is the one value the
+ * driver hands over unencoded: ACT-24 renders it as base64 and the engine's
+ * scrubber does that, after it has scrubbed the bytes (ACT-51). And
  * the fit of rows into the target's row and output limits (§13.11): rows are
  * dropped whole, so a value is never cut in half and the guard band of
  * ACT-52 has nothing to catch.
  */
 export type SqlScalar = string | number | boolean | null;
 
-export type SqlRow = readonly SqlScalar[];
+/**
+ * A value as it leaves the driver. Binary stays a `Uint8Array` all the way to
+ * the engine, which scrubs its bytes and then base64-encodes it (ACT-51):
+ * base64 is positional, so encoding it here would put the credential in front
+ * of a scrub table that cannot match it.
+ */
+export type SqlValue = SqlScalar | Uint8Array;
 
-function objectScalar(value: unknown): SqlScalar {
+export type SqlRow = readonly SqlValue[];
+
+function objectScalar(value: unknown): SqlValue {
   if (value instanceof Date) {
     return value.toISOString();
   }
-  return value instanceof Uint8Array
-    ? Buffer.from(value.buffer, value.byteOffset, value.byteLength).toString('base64')
-    : JSON.stringify(value);
+  return value instanceof Uint8Array ? value : JSON.stringify(value);
 }
 
-export function toSqlScalar(value: unknown): SqlScalar {
+export function toSqlScalar(value: unknown): SqlValue {
   if (value === null || value === undefined) {
     return null;
   }
@@ -42,6 +50,23 @@ export function toSqlString(value: unknown): SqlScalar {
   return value === null || value === undefined ? null : String(toSqlScalar(value));
 }
 
+const BASE64_BLOCK = 4;
+const BASE64_BYTES_PER_BLOCK = 3;
+
+/**
+The serialised size of one row, counting a binary value as the base64 the engine will send (ACT-24).
+*/
+function rowSize(row: SqlRow): number {
+  let bytes = 0;
+  for (const value of row) {
+    bytes +=
+      value instanceof Uint8Array
+        ? Math.ceil(value.byteLength / BASE64_BYTES_PER_BLOCK) * BASE64_BLOCK + 2
+        : Buffer.byteLength(JSON.stringify(value), 'utf8');
+  }
+  return bytes + Math.max(row.length - 1, 0) + 3;
+}
+
 export interface FittedRows {
   readonly rows: readonly SqlRow[];
   readonly truncated: boolean;
@@ -60,7 +85,7 @@ export function fitRows(rows: readonly SqlRow[], maxRows: number, maxBytes: numb
   const kept: SqlRow[] = [];
   let bytes = 0;
   for (const row of rows) {
-    const size = Buffer.byteLength(JSON.stringify(row), 'utf8') + 1;
+    const size = rowSize(row);
     if (kept.length >= maxRows || bytes + size > maxBytes) {
       return { rows: kept, truncated: true, bytes };
     }
