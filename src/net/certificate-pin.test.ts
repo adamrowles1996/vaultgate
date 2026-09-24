@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fakeTlsSocket } from '../test-support/fake-tls-socket.ts';
+import { fakeTlsSocket, fakeTlsSocketWithoutCertificate } from '../test-support/fake-tls-socket.ts';
 
 import {
   certificateDigest,
@@ -40,6 +40,26 @@ describe('guardCertificate', () => {
     socket.handshake();
     expect(socket.events).toStrictEqual(['cork', 'secureConnect', 'destroy']);
     expect(socket.destroyedWith).toStrictEqual([refusal]);
+  });
+
+  it('ACT-57 T33 refuses a peer that presented no certificate instead of throwing in the listener', () => {
+    const socket = fakeTlsSocketWithoutCertificate();
+    let wasChecked = false;
+    const recordingCheck = (): undefined => {
+      wasChecked = true;
+    };
+    guardCertificate(socket, recordingCheck);
+    // Asking the digest of nothing would throw here, and a throw inside a
+    // socket event listener is an uncaught exception, not a failed call.
+    expect(() => {
+      socket.handshake();
+    }).not.toThrow();
+    expect(wasChecked).toBe(false);
+    expect(socket.events).toStrictEqual(['cork', 'secureConnect', 'destroy']);
+    expect(socket.destroyedWith[0]).toMatchObject({
+      code: 'ERR_TLS_CERT_PIN_MISMATCH',
+      message: 'the destination presented no certificate',
+    });
   });
 
   it('ACT-57 leaves the socket corked when the handshake never completes', () => {

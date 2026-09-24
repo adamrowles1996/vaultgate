@@ -28,7 +28,10 @@ export interface GuardedSocket {
   uncork(): void;
   destroy(error?: Error): void;
   once(event: 'secureConnect', listener: () => void): unknown;
-  getPeerCertificate(): { readonly raw: Buffer };
+  /**
+  Empty when the peer sent no certificate, which the guard treats as a failed check.
+  */
+  getPeerCertificate(): { readonly raw?: Buffer | undefined };
 }
 
 /**
@@ -64,7 +67,11 @@ export function guardCertificate<Socket extends GuardedSocket>(
 ): Socket {
   socket.cork();
   socket.once('secureConnect', () => {
-    const problem = check(socket.getPeerCertificate().raw);
+    // A peer that sent no certificate has not satisfied the pin, and asking
+    // the digest of nothing would throw inside this listener, which is an
+    // uncaught exception rather than a failed call (T33).
+    const { raw } = socket.getPeerCertificate();
+    const problem = raw === undefined ? missingCertificate() : check(raw);
     if (problem === undefined) {
       socket.uncork();
       return;
@@ -95,6 +102,15 @@ export function pinnedConnection(connect: TlsConnect, plan: PinnedConnection): (
 }
 
 const PIN_MISMATCH_CODE = 'ERR_TLS_CERT_PIN_MISMATCH';
+
+/**
+The pin's failure when the peer offered nothing to compare it with.
+*/
+function missingCertificate(): Error {
+  return Object.assign(new Error('the destination presented no certificate'), {
+    code: PIN_MISMATCH_CODE,
+  });
+}
 
 /**
 The SHA-256 of a DER certificate, lower-case hex, as `certificate_sha256` is written.

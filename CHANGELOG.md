@@ -6,19 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- ACT-88: a target submission naming a deployment-gated policy field is now refused and told why,
-  instead of being dropped in silence. The account page does not draw the any-command field where
-  `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` is off, so an ordinary browser never sends one; a
-  hand-made request that did was saved as an ordinary restricted target, and the same request with
-  an empty command allowlist was answered "give at least one command pattern, or set any_command",
-  advising the operator to do the very thing the deployment forbids. The switch could never be
-  defeated, so this was an honesty defect rather than a security one, but the service's own
-  refusal was unreachable on the only path that writes a target. Found by the M12 live test.
-
-## [0.1.0-rc.9] - 2026-09-24
-
 ### Added
 
 - `winrm` connector runtime and `winrm_run` (spec 14 §14.6 and spec 13 §13.6.5, M13; ACT-27,
@@ -54,6 +41,25 @@ All notable changes to this project are documented here. The format follows
   (`src/net/certificate-pin.ts`, ACT-57). Only a caller that supplies a certificate check gets the
   behaviour; the CIMD fetcher and the `http` connector are unchanged and keep verifying against
   the system store.
+- ACT-57, T33: the certificate guard treats a peer that presented no certificate as a failed
+  pin rather than asking for the digest of nothing, which would have thrown inside the socket's
+  own event listener, an uncaught exception rather than a failed call. The socket was already
+  left corked, so no credential could have reached such a peer either way.
+
+### Fixed
+
+- ACT-88: a target submission naming a deployment-gated policy field is now refused and told why,
+  instead of being dropped in silence. The account page does not draw the any-command field where
+  `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` is off, so an ordinary browser never sends one; a
+  hand-made request that did was saved as an ordinary restricted target, and the same request with
+  an empty command allowlist was answered "give at least one command pattern, or set any_command",
+  advising the operator to do the very thing the deployment forbids. The switch could never be
+  defeated, so this was an honesty defect rather than a security one, but the service's own
+  refusal was unreachable on the only path that writes a target. Found by the M12 live test.
+
+## [0.1.0-rc.9] - 2026-09-24
+
+### Added
 
 - `ssh` connector runtime and `ssh_run` (spec 14 §14.5 and spec 13 §13.6.5, M12; ACT-27, ACT-28,
   ACT-87, ACT-88): the tool is listed on a deployment with `VAULTGATE_ENABLE_ACTIONS=true` and

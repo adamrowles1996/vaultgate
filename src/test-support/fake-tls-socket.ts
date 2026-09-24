@@ -9,14 +9,17 @@ import { Duplex } from 'node:stream';
 import type { PinnedTlsSocket } from '../net/certificate-pin.ts';
 
 export class FakeTlsSocket extends Duplex implements PinnedTlsSocket {
-  readonly #certificate: Buffer;
+  /**
+  `undefined` stands for a peer that sent no certificate at all.
+  */
+  readonly #certificate: Buffer | undefined;
   /**
   `cork`, `uncork`, `secureConnect` and `destroy` in the order they happened.
   */
   readonly events: string[] = [];
   readonly destroyedWith: (Error | null | undefined)[] = [];
 
-  constructor(certificate: Buffer) {
+  constructor(certificate: Buffer | undefined) {
     super();
     this.#certificate = certificate;
   }
@@ -35,8 +38,8 @@ export class FakeTlsSocket extends Duplex implements PinnedTlsSocket {
     return this;
   }
 
-  getPeerCertificate(): { readonly raw: Buffer } {
-    return { raw: this.#certificate };
+  getPeerCertificate(): { readonly raw?: Buffer | undefined } {
+    return this.#certificate === undefined ? {} : { raw: this.#certificate };
   }
 
   /**
@@ -50,4 +53,11 @@ export class FakeTlsSocket extends Duplex implements PinnedTlsSocket {
 
 export function fakeTlsSocket(certificate: Buffer = Buffer.alloc(0)): FakeTlsSocket {
   return new FakeTlsSocket(certificate);
+}
+
+/**
+A peer that completed the handshake without presenting a certificate at all.
+*/
+export function fakeTlsSocketWithoutCertificate(): FakeTlsSocket {
+  return new FakeTlsSocket(undefined);
 }
