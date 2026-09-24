@@ -5,6 +5,7 @@ import { ActionError } from '../../errors.ts';
 import {
   faultFailure,
   messageOf,
+  reasonOf,
   runFailure,
   statusFailure,
   transportFailure,
@@ -99,5 +100,24 @@ describe('messageOf', () => {
     const long = new Error('y'.repeat(2000));
     expect(messageOf(long)).toHaveLength(1024);
     expect(messageOf('plain')).toBe('plain');
+  });
+});
+
+describe('reasonOf', () => {
+  it('ACT-53 ACT-74 reports the service\u{2019}s own words from a classified failure, and the plain message otherwise', () => {
+    expect(reasonOf(faultFailure({ subcode: 'InternalError', reason: 'shell is busy' }))).toBe(
+      'shell is busy',
+    );
+    // A code whose detail carries no message says nothing an operator could
+    // act on either way, so the fixed sentence is what is left.
+    expect(reasonOf(new ActionError('tls_error'))).toBe(
+      'the TLS certificate of the destination could not be verified',
+    );
+    expect(reasonOf(new ActionError('connection_failed', { reason: 'ECONNRESET' }))).toBe(
+      'the destination could not be reached',
+    );
+    expect(reasonOf(new Error('socket hang up'))).toBe('socket hang up');
+    const long = faultFailure({ subcode: 'x', reason: 'z'.repeat(2000) });
+    expect(reasonOf(long)).toHaveLength(1024);
   });
 });

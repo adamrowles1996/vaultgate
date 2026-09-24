@@ -42,4 +42,12 @@ describe('isValidCsrfToken', () => {
     expect(isValidCsrfToken(token.slice(1), token)).toBe(false);
     expect(isValidCsrfToken(undefined, token)).toBe(false);
   });
+
+  it('ID-18 refuses a multibyte token of the same code-unit length rather than throwing', () => {
+    const token = generateCsrfToken(fixedRandom(2));
+    const multibyte = `${'é'.repeat(token.length - 1)}x`;
+    expect(multibyte).toHaveLength(token.length);
+    expect(Buffer.byteLength(multibyte, 'utf8')).not.toBe(Buffer.byteLength(token, 'utf8'));
+    expect(isValidCsrfToken(multibyte, token)).toBe(false);
+  });
 });

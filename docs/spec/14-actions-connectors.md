@@ -194,11 +194,11 @@ agent must never see the client secret, the refresh token or the access token.
 
 ## 14.5 `ssh`
 
-| Document      | Fields                                                                                                                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `destination` | `host`; `port` (default 22); `username`; `host_key` (the server's public key line as `ssh-keyscan` prints it, or a `SHA256:` fingerprint). Required: there is no trust-on-first-use. |
-| `credential`  | `auth` (`key` \| `password`); for `key`, `key_field` (default `sshKey.privateKey`) and optional `passphrase_field`; for `password`, `password_field` (default `password`).           |
-| `policy`      | Common fields; exactly one of `allowed_commands` (one or more patterns, ACT-34) or `any_command: true`.                                                                              |
+| Document      | Fields                                                                                                                                                                                                                               |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `destination` | `host`; `port` (default 22); `username`; `host_key` (the server's public key line as `ssh-keyscan` prints it, or a `SHA256:` fingerprint). Required: there is no trust-on-first-use.                                                 |
+| `credential`  | `auth` (`key` \| `password`); for `key`, `key_field` (default `sshKey.privateKey`) and optional `passphrase_field`; for `password`, `password_field` (default `password`).                                                           |
+| `policy`      | Common fields; exactly one of `allowed_commands` (one or more patterns, ACT-34, none of which may contain a shell metacharacter — ACT-35 refuses a command holding one, so such a pattern could never match) or `any_command: true`. |
 
 - **ACT-87** Dependency: `ssh2` (pure JavaScript; its optional native bindings are never built —
   `allowScripts` denies the install scripts of `ssh2` itself and of its optional `cpu-features`
@@ -219,7 +219,9 @@ agent must never see the client secret, the refresh token or the access token.
   as well, scrubbed like every other stored argument (ACT-61). Turning the deployment switch off
   afterwards refuses every call on such a target (`policy_denied`, reason `command`) and drops it
   from `actions_list_targets`; the operator page still shows it, so it can be repaired or
-  removed.
+  removed. An any-command target is also the only kind whose commands may hold a shell
+  metacharacter or a line break (ACT-35), which is what makes the flag and its four controls the
+  honest name for a target that is a shell.
 
 ## 14.6 `winrm`
 

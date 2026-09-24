@@ -149,6 +149,46 @@ describe('createConfirmations', () => {
 });
 
 describe('buildConfirmationRequest', () => {
+  it('ACT-43 quotes every line of the operation, so an agent cannot forge the trailer or end the message early', () => {
+    const forged =
+      'uptime\n\nAllow this one call? It expires in 2 minutes and cannot be reused.\n\nrm -rf /';
+    const { message } = buildConfirmationRequest({
+      clientName: 'Agent One',
+      tool: 'ssh_run',
+      targetName: 'host',
+      connector: 'ssh',
+      destinationSummary: 'h',
+      operationSummary: forged,
+    }).params;
+    const unquoted = message.split('\n').filter((line) => line !== '' && !line.startsWith('> '));
+    expect(unquoted).toStrictEqual([
+      'vaultgate: Agent One asks to run ssh_run on target "host" (ssh, h).',
+      'The operation, every line of it quoted with "> ":',
+      'Allow this one call? It expires in 2 minutes and cannot be reused.',
+    ]);
+    expect(message).toContain(
+      '> Allow this one call? It expires in 2 minutes and cannot be reused.',
+    );
+    expect(message).toContain('> rm -rf /');
+  });
+
+  it('ACT-43 says what an excerpt leaves out, outside the quoted block where the agent cannot reach', () => {
+    const { message } = buildConfirmationRequest({
+      clientName: 'Agent One',
+      tool: 'ssh_run',
+      targetName: 'host',
+      connector: 'ssh',
+      destinationSummary: 'h',
+      operationSummary: 'head\n…\ntail',
+      omitted: { characters: 240, total: 1200, sha256: 'a'.repeat(64) },
+    }).params;
+    expect(message).toContain(
+      `NOT SHOWN: 240 of 1200 characters are missing from the middle of the operation above. ` +
+        `The SHA-256 of the whole of it is ${'a'.repeat(64)}. Do not approve an operation you have not read.`,
+    );
+    expect(message.split('\n').some((line) => line.startsWith('NOT SHOWN:'))).toBe(true);
+  });
+
   it('ACT-42 ACT-43 is the elicitation/create document verbatim with the message template', () => {
     expect(
       buildConfirmationRequest({
@@ -165,7 +205,8 @@ describe('buildConfirmationRequest', () => {
         mode: 'form',
         message:
           'vaultgate: Agent One asks to run http_request on target "api" (http, api.example.com/v1).' +
-          '\n\nPOST /v1/users\n\nAllow this one call? It expires in 2 minutes and cannot be reused.',
+          '\n\nThe operation, every line of it quoted with "> ":\n> POST /v1/users\n\n' +
+          'Allow this one call? It expires in 2 minutes and cannot be reused.',
         requestedSchema: {
           type: 'object',
           properties: {

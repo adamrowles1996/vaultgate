@@ -61,7 +61,7 @@ describe('confirmation through elicitation', () => {
         mode: 'form',
         message:
           'vaultgate: Agent One asks to run http_request on target "api" (http, api.example.com/v1).\n\n' +
-          'POST /v1/items\n\n' +
+          'The operation, every line of it quoted with "> ":\n> POST /v1/items\n\n' +
           'Allow this one call? It expires in 2 minutes and cannot be reused.',
         requestedSchema: {
           type: 'object',

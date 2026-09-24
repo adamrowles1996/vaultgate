@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { commonPolicySchema, isPatternMatch } from '../policy.ts';
 
 import { hasControlCharacter, hasNul } from './control-characters.ts';
+import { excerptOf } from './operation-summary.ts';
 
 import type { OperationDescription, OperationSchema, TargetCapabilities } from './connector.ts';
 import type { OutputSchema } from '../../mcp/tools/definition.ts';
@@ -21,8 +22,22 @@ import type { PolicyDecision, PolicyReason } from '../policy.ts';
 export const MAX_COMMAND_BYTES = 16 * 1024;
 
 const MAX_STDIN_BYTES = 64 * 1024;
-const SUMMARY_CAP = 1024;
 const LINE_BREAK = /[\n\r]/u;
+
+/**
+ * ACT-35: the characters that make a command line into a program rather than
+ * a command. `;` separates statements, `&` backgrounds and forms `&&`, `|`
+ * pipes, a backtick substitutes in a POSIX shell and escapes in PowerShell,
+ * `$` opens `$(…)` and `${…}` in both, `<` and `>` redirect, and `(`/`)` open
+ * a subshell in a POSIX shell and a sub-expression PowerShell evaluates
+ * before the command runs. An allowlist pattern cannot restrain any of them:
+ * `*` matches a run of characters, and every one of these is a character, so
+ * a single wildcard turned `journalctl --since *` into an unrestricted shell.
+ * A target that genuinely wants them is an `any_command` target, which ACT-88
+ * gates on the deployment switch, the standing warning, `unrestricted: true`
+ * and the full command in the trail.
+ */
+const SHELL_METACHARACTERS = /[;&|`$<>()]/u;
 
 /**
 ACT-27: the arguments of `ssh_run` and `winrm_run` past `target`.
@@ -92,8 +107,22 @@ export const commandPolicySchema = commonPolicySchema.extend({
 export type CommandPolicy = z.output<typeof commandPolicySchema>;
 
 /**
+ACT-35: a pattern holding a metacharacter can never match, because no command holding one is allowed.
+*/
+function unmatchablePattern(patterns: readonly string[]): string | undefined {
+  const found = patterns.find((pattern) => SHELL_METACHARACTERS.test(pattern));
+  return found === undefined
+    ? undefined
+    : `policy.allowed_commands: the pattern "${found}" can never match, because a command on a ` +
+        'restricted target may not contain ; & | ` $ < > ( or ); set any_command for a target ' +
+        'that needs a shell';
+}
+
+/**
  * ACT-88: exactly one of the two; a target with neither would allow nothing
- * and is a mistake, not a lock.
+ * and is a mistake, not a lock. ACT-35: nor may a pattern hold a
+ * metacharacter the runtime refuses, which would be a rule the operator
+ * believes in and the engine can never satisfy.
  */
 export function commandPolicyProblems(policy: CommandPolicy): readonly string[] {
   if (policy.any_command) {
@@ -101,9 +130,11 @@ export function commandPolicyProblems(policy: CommandPolicy): readonly string[] 
       ? []
       : ['policy: set either allowed_commands or any_command, not both'];
   }
-  return policy.allowed_commands.length === 0
-    ? ['policy.allowed_commands: give at least one command pattern, or set any_command']
-    : [];
+  if (policy.allowed_commands.length === 0) {
+    return ['policy.allowed_commands: give at least one command pattern, or set any_command'];
+  }
+  const unmatchable = unmatchablePattern(policy.allowed_commands);
+  return unmatchable === undefined ? [] : [unmatchable];
 }
 
 export interface CommandDeployment {
@@ -116,8 +147,12 @@ export interface CommandDeployment {
 /**
  * ACT-39: `command_size` for a command beyond the 16 KiB of ACT-27 (the
  * tool's own schema refuses one too, so this is the second of two locks),
- * `command` for a line break the target does not allow and for a command no
- * pattern matches.
+ * `command_metacharacter` for a shell operator on a target that is not an
+ * any-command one, and `command` for a line break the target does not allow
+ * and for a command no pattern matches. The metacharacter rule comes before
+ * the patterns deliberately: it is what makes an allowlist mean what an
+ * operator reads it to mean, so the refusal says so rather than hiding
+ * behind "no pattern matched".
  */
 function refusal(
   policy: CommandPolicy,
@@ -132,6 +167,9 @@ function refusal(
   }
   if (LINE_BREAK.test(command)) {
     return 'command';
+  }
+  if (SHELL_METACHARACTERS.test(command)) {
+    return 'command_metacharacter';
   }
   return policy.allowed_commands.some((pattern) => isPatternMatch(pattern, command, 'command'))
     ? undefined
@@ -157,17 +195,18 @@ export function createCommandAuthorize(
 }
 
 /**
- * ACT-43: the command as the agent wrote it, capped. ACT-60: the class the
- * engine audits is the word `command`, except on an any-command target,
- * where ACT-88 wants the whole command recorded and the 4 KiB cap on
- * `arguments` could cut it. The engine scrubs both (ACT-61).
+ * ACT-43: the command as the agent wrote it, as an excerpt when it is long
+ * and never silently. ACT-60: the class the engine audits is the word
+ * `command`, except on an any-command target, where ACT-88 wants the whole
+ * command recorded and the 4 KiB cap on `arguments` could cut it. The engine
+ * scrubs both (ACT-61).
  */
 export function describeCommand(
   policy: CommandPolicy,
   operation: CommandOperation,
 ): OperationDescription {
   return {
-    summary: operation.command.slice(0, SUMMARY_CAP),
+    ...excerptOf(operation.command),
     classification: policy.any_command ? operation.command : 'command',
   };
 }

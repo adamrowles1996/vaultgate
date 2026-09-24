@@ -105,5 +105,6 @@ export function createRunSupport(
       secrets.add({ field, value });
     },
     rotate: (field, value) => rotate(dependencies, row, field, value),
+    scrub: (text) => secrets.scrub.text(text),
   };
 }

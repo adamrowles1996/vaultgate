@@ -1,7 +1,7 @@
 import { createSecretBox, STATE_COOKIE_INFO, TOTP_SECRET_INFO } from '../crypto/secret-box.ts';
 
 import { type Bootstrap, createBootstrap } from './bootstrap.ts';
-import { attachSession } from './browser.ts';
+import { attachSession, pageHeaders } from './browser.ts';
 import { createLoginThrottle } from './login-throttle.ts';
 import { notFound } from './not-found.ts';
 import { EMPTY } from './pages/template.ts';
@@ -83,6 +83,12 @@ export interface Identity {
   The ID-18 and ID-15 gate for a sensitive `POST /account/*` another layer serves (ACT-5).
   */
   readonly sensitiveAction: SensitiveAction;
+  /**
+   * ID-19 on a page another layer serves (ACT-5): the strict CSP and
+   * `Cache-Control: no-store`. Injected rather than inherited, so an account
+   * page keeps them whatever order the composition layer mounts it in.
+   */
+  readonly pageHeaders: MiddlewareHandler<IdentityEnvironment>;
 }
 
 /**
@@ -143,5 +149,6 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     bootstrap,
     cookiePolicy,
     sensitiveAction: sensitiveAction(services),
+    pageHeaders,
   };
 }

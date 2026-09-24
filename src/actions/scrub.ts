@@ -158,17 +158,34 @@ interface Replacement {
 }
 
 /**
+The replacement table with the set of characters any variant can begin with (ACT-51).
+*/
+interface Table {
+  readonly entries: readonly Replacement[];
+  readonly starts: ReadonlySet<string>;
+}
+
+function tableOf(entries: readonly Replacement[]): Table {
+  return { entries, starts: new Set(entries.map((entry) => entry.variant.charAt(0))) };
+}
+
+/**
  * One left-to-right pass: at each position the longest variant that starts
  * there is replaced and the scan resumes after it, so a marker is never
  * itself scanned and a short value inside a longer one cannot break its
  * match. Linear in the input for a fixed table.
  */
-function scrubText(table: readonly Replacement[], input: string): string {
+function scrubText(table: Table, input: string): string {
   const parts: string[] = [];
   let literalFrom = 0;
   let index = 0;
   while (index < input.length) {
-    const hit = table.find((entry) => input.startsWith(entry.variant, index));
+    // A variant can only begin here if its first character does, so the
+    // common case — a position no variant starts at — costs one set lookup
+    // rather than one `startsWith` per variant.
+    const hit = table.starts.has(input.charAt(index))
+      ? table.entries.find((entry) => input.startsWith(entry.variant, index))
+      : undefined;
     if (hit === undefined) {
       index += 1;
       continue;
@@ -209,13 +226,15 @@ function scrubDeep(value: unknown, scrubs: DeepScrubs): unknown {
  * bytes. latin1 maps each byte to one code point and back without loss, so the
  * text scan above does the byte work too, longest match first by byte length.
  */
-function byteTable(table: readonly Replacement[]): readonly Replacement[] {
-  return table
-    .map((entry) => ({
-      variant: Buffer.from(entry.variant, 'utf8').toString('latin1'),
-      marker: Buffer.from(entry.marker, 'utf8').toString('latin1'),
-    }))
-    .toSorted((left, right) => byLengthDescending(left.variant, right.variant));
+function byteTable(entries: readonly Replacement[]): Table {
+  return tableOf(
+    entries
+      .map((entry) => ({
+        variant: Buffer.from(entry.variant, 'utf8').toString('latin1'),
+        marker: Buffer.from(entry.marker, 'utf8').toString('latin1'),
+      }))
+      .toSorted((left, right) => byLengthDescending(left.variant, right.variant)),
+  );
 }
 
 /**
@@ -245,7 +264,8 @@ export function createScrubber(
     )
     .toSorted((left, right) => byLengthDescending(left.variant, right.variant));
   const guardBytes = Math.max(0, ...table.map((entry) => Buffer.byteLength(entry.variant)));
-  const text = (input: string): string => scrubText(table, input);
+  const characters = tableOf(table);
+  const text = (input: string): string => scrubText(characters, input);
   const raw = byteTable(table);
   const bytes = (input: Buffer): Buffer =>
     Buffer.from(scrubText(raw, input.toString('latin1')), 'latin1');

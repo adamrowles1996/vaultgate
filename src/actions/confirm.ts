@@ -14,6 +14,8 @@ import { fail, ok, type Result } from '../result.ts';
 
 import { ActionError } from './errors.ts';
 
+import type { OmittedText } from './connectors/operation-summary.ts';
+
 export const CONFIRMATION_TTL_MS = 120_000;
 const NONCE_BYTES = 16;
 const STATE_PARTS = 2;
@@ -189,6 +191,39 @@ export interface ConfirmationRequestInput {
   ACT-43: already scrubbed by the caller.
   */
   readonly operationSummary: string;
+  /**
+  ACT-43: what the excerpt leaves out, said outside the quoted block so the agent cannot suppress it.
+  */
+  readonly omitted?: OmittedText | undefined;
+}
+
+const QUOTE = '> ';
+const LINE_TERMINATOR = /\r\n|[\n\r]/u;
+
+/**
+ * ACT-43: every line of the operation carries the quote marker, and the
+ * message says so. The summary is the agent's own text: without this it sits
+ * between blank lines and can reproduce the prompt's trailer, so a call can
+ * be made to look as though it ended before the operative clause. A line the
+ * agent writes is a quoted line; the trailer is the only unquoted one, and
+ * nothing the agent sends can produce an unquoted line.
+ */
+function quoted(summary: string): string {
+  return summary
+    .split(LINE_TERMINATOR)
+    .map((line) => `${QUOTE}${line}`)
+    .join('\n');
+}
+
+/**
+ACT-43: the unforgeable half — vaultgate says what it did not show, and how to identify the whole of it.
+*/
+function omissionNotice(omitted: OmittedText | undefined): string {
+  return omitted === undefined
+    ? ''
+    : `NOT SHOWN: ${String(omitted.characters)} of ${String(omitted.total)} characters are ` +
+        `missing from the middle of the operation above. The SHA-256 of the whole of it is ` +
+        `${omitted.sha256}. Do not approve an operation you have not read.\n\n`;
 }
 
 export interface ConfirmationRequest {
@@ -217,7 +252,10 @@ ACT-42: the elicitation request, verbatim; ACT-43: the message template.
 export function buildConfirmationRequest(input: ConfirmationRequestInput): ConfirmationRequest {
   const message =
     `vaultgate: ${input.clientName} asks to run ${input.tool} on target "${input.targetName}" ` +
-    `(${input.connector}, ${input.destinationSummary}).\n\n${input.operationSummary}\n\n` +
+    `(${input.connector}, ${input.destinationSummary}).\n\n` +
+    `The operation, every line of it quoted with "${QUOTE}":\n` +
+    `${quoted(input.operationSummary)}\n\n` +
+    omissionNotice(input.omitted) +
     'Allow this one call? It expires in 2 minutes and cannot be reused.';
   return {
     method: 'elicitation/create',

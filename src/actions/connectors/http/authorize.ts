@@ -6,6 +6,7 @@
  * vault.
  */
 import { isPatternMatch, type PolicyDecision } from '../../policy.ts';
+import { excerptOf } from '../operation-summary.ts';
 
 import { encodeBody, requestSubject } from './request.ts';
 import { READ_METHODS } from './schemas.ts';
@@ -13,8 +14,6 @@ import { READ_METHODS } from './schemas.ts';
 import type { HttpOperation } from './operation.ts';
 import type { HttpCredential, HttpDestination, HttpPolicy } from './schemas.ts';
 import type { OperationDescription, OperationRequest, TargetCapabilities } from '../connector.ts';
-
-const SUMMARY_CAP = 1024;
 
 /**
  * ACT-22's fixed list plus `content-length` (the transport frames the body
@@ -99,14 +98,14 @@ export function authorize(request: HttpRequest, operation: HttpOperation): Polic
 }
 
 /**
-ACT-43: the method and the path as the agent gave them; ACT-60: the method.
+ACT-43: the method and the path as the agent gave them, excerpted and never silently; ACT-60: the method.
 */
 export function describeOperation(
   _request: HttpRequest,
   operation: HttpOperation,
 ): OperationDescription {
   return {
-    summary: `${operation.method} ${operation.path}`.slice(0, SUMMARY_CAP),
+    ...excerptOf(`${operation.method} ${operation.path}`),
     classification: operation.method,
   };
 }
