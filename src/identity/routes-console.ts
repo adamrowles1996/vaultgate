@@ -25,7 +25,10 @@ const NOTICES: Readonly<Record<'agents' | 'vault', Readonly<Record<string, strin
   agents: {
     disconnected: 'Agent disconnected. Its tokens no longer work and its grants are gone.',
   },
-  vault: { 'vault-updated': 'Vault connection saved. The backend is using it now.' },
+  vault: {
+    'vault-updated': 'Vault connection saved. The backend is using it now.',
+    'vault-synced': 'The vault synced with the server.',
+  },
 };
 
 function noticeFor(page: 'agents' | 'vault', context: IdentityContext): string | undefined {

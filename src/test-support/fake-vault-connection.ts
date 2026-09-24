@@ -32,13 +32,17 @@ export interface ConfigureCall {
 }
 
 /**
- * The identity harness's vault: a settable status and a `configure` that
+ * The identity harness's vault: a settable status, a `configure` that
  * records what it was given and either succeeds (becoming the configured
- * status) or fails with the scripted message.
+ * status) or fails with the scripted message, and a `sync` that counts its
+ * calls and either moves `lastSyncAt` to `syncedAt` or fails with `syncError`.
  */
 export class FakeVaultConnection implements VaultConnection {
   current: VaultConnectionStatus = UNCONFIGURED_VAULT;
   failWith: string | undefined;
+  syncError: VaultError | undefined;
+  syncedAt = '2026-09-22T12:30:00.000Z';
+  syncs = 0;
   readonly calls: ConfigureCall[] = [];
 
   status(): Promise<VaultConnectionStatus> {
@@ -58,6 +62,15 @@ export class FakeVaultConnection implements VaultConnection {
       userEmailMasked: 'a***@example.com',
       lastSyncAt: '2026-09-22T12:00:00.000Z',
     };
+    return Promise.resolve(ok(undefined));
+  }
+
+  sync(): Promise<Result<void, VaultError>> {
+    this.syncs += 1;
+    if (this.syncError !== undefined) {
+      return Promise.resolve(fail(this.syncError));
+    }
+    this.current = { ...this.current, lastSyncAt: this.syncedAt };
     return Promise.resolve(ok(undefined));
   }
 }

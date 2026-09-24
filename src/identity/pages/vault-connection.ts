@@ -1,13 +1,15 @@
 /**
- * The console's Vault page (ID-25, VAULT-18): the connection's status for
- * everyone signed in, the form that changes it only after a fresh password
+ * The console's Vault page (ID-25, VAULT-18, VAULT-19): the connection's
+ * status for everyone signed in with a "Sync now" while the vault is ready,
+ * the form that changes the connection only after a fresh password
  * confirmation (ID-15), and whatever other layers add below. Saving is the
  * test: the backend switches to the new connection and the outcome comes
  * back here. No secret is ever drawn; the secret fields always render empty.
  */
 import { type ConsolePage, unlockPath } from './console.ts';
+import { icon } from './icons.ts';
 import { errorBanner, hidden, type Html, html, noticeBanner, when } from './template.ts';
-import { cardHead, pageHead, pill, relativeTime } from './ui.ts';
+import { cardHead, formatInstant, pageHead, pill, relativeTime } from './ui.ts';
 
 import type { VaultConnectionStatus, VaultCredentialOrigin } from '../../vault/connection.ts';
 
@@ -22,6 +24,8 @@ export interface VaultFormValues {
 export const EMPTY_VAULT_FORM: VaultFormValues = { serverUrl: '', clientId: '' };
 
 export const VAULT_PATH = '/account/vault';
+
+export const VAULT_SYNC_PATH = '/account/vault/sync';
 
 export interface VaultPageView {
   readonly csrfToken: string;
@@ -58,13 +62,31 @@ function readiness(vault: VaultConnectionStatus): Html {
 }
 
 function statusCard(vault: VaultConnectionStatus, now: number): Html {
-  const synced = vault.lastSyncAt === null ? '' : relativeTime(Date.parse(vault.lastSyncAt), now);
+  const at = vault.lastSyncAt === null ? undefined : Date.parse(vault.lastSyncAt);
   return html`<section class="card stats" id="vault-status" aria-label="Vault status">
     ${stat('Status', readiness(vault), ORIGIN_TEXT[vault.origin])}
     ${stat('Server', html`<code>${vault.serverUrl}</code>`)}
     ${stat('Account', vault.userEmailMasked ?? 'unknown until the vault is ready')}
-    ${stat('Last sync', vault.lastSyncAt ?? 'none since start-up', synced)}
+    ${
+      at === undefined
+        ? stat('Last sync', 'none since start-up')
+        : stat('Last sync', formatInstant(at), relativeTime(at, now))
+    }
   </section>`;
+}
+
+/**
+VAULT-19: a sync now, offered while the vault is ready; it needs no password confirmation.
+*/
+function syncForm(view: VaultPageView): Html {
+  return when(
+    view.vault.ready,
+    () =>
+      html`<form method="post" action="${VAULT_SYNC_PATH}">
+        ${hidden('csrf', view.csrfToken)}
+        <button type="submit">${icon('refresh')} Sync now</button>
+      </form>`,
+  );
 }
 
 function connectionForm(view: VaultPageView): Html {
@@ -126,6 +148,7 @@ export function vaultPage(view: VaultPageView): ConsolePage {
   const body = html`${pageHead(
     'Vault',
     'The account vaultgate signs in to. The vault stays the only store of secrets: pages show names, usernames and addresses, and a secret field only ever appears sealed.',
+    syncForm(view),
   )}
   ${errorBanner(view.error)} ${noticeBanner(view.notice)} ${statusCard(view.vault, view.now)}
   ${connectionCard(view)} ${view.sections}`;

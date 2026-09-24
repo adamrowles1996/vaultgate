@@ -1,8 +1,10 @@
 /**
- * The sync side of the supervisor (VAULT-9, VAULT-17): the initial sync after
- * unlock, the scheduled ones after it, one retry for a `/sync` answered
- * without its envelope, and the record that `/readyz` reports. A failed sync
- * never touches readiness or the restart counter; the child's exit does that.
+ * The sync side of the supervisor (VAULT-9, VAULT-17, VAULT-19): the initial
+ * sync after unlock, the scheduled ones after it, the operator's "sync now",
+ * one retry for a `/sync` answered without its envelope, and the record that
+ * `/readyz` reports. One sync runs at a time: a request while one is running
+ * joins it. A failed sync never touches readiness or the restart counter; the
+ * child's exit does that.
  */
 import { type Clock, sleep, type Sleep } from './clock.ts';
 
@@ -32,7 +34,7 @@ export interface VaultSyncRunnerOptions {
   readonly isChildAlive: () => boolean;
 }
 
-type SyncKind = 'initial' | 'scheduled';
+type SyncKind = 'initial' | 'scheduled' | 'manual';
 
 /**
 How long after a `/sync` protocol error the one retry waits (VAULT-17).
@@ -46,6 +48,7 @@ export class VaultSyncRunner {
   #cancelScheduled: (() => void) | undefined;
   #retryPause: Sleep | undefined;
   #isScheduling = false;
+  #inFlight: Promise<Result<void, VaultError>> | undefined;
 
   constructor(options: VaultSyncRunnerOptions) {
     this.#options = options;
@@ -85,7 +88,7 @@ export class VaultSyncRunner {
       : first;
   }
 
-  async #sync(kind: SyncKind): Promise<void> {
+  async #run(kind: SyncKind): Promise<Result<void, VaultError>> {
     const { clock, logger } = this.#options;
     const startedAt = clock.now();
     const synced = await this.#attempt();
@@ -94,13 +97,30 @@ export class VaultSyncRunner {
       this.#lastSyncAt = new Date(clock.now()).toISOString();
       this.#lastSyncError = null;
       logger.info({ kind, durationMs }, 'vault synced');
-      return;
+      return synced;
     }
     this.#lastSyncError = synced.error.code;
     logger.warn(
       { err: synced.error, kind, durationMs },
       kind === 'initial' ? 'initial vault sync failed' : 'vault sync failed',
     );
+    return synced;
+  }
+
+  async #runAlone(kind: SyncKind): Promise<Result<void, VaultError>> {
+    try {
+      return await this.#run(kind);
+    } finally {
+      this.#inFlight = undefined;
+    }
+  }
+
+  /**
+  The sync already running, or a new one of `kind` (VAULT-19).
+  */
+  #sync(kind: SyncKind): Promise<Result<void, VaultError>> {
+    this.#inFlight ??= this.#runAlone(kind);
+    return this.#inFlight;
   }
 
   state(): SyncState {
@@ -112,6 +132,13 @@ export class VaultSyncRunner {
   */
   async initial(): Promise<void> {
     await this.#sync('initial');
+  }
+
+  /**
+  A sync at the operator's request, joined with one already running (VAULT-19).
+  */
+  syncNow(): Promise<Result<void, VaultError>> {
+    return this.#sync('manual');
   }
 
   /**

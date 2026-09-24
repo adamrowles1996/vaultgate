@@ -47,4 +47,10 @@ export interface VaultConnection {
    * secret-free and safe to show the operator.
    */
   configure(input: VaultConnectionInput, operatorId: string): Promise<Result<void, VaultError>>;
+  /**
+   * Syncs the vault now, or joins the sync already running (VAULT-19); the
+   * status's `lastSyncAt` moves when it succeeds. Refused with
+   * `vault_unavailable` while the backend is not ready.
+   */
+  sync(): Promise<Result<void, VaultError>>;
 }

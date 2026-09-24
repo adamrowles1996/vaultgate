@@ -219,8 +219,8 @@ is retrying. Look for these lines:
 | `logging in to bitwarden with the api key`            | The CLI reported `unauthenticated`, so `bw login --apikey` runs (after `bw config server` when the connection names a server, or to reset a reused directory to the default).                    |
 | `vault reconfigured` / `vault reconfiguration failed` | The Vault page changed the connection: the new generation is ready, or it failed (`err` says why) and the previous connection is back.                                                           |
 | `initial vault sync failed`                           | Login and unlock worked but the first sync did not. Readiness is unaffected; reads serve from the cached vault and the sync is retried on the schedule.                                          |
-| `vault synced`                                        | A sync succeeded; `kind` says whether it was the `initial` or a `scheduled` one and `durationMs` how long it took.                                                                               |
-| `vault sync failed`                                   | A scheduled sync failed; `err` says why. Readiness is unaffected and the next sync runs on schedule.                                                                                             |
+| `vault synced`                                        | A sync succeeded; `kind` says whether it was the `initial`, a `scheduled` or a `manual` one (**Sync now**) and `durationMs` how long it took.                                                    |
+| `vault sync failed`                                   | A scheduled or manual sync failed; `err` says why. Readiness is unaffected and the next sync runs on schedule.                                                                                   |
 | `vault sync answered without its envelope; retrying`  | Debug level. `/sync` answered with something other than its JSON envelope while `bw serve` was still running; it is retried once after 2 s before being reported.                                |
 | `vault ready`                                         | Unlocked. `/readyz` turns `200`.                                                                                                                                                                 |
 | `bw serve exited`                                     | The child died; it is restarted with backoff. `code`, `signal` and `uptimeMs` say how and after how long, and `output` holds the last lines it wrote (session keys and passwords redacted).      |
@@ -232,7 +232,10 @@ account that does not yet exist. All of them are fixed from the Vault page's con
 one there and leaving the client secret blank.
 
 After the vault is ready it is synced every `VAULTGATE_BW_SYNC_INTERVAL` (default 15 minutes,
-1 minute to 24 hours). A failed sync is logged as a warning and does not affect readiness. A
+1 minute to 24 hours). A failed sync is logged as a warning and does not affect readiness. To pick
+up a change made in Bitwarden without waiting, press **Sync now** on the Vault page while the vault
+is ready; it needs no password confirmation, joins a sync already running rather than starting a
+second, and does not move the schedule. A
 `bw serve` that dies shortly after becoming ready, for instance on every scheduled sync, counts
 towards the same backoff and escalation as a failed start; only five minutes of readiness clear
 the count.

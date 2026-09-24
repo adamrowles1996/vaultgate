@@ -21,6 +21,23 @@ import type { VaultError } from '../vault/client.ts';
 
 export type RemoveDirectory = (path: string) => Promise<void>;
 
+/**
+ * A lock on the way down (VAULT-7). A backend that has gone cannot be
+ * locked and need not be, its session having died with it, so a clean stop
+ * logs no warning; a reachable vault that refuses still does.
+ */
+export function recordLock(logger: Logger, locked: Result<unknown, VaultError>): void {
+  if (locked.ok) {
+    logger.info('vault locked');
+    return;
+  }
+  if (locked.error.code === 'vault_unavailable') {
+    logger.info('vault backend already stopped; its session went with it');
+    return;
+  }
+  logger.warn({ err: locked.error }, 'vault lock failed');
+}
+
 export interface VaultSupervisorDependencies {
   /**
   The parent environment; only `PATH`, `HOME` and `TMPDIR` reach the CLI.

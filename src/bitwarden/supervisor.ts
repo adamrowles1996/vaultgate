@@ -17,6 +17,7 @@ import { RestartLoop } from './supervisor-loop.ts';
 import { type Generation, GenerationFactory, GenerationStarter } from './supervisor-start.ts';
 import {
   describeStartFailure,
+  recordLock,
   type RemoveDirectory,
   resolveDependencies,
   type VaultSupervisorDependencies,
@@ -55,6 +56,10 @@ export interface VaultSupervisor {
   Switches to `values` in a fresh CLI app-data generation; a failure restores what ran before (VAULT-18).
   */
   reconfigure(values: CredentialValues): Promise<Result<void, VaultError>>;
+  /**
+  Syncs now, joining a sync already running; refused while the backend is not ready (VAULT-19).
+  */
+  syncNow(): Promise<Result<void, VaultError>>;
   stop(): Promise<void>;
 }
 
@@ -168,28 +173,11 @@ class Supervisor implements VaultSupervisor {
         path: '/lock',
         schema: messageDataSchema,
       });
-      this.#recordLock(locked);
+      recordLock(this.#logger, locked);
       await this.#stopServe();
       this.#logger.info('bw serve stopped');
     }
     await this.#loop;
-  }
-
-  /**
-   * A lock on the way down (VAULT-7). A backend that has gone cannot be
-   * locked and need not be, its session having died with it, so a clean stop
-   * logs no warning; a reachable vault that refuses still does.
-   */
-  #recordLock(locked: Result<unknown, VaultError>): void {
-    if (locked.ok) {
-      this.#logger.info('vault locked');
-      return;
-    }
-    if (locked.error.code === 'vault_unavailable') {
-      this.#logger.info('vault backend already stopped; its session went with it');
-      return;
-    }
-    this.#logger.warn({ err: locked.error }, 'vault lock failed');
   }
 
   /**
@@ -262,6 +250,12 @@ class Supervisor implements VaultSupervisor {
 
   syncState(): SyncState {
     return this.#syncRunner.state();
+  }
+
+  syncNow(): Promise<Result<void, VaultError>> {
+    return this.#isReady
+      ? this.#syncRunner.syncNow()
+      : Promise.resolve(fail(new VaultError('vault_unavailable', 'the vault is not ready')));
   }
 
   async reconfigure(values: CredentialValues): Promise<Result<void, VaultError>> {

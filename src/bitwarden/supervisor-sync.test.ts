@@ -224,3 +224,52 @@ describe('startVaultSupervisor periodic sync (VAULT-9)', () => {
     expect(harness.clock.pending()).toBe(0);
   });
 });
+
+describe('startVaultSupervisor sync now (VAULT-19)', () => {
+  it('VAULT-19 syncs at once on request, refuses while not ready and reports a failure', async () => {
+    const harness = new SupervisorHarness();
+    const supervisor = harness.start();
+    const early = await supervisor.syncNow();
+    expect(early).toMatchObject({ ok: false, error: { code: 'vault_unavailable' } });
+    expect(early.ok ? '' : early.error.message).toBe('the vault is not ready');
+    await harness.until(() => supervisor.isReady());
+    expect(harness.fake.requestsTo('/sync')).toHaveLength(1);
+    await harness.clock.advance(30_000);
+    expect(await supervisor.syncNow()).toStrictEqual({ ok: true, value: undefined });
+    expect(harness.fake.requestsTo('/sync')).toHaveLength(2);
+    expect(harness.linesFor('vault synced')[1]).toMatchObject({ level: 30, kind: 'manual' });
+    expect(supervisor.syncState()).toStrictEqual({
+      lastSyncAt: '2026-09-22T12:00:30.000Z',
+      lastSyncError: null,
+    });
+    harness.fake.override('POST', '/sync', { success: false, message: 'Vault is locked.' });
+    const failed = await supervisor.syncNow();
+    expect(failed).toMatchObject({ ok: false, error: { code: 'vault_unavailable' } });
+    expect(harness.linesFor('vault sync failed')[0]).toMatchObject({ level: 40, kind: 'manual' });
+    expect(supervisor.syncState().lastSyncError).toBe('vault_unavailable');
+    expect(supervisor.isReady()).toBe(true);
+    await supervisor.stop();
+    expect(harness.clock.pending()).toBe(0);
+  });
+
+  it('VAULT-19 joins a sync already running rather than starting another', async () => {
+    const { harness, control } = harnessWith(0, 2);
+    const supervisor = harness.start();
+    await harness.until(() => supervisor.isReady());
+    await harness.clock.advance(60_000);
+    await harness.until(() => control.syncsStarted() === 2);
+    const joined = supervisor.syncNow();
+    const again = supervisor.syncNow();
+    control.release();
+    expect(await joined).toStrictEqual({ ok: true, value: undefined });
+    expect(await again).toStrictEqual({ ok: true, value: undefined });
+    expect(control.syncsStarted()).toBe(2);
+    expect(harness.linesFor('vault synced').map((line) => line['kind'])).toStrictEqual([
+      'initial',
+      'scheduled',
+    ]);
+    expect(await supervisor.syncNow()).toStrictEqual({ ok: true, value: undefined });
+    expect(control.syncsStarted()).toBe(3);
+    await supervisor.stop();
+  });
+});

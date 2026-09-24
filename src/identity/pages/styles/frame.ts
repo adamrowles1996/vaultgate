@@ -72,6 +72,7 @@ export const FRAME = `.crumbs ol {
 }
 .page-head > div:first-child {
   display: grid;
+  flex: 1 1 30rem;
   gap: 0.375rem;
   min-width: 0;
 }

@@ -47,7 +47,7 @@ const LEGACY_ALLOWED_PATHS = new Set(['/account/reauthenticate', '/account/email
 /**
 A signed-in operator whose form passed the ID-18 checks; otherwise the 403.
 */
-function requireAuthenticated(
+export function requireAuthenticated(
   context: IdentityContext,
   services: IdentityServices,
   form: Form,

@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- VAULT-19, ID-25: **Sync now** on the Vault page syncs the vault at once instead of waiting
+  for the next scheduled sync, so a change made in Bitwarden reaches agents straight away. It is
+  offered while the vault is ready, needs the usual form checks but no password confirmation,
+  joins a sync already running rather than starting a second, and records
+  `vault.sync_requested`. The log's `vault synced` line says `kind: manual` for it.
 - ID-19, ACT-5: **an operator console with a sidebar.** Every page a signed-in operator sees now
   shares one frame: a sidebar with **Computers** (one entry per kind, with counts), **Agents**,
   **Activity** and **Vault**, an **Add computer** button, the vault's state and the operator; a

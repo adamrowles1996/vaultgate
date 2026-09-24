@@ -60,7 +60,7 @@ describe('GET /account/vault', () => {
     expect(markup).toContain('>https://vault.example.test<');
     expect(markup).toContain('>a***@example.com<');
     expect(markup).toContain('<span class="pill pill-ok">Ready</span>');
-    expect(markup).toContain('>2026-09-22T11:00:00.000Z<');
+    expect(markup).toContain('>2026-09-22 11:00 UTC<');
     expect(markup).toContain('>1 h ago<');
   });
 
