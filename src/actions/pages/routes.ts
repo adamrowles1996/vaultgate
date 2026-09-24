@@ -12,7 +12,7 @@ import { CONNECTOR_KINDS } from '../../config/actions.ts';
 
 import { CREATE_PATH, renderCreatePage } from './create-page.ts';
 import { documentsFromForm, type FormValues } from './form-values.ts';
-import { formFor } from './forms.ts';
+import { deploymentProblems, formFor } from './forms.ts';
 import { targetPath } from './section.ts';
 import {
   CONNECTOR_FIELD,
@@ -112,6 +112,11 @@ async function create(
   if (form === undefined) {
     return context.notFound();
   }
+  const refused = deploymentProblems(gate.form, dependencies.switches);
+  if (refused.length > 0) {
+    const denied = { ...viewerOf(gate.session), problems: refused, form, values: gate.form };
+    return context.html(renderCreatePage(denied), 400);
+  }
   const created = await dependencies.targets.create(
     targetInputFromForm(form, gate.form, true),
     gate.operatorId,
@@ -172,6 +177,12 @@ async function update(
     return context.notFound();
   }
   const { target, form } = current;
+  const refused = deploymentProblems(gate.form, dependencies.switches);
+  if (refused.length > 0) {
+    const denied = { problems: refused, values: gate.form };
+    const page = await targetPageView(dependencies, target, viewerOf(gate.session), denied);
+    return context.html(renderTargetPage(page), 400);
+  }
   const updated = await dependencies.targets.update(
     target.id,
     targetInputFromForm(form, gate.form, false),
