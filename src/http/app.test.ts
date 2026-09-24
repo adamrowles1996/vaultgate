@@ -72,7 +72,7 @@ describe('createApp', () => {
     expect(response.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/);
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
     expect(response.headers.get('x-frame-options')).toBe('SAMEORIGIN');
-    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(response.headers.get('referrer-policy')).toBe('same-origin');
   });
 
   it('returns a JSON 404 for unknown routes', async () => {

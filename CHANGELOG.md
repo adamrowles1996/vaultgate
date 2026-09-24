@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- ID-18, ID-19: **browser sign-in and consent were refused with a bare `403 Forbidden`.** Every
+  page was served with `Referrer-Policy: no-referrer` (Hono's `secureHeaders` default), and under
+  that policy a browser sends `Origin: null` on a form POST, which the origin check compared with
+  the public URL and refused. Reproduced in Chromium 153 against the reference deployment; the
+  suite never saw it because its browser double always sends a real `Origin`. Pages now send
+  `Referrer-Policy: same-origin`, so a same-origin POST carries its origin and nothing leaks
+  cross-origin, and an `Origin: null` is treated as absent so the browser-set
+  `Sec-Fetch-Site: same-origin` decides (a cross-site `null` is still refused).
+
 ## [0.1.0-rc.13] - 2026-09-24
 
 ### Added

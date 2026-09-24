@@ -31,6 +31,14 @@ describe('isSameOriginRequest', () => {
     );
     expect(isSameOriginRequest(new Headers(), PUBLIC_URL)).toBe(false);
   });
+
+  it('ID-18 treats Origin: null as absent and lets Sec-Fetch-Site decide', () => {
+    const sameOrigin = new Headers({ origin: 'null', 'sec-fetch-site': 'same-origin' });
+    expect(isSameOriginRequest(sameOrigin, PUBLIC_URL)).toBe(true);
+    const crossSite = new Headers({ origin: 'null', 'sec-fetch-site': 'cross-site' });
+    expect(isSameOriginRequest(crossSite, PUBLIC_URL)).toBe(false);
+    expect(isSameOriginRequest(new Headers({ origin: 'null' }), PUBLIC_URL)).toBe(false);
+  });
 });
 
 describe('isValidCsrfToken', () => {
