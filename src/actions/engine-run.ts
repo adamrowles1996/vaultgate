@@ -162,12 +162,16 @@ function assemble(
   const captured = capture(output, scrub, maxBytes);
   const isOutputTruncated =
     output.result['truncated'] === true || captured.some(([, capped]) => capped.truncated);
-  const result = scrub.deep({
-    ...output.result,
+  // `capture` has already scrubbed every captured stream; only the
+  // connector's own result fields still need a pass. Scrubbing the merged
+  // object would walk a megabyte of body a second time, on the event loop
+  // that also serves OAuth and the operator pages.
+  const result = {
+    ...scrub.deep(output.result),
     ...Object.fromEntries(captured.map(([key, capped]) => [key, capped.text])),
     truncated: isOutputTruncated,
     duration_ms: durationMs,
-  });
+  };
   return {
     result,
     outputBytes: output.bytes ?? captured.reduce((total, [, capped]) => total + capped.bytes, 0),

@@ -171,6 +171,23 @@ describe('the winrm connector through the engine', () => {
     expect(storedCalls(harness.database)).toMatchObject([{ outcome: 'error:timeout' }]);
   });
 
+  it('ACT-53 a service message quoting the credential is scrubbed on the one path that logs it, the failed shell delete', async () => {
+    const { harness } = harnessOverWinrm({
+      handler: (action) =>
+        action === 'Delete'
+          ? soapFault('InternalError', `shell held by ${CANARY.password}`)
+          : undefined,
+    });
+    await createWinrmTarget(harness);
+    resultOf(await harness.engine.call(caller(WINRM), winrmInvocation()));
+    const logged = harness
+      .logged()
+      .filter((line) => line['msg'] === 'the winrm shell did not delete cleanly');
+    expect(logged).toHaveLength(1);
+    expect(String(logged[0]?.['reason'])).toContain('shell held by [redacted:password]');
+    expect(surfaces(harness, [])).not.toContain(CANARY.password);
+  });
+
   it('ACT-19 ACT-88 lists a winrm target with the shell operation, and marks an any-command one unrestricted', async () => {
     const { harness } = harnessOverWinrm({}, { allowAnyCommand: true });
     await createWinrmTarget(harness);

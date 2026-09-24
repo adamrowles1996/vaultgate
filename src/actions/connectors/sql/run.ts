@@ -20,7 +20,6 @@ import { fitRows } from './values.ts';
 import type { SqlOperation } from './operation.ts';
 import type { SqlCredential, SqlDestination, SqlPolicy } from './schemas.ts';
 import type { SqlConnection, SqlRows, SqlSession, SqlSessions } from './session.ts';
-import type { Logger } from '../../../logger.ts';
 import type { InjectedValues } from '../../scrub.ts';
 import type { ConnectorOutput, RunContext } from '../connector.ts';
 
@@ -111,13 +110,19 @@ function toOutput(context: SqlRunContext, rows: SqlRows): ConnectorOutput {
 }
 
 /**
-A session that will not close is logged for the operator; it never changes the call's outcome.
-*/
-async function closeQuietly(session: SqlSession, logger: Logger): Promise<void> {
+ * A session that will not close is logged for the operator; it never changes
+ * the call's outcome. The driver's message is upstream text and is scrubbed
+ * like any other (ACT-53): it is the one line in this connector that reaches
+ * the log without passing through the engine.
+ */
+async function closeQuietly(session: SqlSession, context: SqlRunContext): Promise<void> {
   try {
     await session.close();
   } catch (error) {
-    logger.warn({ reason: faultOf(error).message }, 'the sql session did not close cleanly');
+    context.logger.warn(
+      { reason: context.support.scrub(faultOf(error).message) },
+      'the sql session did not close cleanly',
+    );
   }
 }
 
@@ -172,7 +177,7 @@ export function createRun(sessions: SqlSessions): SqlRun {
       return fail(failureOf(error));
     } finally {
       if (session !== undefined) {
-        await closeQuietly(session, context.logger);
+        await closeQuietly(session, context);
       }
     }
   };

@@ -75,6 +75,7 @@ export function recordedSupport(options: SupportOptions = {}): RecordedSupport {
         options.rotation === undefined ? ok(undefined) : fail(options.rotation),
       );
     },
+    scrub: (text) => secrets.scrub.text(text),
   };
   return { support, secrets, resolved, captured, rotations };
 }

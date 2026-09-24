@@ -10,12 +10,11 @@
 import { fail, ok, type Result } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
 
-import { messageOf, runFailure } from './failures.ts';
+import { reasonOf, runFailure } from './failures.ts';
 
 import type { WinrmOperation } from './operation.ts';
 import type { WinrmCredential, WinrmDestination, WinrmPolicy } from './schemas.ts';
 import type { WinrmConnection, WinrmSession, WinrmSessionFactory } from './session.ts';
-import type { Logger } from '../../../logger.ts';
 import type { ConnectorOutput, RunContext } from '../connector.ts';
 
 export type WinrmRunContext = RunContext<WinrmDestination, WinrmCredential, WinrmPolicy>;
@@ -50,13 +49,19 @@ function prepare(context: WinrmRunContext): Result<WinrmConnection, ActionError>
 }
 
 /**
-A shell that will not delete is logged for the operator; it never changes the call's outcome.
-*/
-async function closeQuietly(session: WinrmSession, logger: Logger): Promise<void> {
+ * A shell that will not delete is logged for the operator; it never changes
+ * the call's outcome. The service's message is upstream text and is scrubbed
+ * like any other (ACT-53): it is the one line in this connector that reaches
+ * the log without passing through the engine.
+ */
+async function closeQuietly(session: WinrmSession, context: WinrmRunContext): Promise<void> {
   try {
     await session.close();
   } catch (error: unknown) {
-    logger.warn({ reason: messageOf(error) }, 'the winrm shell did not delete cleanly');
+    context.logger.warn(
+      { reason: context.support.scrub(reasonOf(error)) },
+      'the winrm shell did not delete cleanly',
+    );
   }
 }
 
@@ -85,7 +90,7 @@ export function createRun(open: WinrmSessionFactory): WinrmRun {
       return fail(runFailure(error));
     } finally {
       if (session !== undefined) {
-        await closeQuietly(session, context.logger);
+        await closeQuietly(session, context);
       }
     }
   };

@@ -29,6 +29,18 @@ export function messageOf(error: unknown): string {
 }
 
 /**
+ * What to tell the operator about a failure vaultgate swallows, such as a
+ * shell that would not delete. A classified failure carries the service's own
+ * words in `detail.message` and only the fixed §13.16 sentence in `message`,
+ * so the fixed sentence alone would say nothing an operator can act on. The
+ * caller scrubs what comes back: it is upstream text (ACT-53).
+ */
+export function reasonOf(error: unknown): string {
+  const detail = error instanceof ActionError ? error.detail?.['message'] : undefined;
+  return typeof detail === 'string' ? detail.slice(0, MESSAGE_CAP) : messageOf(error);
+}
+
+/**
 ACT-59: an abort is the policy timeout; ACT-57: a certificate problem is `tls_error`.
 */
 export function transportFailure(error: unknown, signal: AbortSignal): ActionError {
