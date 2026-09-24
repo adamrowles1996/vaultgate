@@ -16,6 +16,15 @@ import type { ConnectorSchemas, CredentialField, Endpoint } from '../connector.t
 
 export const WINRM_SHELLS = ['powershell', 'cmd'] as const;
 
+/**
+ * ACT-89. `negotiate` is the default because it is what a stock Windows host
+ * already speaks: the password never crosses the network, and on a plain
+ * listener the payload is sealed with the session key, which is what
+ * `AllowUnencrypted=false` demands. `basic` is kept for a listener whose owner
+ * has deliberately enabled it, and it is accepted only over TLS.
+ */
+export const WINRM_AUTH = ['negotiate', 'basic'] as const;
+
 const SHA256_HEX = /^[\da-f]{64}$/u;
 const SEPARATORS = /[\s:]/gu;
 
@@ -71,6 +80,7 @@ export const winrmDestinationSchema = z.strictObject({
   The account the command runs as; §14.6 puts it in the destination, so one vault item can serve several targets.
   */
   username: z.string().min(1),
+  auth: z.enum(WINRM_AUTH).default('negotiate'),
   shell: z.enum(WINRM_SHELLS).default('powershell'),
   certificate_sha256: certificateSchema,
 });
@@ -81,6 +91,7 @@ export const winrmCredentialSchema = z.strictObject({
 
 export const winrmPolicySchema = commandPolicySchema;
 
+export type WinrmAuth = (typeof WINRM_AUTH)[number];
 export type WinrmDestination = z.output<typeof winrmDestinationSchema>;
 export type WinrmCredential = z.output<typeof winrmCredentialSchema>;
 export type WinrmPolicy = CommandPolicy;
@@ -111,6 +122,20 @@ function certificateProblems(destination: WinrmDestination): readonly string[] {
     : [];
 }
 
+/**
+ * ACT-89: `basic` is the one thing that actually sends the password, so it is
+ * refused on a plain endpoint outright — not warned about. `negotiate` is
+ * there for exactly that endpoint and gives up nothing.
+ */
+function authProblems(destination: WinrmDestination): readonly string[] {
+  return destination.auth === 'basic' && new URL(destination.url).protocol === 'http:'
+    ? [
+        'destination.auth: basic sends the password in the clear on an http:// url; ' +
+          'leave the authentication as negotiate',
+      ]
+    : [];
+}
+
 export const winrmSchemas: ConnectorSchemas<WinrmDestination, WinrmCredential, WinrmPolicy> = {
   kind: 'winrm',
   destinationSchema: winrmDestinationSchema,
@@ -119,17 +144,24 @@ export const winrmSchemas: ConnectorSchemas<WinrmDestination, WinrmCredential, W
   endpoints,
   credentialFields,
   /**
-   * ACT-51: `client.ts` authenticates with `Basic
-   * base64(destination.username:password)`, a string vaultgate builds itself,
-   * so the engine needs the account name to generate that variant. Without it
-   * a listener that echoed the `Authorization` header would return the pair
-   * the agent can decode, with only the raw password redacted.
+   * ACT-51: on a `basic` target the transport builds `Basic
+   * base64(destination.username:password)` itself, so the engine needs the
+   * account name to generate that variant. Without it a listener that echoed
+   * the `Authorization` header would return the pair the agent can decode,
+   * with only the raw password redacted. The variant is generated whatever the
+   * target's `auth` says — `negotiate` builds no such string, so the extra
+   * variant matches nothing, and keeping it means a target switched to `basic`
+   * is covered from the first call.
    */
   basicUsername(destination) {
     return destination.username;
   },
   saveProblems({ destination, policy }) {
-    return [...certificateProblems(destination), ...commandPolicyProblems(policy)];
+    return [
+      ...certificateProblems(destination),
+      ...authProblems(destination),
+      ...commandPolicyProblems(policy),
+    ];
   },
   summariseDestination(destination) {
     return `${destination.username}@${new URL(destination.url).host} (${destination.shell})`;

@@ -6,6 +6,37 @@
  * destination side for the contract tests, so no test needs a Windows host.
  */
 import type { WinrmShell } from './envelopes.ts';
+import type { WinrmAuth } from './schemas.ts';
+import type { PinnedFetch } from '../../../net/pinned-https.ts';
+
+/**
+ * What `client.ts` is built over; injected so a contract test drives the
+ * whole connector — the WS-Management exchanges and, on a `negotiate` target,
+ * a real NTLM handshake — without a socket or a Windows host.
+ */
+export interface WinrmDependencies {
+  readonly transport: PinnedFetch;
+  /**
+  Sent as `User-Agent: vaultgate/<version>`, as the `http` connector does.
+  */
+  readonly version: string;
+  /**
+  The `wsa:MessageID` of each exchange; injected so a test can assert the exact envelopes.
+  */
+  readonly newId: () => string;
+  /**
+  ACT-90: the deadline for `Signal` and `Delete`, which run after the call's own deadline elapsed.
+  */
+  readonly cleanupSignal: () => AbortSignal;
+  /**
+  ACT-89: the NTLM client challenge and exported session key; never anything an agent chooses.
+  */
+  readonly random: (bytes: number) => Buffer;
+  /**
+  ACT-89: the NTLMv2 blob's timestamp, for a destination whose challenge carries none.
+  */
+  readonly now: () => number;
+}
 
 export interface WinrmConnection {
   /**
@@ -18,6 +49,10 @@ export interface WinrmConnection {
   readonly address: string;
   readonly username: string;
   readonly password: string;
+  /**
+  ACT-89: `negotiate` runs NTLM and seals the payload; `basic` sends the pair, and only over TLS.
+  */
+  readonly auth: WinrmAuth;
   readonly shell: WinrmShell;
   /**
   ACT-57: the pinned leaf certificate, lower-case hex, or `undefined` to let the system store verify.

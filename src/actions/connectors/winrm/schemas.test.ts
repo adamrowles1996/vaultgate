@@ -39,7 +39,12 @@ function documents(
 describe('the winrm destination schema', () => {
   it('§14.6 defaults the shell to powershell and leaves the certificate unpinned', () => {
     const parsed = winrmDestinationSchema.parse(destination());
-    expect(parsed).toStrictEqual({ url: URL, username: 'vaultgate', shell: 'powershell' });
+    expect(parsed).toStrictEqual({
+      url: URL,
+      username: 'vaultgate',
+      auth: 'negotiate',
+      shell: 'powershell',
+    });
     expect(parsed.certificate_sha256).toBeUndefined();
   });
 
@@ -77,6 +82,12 @@ describe('the winrm destination schema', () => {
     expect(destinationProblems({ url: 'https://a:b@win.example.com/wsman' })).toStrictEqual([
       'must not carry credentials',
     ]);
+  });
+
+  it('ACT-89 defaults the authentication to negotiate and refuses one it does not serve', () => {
+    expect(winrmDestinationSchema.parse(destination()).auth).toBe('negotiate');
+    expect(winrmDestinationSchema.parse(destination({ auth: 'basic' })).auth).toBe('basic');
+    expect(winrmDestinationSchema.safeParse(destination({ auth: 'kerberos' })).success).toBe(false);
   });
 
   it('§14.6 refuses a shell it does not serve and an empty login name', () => {
@@ -124,6 +135,16 @@ describe('the winrm connector schemas', () => {
     ]);
     expect(documents(destination({ url: 'http://win.example.com:5985/wsman' }))).toStrictEqual([]);
     expect(documents(destination({ certificate_sha256: DIGEST }))).toStrictEqual([]);
+  });
+
+  it('ACT-89 refuses basic on a plain endpoint, where it would send the password in the clear', () => {
+    const plain = { url: 'http://win.example.com:5985/wsman' };
+    expect(documents(destination({ ...plain, auth: 'basic' }))).toStrictEqual([
+      'destination.auth: basic sends the password in the clear on an http:// url; ' +
+        'leave the authentication as negotiate',
+    ]);
+    expect(documents(destination({ ...plain, auth: 'negotiate' }))).toStrictEqual([]);
+    expect(documents(destination({ auth: 'basic' }))).toStrictEqual([]);
   });
 
   it('ACT-88 insists on either command patterns or any_command, never both and never neither', () => {
