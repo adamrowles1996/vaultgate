@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { TEST_CERTIFICATE_PEM } from '../../../test-support/test-certificate.ts';
+
 import {
   portOf,
   sqlCredentialSchema,
@@ -125,9 +127,21 @@ describe('the sql save-time checks', () => {
     expect(problems({ destination: { tls: 'verify-full' } })).toStrictEqual([
       'destination.ca_pem: the verify-full mode needs the certificate authority to verify against',
     ]);
-    expect(problems({ destination: { tls: 'verify-full', ca_pem: '-----BEGIN' } })).toStrictEqual(
-      [],
-    );
+    expect(
+      problems({ destination: { tls: 'verify-full', ca_pem: TEST_CERTIFICATE_PEM } }),
+    ).toStrictEqual([]);
+  });
+
+  it('ACT-57 refuses a certificate authority that is not a PEM certificate, as a one-line paste is', () => {
+    const refusal = [
+      'destination.ca_pem: is not a PEM certificate; paste it with its line breaks, from -----BEGIN CERTIFICATE----- to -----END CERTIFICATE-----',
+    ];
+    const oneLine = TEST_CERTIFICATE_PEM.replaceAll('\n', '');
+    const lines = TEST_CERTIFICATE_PEM.split('\n');
+    const truncated = [...lines.slice(0, 2), ...lines.slice(3)].join('\n');
+    for (const ca_pem of ['-----BEGIN', oneLine, truncated]) {
+      expect(problems({ destination: { tls: 'verify-full', ca_pem } })).toStrictEqual(refusal);
+    }
   });
 
   it('ACT-57 a certificate authority without verify-full is refused rather than ignored', () => {
