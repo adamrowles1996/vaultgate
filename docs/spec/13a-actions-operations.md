@@ -34,20 +34,21 @@
 
 ## 13.11 Rate limits and caps
 
-| Limit                       | Default                                                              | Key     | Beyond it                                          |
-| --------------------------- | -------------------------------------------------------------------- | ------- | -------------------------------------------------- |
-| Calls per target            | `policy.rate_limit_per_minute`, 60                                   | target  | `rate_limited` with `retry_after_s`                |
-| Calls per client            | 120 / min across all targets                                         | client  | `rate_limited`                                     |
-| In-flight calls per target  | 4                                                                    | target  | `rate_limited`                                     |
-| In-flight calls per client  | 8                                                                    | client  | `rate_limited`                                     |
-| Timeout per call            | `policy.timeout_ms`, 30 000; ceiling 300 000                         | call    | `timeout`; the connector cancels the work          |
-| Output per call             | `policy.max_output_bytes`, 256 KiB; ceiling 1 MiB                    | call    | `truncated: true`                                  |
-| Request body (`http`)       | `policy.max_body_bytes`, 256 KiB; ceiling 4 MiB                      | call    | `policy_denied` (`body_size`)                      |
-| Rows (`sql_query`)          | `policy.max_rows`, 500; ceiling 10 000                               | call    | `truncated: true`                                  |
-| Browser sessions per client | `policy.max_sessions`, 1; ceiling 4                                  | client  | `session_limit`                                    |
-| Browser session lifetime    | `policy.session_ttl_s`, 900 idle; 3 600 absolute                     | session | `session_expired`                                  |
-| Confirmations pending       | 2 minutes each                                                       | state   | `confirmation_expired`                             |
-| Index builds (`code`)       | 1 in flight per target; `policy.build_timeout_s`, 600; ceiling 3 600 | target  | A second trigger joins the running build (ACT-108) |
+| Limit                       | Default                                                                         | Key     | Beyond it                                                      |
+| --------------------------- | ------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------- |
+| Calls per target            | `policy.rate_limit_per_minute`, 60                                              | target  | `rate_limited` with `retry_after_s`                            |
+| Calls per client            | 120 / min across all targets                                                    | client  | `rate_limited`                                                 |
+| In-flight calls per target  | 4                                                                               | target  | `rate_limited`                                                 |
+| In-flight calls per client  | 8                                                                               | client  | `rate_limited`                                                 |
+| Timeout per call            | `policy.timeout_ms`, 30 000; ceiling 300 000                                    | call    | `timeout`; the connector cancels the work                      |
+| Output per call             | `policy.max_output_bytes`, 256 KiB; ceiling 1 MiB                               | call    | `truncated: true`                                              |
+| Request body (`http`)       | `policy.max_body_bytes`, 256 KiB; ceiling 4 MiB                                 | call    | `policy_denied` (`body_size`)                                  |
+| Rows (`sql_query`)          | `policy.max_rows`, 500; ceiling 10 000                                          | call    | `truncated: true`                                              |
+| Browser sessions per client | `policy.max_sessions`, 1; ceiling 4                                             | client  | `session_limit`                                                |
+| Browser session lifetime    | `policy.session_ttl_s`, 900 idle; 3 600 absolute                                | session | `session_expired`                                              |
+| Confirmations pending       | 2 minutes each                                                                  | state   | `confirmation_expired`                                         |
+| Index builds (`code`)       | 1 in flight per target and commit; `policy.build_timeout_s`, 600; ceiling 3 600 | target  | A second trigger joins the running build (ACT-108)             |
+| Build wait (`code`)         | `policy.build_wait_s`, 90; ceiling 290                                          | call    | `index_not_ready` (`building`), the build carries on (ACT-112) |
 
 - **ACT-59** Limits are the in-memory token buckets of OPS-6 (single replica, 10 000 keys), sit
   inside the per-token limit of MCP-5, and are applied before confirmation so an agent cannot
@@ -128,7 +129,7 @@ about a repository, snapshot or index is stored in vaultgate's database:
 | `VAULTGATE_ACTIONS_ENABLE_BROWSER`    | `false` | Enables the `browser` connector and `actions:browser`. Requires `VAULTGATE_ACTIONS_BROWSER_CDP_URL`.                                   |
 | `VAULTGATE_ACTIONS_BROWSER_CDP_URL`   |         | `ws://` or `wss://` URL of the Chromium sidecar's DevTools endpoint (14.7). Must not be a public address.                              |
 | `VAULTGATE_ACTIONS_ENABLE_CODE`       | `false` | Enables the `code` connector and `actions:code` (14.8). Requires `VAULTGATE_ACTIONS_CODE_URL`.                                         |
-| `VAULTGATE_ACTIONS_CODE_URL`          |         | `http://` URL of the code sidecar (ACT-113, ACT-114). Must not be a public address.                                                    |
+| `VAULTGATE_ACTIONS_CODE_URL`          |         | The code sidecar (ACT-113, ACT-114): an `http://` URL on an address that is not public, or `unix:` and a socket's absolute path.       |
 | `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` | `false` | Allows `ssh`/`winrm` targets to be saved with `any_command: true` (ACT-88). Turning it off later makes such targets refuse every call. |
 
 - **ACT-67** The connector switches are meaningful only with the master switch on; a connector
@@ -183,6 +184,7 @@ src/actions/
     ssh/               the runtime (M12): schemas (14.5), the host-key parser and matcher, the tool, authorize (pure), the ssh2 driver shape, client, channel, run
     winrm/             the runtime (M13): schemas (14.6), the tool, authorize (pure), the SOAP envelopes, the strict response reader, client (shell lifecycle), run, index
     browser/           CDP client, login sequence, origin interception, snapshot and masking (planned)
+    code/              the runtime (M16): schemas (14.8), the GitHub fetch, the sidecar client, snapshots and builds, the three tools
 ```
 
 - **ACT-70** Dependency-cruiser gains a layer: `src/actions/` MAY import `result`, `config`,
@@ -246,8 +248,10 @@ src/actions/
 | `session_expired`            | The session passed its idle or absolute TTL, or was closed by a revocation path (ACT-96).                                                                                                                                                                                                           |
 | `session_limit`              | The client already holds `max_sessions` sessions on this target (ACT-96).                                                                                                                                                                                                                           |
 | `index_unavailable`          | The code sidecar did not answer on `VAULTGATE_ACTIONS_CODE_URL` (ACT-113).                                                                                                                                                                                                                          |
-| `index_not_ready`            | The `code` target has no index yet; `detail.state` is `building`, `failed` or `absent` (ACT-112).                                                                                                                                                                                                   |
-| `path_not_found`             | The path is not a regular file in the target's current snapshot, including an excluded file (ACT-111).                                                                                                                                                                                              |
+| `index_not_ready`            | The `code` index is not built yet; `detail.state` is `building` or `failed`, with `detail.repo` and, when failed, `detail.reason` (ACT-112).                                                                                                                                                        |
+| `path_not_found`             | The path is not a regular file in the snapshot, including an excluded or skipped file (ACT-111).                                                                                                                                                                                                    |
+| `ref_not_found`              | GitHub has no branch, tag, commit or pull request of that name in the repository (ACT-104).                                                                                                                                                                                                         |
+| `chunk_not_found`            | `code_find_related` names a line no indexed chunk holds (ACT-111).                                                                                                                                                                                                                                  |
 | `not_text`                   | `code_read` of a file that is not text (ACT-111).                                                                                                                                                                                                                                                   |
 | `element_not_found`          | The `ref` is not in the current page (ACT-32).                                                                                                                                                                                                                                                      |
 

@@ -23,6 +23,7 @@ model is [`../THREAT_MODEL.md`](../THREAT_MODEL.md).
 | [13 Actions](13-actions.md)                           | Targets, `actions:*` scopes, the tools, policy, elicitation, secret handling          |
 | [13a Actions in operation](13a-actions-operations.md) | Destinations, limits, audit, storage, configuration, module layout, error codes       |
 | [14 Action connectors](14-actions-connectors.md)      | `http` and Graph, `sql`; `ssh`, `winrm` and `browser` contracts and sidecar (planned) |
+| [14a The `code` connector](14a-code-connector.md)     | Semble code search over GitHub repositories: fetching, snapshots, tools, sidecar      |
 
 Requirement language follows RFC 2119: **MUST**, **SHOULD**, **MAY**.
 Each requirement has an identifier (for example `OAUTH-12`) so tests and pull

@@ -46,7 +46,10 @@ join this surface only on a deployment that enables the layer, for tokens with a
 - **MCP-16** The handshake's `instructions` depend on the token. A token that holds an
   `actions:*` scope on a deployment with the actions layer enabled is told to call
   `actions_list_targets` and then the action tool for a target, and to prefer an action to
-  `get_secret` so that no secret it only needs to use enters the conversation. Any other token is
+  `get_secret` so that no secret it only needs to use enters the conversation. A token that also
+  holds `actions:code` is given `semble`'s own guidance for the code tools (14.8.6): search once
+  with a focused query, go straight to the returned file and line, use `code_find_related` after
+  a search, and ask for `max_snippet_lines: null` when a snippet is not enough. Any other token is
   told that read tools return metadata only and that `get_secret` is the sole, audited way to read
   a secret value.
 
