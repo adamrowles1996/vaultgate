@@ -55,6 +55,10 @@ const FIELD_MESSAGES: Readonly<Record<string, string>> = {
     'Whether the connection accepts any command at all. It needs the deployment switch ' +
     'VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND, and every call is audited with the full command.',
   // code (§14.8)
+  'destination.repository':
+    'The repository as owner/name, as GitHub shows it: type it, or choose one the token can read.',
+  'destination.ref':
+    'A branch or tag name, or a full 40-character commit SHA; empty for the default branch.',
   'policy.content':
     'The content agents may search, at least one of code, docs and config; a call may narrow it.',
   'policy.allow_read': 'Whether code_read may return whole files, up to the most lines per read.',

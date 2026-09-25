@@ -155,11 +155,19 @@ describe('Add connection: Semble · GitHub code search', () => {
       csrf,
       ...CODE_FORM,
       internal: 'on',
-      'destination.repository': 'not a repository',
     });
     expect(response.status).toBe(400);
     const markup = compact(await response.text());
     expect(markup).toContain('this connection reaches the internet only; it is never internal');
+    const invalid = await browser.submit('/account/actions', {
+      csrf,
+      ...CODE_FORM,
+      'destination.repository': 'not a repository',
+    });
+    expect(invalid.status).toBe(400);
+    expect(compact(await invalid.text())).toContain(
+      '<p class="field-error">The repository as owner/name, as GitHub shows it: type it, or choose one the token can read. (',
+    );
     const waiting = await browser.submit('/account/actions', {
       csrf,
       ...CODE_FORM,
