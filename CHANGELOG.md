@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- OAUTH-19, ID-19: **Allow on the consent page did nothing in a real browser.** The page's
+  `form-action 'self'` also governs the redirects a form submission follows, so Chromium blocked
+  the decision's `302` to the client (reporting the page's own URL), the code never reached the
+  client, and a second press found the request spent (`this authorization request has expired`).
+  The consent page now allows exactly its request's redirect origin in `form-action`; every other
+  page keeps the strict policy.
+
 ## [0.1.0-rc.16] - 2026-09-25
 
 ### Fixed

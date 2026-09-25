@@ -17,7 +17,10 @@ describe('GET /oauth/authorize/:id', () => {
     const path = await parkedPath(harness, browser);
     const response = await authorize(harness, path, browser);
     expect(response.status).toBe(200);
-    expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+    expect(response.headers.get('content-security-policy')).toBe(
+      "default-src 'none'; style-src 'self'; img-src 'self' data:; " +
+        "form-action 'self' https://agent.example.com; frame-ancestors 'none'; base-uri 'none'",
+    );
     expect(response.headers.get('cache-control')).toBe('no-store');
     const form = parseConsentForm(response.text);
     expect(form.requestId).toBe(requestIdOf(path));
@@ -43,6 +46,9 @@ describe('GET /oauth/authorize/:id', () => {
     expect(text).toContain('loopback address (<code>127.0.0.1:61234</code>)');
     expect(text).toContain('<dt>Will redirect to</dt><dd><code>127.0.0.1:61234</code></dd>');
     expect(text).toContain('pre-registered by the operator');
+    expect(page.headers.get('content-security-policy')).toContain(
+      "form-action 'self' http://127.0.0.1:61234;",
+    );
   });
 
   it('OAUTH-17 redirects to login when the session is gone, preserving the request id', async () => {

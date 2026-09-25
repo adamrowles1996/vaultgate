@@ -1,3 +1,4 @@
+import { contentSecurityPolicy } from '../identity/browser.ts';
 import { isScope, type Scope } from '../scopes/registry.ts';
 
 import { parseAuthorizationRequest, toPendingParameters } from './authorize-request.ts';
@@ -98,6 +99,11 @@ export function createConsentPageHandler(dependencies: AuthorizeDependencies): C
       );
     }
     const { parameters } = pending;
+    // OAUTH-19: the decision's 302 goes to the client, so the form may leave for that origin only.
+    context.header(
+      'Content-Security-Policy',
+      contentSecurityPolicy([new URL(parameters.redirect_uri).origin]),
+    );
     const view = {
       requestId: id,
       csrfToken: session.csrfToken,
