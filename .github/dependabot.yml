@@ -27,6 +27,34 @@ updates:
       timezone: Europe/London
     commit-message:
       prefix: 'build(docker)'
+  # The code sidecar (sidecars/code): its Python lockfile and its image's base.
+  - package-ecosystem: uv
+    directory: /sidecars/code
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/London
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'build(deps)'
+      prefix-development: 'build(deps-dev)'
+    groups:
+      code-sidecar-runtime:
+        dependency-type: production
+        update-types: [minor, patch]
+      code-sidecar-tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /sidecars/code
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/London
+    commit-message:
+      prefix: 'build(docker)'
   - package-ecosystem: docker-compose
     directory: /
     schedule:

@@ -15,6 +15,7 @@ const SPEC_FILES = [
 ];
 
 const TEST_ROOT = 'src';
+const PYTHON_TEST_ROOT = 'sidecars/code/tests';
 const PREFIX = 'ACT-';
 
 /**
@@ -68,32 +69,69 @@ function definedRequirements() {
   return defined;
 }
 
-async function testFiles(directory) {
+async function testFiles(directory, isTest) {
   const entries = await readdir(directory, { withFileTypes: true });
   const found = [];
   for (const entry of entries) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) {
-      found.push(...(await testFiles(path)));
-    } else if (entry.name.endsWith('.test.ts')) {
+      found.push(...(await testFiles(path, isTest)));
+    } else if (isTest(entry.name)) {
       found.push(path);
     }
   }
   return found;
 }
 
-function citationsIn(path) {
-  const cited = [];
-  const titles = readFileSync(path, 'utf8').matchAll(TEST_TITLE);
-  for (const [, title] of titles) {
-    cited.push(...(title.match(CITATION) ?? []));
+function vitestTitles(text) {
+  return text
+    .matchAll(TEST_TITLE)
+    .map(([, title]) => title)
+    .toArray();
+}
+
+/**
+ * The code sidecar's pytest suite cites a requirement in the first line of a
+ * test function's docstring: `"""ACT-106: symbolic links are skipped."""`.
+ * A line starting `def test_` opens a signature, the first line ending in `:`
+ * closes it, and the next non-blank line is the docstring or there is none.
+ */
+function pytestTitles(text) {
+  const titles = [];
+  let state = 'code';
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (state === 'body' && line !== '') {
+      if (line.startsWith('"""')) {
+        titles.push(line);
+      }
+      state = 'code';
+    }
+    if (line.startsWith('def test_')) {
+      state = 'signature';
+    }
+    if (state === 'signature' && line.endsWith(':')) {
+      state = 'body';
+    }
   }
-  return cited;
+  return titles;
+}
+
+function citationsIn(path, titlesOf) {
+  const titles = titlesOf(readFileSync(path, 'utf8'));
+  return titles.flatMap((title) => title.match(CITATION) ?? []);
 }
 
 async function citedRequirements() {
-  const files = await testFiles(TEST_ROOT);
-  return new Set(files.flatMap((file) => citationsIn(file)));
+  const vitest = await testFiles(TEST_ROOT, (name) => name.endsWith('.test.ts'));
+  const pytest = await testFiles(
+    PYTHON_TEST_ROOT,
+    (name) => name.startsWith('test_') && name.endsWith('.py'),
+  );
+  return new Set([
+    ...vitest.flatMap((file) => citationsIn(file, vitestTitles)),
+    ...pytest.flatMap((file) => citationsIn(file, pytestTitles)),
+  ]);
 }
 
 const defined = definedRequirements();

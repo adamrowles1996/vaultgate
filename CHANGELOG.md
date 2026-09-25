@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- ACT-106, ACT-113, ACT-117: **the `code` connector's sidecar**, under `sidecars/code/`: Python
+  3.12 and `semble` 0.6.1 as a library, locked by hash with `uv`, and the embedding model pinned by
+  revision and SHA-256. It extracts archives under the hostile-archive rules, builds indexes in a
+  child process under disk and memory caps, and serves the protocol of
+  [`sidecars/code/PROTOCOL.md`](sidecars/code/PROTOCOL.md) over a Unix socket or TCP, with no
+  credential and no network. Its own suite holds 100% coverage; CI also builds and boots its image.
+
 ### Changed
 
 - ACT-5: **the console calls a target a _connection_ rather than a _computer_**, since most
@@ -29,6 +38,10 @@ All notable changes to this project are documented here. The format follows
   connector moves to its own file, [14a](docs/spec/14a-code-connector.md), with two new
   requirements for the console's repository picker and GitHub check (ACT-119, ACT-120) and two
   new error codes, `ref_not_found` and `chunk_not_found`.
+
+- The changelog's 0.1.0-rc.7 to 0.1.0-rc.9 sections moved verbatim to
+  [`docs/changelog-archive.md`](docs/changelog-archive.md), so `CHANGELOG.md` keeps room inside
+  the 64 KiB file gate for the M16 entries.
 
 ## [0.1.0-rc.20] - 2026-09-25
 
@@ -506,269 +519,9 @@ All notable changes to this project are documented here. The format follows
   defeated, so this was an honesty defect rather than a security one, but the service's own
   refusal was unreachable on the only path that writes a target. Found by the M12 live test.
 
-## [0.1.0-rc.9] - 2026-09-24
-
-### Added
-
-- `ssh` connector runtime and `ssh_run` (spec 14 §14.5 and spec 13 §13.6.5, M12; ACT-27, ACT-28,
-  ACT-87, ACT-88): the tool is listed on a deployment with `VAULTGATE_ENABLE_ACTIONS=true` and
-  `VAULTGATE_ACTIONS_ENABLE_SSH=true` for tokens holding `actions:ssh`. An `ssh` target names a
-  host, a port, the login name the command runs as and the server's host key — the line
-  `ssh-keyscan` prints, or its `SHA256:` fingerprint — which is parsed at save, so a target that
-  could never be verified cannot be stored; there is no trust-on-first-use and no way to skip the
-  check. The credential is either a private key from the vault item (with an optional passphrase
-  field) or a password. The policy names either a list of command patterns or `any_command`,
-  never both and never neither. A call matches the whole command against the patterns before
-  anything connects (`policy_denied`, reason `command`; a command beyond 16 KiB is
-  `command_size`), refuses a newline or carriage return except on an any-command target, and
-  refuses a NUL byte as `invalid_arguments`. The connection goes to the address the engine
-  resolved and validated once, with the host name kept for the host-key lookup; the presented key
-  is checked in `ssh2`'s `hostVerifier` during the key exchange, so a mismatch fails
-  `host_key_mismatch` before any credential is offered. `ssh-rsa` (the SHA-1 signature algorithm)
-  is removed from the host-key algorithms and only the one authentication method the mapping
-  names is offered, so no agent, `none` or keyboard-interactive attempt can follow. One exec
-  channel runs the command with no pseudo-terminal, no agent forwarding, no X11, no environment
-  and no port forwarding; standard input is written and closed; standard output and standard
-  error are captured separately, each cut at the target's output limit with the scrubber's guard
-  band; and the connection is closed when the call ends. The policy timeout signals `KILL` to the
-  remote command. Every call is a shell operation, so `confirm_writes` asks a human first, and
-  every injected value in every encoding is replaced by `[redacted:<field>]` in the result, the
-  error detail and the audit row. Contract tests drive the connector over a fake client (every
-  policy reason, both authentication modes, the caps with a value straddling the cut, the
-  timeout, the canary suite) and the real `ssh2` wrapper over a fake driver, so no test needs a
-  server. Operator guide: `docs/guides/actions.md` ("Creating an `ssh` target", "Calling an `ssh`
-  target"); tool reference: `docs/guides/tools-and-scopes.md`.
-- The account page can create and edit `ssh` targets, and shows a standing warning on a target
-  that allows any command (ACT-88). The unrestricted box is drawn only on a deployment with
-  `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND=true`, and turning that switch off afterwards refuses
-  every call on such a target and hides it from `actions_list_targets`, as §13.14 says it should.
-- Runtime dependency `ssh2` (exact pin, ACT-72, ACT-87, QG-9). `package.json` gains an
-  `allowScripts` block denying the install scripts of `ssh2` and of its optional `cpu-features`
-  binding, so `npm ci` compiles nothing on any platform and no native addon reaches
-  `node_modules`; the library uses its JavaScript implementations, which is all it needs.
-
-### Changed
-
-- `ssh` and `winrm` share one command policy (`src/actions/connectors/command.ts`): the ACT-27
-  argument shape, the ACT-88 allowlist-or-`any_command` rule, the ACT-39 decision, the ACT-43
-  summary and the ACT-19 capabilities are now written once, so the two connectors cannot drift
-  apart. Behaviour is unchanged except as below.
-- `ssh_run` and `winrm_run` refuse a command containing a C0 control character other than tab,
-  carriage return or line feed (`invalid_arguments`), not only a NUL byte. XML 1.0 cannot carry
-  one even as a character reference, so a `winrm` command holding one could never be sent; on
-  `ssh` it is a mistake or a terminal escape. ACT-27 is updated to say so.
-- The audited `classification` of a call is now scrubbed like its arguments, because an
-  any-command `ssh` target records the whole command there (ACT-60, ACT-61, ACT-88): the 4 KiB
-  cap on `arguments` could otherwise cut the very command an operator needs to read back.
-- A connector's loader receives the actions configuration, so the `ssh` runtime can close over
-  `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` and refuse every call on an any-command target once the
-  deployment withdraws it.
-- The guide now says that vaultgate's `tls: "require"` is not PostgreSQL's `sslmode=require`: it
-  verifies fully against the system trust store, closer to `verify-full`. It also corrects the
-  least-privilege example, which implied that `DENY EXECUTE` in the target database stops
-  `EXEC sp_who`; it does not, because that procedure lives in `master` where `public` may execute
-  it. The classifier is what refuses it, before any connection exists.
-
-### Fixed
-
-- `sql` connector, three defects an M11 live test found in `v0.1.0-rc.8` against a real
-  PostgreSQL 18 and a real SQL Server 2019 (ACT-24, ACT-55, ACT-57, ACT-74, ACT-84).
-  - **SQL Server never worked at all.** `mssql` is CommonJS and `cjs-module-lexer` finds none of
-    its classes, so the ESM namespace Node offers is `default`, `module.exports` and
-    `valueHandler`: `const { ConnectionPool } = await import('mssql')` was `undefined` and every
-    call failed with `ConnectionPool is not a constructor`. Both drivers now come through one
-    checked lookup that takes the class off `default` when the namespace does not carry it, and
-    refuses by name if neither does. The suite injected fakes everywhere, so the one line that
-    touched the real package was never executed; the new tests import the real `mssql` and `pg`
-    and drive the production interop over the namespace Node really offers, opening no
-    connection, and fail if either package changes its export shape.
-  - **A `TypeError` inside the connector no longer blames the destination.** A JavaScript fault
-    is the new `connector_fault` (§13.16), whose message says the call failed inside vaultgate
-    and that the destination may never have been contacted, rather than `upstream_error`'s "the
-    destination reported an error".
-  - **A TLS target whose host is an IP literal.** No server name is sent for an address — SNI has
-    no syntax for one and Node refuses it — and the certificate is verified against its IP
-    subject-alternative names instead, which is the correct verification for an address.
-    PostgreSQL targets reached by address now connect. SQL Server cannot verify an address at all
-    (Tedious puts the server name straight into the handshake and its in-band TLS path leaves
-    nothing else to verify against), so such a target is now a save-time problem naming the two
-    ways out instead of an `ESOCKET` at call time. Pinning is unchanged: the socket still goes
-    only to the address the engine validated.
-  - **SQL Server decimals kept their scale.** A decimal string now carries the scale its column
-    declares, so `decimal(10,2)` 3.50 is `"3.50"` and not `"3.5"`. Tedious builds the double
-    inside its own value parser, before `mssql`'s `valueHandler` registry can see it, so a value
-    whose unscaled integer passes `Number.MAX_SAFE_INTEGER` has already lost digits: rather than
-    return a plausible wrong number — which is what ACT-24 exists to prevent — the call fails with
-    `connector_fault` and `detail.reason: "exact_numeric_precision"`, and the guide says to cast
-    the column to `varchar`.
-
-## [0.1.0-rc.8] - 2026-09-24
-
-### Added
-
-- `sql` connector runtime and `sql_query` (spec 14 §14.4 and spec 13 §13.6.4, M11 first pull
-  request; ACT-23, ACT-24, ACT-26, ACT-36, ACT-37, ACT-38, ACT-77, ACT-84, ACT-85, ACT-86): the
-  tool is listed on a deployment with `VAULTGATE_ENABLE_ACTIONS=true` and
-  `VAULTGATE_ACTIONS_ENABLE_SQL=true` for tokens holding `actions:sql.read`. A `sql_query` names
-  a granted target and gives exactly one statement (at most 64 KiB) and up to 100 positional
-  parameters. The statement is tokenised in the target's own dialect — `'…'` with doubled
-  quotes, `N'…'` on SQL Server, `E'…'` and `$tag$…$tag$` on PostgreSQL, `"…"` and `[…]` quoted
-  identifiers, line comments and block comments that nest on PostgreSQL — and refused before any
-  connection is opened when it is more than one statement (`policy_denied`,
-  `statement_count`) or does not classify as a read (`policy_denied`, `statement_class`); the
-  class it was given is recorded on the refused call as well as on the call that ran. Parameters
-  bind to `$1…$n` (PostgreSQL) or `@p1…@pn` (SQL Server), counted in the tokenised statement, and
-  any mismatch is `invalid_arguments`; there is no interpolation path. One connection is opened
-  per call after the policy decision, to the address the engine resolved and validated once, with
-  the host name kept for TLS (SNI and certificate verification, `verify-full` against a
-  `ca_pem`; there is no way to skip verification), and closed in `finally` — no pool, so a
-  rotated password takes effect on the next call. PostgreSQL sessions are opened read-only
-  (`SET default_transaction_read_only = on` and `BEGIN READ ONLY`); on SQL Server the
-  classification and the least-privilege login are the controls, and the guide says so. The
-  result carries the columns with the engine's own type names, the rows as arrays of JSON
-  scalars (ISO 8601 dates, base64 binary, decimals and 64-bit integers as strings), the row
-  count, `truncated` and `duration_ms`; rows are dropped whole at `max_rows` and at
-  `max_output_bytes`, so no value is ever cut in half. Driver failures map to
-  `authentication_failed`, `connection_failed`, `tls_error`, `timeout` and `upstream_error` with
-  the server's message scrubbed and capped at 1 KiB. Contract tests run the connector against
-  fake sessions and both real session modules against fake drivers, with the ACT-77 corpus as
-  one named test per statement per engine, the ACT-53 canary suite through the engine and a
-  parameterised query through the MCP client SDK.
-  Operator guide: `docs/guides/actions.md` ("Creating a `sql` target", "Calling a `sql` target",
-  with the `CREATE ROLE`/`CREATE LOGIN` examples); tool reference:
-  `docs/guides/tools-and-scopes.md`.
-- `sql_execute` under `actions:sql.write` (spec 13 §13.6.4 and spec 14 §14.4, M11 second pull
-  request; ACT-25, ACT-38, ACT-40, ACT-41, ACT-45…49, ACT-76): the tool is listed for tokens
-  holding `actions:sql.write` on a deployment with `VAULTGATE_ACTIONS_ENABLE_SQL=true`, and a
-  target serves it only when its policy's `operations` include `write`. It takes the same
-  arguments as `sql_query` and is judged by the same tokeniser and classifier, but accepts the
-  opposite classes: `dml` always, `ddl` only when `write_classes` names it, and a `read`
-  statement never — so neither tool can be made to do the other's work whatever scopes the token
-  holds. A target carrying a `statement_allowlist` then has it applied as ACT-34 `command`-kind
-  patterns over the statement as the agent wrote it, refusing anything outside with
-  `policy_denied` and `detail.reason: "statement_pattern"`. Every call is a non-read call, so a
-  target with `confirm_writes` (the default for a new target) obtains a human confirmation
-  through MCP elicitation before the credential is fetched or anything connects. The statement
-  runs in its own transaction — `BEGIN`/`COMMIT` on PostgreSQL, the driver's transaction on SQL
-  Server — rolled back on any error, and on the policy timeout the connection is dropped, which
-  rolls it back too. The result is `rows_affected`, the `columns` and `rows` the statement
-  returned through `RETURNING` or `OUTPUT` (both empty when it returned none, so the shape does
-  not change with the statement), `truncated` and `duration_ms`. `actions_list_targets` now
-  reports `write` for a target whose policy allows it and whose caller holds the scope.
-  The confirmation flow is proven end to end through the real MCP client SDK for this tool:
-  accept, accept without the box ticked, decline, cancel, a client that cannot elicit, a replayed
-  confirmation, an expired one, an edited target, altered arguments and another token.
-  Operator guide: `docs/guides/actions.md` ("Changing data through a `sql` target", with the
-  least-privilege write-login examples for both engines).
-
-### Changed
-
-- **Specification 13 is split in two.** `docs/spec/13-actions.md` keeps 13.1 to 13.9 — what a
-  target is, who may use it, the tools, the policy, the confirmation and the secret handling —
-  and the new `docs/spec/13a-actions-operations.md` holds 13.10 to 13.18: the network rules, the
-  limits, the audit trail, the storage, the configuration, the module layout, the error codes,
-  the non-goals and the verification. The section numbers and the `ACT-n` identifiers are
-  unchanged, so every existing citation still resolves; the seam is the one between the layer's
-  contract and its operation, and the file had reached the repository's 64 KiB size gate.
-- `Connector.authorize` and `Connector.describe` now take one `OperationRequest` — the target's
-  three documents and the tool the agent called — instead of a list of documents. A connector
-  that serves two tools needs the name to judge an operation at all, and this supersedes the
-  appended `destination` parameter added in M11's first pull request.
-- `RunContext` carries the tool name, so the `sql` connector opens a read-only or a
-  transactional session and returns the ACT-24 or the ACT-25 result accordingly.
-- `ConnectorOutput` gains an optional `bytes`, so a connector whose result is not a byte
-  stream (the `sql` rows) still reports `output_bytes` to the `action_calls` row.
-- The `action_calls` classification is recorded for a call the policy refused, not only for a
-  call that ran (ACT-26, ACT-60), so an operator reading a target's history sees what a refused
-  statement was taken to be.
-- `policy.schemas` is withdrawn from the `sql` policy document (spec 14 §14.4). Deciding whether
-  a qualified name in a statement is a schema or a table alias needs a real parser; a check that
-  cannot tell them apart either refuses ordinary statements or gives a false assurance. Granting
-  the login only the schemas you mean is the control, and the guide now shows how for both
-  engines. A stored `schemas` value is ignored rather than invalidating the target.
-- The certificate and TLS error codes are classified in one place (`src/net/tls-error.ts`) for
-  the pinned HTTPS transport and the database drivers alike, instead of once per connector.
-- The measured cost of the `sql` drivers is recorded in the specification itself (ACT-84), not
-  only in a pull-request body: `pg` and everything it needs is 14 packages and about 0.9 MB;
-  `mssql` adds 73 packages and about 69 MB, of which about 44 MB is the `@azure/*` tree that
-  `tedious` requires at module load for Entra ID authentication modes vaultgate never uses.
-
-### Dependencies
-
-- Added `pg` 8.23.0 and `mssql` 12.7.2 (ACT-84, QG-9), each imported only from inside its own
-  session module through a dynamic import, so a deployment that never enables `sql` never loads
-  either. Both are pure JavaScript with no native addon and no install script; `pg-native` is an
-  optional peer dependency and is not installed. Added `@types/pg` 8.23.1 and `@types/mssql`
-  12.3.0 as development dependencies (type declarations only; neither ships).
-
-### Fixed
-
-- The account page's `graph` credential fields still carried the pre-M10 help text, telling the
-  operator that "a graph target cannot be saved until the graph adapter arrives in M10" on the
-  very release that ships the adapter. The help now describes the tenant field and keeps the
-  base-URL rule. Found by the M10 live test against the reference deployment.
-
-- A call the policy refuses is now covered by a test asserting it is recorded with the
-  classification it was refused for (ACT-26, ACT-60), so the operator can see what was asked for.
-  The behaviour arrived with the `sql` connector, which moved the connector's `describe` ahead of
-  its `authorize`; nothing asserted it, and the release before it recorded a blank classification
-  on every refusal.
-- The operator guide says that a target's vault item must be one vaultgate has already synced,
-  since a freshly created item is refused until the next scheduled sync.
-
-## [0.1.0-rc.7] - 2026-09-23
-
-### Added
-
-- `graph` credential adapter for `http` targets (spec 14 §14.3, M10; ACT-81, ACT-82, ACT-83): a
-  target whose `base_url` is on `https://graph.microsoft.com` may map its credential as
-  `mode: "graph"`, and `http_request` then behaves exactly as it does on a bearer target while
-  vaultgate obtains the Microsoft Graph access token itself. The adapter document names the
-  tenant (a GUID or a domain name), the application id, the grant (`client_credentials` or
-  `refresh_token`), the scope and the vault fields holding the client secret and, for the
-  refresh grant, the refresh token; the M9 save-time refusal of the mode is gone and a `graph`
-  mapping is checked like any other (ACT-4). Before the request the adapter posts the grant to
-  `https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token` through the pinned transport,
-  resolving and validating that host by the same private-range rule as any destination, and
-  validates the response against a schema before reading a field. The token is held in process
-  memory only, keyed by target id and revision and given up 60 s before it expires (the one
-  caching exception of ACT-50); it is never stored, never logged, and is redacted from every
-  result, row, log line and elicitation message as `[redacted:graph.access_token]`, in every
-  ACT-51 encoding. A `401` from Graph discards it and the request is retried once with a fresh
-  token; a `401` on that attempt is the result. When the token endpoint rotates the refresh
-  token, the new one is written back to the mapped vault field **before** the Graph request and
-  an `actions.credential_rotated` event is recorded (target, item id, field name, never the
-  value); a write-back that fails fails the call with `credential_rotation_failed` so the
-  operator learns while the old token still works. Token-endpoint failures map to
-  `authentication_failed` for `invalid_client` and `invalid_grant` (the OAuth error code is the
-  only detail; the AADSTS description is not scrub-safe), to `connection_failed`, `tls_error`
-  or `timeout` for a transport failure, and to `upstream_error` otherwise. Contract tests cover
-  both grants, the cache and its 60 s margin, a revision change, the `401` retry and the
-  absence of a loop, rotation and a failed write-back, every error mapping, and an ACT-53 canary
-  suite through the engine in which the fake Graph echoes the `Authorization` header and the
-  fake token endpoint echoes the form it was posted. Operator guide: `docs/guides/actions.md`
-  ("Microsoft Graph targets").
-
-### Changed
-
-- `VaultClient.updateItem` can write custom fields (`ItemPatch.customFields`): a named field
-  keeps its kind and takes the new value, a name the item does not carry is created `hidden`.
-  This is what the ACT-83 refresh-token write-back uses; it is the only path by which the
-  actions layer writes to the vault, and it needs no agent scope.
-
-### Fixed
-
-- The account page's create-target form carried no `connector` field, while `POST /account/actions`
-  reads the connector from the submission, so creating a target from a browser answered `404` and
-  no target could be created through the operator pages at all (spec 13 §13.3.2, ACT-2, ACT-6).
-  The create form now carries the connector as a hidden field, and the create-page test submits
-  exactly the controls the rendered form carries rather than a hand-written field set, so a field
-  the form forgets to render fails the suite. Found by the M9 live test against both reference
-  deployments on v0.1.0-rc.6.
-
 ## Earlier releases
 
-Release candidates 0.1.0-rc.1 to 0.1.0-rc.6 are in
+Release candidates 0.1.0-rc.1 to 0.1.0-rc.9 are in
 [`docs/changelog-archive.md`](docs/changelog-archive.md). They are kept verbatim; this file holds
 the current release and the ones after it, so it stays inside the repository's 64 KiB file gate.
 
@@ -784,6 +537,3 @@ the current release and the ones after it, so it stays inside the repository's 6
 [0.1.0-rc.12]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.11...v0.1.0-rc.12
 [0.1.0-rc.11]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.10...v0.1.0-rc.11
 [0.1.0-rc.10]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.9...v0.1.0-rc.10
-[0.1.0-rc.9]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.8...v0.1.0-rc.9
-[0.1.0-rc.8]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.7...v0.1.0-rc.8
-[0.1.0-rc.7]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.6...v0.1.0-rc.7
