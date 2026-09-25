@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- OAUTH-9, OAUTH-11: Claude could not connect. Its hosted client metadata document lists
+  `urn:ietf:params:oauth:grant-type:jwt-bearer` beside `authorization_code` and `refresh_token`,
+  and vaultgate refused the whole document with `invalid_client`. A grant type vaultgate does not
+  offer is now dropped instead, in a hosted document and in a dynamic registration alike; the
+  document must still list `authorization_code`, and the token endpoint still honours only the
+  two grants it advertises.
 - ID-25: the installer's closing message, the two environment examples, `llms.txt` and the Azure
   template's field descriptions still sent operators to "the account page" to connect the vault;
   since 0.1.0-rc.15 that is the console's Vault page, and they now say so.

@@ -86,7 +86,7 @@ describe('registerDynamicClient', () => {
   });
 
   it.each([
-    [{ grant_types: ['client_credentials'] }, 'grant_types.0'],
+    [{ grant_types: ['client_credentials'] }, 'grant_types'],
     [{ grant_types: [] }, 'grant_types'],
     [{ response_types: ['token'] }, 'response_types.0'],
     [{ application_type: 'desktop' }, 'application_type'],

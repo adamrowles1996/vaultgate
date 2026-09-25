@@ -68,7 +68,9 @@ Three mechanisms, resolved in this order when a `client_id` is presented:
   list forces a refetch before the request is refused (T22).
 - **OAUTH-11** DCR is rate limited (10 registrations per IP per hour) and rejects requests larger
   than 16 KiB. `application_type`, `grant_types`, `response_types` and `scope` are validated;
-  unknown fields are ignored. The response is `201` with `client_id` (`vg_c_…`), `client_id_issued_at`
+  unknown fields are ignored. A grant type vaultgate does not offer is dropped rather than refused
+  (RFC 7591 §2), in a registration and in a hosted document alike, but `authorization_code` must be
+  listed. The response is `201` with `client_id` (`vg_c_…`), `client_id_issued_at`
   and the echoed metadata; no secret is issued.
 - **OAUTH-12** Pre-registered clients are validated at start-up; an invalid list is a fatal
   configuration error.

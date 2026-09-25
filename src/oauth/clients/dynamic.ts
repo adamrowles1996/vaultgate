@@ -6,7 +6,7 @@ import { CREDENTIAL_PREFIX, mintCredential, type RandomSource } from '../credent
 import { OAuthError } from '../errors.ts';
 import { validateRedirectUri } from '../redirect-uri.ts';
 
-import { describeIssues } from './cimd-document.ts';
+import { describeIssues, grantTypesSchema } from './cimd-document.ts';
 
 import type { Clock } from '../clock.ts';
 import type { ClientsRepo } from '../repositories/clients.ts';
@@ -23,10 +23,7 @@ const registrationSchema = z
     redirect_uris: z.array(redirectUri).min(1),
     client_name: z.string().trim().min(1).max(200).optional(),
     token_endpoint_auth_method: z.literal('none').default('none'),
-    grant_types: z
-      .array(z.enum(['authorization_code', 'refresh_token']))
-      .min(1)
-      .default(['authorization_code', 'refresh_token']),
+    grant_types: grantTypesSchema.default(['authorization_code', 'refresh_token']),
     response_types: z.array(z.literal('code')).min(1).default(['code']),
     application_type: z.enum(['native', 'web']).default('web'),
     scope: z.string().optional(),
