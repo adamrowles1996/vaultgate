@@ -25,3 +25,13 @@ data/
 
 # Release assets built by scripts/release-assets.sh
 release/
+
+# The code sidecar's virtual environment, model download and test output
+sidecars/code/.venv/
+sidecars/code/.model/
+sidecars/code/.coverage*
+sidecars/code/htmlcov/
+sidecars/code/.pytest_cache/
+sidecars/code/.mypy_cache/
+sidecars/code/.ruff_cache/
+__pycache__/
