@@ -75,7 +75,7 @@ links, and when the official stdio server is the better choice: [`docs/compariso
 
 ## Quick start
 
-The current version is 0.1.0-rc.16 (`package.json`; releases are tagged on GitHub). On a VM with
+The current version is 0.1.0-rc.17 (`package.json`; releases are tagged on GitHub). On a VM with
 Docker Engine, the Compose plugin, a DNS name pointing at it and ports 80 and 443 reachable from
 the internet:
 
