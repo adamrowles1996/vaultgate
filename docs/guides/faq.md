@@ -13,7 +13,7 @@ instead of your credentials ([ADR 0002](../adr/0002-own-authorization-server.md)
 
 Yes, at targets you define. That is what the actions layer is for: a credential an agent reads in
 order to use it ends up in the model's context, the chat transcript and the client's logs. With
-the layer enabled, you add a computer (a target) on the console's Computers page (an HTTP API, Microsoft Graph, a SQL
+the layer enabled, you add a connection (a target) on the console's Connections page (an HTTP API, Microsoft Graph, a SQL
 Server or PostgreSQL database, an SSH or WinRM host), the vault item that signs in there and what
 is allowed; the agent names the target and describes the operation, and vaultgate performs it and
 returns the result with every injected value scrubbed out

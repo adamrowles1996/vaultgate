@@ -68,7 +68,7 @@ const CALL_COLUMNS = [
 
 const TRAIL_COLUMNS = [
   'Time',
-  'Computer',
+  'Connection',
   'Agent',
   'Tool',
   'Classification',
@@ -159,7 +159,7 @@ export function callHistoryPage(view: CallHistoryView): ConsolePage {
     title: `Calls of ${view.targetName}`,
     active: 'computers',
     crumbs: [
-      { label: 'Computers', href: CREATE_PATH },
+      { label: 'Connections', href: CREATE_PATH },
       {
         label: html`<span class="mono">${view.targetName}</span>`,
         href: targetPath(view.targetId),
@@ -218,7 +218,7 @@ export function unexpectedPage(view: UnexpectedView): ConsolePage {
     crumbs: [{ label: 'Activity', href: '/account/activity' }, { label: 'Unexpected writes' }],
     body: html`${pageHead(
         'Unexpected writes',
-        'Every call that changed something — a write, a shell command or a browser action — and was not accepted by a human through a confirmation, newest first, across every computer. A computer that asks for confirmation on every non-read call appears here only when one was declined, cancelled, expired or refused.',
+        'Every call that changed something — a write, a shell command or a browser action — and was not accepted by a human through a confirmation, newest first, across every connection. A connection that asks for confirmation on every non-read call appears here only when one was declined, cancelled, expired or refused.',
       )}
       <section class="card flush">
         ${renderTrailTable(view.calls, 'No unexpected write has been recorded.')}
@@ -237,7 +237,7 @@ export function activitySection(calls: readonly CallItem[], unexpectedCount: num
   return html`<section class="card flush" id="recent-calls">
     ${cardHead(
       'Recent calls',
-      'The latest calls agents made through your computers.',
+      'The latest calls agents made through your connections.',
       html`<a class="button small" href="${UNEXPECTED_PATH}">Unexpected writes ${badge}</a>`,
     )}
     ${renderTrailTable(calls, 'No agent has made a call yet.')}

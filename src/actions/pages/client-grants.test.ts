@@ -43,7 +43,9 @@ describe('the computers row of an agent’s card', () => {
   it('ACT-9 says so for an agent with no grant, whether or not the password is confirmed', async () => {
     const harness = createPagesHarness();
     await createHttpTarget(harness.actions);
-    expect(render(harness, OTHER_CLIENT_ID)).toContain('<p class="card-note">No computer yet.</p>');
+    expect(render(harness, OTHER_CLIENT_ID)).toContain(
+      '<p class="card-note">No connection yet.</p>',
+    );
     expect(render(harness, CLIENT_ID, UNCONFIRMED)).toContain('>api</a>');
   });
 });
@@ -79,7 +81,9 @@ describe('the Agents page’s matrix of grants', () => {
     const harness = createPagesHarness();
     const { browser } = await signedInOperator(harness);
     const markup = await pageText(browser, '/account/agents');
-    expect(markup).toContain('Grants appear here once there is a computer and a connected agent.');
+    expect(markup).toContain(
+      'Grants appear here once there is a connection and a connected agent.',
+    );
   });
 });
 
@@ -103,7 +107,7 @@ describe('POST /account/actions/clients/:clientId/grants', () => {
     expect(revoked.headers.get('location')).toBe(
       `/account/actions/${target.id}?notice=grant-revoked`,
     );
-    expect(render(harness, CLIENT_ID)).toContain('No computer yet.');
+    expect(render(harness, CLIENT_ID)).toContain('No connection yet.');
     const fromMatrix = await browser.submit(`/account/actions/clients/${CLIENT_ID}/grants`, {
       csrf,
       target_id: target.id,

@@ -63,7 +63,7 @@ export interface ComputersView {
 }
 
 const COLUMNS = [
-  'Computer',
+  'Connection',
   'Address',
   'Signs in with',
   'Allows',
@@ -189,7 +189,7 @@ function filters(view: ComputersView): Html {
     html`<a href="${href}" ${when(isCurrent, () => html`aria-current="page"`)}
       >${label} <span class="count">${count}</span></a
     >`;
-  return html`<nav class="filters" aria-label="Kinds of computer">
+  return html`<nav class="filters" aria-label="Kinds of connection">
     ${link('All', CREATE_PATH, view.rows.length, view.filter === undefined)}
     ${kinds.map((kind) =>
       link(
@@ -236,9 +236,9 @@ function attention(view: ComputersView): Html {
 function emptyState(): Html {
   return html`<section class="card">
     <div class="empty">
-      <p><strong>No computers yet.</strong></p>
+      <p><strong>No connections yet.</strong></p>
       <p>Add one to let an agent use a sign-in from your vault without ever seeing it.</p>
-      <p><a class="button primary" href="${NEW_PATH}">${icon('plus')}Add computer</a></p>
+      <p><a class="button primary" href="${NEW_PATH}">${icon('plus')}Add connection</a></p>
     </div>
   </section>`;
 }
@@ -247,11 +247,11 @@ export function computersPage(view: ComputersView): ConsolePage {
   const content =
     view.rows.length === 0 ? emptyState() : html`${attention(view)} ${filters(view)} ${body(view)}`;
   return {
-    title: 'Computers',
+    title: 'Connections',
     active: 'computers',
-    crumbs: [{ label: 'Computers' }],
+    crumbs: [{ label: 'Connections' }],
     body: html`${pageHead(
-      'Computers',
+      'Connections',
       'Everything your agents can reach through vaultgate. They use each sign-in; they never see it.',
     )}
     ${noticeBanner(view.notice)} ${content}`,

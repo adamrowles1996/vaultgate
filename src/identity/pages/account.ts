@@ -46,7 +46,7 @@ const SESSION_COLUMNS = ['Started', 'Last seen', 'Address', 'Browser'] as const;
 const CONFIRM_NOTE =
   'Changing your password or e-mail address, setting up a new authenticator or new recovery ' +
   'codes, changing the vault connection, exporting the audit log and every change to a ' +
-  'computer need your password first. The confirmation lasts five minutes.';
+  'connection need your password first. The confirmation lasts five minutes.';
 
 function sessionRow(session: SessionView): Html {
   const started = html`<span class="cell-main"

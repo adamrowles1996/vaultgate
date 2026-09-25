@@ -108,9 +108,9 @@ Design rules, in priority order:
 
 ### 13.3.2 Operator pages
 
-- **ACT-5** The console (ID-19) gains a **Computers** section, present only when
+- **ACT-5** The console (ID-19) gains a **Connections** section, present only when
   `VAULTGATE_ENABLE_ACTIONS=true`, and then the console's home page (ID-23); the pages call a
-  target a _computer_. `GET /account/actions` lists the targets grouped by kind (SQL Server,
+  target a _connection_. `GET /account/actions` lists the targets grouped by kind (SQL Server,
   PostgreSQL, Windows · WinRM, Linux · SSH, HTTP APIs, Microsoft Graph: the `sql` connector split
   by engine, and `http` targets with a Graph mapping set apart), each with its name and
   description, destination summary, the vault item and the fields it maps (a secret field shown
@@ -118,7 +118,7 @@ Design rules, in priority order:
   last call and its state. `?kind=` shows one kind, and the sidebar has an entry per kind with its
   count. What needs attention comes first: an invalid target (ACT-1), a target that writes without
   confirmation (ACT-49), and the unexpected writes of the last seven days (ACT-63). **Add
-  computer** (`GET /account/actions/new`) chooses the kind, then the vault item (`?q=` searches
+  connection** (`GET /account/actions/new`) chooses the kind, then the vault item (`?q=` searches
   item summaries by name, username and address, at most 20 at a time, each shown with its login
   name, first address and field names, a secret field sealed; `?item=` takes the chosen or pasted
   id), then shows that connector's form with the kind's defaults filled in (the SQL Server engine

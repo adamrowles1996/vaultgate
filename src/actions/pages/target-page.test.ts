@@ -208,7 +208,7 @@ describe('GET /account/actions/:id', () => {
     expect(markup).toContain('<span>Agent One</span>');
     const edit = compact(await pageText(browser, `/account/actions/${target.id}/edit`));
     expect(edit).toContain(
-      'Changing a computer needs your password, confirmed in the last five minutes.',
+      'Changing a connection needs your password, confirmed in the last five minutes.',
     );
     expect(edit).toContain('href="/account/unlock?next=%2Faccount%2Factions%2Fid-1%2Fedit"');
     expect(edit).not.toContain('action="/account/actions/id-1"');
@@ -261,7 +261,7 @@ describe('POST /account/actions/:id', () => {
     expect(JSON.stringify(harness.actions.audit)).not.toContain('X-Api-Key');
     const page = await browser.get('/account/actions/id-1?notice=updated');
     const markup = compact(await page.text());
-    expect(markup).toContain('Computer saved; its revision has moved on');
+    expect(markup).toContain('Connection saved; its revision has moved on');
     expect(markup).toContain('<dt>Revision</dt><dd>2 · updated just now</dd>');
   });
 
@@ -280,7 +280,7 @@ describe('POST /account/actions/:id', () => {
     const markup = await response.text();
     expect(response.status).toBe(400);
     expect(markup).toContain(
-      'The computer was not saved; fix the problems shown against each field',
+      'The connection was not saved; fix the problems shown against each field',
     );
     expect(markup).toContain(
       '<p class="field-error">must not carry a query string or fragment</p>',

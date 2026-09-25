@@ -242,7 +242,7 @@ export function targetPage(view: TargetPageView): ConsolePage {
     title: target.name,
     active: 'computers',
     crumbs: [
-      { label: 'Computers', href: CREATE_PATH },
+      { label: 'Connections', href: CREATE_PATH },
       { label: KINDS[view.summary.kind].plural, href: `${CREATE_PATH}?kind=${view.summary.kind}` },
       { label: html`<span class="mono">${target.name}</span>` },
     ],

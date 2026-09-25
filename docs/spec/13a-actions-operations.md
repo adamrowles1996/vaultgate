@@ -87,7 +87,7 @@
 - **ACT-63** A target's page shows its last 50 calls with their outcome and elicitation result,
   and its open sessions. The console's Activity page shows the latest calls across targets and
   links to an "unexpected write" view listing every non-read call whose elicitation is not
-  `accepted`, so a target with `confirm_writes: false` is reviewable; the Computers page and the
+  `accepted`, so a target with `confirm_writes: false` is reviewable; the Connections page and the
   sidebar count those of the last seven days.
 
 ## 13.13 Storage
@@ -206,7 +206,7 @@ src/actions/
   remain unacceptable; a package whose install compiles or downloads anything is rejected.
 - **ACT-73** The engine is constructed only when `VAULTGATE_ENABLE_ACTIONS=true`; otherwise
   `src/main.ts` passes no engine, the MCP tool registry registers no actions tool, the scope
-  registry advertises no actions scope, the console has no Computers section, and the connectors'
+  registry advertises no actions scope, the console has no Connections section, and the connectors'
   modules are never imported (dynamic import at engine construction, so knip and the module-graph
   rules still see them).
 

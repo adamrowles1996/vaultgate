@@ -106,10 +106,10 @@ describe('GET /account/actions/unexpected', () => {
     expect(markup).toContain('<title>Unexpected writes · vaultgate</title>');
     expect(rowsOf(markup)).toHaveLength(2);
     expect(markup).toContain(
-      'data-label="Computer"><a class="mono" href="/account/actions/id-1">api</a>',
+      'data-label="Connection"><a class="mono" href="/account/actions/id-1">api</a>',
     );
     expect(markup).toContain(
-      'data-label="Computer"><a class="mono" href="/account/actions/id-2">other</a>',
+      'data-label="Connection"><a class="mono" href="/account/actions/id-2">other</a>',
     );
     expect(markup).toContain(`data-label="Agent">${CLIENT_ID}</td>`);
     expect(markup).toContain('data-label="Classification">POST</td>');
@@ -149,8 +149,8 @@ describe('GET /account/actions/unexpected', () => {
     harness.actions.engine.targets.remove(target.id, OPERATOR_ID);
     const markup = await pageMarkup(browser, '/account/actions/unexpected');
     expect(rowsOf(markup)).toHaveLength(1);
-    expect(markup).toContain('data-label="Computer"><span class="mono">api</span></td>');
-    expect(markup).not.toContain('data-label="Computer"><a');
+    expect(markup).toContain('data-label="Connection"><span class="mono">api</span></td>');
+    expect(markup).not.toContain('data-label="Connection"><a');
   });
 
   it('ACT-5 sends a visitor with no session to the login form and links the view from the Activity page', async () => {

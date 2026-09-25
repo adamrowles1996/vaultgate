@@ -109,7 +109,7 @@ async function showCreate(
   const url = new URL(context.req.url);
   const frame = createFrame(formKind(form, values), `${url.pathname}${url.search}`);
   if (!viewer.isReauthenticated) {
-    const page = lockedPage(frame, 'Adding a computer');
+    const page = lockedPage(frame, 'Adding a connection');
     return context.html(await dependencies.renderConsole(viewer.session, page));
   }
   if (itemId === '') {
@@ -222,7 +222,7 @@ async function showEdit(
   const url = new URL(context.req.url);
   const frame = editFrame(current.target, `${url.pathname}${url.search}`);
   if (!viewer.isReauthenticated) {
-    const page = lockedPage(frame, 'Changing a computer');
+    const page = lockedPage(frame, 'Changing a connection');
     return context.html(await dependencies.renderConsole(viewer.session, page));
   }
   const picked = (context.req.query(ITEM_PARAM) ?? '').trim();

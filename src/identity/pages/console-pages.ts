@@ -32,7 +32,7 @@ export interface AgentsView extends SectionsView {
 export function agentsPage(view: AgentsView): ConsolePage {
   const body = html`${pageHead(
       'Agents',
-      'Apps connected to vaultgate over OAuth. Each uses only the scopes it asked for when it connected, and only the computers you grant it.',
+      'Apps connected to vaultgate over OAuth. Each uses only the scopes it asked for when it connected, and only the connections you grant it.',
     )}
     ${errorBanner(view.error)} ${noticeBanner(view.notice)}
     <section class="card" id="connected-clients">

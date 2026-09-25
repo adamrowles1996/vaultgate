@@ -172,7 +172,7 @@ a connector tool by target name. Specification: [13 Actions](../spec/13-actions.
 [13a Actions in operation](../spec/13a-actions-operations.md),
 [14 Action connectors](../spec/14-actions-connectors.md) and
 [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md). The engine, the scopes, the MCP
-tool surface below and the operator pages (the console's Computers pages, described in the
+tool surface below and the operator pages (the console's Connections pages, described in the
 [Actions guide](actions.md)) exist today, and so do the `http` connector with `http_request`
 (M9) and its Microsoft Graph credential adapter (M10), the `sql` connector with `sql_query`
 and `sql_execute` (M11), the `ssh` connector with `ssh_run` (M12) and the `winrm` connector with

@@ -19,7 +19,7 @@ import type { FieldProblems } from './messages.ts';
 const DOCUMENT_LABELS: Readonly<Record<DocumentName, { title: string; note: string }>> = {
   destination: {
     title: 'Destination',
-    note: 'Where the computer is. Saving resolves it and checks every address; it does not connect.',
+    note: 'Where the connection points. Saving resolves it and checks every address; it does not connect.',
   },
   credential: {
     title: 'Credential mapping',
@@ -249,7 +249,7 @@ function addressSource(
       ${pickerOption('', 'No: use what is typed above', chosen === '')} ${options}
     </select>
     <small
-      >Copied when you save: the computer keeps that address, and a later change in the vault does
+      >Copied when you save: the connection keeps that address, and a later change in the vault does
       not move it.</small
     >
   </label>`;

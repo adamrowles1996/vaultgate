@@ -83,14 +83,14 @@ export function navigation(dependencies: ActionsPagesDependencies): ConsoleNavig
     items: [
       {
         key: 'computers',
-        label: 'Computers',
+        label: 'Connections',
         href: CREATE_PATH,
         icon: 'server',
         count: kinds.length,
         children,
       },
     ],
-    primaryAction: { label: 'Add computer', href: NEW_PATH },
+    primaryAction: { label: 'Add connection', href: NEW_PATH },
     activityBadge:
       unexpected === 0
         ? undefined

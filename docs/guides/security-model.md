@@ -23,7 +23,7 @@ agent ──HTTPS + bearer token──▶ vaultgate ──loopback──▶ bw s
 - **Bitwarden** or Vaultwarden is reached over HTTPS with its own end-to-end encryption; vaultgate
   stores no vault content.
 - **Targets** exist only when you enable the actions layer: the APIs, databases and hosts you
-  added on the console's Computers page. vaultgate connects to them with a credential it fetches from the
+  added on the console's Connections page. vaultgate connects to them with a credential it fetches from the
   vault for that one call, and the agent receives the scrubbed result.
 
 ## What an agent can do
@@ -68,7 +68,7 @@ Only what its token's scopes allow, and the operator picks those on the consent 
 | Refresh token         | 30 days absolute (`VAULTGATE_REFRESH_TOKEN_TTL`, 1 hour to 365 days), single use, rotated on each refresh. A replayed refresh token revokes the whole family. |
 | Consent               | Until you disconnect the client on the Agents page.                                                                                                           |
 | Operator session      | 12 hours (`VAULTGATE_SESSION_TTL`, 15 minutes to 7 days), 1 hour idle. Signing out or changing the password ends sessions.                                    |
-| Password confirmation | 5 minutes, for the sensitive actions and every change to a computer.                                                                                          |
+| Password confirmation | 5 minutes, for the sensitive actions and every change to a connection.                                                                                        |
 | Bootstrap token       | 30 minutes, single use; only exists while there is no operator.                                                                                               |
 | Audit events          | 365 days (`VAULTGATE_AUDIT_RETENTION_DAYS`, 1 to 3650).                                                                                                       |
 

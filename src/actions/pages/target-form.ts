@@ -92,7 +92,7 @@ function nameField(view: TargetFormView): Html {
 function commonFields(view: TargetFormView): Html {
   const isInternal = view.values.get(INTERNAL_FIELD) === 'on';
   return html`<section class="card">
-    ${cardHead('The computer', 'How agents know it, and whether it lives on your own network.')}
+    ${cardHead('The connection', 'How agents know it, and whether it lives on your own network.')}
     ${when(view.isNew, () => nameField(view))} ${fieldErrors(view.problems, DESCRIPTION_FIELD)}
     <label
       >Description
@@ -146,7 +146,7 @@ export function renderProblems(problems: FieldProblems): Html {
   }
   const items = problems.rest.map((problem) => html`<li>${problem}</li>`);
   return html`${errorBanner(
-    'The computer was not saved; fix the problems shown against each field and try again.',
+    'The connection was not saved; fix the problems shown against each field and try again.',
   )}
   ${when(
     problems.rest.length > 0,

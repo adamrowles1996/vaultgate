@@ -50,7 +50,7 @@ describe('the one-button writes', () => {
     expect(disabled.headers.get('location')).toBe('/account/actions/id-1?notice=disabled');
     const page = await browser.get('/account/actions/id-1?notice=disabled');
     const markup = await page.text();
-    expect(markup).toContain('Computer disabled; agents no longer see it.');
+    expect(markup).toContain('Connection disabled; agents no longer see it.');
     expect(markup).toContain('<span class="pill pill-off">Disabled</span>');
     expect(markup).toContain('action="/account/actions/id-1/enable"');
     const enabled = await browser.submit(`/account/actions/${target.id}/enable`, { csrf });
@@ -94,7 +94,7 @@ describe('the one-button writes', () => {
     ]);
     const list = await browser.get('/account/actions?notice=deleted');
     const markup = await list.text();
-    expect(markup).toContain('<strong>No computers yet.</strong>');
+    expect(markup).toContain('<strong>No connections yet.</strong>');
     const again = await browser.submit(`/account/actions/${target.id}/delete`, { csrf });
     expect(again.status).toBe(404);
   });
@@ -153,7 +153,7 @@ describe('the one-button writes', () => {
     expect(unnamed.headers.get('location')).toBe('/account/actions/id-1?notice=grant-revoked');
     const cleared = await browser.get('/account/actions/id-1');
     const clearedMarkup = await cleared.text();
-    expect(clearedMarkup).toContain('No agent is granted this computer.');
+    expect(clearedMarkup).toContain('No agent is granted this connection.');
     harness.clients.length = 0;
     const nobody = await browser.get('/account/actions/id-1');
     const nobodyMarkup = await nobody.text();
@@ -188,7 +188,7 @@ describe('the one-button writes', () => {
     ]);
     const after = await browser.get('/account/actions/id-1?notice=sessions-closed');
     const afterMarkup = compact(await after.text());
-    expect(afterMarkup).toContain('Every open session on this computer was closed.');
+    expect(afterMarkup).toContain('Every open session on this connection was closed.');
     expect(afterMarkup).toContain('<dt>Open sessions</dt><dd>0</dd>');
   });
 
