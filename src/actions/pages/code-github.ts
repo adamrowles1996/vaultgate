@@ -8,14 +8,22 @@
  * drawn, logged or put in a response, and a failure is shown by its code.
  * A page never opens an archive, so nothing here reaches the archive host.
  */
+import { ok } from '../../result.ts';
 import { isFieldPresent, parseFieldSelector } from '../../vault/fields.ts';
-import { listRepos, repoInfo, type GitHubAccess } from '../connectors/code/github.ts';
+import {
+  listRepos,
+  type ListedRepo,
+  repoInfo,
+  type RepoInfo,
+  type GitHubAccess,
+} from '../connectors/code/github.ts';
 import {
   codeCredentialSchema,
   codeDestinationSchema,
   GITHUB_API_HOST,
 } from '../connectors/code/schemas.ts';
 import { pinEndpoint } from '../destination.ts';
+import { createScrubber } from '../scrub.ts';
 
 import { TOKEN_FIELD } from './code-form.ts';
 import { NO_FIELD, type FormValues } from './form-values.ts';
@@ -73,13 +81,18 @@ function ignoreCapture(): void {
 /**
  * One GitHub exchange from a page: the pinned API address and the token. A
  * page never opens an archive, so it has no archive address and nothing a
- * redirect could hand back is kept.
+ * redirect could hand back is kept; what GitHub says is scrubbed of the
+ * token before a page draws it (ACT-51).
  */
 export function pageAccess(
   github: GitHubPagesAccess,
   apiAddress: string,
   token: string | undefined,
 ): GitHubAccess {
+  const scrubber = createScrubber(
+    token === undefined ? [] : [{ field: 'token', value: Buffer.from(token, 'utf8') }],
+    undefined,
+  );
   return {
     fetch: github.fetch,
     apiAddress,
@@ -88,7 +101,39 @@ export function pageAccess(
     signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
     userAgent: github.userAgent,
     capture: ignoreCapture,
+    scrub: (text) => scrubber.text(text),
   };
+}
+
+/**
+ACT-119: the token's repositories, each name scrubbed before a page draws it.
+*/
+async function scrubbedList(
+  access: GitHubAccess,
+): Promise<Result<readonly ListedRepo[], ActionError>> {
+  const listed = await listRepos(access);
+  return listed.ok
+    ? ok(listed.value.map((repo) => ({ ...repo, fullName: access.scrub(repo.fullName) })))
+    : listed;
+}
+
+/**
+ACT-120: the repository as the token sees it, every text scrubbed before a page draws it.
+*/
+async function scrubbedInfo(
+  access: GitHubAccess,
+  repo: string,
+): Promise<Result<RepoInfo, ActionError>> {
+  const info = await repoInfo(access, repo);
+  if (!info.ok) {
+    return info;
+  }
+  const { fullName, defaultBranch, visibility } = info.value;
+  return ok({
+    fullName: access.scrub(fullName),
+    defaultBranch: access.scrub(defaultBranch),
+    visibility: access.scrub(visibility),
+  });
 }
 
 /**
@@ -186,7 +231,7 @@ export async function repoOffer(
     return { state: 'no-token' };
   }
   const source = { item: item.summary, tokenField };
-  const listed = await askGitHub(dependencies, source, (access) => listRepos(access));
+  const listed = await askGitHub(dependencies, source, (access) => scrubbedList(access));
   return listed.ok
     ? { state: 'listed', repositories: listed.value }
     : { state: 'failed', failure: listed.failure };
@@ -226,7 +271,7 @@ export async function githubCheck(
   const source = { item: item?.ok === true ? item.value : undefined, tokenField };
   const hasToken = tokenField !== null;
   const info = await askGitHub(dependencies, source, (access) =>
-    repoInfo(access, destination.data.repository),
+    scrubbedInfo(access, destination.data.repository),
   );
   return info.ok
     ? { state: 'read', repository: info.value, hasToken }

@@ -135,6 +135,7 @@ describe('what the Index card says of each state (ACT-115)', () => {
         storage_bytes: 0,
         variants: {},
         ref: undefined,
+        trigger: undefined,
         current: false,
       },
     ],
@@ -142,19 +143,11 @@ describe('what the Index card says of each state (ACT-115)', () => {
     lastBuild: {
       at: 0,
       commit: 'd'.repeat(40),
-      ref: 'v2',
       trigger: 'call',
       durationMs: 5,
       reason: 'archive_too_large',
     },
-    lastFailure: {
-      at: 0,
-      commit: 'd'.repeat(40),
-      ref: 'v2',
-      trigger: 'call',
-      durationMs: 5,
-      reason: 'archive_too_large',
-    },
+    lastFailure: { at: 0, trigger: 'operator', durationMs: 0, reason: 'credential_unavailable' },
   };
 
   it('ACT-112 ACT-115 shows a running build, a failed resolution, the failure’s reason and trigger, and an old snapshot', async () => {
@@ -168,20 +161,19 @@ describe('what the Index card says of each state (ACT-115)', () => {
     );
     expect(card).toContain('on call');
     expect(card).toContain('not known since a restart');
+    expect(card).toContain(
+      '<span class="pill pill-bad">Failed</span> <span class="mono">credential_unavailable</span> · did not start · on operator',
+    );
     expect(card).toContain('Not the current one');
     expect(card).toContain('None yet');
     expect(card).toContain('5 excluded · 1 too large · 0 links · 2 special');
   });
 
   it('ACT-115 says when nothing has been resolved or built since vaultgate started', async () => {
-    const control = stubControl({ ...EMPTY_STATUS, resolution: { at: 0 } });
-    const { browser } = await codeTarget({ codeControl: control });
+    const { browser } = await codeTarget({ codeControl: stubControl(EMPTY_STATUS) });
     const card = compact(indexCardOf(await pageText(browser, '/account/actions/id-1')));
     expect(card).toContain('<dt>Last build</dt><dd>None since vaultgate started</dd>');
-    expect(card).toContain('<span class="mono"></span> at <span class="mono" title=""></span>');
-    const fresh = await codeTarget({ codeControl: stubControl(EMPTY_STATUS) });
-    const empty = compact(indexCardOf(await pageText(fresh.browser, '/account/actions/id-1')));
-    expect(empty).toContain('Not resolved since vaultgate started');
+    expect(card).toContain('<dt>Configured ref</dt><dd>Not resolved since vaultgate started</dd>');
   });
 
   it('ACT-108 hands the rebuild to the connector as an operator reset, and a build that throws never fails the request', async () => {

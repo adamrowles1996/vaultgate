@@ -59,10 +59,11 @@ function resolutionLine(resolution: Resolution | undefined, now: number): Html {
     return html`Not resolved since vaultgate started`;
   }
   const when = relativeTime(resolution.at, now);
-  return resolution.failure === undefined
-    ? html`<span class="mono">${resolution.ref ?? ''}</span> at ${commit(resolution.commit ?? '')} ·
-        ${when}`
-    : html`<span class="bad">${resolution.failure}</span> · ${when}`;
+  if ('failure' in resolution) {
+    return html`<span class="bad">${resolution.failure}</span> · ${when}`;
+  }
+  const reference = html`<span class="mono">${resolution.ref}</span>`;
+  return html`${reference} at ${commit(resolution.commit)} · ${when}`;
 }
 
 function buildLine(build: BuildRecord | undefined, now: number): Html {
@@ -73,7 +74,7 @@ function buildLine(build: BuildRecord | undefined, now: number): Html {
     build.reason === undefined
       ? pill('ok', 'Built')
       : html`${pill('bad', 'Failed')} <span class="mono">${build.reason}</span>`;
-  const built = html`${commit(build.commit)} (<span class="mono">${build.ref}</span>)`;
+  const built = build.commit === undefined ? html`did not start` : commit(build.commit);
   const when = `on ${build.trigger} · ${relativeTime(build.at, now)}`;
   return html`${outcome} · ${built} · ${when}`;
 }
@@ -96,11 +97,19 @@ function skipped(snapshot: SnapshotStatus): Html {
   >`;
 }
 
+/**
+When a snapshot was built and, when this process built it, what started the build.
+*/
+function builtWhen(snapshot: SnapshotStatus, now: number): string {
+  const when = relativeTime(snapshot.created_at, now);
+  return snapshot.trigger === undefined ? when : `${when} · on ${snapshot.trigger}`;
+}
+
 function snapshotRow(snapshot: SnapshotStatus, now: number): Html {
   return html`<tr>
     ${cell(COLUMNS[0], commit(snapshot.commit))}
     ${cell(COLUMNS[1], html`<span class="mono">${snapshot.ref ?? 'not known since a restart'}</span>`)}
-    ${cell(COLUMNS[2], relativeTime(snapshot.created_at, now))}
+    ${cell(COLUMNS[2], builtWhen(snapshot, now))}
     ${cell(COLUMNS[3], snapshot.current ? tag('Answers calls', 'green') : 'Not the current one')}
     ${cell(COLUMNS[4], variants(snapshot))} ${cell(COLUMNS[5], skipped(snapshot))}
   </tr>`;

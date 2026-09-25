@@ -34,9 +34,10 @@ export interface Submitted {
 /**
  * The values a submission stands for (ACT-2's address and ACT-119's
  * repository applied) and every refusal a save gives before the targets
- * service sees it: a field the deployment does not allow (ACT-88), an
- * internal box on a connection that is never internal (ACT-103), and a
- * choice beside a field that contradicts what is typed in it.
+ * service sees it: a field the deployment does not allow (ACT-88) and a
+ * choice beside a field that contradicts what is typed in it. An internal
+ * box on a connection that is never internal is the service's to refuse
+ * (ACT-103); the form does not draw one.
  */
 export function submitted(
   dependencies: Pick<ActionsPagesDependencies, 'switches'>,
@@ -44,14 +45,7 @@ export function submitted(
   sent: FormValues,
 ): Submitted {
   const { values, problems } = applyChoices(form, sent);
-  const internal =
-    form.network === 'public' && sent.has(INTERNAL_FIELD)
-      ? [`${INTERNAL_FIELD}: this connection reaches the internet only; it is never internal`]
-      : [];
-  return {
-    values,
-    refused: [...deploymentProblems(sent, dependencies.switches), ...internal, ...problems],
-  };
+  return { values, refused: [...deploymentProblems(sent, dependencies.switches), ...problems] };
 }
 
 export function text(values: FormValues, name: string): string {

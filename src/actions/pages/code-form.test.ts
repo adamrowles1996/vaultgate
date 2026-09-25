@@ -158,7 +158,9 @@ describe('Add connection: Semble · GitHub code search', () => {
     });
     expect(response.status).toBe(400);
     const markup = compact(await response.text());
-    expect(markup).toContain('this connection reaches the internet only; it is never internal');
+    expect(markup).toContain(
+      '<p class="field-error">a code target reaches GitHub over the internet and is never internal</p>',
+    );
     const invalid = await browser.submit('/account/actions', {
       csrf,
       ...CODE_FORM,
