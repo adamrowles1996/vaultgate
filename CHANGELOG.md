@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- ACT-57: **a PostgreSQL or SQL Server target in `verify-full` mode failed every call with
+  `tls_error`** when its certificate authority was pasted into the console. The field was a
+  single-line box, and a browser strips the line breaks from what is pasted there, so the stored
+  PEM could not be read. The field is now a text area, and a save or check refuses a certificate
+  authority that does not parse as PEM certificates, so the mistake shows at once rather than at
+  the first call.
+
 ## [0.1.0-rc.18] - 2026-09-25
 
 ### Fixed

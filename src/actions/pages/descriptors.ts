@@ -50,6 +50,10 @@ export type FieldDescriptor = FieldBase &
     | {
         readonly kind: 'text';
         readonly required?: boolean;
+        /**
+        Drawn as a text area, so a value with line breaks (a PEM) survives the browser.
+        */
+        readonly multiline?: boolean;
         readonly picker?: FieldPicker;
         /**
         The destination's address, which the vault item may supply (ACT-2): a host, or a URL.

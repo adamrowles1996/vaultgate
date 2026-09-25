@@ -67,6 +67,9 @@ describe('Add computer', () => {
     expect(form).toContain('<title>Add SQL Server · vaultgate</title>');
     expect(form).toContain('<option value="mssql" selected>mssql</option>');
     expect(form).toContain('value="1433"');
+    // ACT-57: a single-line box would drop a pasted PEM's line breaks.
+    expect(form).toContain('<textarea name="destination.ca_pem" rows="8" spellcheck="false"');
+    expect(form).not.toContain('<input name="destination.ca_pem"');
     expect(await statusOf(browser, '/account/actions/new?connector=nope')).toBe(404);
   });
 });

@@ -72,6 +72,7 @@ const destination: readonly FieldDescriptor[] = [
     name: 'ca_pem',
     label: 'Certificate authority (PEM)',
     kind: 'text',
+    multiline: true,
     when: { field: 'tls', values: ['verify-full'] },
     help: 'The PEM the server certificate must chain to. Used by the verify-full mode.',
   },

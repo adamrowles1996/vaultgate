@@ -3,6 +3,7 @@
  * static half every build carries so the account page can validate and edit
  * targets; the runtime is `./index.ts`.
  */
+import { X509Certificate } from 'node:crypto';
 import { isIP } from 'node:net';
 
 import { z } from 'zod';
@@ -88,10 +89,39 @@ function credentialFields(credential: SqlCredential): readonly CredentialField[]
   ];
 }
 
+const PEM_CERTIFICATE = /-----BEGIN CERTIFICATE-----\r?\n[\s\S]+?\r?\n-----END CERTIFICATE-----/g;
+
+/**
+ACT-57: every certificate in the PEM parses. A PEM pasted into a single-line box loses its line
+breaks, which no TLS stack reads, and the call would fail as `tls_error` long after the save.
+*/
+function isPemCertificates(pem: string): boolean {
+  const blocks = pem.match(PEM_CERTIFICATE) ?? [];
+  return (
+    blocks.length > 0 &&
+    blocks.every((block) => {
+      try {
+        return new X509Certificate(block).subject.length > 0;
+      } catch {
+        return false;
+      }
+    })
+  );
+}
+
 function tlsProblems(destination: SqlDestination): readonly string[] {
   if (destination.tls === 'verify-full' && destination.ca_pem === undefined) {
     return [
       'destination.ca_pem: the verify-full mode needs the certificate authority to verify against',
+    ];
+  }
+  if (
+    destination.tls === 'verify-full' &&
+    destination.ca_pem !== undefined &&
+    !isPemCertificates(destination.ca_pem)
+  ) {
+    return [
+      'destination.ca_pem: is not a PEM certificate; paste it with its line breaks, from -----BEGIN CERTIFICATE----- to -----END CERTIFICATE-----',
     ];
   }
   return destination.tls === 'verify-full' || destination.ca_pem === undefined

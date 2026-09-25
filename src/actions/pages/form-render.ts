@@ -54,11 +54,12 @@ function textInput(
   isFilledByItem: boolean,
 ): Html {
   const required = when(field.required === true && !isFilledByItem, () => html`required`);
-  return html`<label
-    >${field.label}
-    <input name="${fieldName(field)}" value="${value}" autocomplete="off" ${required} />
-    ${help(field)}
-  </label>`;
+  const input =
+    field.multiline === true
+      ? html`<textarea name="${fieldName(field)}" rows="8" spellcheck="false" ${required}>
+${value}</textarea>`
+      : html`<input name="${fieldName(field)}" value="${value}" autocomplete="off" ${required} />`;
+  return html`<label>${field.label} ${input} ${help(field)} </label>`;
 }
 
 type PickerField = FieldDescriptor & { readonly kind: 'text'; readonly picker: FieldPicker };
