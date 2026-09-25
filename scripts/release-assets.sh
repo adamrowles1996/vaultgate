@@ -48,7 +48,7 @@ cp -R "${sidecar}/src/vaultgate_code" "${code_root}/app/"
 find "${code_root}/app" -name '__pycache__' -prune -exec rm -rf {} +
 cp "${sidecar}/README.md" "${sidecar}/PROTOCOL.md" "${sidecar}/pyproject.toml" \
   "${sidecar}/uv.lock" LICENSE NOTICE "$code_root"/
-uv export --project "$sidecar" --frozen --no-dev --no-emit-project --format requirements-txt \
+uv export --project "$sidecar" --frozen --no-dev --no-emit-project --no-header --format requirements-txt \
   --output-file "${code_root}/requirements.txt" >/dev/null
 grep -q -- '--hash=sha256:' "${code_root}/requirements.txt" || {
   echo "the exported sidecar requirements carry no hashes" >&2

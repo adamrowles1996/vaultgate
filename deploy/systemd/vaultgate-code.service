@@ -40,7 +40,7 @@ RuntimeDirectoryMode=0750
 # Snapshots and indexes, outside vaultgate's own data directory. Nothing in it
 # is irreplaceable: a lost state directory costs only the time to rebuild.
 StateDirectory=vaultgate-code
-StateDirectoryMode=0750
+StateDirectoryMode=0700
 
 # No network at all.
 PrivateNetwork=yes
@@ -55,6 +55,7 @@ PrivateTmp=yes
 PrivateDevices=yes
 PrivateUsers=yes
 SystemCallFilter=@system-service
+# Not @resources: numpy's BLAS calls mbind(2) when it loads.
 SystemCallFilter=~@privileged
 SystemCallArchitectures=native
 CapabilityBoundingSet=
@@ -71,6 +72,7 @@ RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
+MemoryDenyWriteExecute=yes
 RemoveIPC=yes
 
 # The model, a build child and the loaded indexes (VAULTGATE_CODE_MAX_MEMORY_BYTES,
