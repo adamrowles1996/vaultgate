@@ -41,7 +41,7 @@ describe('parseCimdDocument', () => {
     [{ redirect_uris: ['http://agent.example.com/cb'] }, 'redirect_uris.0'],
     [{ client_id: 'http://agent.example.com/client.json' }, 'client_id'],
     [{ token_endpoint_auth_method: 'client_secret_basic' }, 'token_endpoint_auth_method'],
-    [{ grant_types: ['client_credentials'] }, 'grant_types.0'],
+    [{ grant_types: ['client_credentials'] }, 'grant_types'],
     [{ response_types: ['token'] }, 'response_types.0'],
     [{ application_type: 'desktop' }, 'application_type'],
     [{ logo_uri: 'http://agent.example.com/logo.png' }, 'logo_uri'],
@@ -49,6 +49,23 @@ describe('parseCimdDocument', () => {
     const parsed = parseCimdDocument(CLIENT_ID, document(overrides));
     expect(parsed.ok).toBe(false);
     expect(JSON.stringify(parsed)).toContain(`"reason":"${path}:`);
+  });
+
+  it("OAUTH-9 drops grant types vaultgate does not offer, as Claude's document lists", () => {
+    const parsed = parseCimdDocument(
+      CLIENT_ID,
+      document({
+        grant_types: [
+          'authorization_code',
+          'refresh_token',
+          'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        ],
+      }),
+    );
+    expect(parsed.ok && parsed.document.grant_types).toStrictEqual([
+      'authorization_code',
+      'refresh_token',
+    ]);
   });
 
   it('OAUTH-9 rejects a non-object body', () => {

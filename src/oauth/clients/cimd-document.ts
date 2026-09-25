@@ -8,6 +8,21 @@ const redirectUri = z.string().refine((text) => validateRedirectUri(text).ok, {
   message: 'must be an https URL or a loopback http address',
 });
 
+const SUPPORTED_GRANT_TYPES: ReadonlySet<string> = new Set(['authorization_code', 'refresh_token']);
+
+/**
+ * OAUTH-9, OAUTH-11: a client may list grant types vaultgate does not offer (Claude's hosted
+ * document names `urn:ietf:params:oauth:grant-type:jwt-bearer`, for one). They are dropped
+ * rather than refused, as RFC 7591 section 2 lets a server do, and the token endpoint never
+ * honours them; `authorization_code` itself must still be listed.
+ */
+export const grantTypesSchema = z
+  .array(z.string().min(1))
+  .refine((types) => types.includes('authorization_code'), {
+    message: 'must include "authorization_code"',
+  })
+  .transform((types) => types.filter((type) => SUPPORTED_GRANT_TYPES.has(type)));
+
 /**
  * OAUTH-9 / OAUTH-5: the required fields, the optional fields validated when
  * present, everything else passed through untouched.
@@ -17,7 +32,7 @@ const cimdDocumentSchema = z.looseObject({
   client_name: z.string().trim().min(1),
   redirect_uris: z.array(redirectUri).min(1),
   token_endpoint_auth_method: z.literal('none').optional(),
-  grant_types: z.array(z.enum(['authorization_code', 'refresh_token'])).optional(),
+  grant_types: grantTypesSchema.optional(),
   response_types: z.array(z.literal('code')).optional(),
   application_type: z.enum(['native', 'web']).optional(),
   scope: z.string().optional(),
