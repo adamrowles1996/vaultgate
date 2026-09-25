@@ -95,7 +95,10 @@ added without touching the OAuth layer (see `PLAN.md`).
   requires a recorded refusal.
 - **ID-19** HTML pages are served with a `Content-Security-Policy` of
   `default-src 'none'; style-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`
-  and `Cache-Control: no-store`. Every response carries `Referrer-Policy: same-origin`: no
+  and `Cache-Control: no-store`. The consent page alone adds the origin of the request's
+  `redirect_uri` to `form-action` (`form-action 'self' https://client.example`): a browser applies
+  `form-action` to every redirect a form submission follows, so without it the decision's `302` to
+  the client is blocked and the operator's Allow does nothing. Every response carries `Referrer-Policy: same-origin`: no
   referrer leaves the origin, and a same-origin form POST keeps its real `Origin` (under the
   stricter `no-referrer` a browser sends `Origin: null`, and until 0.1.0-rc.14 that made ID-18
   refuse every browser sign-in and consent with a bare `403`).

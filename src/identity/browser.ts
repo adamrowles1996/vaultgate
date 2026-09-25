@@ -9,19 +9,31 @@ import type { MiddlewareHandler } from 'hono';
 export type { Form, IdentityContext, IdentityEnvironment } from './context.ts';
 
 /**
-ID-19, verbatim.
+ID-19. `formActionSources` widens `form-action` for the one page whose form must leave the origin:
+the consent page, whose decision redirects to the client (OAUTH-19), and a browser applies
+`form-action` to every hop of a form submission's redirects.
 */
-export const CONTENT_SECURITY_POLICY =
-  "default-src 'none'; style-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+export function contentSecurityPolicy(formActionSources: readonly string[] = []): string {
+  const formAction = ["'self'", ...formActionSources].join(' ');
+  return `default-src 'none'; style-src 'self'; img-src 'self' data:; form-action ${formAction}; frame-ancestors 'none'; base-uri 'none'`;
+}
+
+/**
+ID-19, verbatim, for every page but consent.
+*/
+export const CONTENT_SECURITY_POLICY = contentSecurityPolicy();
 
 const MS_PER_SECOND = 1000;
 
 /**
-Every HTML page: strict CSP, never cached, no CORS (spec 03 OAUTH-37).
+Every HTML page: strict CSP, never cached, no CORS (spec 03 OAUTH-37). A page that set its own
+policy through `contentSecurityPolicy` keeps it.
 */
 export const pageHeaders: MiddlewareHandler<IdentityEnvironment> = async (context, next) => {
   await next();
-  context.header('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  if (!context.res.headers.has('Content-Security-Policy')) {
+    context.header('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  }
   context.header('Cache-Control', 'no-store');
 };
 
