@@ -1,6 +1,6 @@
 {
   "name": "vaultgate",
-  "version": "0.1.0-rc.15",
+  "version": "0.1.0-rc.16",
   "private": true,
   "description": "Remote MCP server for Bitwarden with OAuth 2.1, so AI agents can use your credentials over HTTPS without ever seeing them.",
   "keywords": [
