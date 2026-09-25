@@ -12,6 +12,11 @@ export interface ConsentView {
   readonly mode: ClientMode;
   readonly loopbackOnly: boolean;
   readonly scopes: readonly Scope[];
+  /**
+  OAUTH-18: the deployment's other enabled scopes, which the operator may grant although the
+  client did not ask for them.
+  */
+  readonly offeredScopes: readonly Scope[];
 }
 
 const MODE_LABELS: Readonly<Record<ClientMode, string>> = {
@@ -40,13 +45,18 @@ export function scopeFieldName(scope: Scope): string {
   return `scope:${scope}`;
 }
 
-function scopeRow(scope: Scope): Html {
+function scopeRow(scope: Scope, isTicked = true): Html {
   const definition = scopeDefinition(scope);
   const name = scopeFieldName(scope);
   const risk = when(definition.risky, () => html` <strong class="risk">Sensitive</strong>`);
   const control = FIXED_SCOPES.has(scope)
     ? html`<input type="checkbox" checked disabled />${hidden(name, 'on')}`
-    : html`<input type="checkbox" name="${name}" value="on" checked />`;
+    : html`<input
+        type="checkbox"
+        name="${name}"
+        value="on"
+        ${when(isTicked, () => html`checked`)}
+      />`;
   const extra = when(scope === 'actions:browser', () => html` ${BROWSER_NOTE}`);
   return html`<li>
     <label>${control} <code>${scope}</code>${risk} — ${definition.explanation}${extra}</label>
@@ -56,14 +66,38 @@ function scopeRow(scope: Scope): Html {
 /**
  * ACT-13: the `actions:*` scopes form their own group under one plain-language line.
  */
-function actionsGroup(scopes: readonly Scope[]): Html {
+function actionsGroup(scopes: readonly Scope[], isTicked = true): Html {
   return when(
     scopes.length > 0,
     () =>
       html`<p class="actions-note">${ACTIONS_NOTE}</p>
         <ul>
-          ${scopes.map((scope) => scopeRow(scope))}
+          ${scopes.map((scope) => scopeRow(scope, isTicked))}
         </ul>`,
+  );
+}
+
+/**
+ * OAUTH-18: a client that follows the challenge's `scope` hint asks for `vault:read` alone, so the
+ * operator can add any other enabled scope here. Nothing in this group starts ticked.
+ */
+function offeredGroup(view: ConsentView): Html {
+  const vaultScopes = view.offeredScopes.filter((scope) => !isActionScope(scope));
+  const actionScopes = view.offeredScopes.filter((scope) => isActionScope(scope));
+  return when(
+    view.offeredScopes.length > 0,
+    () =>
+      html`<fieldset>
+        <legend>Not requested</legend>
+        <p>
+          <strong>${view.clientName}</strong> did not ask for these. Tick any you want to grant as
+          well.
+        </p>
+        <ul>
+          ${vaultScopes.map((scope) => scopeRow(scope, false))}
+        </ul>
+        ${actionsGroup(actionScopes, false)}
+      </fieldset>`,
   );
 }
 
@@ -111,6 +145,7 @@ export function renderConsentPage(view: ConsentView): string {
           </ul>
           ${actionsGroup(actionScopes)}
         </fieldset>
+        ${offeredGroup(view)}
         <button type="submit" name="decision" value="${APPROVE}">Allow</button>
         <button type="submit" name="decision" value="${DENY}">Deny</button>
       </form>`,

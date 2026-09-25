@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- OAUTH-18: **the consent page offers the scopes the client did not ask for.** Claude on
+  claude.ai follows the `WWW-Authenticate` challenge's `scope` hint and so requests `vault:read`
+  alone, which left the operator no way to grant it an `actions:*` scope. Every other scope the
+  deployment enables is now listed unticked under **Not requested**, and whatever the operator
+  ticks is granted.
+
 ## [0.1.0-rc.19] - 2026-09-25
 
 ### Fixed

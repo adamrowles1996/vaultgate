@@ -156,7 +156,9 @@ export function authorizationPath(provider: TestProvider): string {
 }
 
 /**
- * The human half: open the authorization URL signed in, approve every scope.
+ * The human half: open the authorization URL signed in and approve, submitting what a browser
+ * would: the scopes the page renders ticked, plus the hidden `vault:read`. The unticked
+ * **Not requested** offers (OAUTH-18) stay out.
  */
 export async function approveInBrowser(
   harness: OAuthHarness,
@@ -172,8 +174,10 @@ export async function approveInBrowser(
     csrf: form.csrfToken,
     decision: 'approve',
   };
-  for (const scope of form.html.matchAll(/name="scope:([\w:]+)"/g)) {
-    fields[`scope:${scope[1] ?? ''}`] = 'on';
+  for (const input of form.html.matchAll(/<input[^>]*name="scope:([\w:.]+)"[^>]*>/g)) {
+    if (/ checked|type="hidden"/.test(input[0])) {
+      fields[`scope:${input[1] ?? ''}`] = 'on';
+    }
   }
   const decided = await browser.submit('/oauth/authorize', fields);
   expect(decided.status).toBe(302);

@@ -13,9 +13,26 @@ const VIEW = {
   mode: 'cimd' as const,
   loopbackOnly: false,
   scopes: ['vault:read', 'vault:reveal', 'vault:generate'] as const,
+  offeredScopes: [] as const,
 };
 
 describe('renderConsentPage', () => {
+  it('OAUTH-18 offers the enabled scopes the client did not request, none of them ticked', () => {
+    const html = flattenHtml(
+      renderConsentPage({
+        ...VIEW,
+        scopes: ['vault:read'],
+        offeredScopes: ['vault:reveal', 'actions:ssh', 'actions:sql.read'],
+      }),
+    );
+    expect(html).toContain('<legend>Not requested</legend>');
+    expect(html).toContain('did not ask for these. Tick any you want to grant as well.');
+    expect(html).toContain('<input type="checkbox" name="scope:vault:reveal" value="on" />');
+    expect(html).toContain('<input type="checkbox" name="scope:actions:ssh" value="on" />');
+    expect(html).not.toContain('name="scope:actions:ssh" value="on" checked');
+    expect(flattenHtml(renderConsentPage(VIEW))).not.toContain('Not requested');
+  });
+
   it('OAUTH-13 shows the escaped client name, the full redirect host and the registration mechanism', () => {
     const html = flattenHtml(renderConsentPage(VIEW));
     expect(html).toContain('<strong>Agent &lt;One&gt;</strong>');

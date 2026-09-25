@@ -115,7 +115,7 @@ describe('POST /oauth/authorize', () => {
     });
   });
 
-  it('OAUTH-18 issues only the ticked scopes, ignoring scopes that were not requested', async () => {
+  it('OAUTH-18 issues only the ticked scopes, ignoring a scope the deployment does not enable', async () => {
     const parked = await park();
     const response = await decide(parked, {
       ...APPROVE_ALL,
@@ -130,6 +130,24 @@ describe('POST /oauth/authorize', () => {
     expect(parked.harness.repos.consents.findActive(OPERATOR_ID, CIMD_ID)?.scopes).toStrictEqual([
       'vault:read',
     ]);
+  });
+
+  it('OAUTH-18 grants an enabled scope the operator ticks although the client did not request it', async () => {
+    const parked = await park('vault:read');
+    const response = await decide(parked, {
+      decision: 'approve',
+      'scope:vault:read': 'on',
+      'scope:vault:generate': 'on',
+    });
+    const claim = parked.harness.repos.authorizationCodes.claim(
+      hashCredential(codeOf(response)),
+      0,
+    );
+    expect(claim).toMatchObject({ code: { scopes: ['vault:read', 'vault:generate'] } });
+    expect(parked.harness.audit[0]).toMatchObject({
+      action: 'consent_granted',
+      details: { scopes: ['vault:read', 'vault:generate'] },
+    });
   });
 
   it('OAUTH-18 a later approval for the same client widens the existing consent row', async () => {
