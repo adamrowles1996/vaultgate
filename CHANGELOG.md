@@ -29,6 +29,7 @@ All notable changes to this project are documented here. The format follows
   connector moves to its own file, [14a](docs/spec/14a-code-connector.md), with two new
   requirements for the console's repository picker and GitHub check (ACT-119, ACT-120) and two
   new error codes, `ref_not_found` and `chunk_not_found`.
+
 ## [0.1.0-rc.20] - 2026-09-25
 
 ### Added
