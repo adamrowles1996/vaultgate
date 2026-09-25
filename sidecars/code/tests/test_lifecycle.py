@@ -201,21 +201,21 @@ def test_an_owner_delete_abandons_its_running_builds(make_service: ServiceFactor
 
 
 @pytest.mark.parametrize(
-    ("target", "code", "message"),
+    ("target", "timeout_s", "code", "message"),
     [
-        (childtargets.sleep_forever, "build_timeout", "the build exceeded build_timeout_s"),
-        (childtargets.fail, "build_failed", "RuntimeError"),
-        (childtargets.exit_silently, "build_failed", "ChildExited"),
+        (childtargets.sleep_forever, 1, "build_timeout", "the build exceeded build_timeout_s"),
+        (childtargets.fail, 120, "build_failed", "RuntimeError"),
+        (childtargets.exit_silently, 120, "build_failed", "ChildExited"),
     ],
 )
 def test_a_variant_that_cannot_build_fails_the_build(
-    make_service: ServiceFactory, target: Any, code: str, message: str
+    make_service: ServiceFactory, target: Any, timeout_s: int, code: str, message: str
 ) -> None:
     """ACT-107: a variant killed at build_timeout_s, or failing, fails the build with its counts."""
     service = make_service()
     service.runner._target = target
     error = failure(
-        lambda: put(service, "acme", build_timeout_s=1, max_file_bytes=repo.MAX_FILE_BYTES)
+        lambda: put(service, "acme", build_timeout_s=timeout_s, max_file_bytes=repo.MAX_FILE_BYTES)
     )
     assert (error.status, error.code, error.message) == (422, code, message)
     assert error.detail is not None

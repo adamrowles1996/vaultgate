@@ -8,7 +8,7 @@ import pytest
 
 import archives
 from conftest import ServiceFactory, put
-from vaultgate_code import engine, query
+from vaultgate_code import engine, indexes, query
 from vaultgate_code.errors import ApiError
 from vaultgate_code.service import Service
 
@@ -107,8 +107,13 @@ def test_an_on_demand_variant_evicts_others_or_is_storage_full(
     assert not list(service.store.tmp_dir.iterdir())
 
 
-def test_the_memory_budget_drops_the_least_recently_used(make_service: ServiceFactory) -> None:
+def test_the_memory_budget_drops_the_least_recently_used(
+    make_service: ServiceFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """ACT-107: loaded variants stay within max_memory_bytes; a drop calls malloc_trim."""
+    # No resident growth is measured, so each variant counts its size on disk: the three are
+    # the same archive and differ by a few bytes at most.
+    monkeypatch.setattr(indexes, "resident_bytes", lambda: 0)
     trims: list[int] = []
     service = make_service(trim=lambda: trims.append(1))
     for key in ("a", "b", "c"):
@@ -117,7 +122,7 @@ def test_the_memory_budget_drops_the_least_recently_used(make_service: ServiceFa
     search(service, "b")
     loaded, used = service.loaded.usage()
     assert (loaded, trims) == (2, [])
-    service.loaded.budget = used  # room for exactly these two
+    service.loaded.budget = used + 1000  # room for two, not three
     search(service, "a")  # a is now the most recent
     search(service, "c")
     assert service.loaded.get((("a", "code"),)) is not None

@@ -189,7 +189,9 @@ const typeScriptRules = {
 
 export default tseslint.config(
   {
-    ignores: ['node_modules/**', 'dist/**', 'coverage/**'],
+    // The code sidecar's local virtual environment holds third-party JavaScript (coverage's
+    // HTML report); the sidecar itself is Python, checked by its own CI job.
+    ignores: ['node_modules/**', 'dist/**', 'coverage/**', 'sidecars/code/.venv/**'],
   },
   js.configs.recommended,
   eslintComments.recommended,
