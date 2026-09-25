@@ -11,7 +11,9 @@
   compatibility evidence) is in progress; the off-by-default actions layer has landed through M14
   with the `http` (and Microsoft Graph), `sql`, `ssh` and `winrm` connectors
   (docs/spec/13-actions.md, docs/spec/13a-actions-operations.md, docs/spec/14-actions-connectors.md,
-  docs/guides/actions.md); the `browser` connector is M15 (docs/PLAN.md). Single maintainer.
+  docs/guides/actions.md), and M16 adds the `code` connector, Semble code search over GitHub
+  repositories through a sidecar (docs/spec/14a-code-connector.md, docs/guides/code-search.md);
+  the `browser` connector is M15 (docs/PLAN.md). Single maintainer.
 - Apache-2.0 (LICENSE, NOTICE). Source: https://github.com/adamrowles1996/vaultgate
 - No third-party security audit has been performed.
 
@@ -27,7 +29,9 @@
   (destination, the vault item that signs in there, a policy, and which clients may use it); an
   agent names a target and describes an operation through http_request, sql_query, sql_execute,
   ssh_run or winrm_run, under scopes actions:http, actions:sql.read, actions:sql.write,
-  actions:ssh and actions:winrm. vaultgate fetches the credential, connects to the pinned
+  actions:ssh and actions:winrm; and Semble connections (one GitHub repository each) through
+  code_search, code_find_related and code_read under actions:code, with the arguments of semble's
+  own MCP server (repo is a connection name or a list of them). vaultgate fetches the credential, connects to the pinned
   destination, runs the operation inside the policy and scrubs every injected value from the
   result. Agents never pass a host, URL base, database or credential. Writes can require a human
   confirmation per call. Nothing executes on the vaultgate host.

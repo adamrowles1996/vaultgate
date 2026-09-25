@@ -9,8 +9,13 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh | sudo bash
 #   curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh | sudo bash -s -- --version 0.1.0
+#   curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh | sudo bash -s -- --with-code-sidecar
 #
-# Re-running upgrades in place. An existing /etc/vaultgate/vaultgate.env is never overwritten.
+# --with-code-sidecar also installs the code connector's sidecar (ACT-114) as its own
+# service; once installed, every re-run upgrades it with the core.
+#
+# Re-running upgrades in place. An existing /etc/vaultgate/vaultgate.env is never overwritten;
+# --with-code-sidecar only appends the two code connector settings when they are absent.
 # scripts/test-install-sh.sh sources this file (the guard at the end keeps main
 # from running) to check the argument and operating-system logic.
 set -euo pipefail
@@ -22,6 +27,7 @@ DATA_DIR="/var/lib/vaultgate"
 SERVICE_USER="vaultgate"
 NODE_MAJOR=26
 VERSION="${VAULTGATE_VERSION:-}"
+WITH_CODE_SIDECAR=0
 OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
 
 # Bitwarden CLI pin. Keep equal to the Dockerfile; src/bitwarden/versions.test.ts checks it (COMPAT-1).
@@ -45,8 +51,12 @@ parse_arguments() {
         VERSION="$2"
         shift 2
         ;;
+      --with-code-sidecar)
+        WITH_CODE_SIDECAR=1
+        shift
+        ;;
       -h | --help)
-        echo "usage: install.sh [--version X.Y.Z]   (VAULTGATE_VERSION=X.Y.Z also works)"
+        echo "usage: install.sh [--version X.Y.Z] [--with-code-sidecar]   (VAULTGATE_VERSION=X.Y.Z also works)"
         exit 0
         ;;
       *) die "unknown argument: $1" ;;
@@ -188,6 +198,11 @@ has_placeholders() {
   grep -Eq '^VAULTGATE_(PUBLIC_URL|SECRET_KEY)=.*(replace-with|@SECRET_KEY@)' "$1"
 }
 
+# The sidecar, once installed, is upgraded with the core: the two speak one protocol version.
+wants_code_sidecar() {
+  [ "$WITH_CODE_SIDECAR" -eq 1 ] || [ -e /etc/systemd/system/vaultgate-code.service ]
+}
+
 install_service() {
   step "Installing the systemd unit"
   install -m 0644 -o root -g root "${RELEASE_DIR}/deploy/systemd/vaultgate.service" \
@@ -208,6 +223,10 @@ install_service() {
 
 print_next_steps() {
   step "Done: vaultgate ${VERSION} is installed"
+  if wants_code_sidecar; then
+    info "The code sidecar runs as vaultgate-code on ${CODE_SOCKET:-/run/vaultgate-code/code.sock}:"
+    info "  systemctl status vaultgate-code; journalctl -u vaultgate-code -n 50"
+  fi
   if [ "$STARTED" -eq 0 ]; then
     cat <<END
     1. Edit ${CONFIG_DIR}/vaultgate.env: set VAULTGATE_PUBLIC_URL to the https
@@ -249,6 +268,11 @@ main() {
   create_service_user
   install_release
   write_environment_file
+  if wants_code_sidecar; then
+    # shellcheck source=deploy/lib/code-sidecar.sh
+    . "${RELEASE_DIR}/deploy/lib/code-sidecar.sh"
+    install_code_sidecar
+  fi
   install_service
   print_next_steps
 }

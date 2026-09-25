@@ -175,25 +175,28 @@ a connector tool by target name. Specification: [13 Actions](../spec/13-actions.
 tool surface below and the operator pages (the console's Connections pages, described in the
 [Actions guide](actions.md)) exist today, and so do the `http` connector with `http_request`
 (M9) and its Microsoft Graph credential adapter (M10), the `sql` connector with `sql_query`
-and `sql_execute` (M11), the `ssh` connector with `ssh_run` (M12) and the `winrm` connector with
-`winrm_run` (M13); the `browser` runtime lands with M15 in [`PLAN.md`](../PLAN.md), and until a
-connector's runtime lands its tool is not listed on any deployment.
+and `sql_execute` (M11), the `ssh` connector with `ssh_run` (M12), the `winrm` connector with
+`winrm_run` (M13) and the `code` connector with `code_search`, `code_find_related` and
+`code_read` (M16, [Code search](code-search.md)); the `browser` runtime lands with M15 in
+[`PLAN.md`](../PLAN.md), and until a connector's runtime lands its tool is not listed on any
+deployment.
 
 ### Actions scopes
 
 Every actions scope is marked risky on the consent page and none implies another. A scope is
 advertised and effective only when `VAULTGATE_ENABLE_ACTIONS=true` _and_ its connector's switch
-is on (`VAULTGATE_ACTIONS_ENABLE_HTTP`, `_SQL`, `_SSH`, `_WINRM`, `_BROWSER`); turning a switch
+is on (`VAULTGATE_ACTIONS_ENABLE_HTTP`, `_SQL`, `_SSH`, `_WINRM`, `_BROWSER`, `_CODE`); turning a switch
 off takes effect for every existing token at once, exactly as for `vault:write`.
 
-| Scope               | Grants                                                       | Tools             |
-| ------------------- | ------------------------------------------------------------ | ----------------- |
-| `actions:http`      | HTTP requests to granted `http` targets, signed by vaultgate | `http_request`    |
-| `actions:sql.read`  | Read-only queries against granted `sql` targets              | `sql_query`       |
-| `actions:sql.write` | Data changes on granted `sql` targets whose policy allows it | `sql_execute`     |
-| `actions:ssh`       | One allowlisted command on a granted `ssh` target            | `ssh_run`         |
-| `actions:winrm`     | One allowlisted command on a granted `winrm` target          | `winrm_run`       |
-| `actions:browser`   | A signed-in browser session confined to allowed origins      | `browser_*` (M15) |
+| Scope               | Grants                                                        | Tools                                           |
+| ------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
+| `actions:http`      | HTTP requests to granted `http` targets, signed by vaultgate  | `http_request`                                  |
+| `actions:sql.read`  | Read-only queries against granted `sql` targets               | `sql_query`                                     |
+| `actions:sql.write` | Data changes on granted `sql` targets whose policy allows it  | `sql_execute`                                   |
+| `actions:ssh`       | One allowlisted command on a granted `ssh` target             | `ssh_run`                                       |
+| `actions:winrm`     | One allowlisted command on a granted `winrm` target           | `winrm_run`                                     |
+| `actions:browser`   | A signed-in browser session confined to allowed origins       | `browser_*` (M15)                               |
+| `actions:code`      | Semble search and file reads over granted GitHub repositories | `code_search`, `code_find_related`, `code_read` |
 
 A token holding any of these also gets `actions_list_targets`. Calling it without one is
 answered `403` with a challenge that lists every enabled actions scope as an any-of set
@@ -338,6 +341,26 @@ operation, so the operator may require a human confirmation for every call (see 
 injected value in every encoding is replaced by `[redacted:<field>]` before the result, the error
 detail or the audit row leaves the engine.
 
+### `code_search`, `code_find_related`, `code_read` (`actions:code`)
+
+The three take `repo` in place of `target`: a Semble connection's name, or for the two search
+tools a list of up to ten names searched together. `code_search` takes `query`, and
+`code_find_related` a `file_path` and `line` from an earlier result; both take `semble`'s own
+`content` (`code`, `docs`, `config` or `all`), `top_k` (5 by default) and `max_snippet_lines`
+(`0`, `N` or `null`, 10 by default), and `code_search` also `paths` and `languages`. `code_read`
+takes one `repo`, a `file_path` and an optional `start_line` and `end_line`. Each may name a
+`ref` (a branch, a tag, a 40-character SHA or `pr:<n>`) with one repository, where the connection
+allows it.
+
+Out, for the searches: `query`, `results` (each with `repo`, `file_path`, `start_line`,
+`end_line`, `score`, `language` and, unless `max_snippet_lines` is `0`, `content`) ranked as
+`semble` ranks them, and `repos` (per repository its `repository`, `ref`, `commit`, `indexed_at`
+and `stale`); for a read, the file's lines with `total_lines` and `truncated`. With several
+repositories every `file_path` starts with the connection name and a `/`. The first call on a
+commit with no index waits for the build up to the connection's `build_wait_s`; after that it is
+`index_not_ready`. Setup, parity with `semble`'s MCP server and operation:
+[Code search](code-search.md).
+
 ### Connector tools
 
 Every connector tool takes `target` first and resolves it in a fixed order, stopping at the first
@@ -397,6 +420,8 @@ every code has one fixed message and `detail` is the only variable part.
 | `confirmation_unavailable`, `confirmation_declined`, `confirmation_cancelled`, `confirmation_expired`, `confirmation_invalid`, `confirmation_reused` | The confirmation of the section above did not happen, was refused, or the retried state was stale, altered or replayed.                                                                                                       |
 | `credential_unavailable`                                                                                                                             | The vault is locked or the item or field is missing; the operator sees why on the target's page.                                                                                                                              |
 | `destination_refused`, `connection_failed`, `tls_error`, `host_key_mismatch`, `authentication_failed`, `timeout`, `upstream_error`                   | The destination could not be reached, presented an SSH host key or a TLS certificate other than the pinned one, or answered with an error; `detail` carries a scrubbed, capped message where one exists.                      |
+| `index_not_ready`, `index_unavailable`                                                                                                               | Code search: the commit is still being indexed (`detail.state` `building`, retry shortly) or its build failed (`state` `failed` and `detail.reason`), or the sidecar did not answer.                                          |
+| `ref_not_found`, `path_not_found`, `chunk_not_found`, `not_text`                                                                                     | Code search: no such branch, tag, commit or pull request; no indexed file of that path; no indexed chunk at that line; a file that is not text for `code_read`.                                                               |
 | `connector_fault`                                                                                                                                    | The call failed inside vaultgate rather than at the destination, which may never have been contacted; `detail.reason` says which.                                                                                             |
 
 ## Secret-handling rules, in plain words

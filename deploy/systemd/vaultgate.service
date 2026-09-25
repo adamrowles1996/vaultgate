@@ -3,7 +3,8 @@
 [Unit]
 Description=vaultgate remote MCP server for Bitwarden
 Documentation=https://github.com/adamrowles1996/vaultgate
-After=network-online.target
+# The code sidecar, when installed (install.sh --with-code-sidecar), starts first.
+After=network-online.target vaultgate-code.service
 Wants=network-online.target
 
 [Service]

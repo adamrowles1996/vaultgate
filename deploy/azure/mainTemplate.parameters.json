@@ -8,6 +8,7 @@
     "bitwardenServer": { "value": "" },
     "enableWriteScope": { "value": false },
     "logLevel": { "value": "info" },
+    "deployCodeSidecar": { "value": false },
     "bwPassword": { "value": "" },
     "bwClientId": { "value": "" },
     "bwClientSecret": { "value": "" },

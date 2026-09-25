@@ -18,7 +18,9 @@ docker compose up -d
 docker compose logs -f vaultgate
 ```
 
-`VAULTGATE_VERSION=latest` follows the newest release on every `pull`; pin a version for
+With the code sidecar, add `--profile code` to `pull` and `up`: the sidecar and vaultgate speak
+one protocol version, so upgrade them together. `VAULTGATE_VERSION=latest` follows the newest
+release on every `pull`; pin a version for
 anything you would mind being surprised by. Every image is signed; verifying it before pulling is
 described in [Install with Docker Compose](install-docker-compose.md#verifying-the-image).
 
@@ -36,7 +38,10 @@ curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/insta
 ```
 
 The script downloads and verifies the release tarball, installs it to `/opt/vaultgate/<version>`,
-moves the `current` symlink and restarts the service. `/etc/vaultgate/vaultgate.env` is never
+moves the `current` symlink and restarts the service. Where the code sidecar is installed
+(`--with-code-sidecar`), every re-run upgrades it too, to `/opt/vaultgate-code/<version>`; its
+snapshots and indexes in `/var/lib/vaultgate-code` are kept, and an index built by another
+`semble` version or model revision is rebuilt on its next use. `/etc/vaultgate/vaultgate.env` is never
 overwritten. The installer also updates the Bitwarden CLI when the release pins a newer one; the
 process refuses to start with a CLI below its minimum, so a CLI you manage yourself must keep up.
 
@@ -49,7 +54,9 @@ az containerapp update --name vaultgate --resource-group rg-vaultgate \
   --image ghcr.io/adamrowles1996/vaultgate:1.2.3
 ```
 
-The single replica restarts on the new revision; migrations run on that start. `imageTag=latest`
+The single replica restarts on the new revision; migrations run on that start. With
+`deployCodeSidecar`, update its app too, to the same version:
+`az containerapp update --name vaultgate-code --resource-group rg-vaultgate --image ghcr.io/adamrowles1996/vaultgate-code:1.2.3`. `imageTag=latest`
 only changes when a revision restarts, so pin a version there too.
 
 ## What to check afterwards
@@ -68,7 +75,8 @@ consents survive an upgrade, so nothing needs reconnecting.
 Within a major version, run the previous release again:
 
 - Compose: set the previous `VAULTGATE_VERSION` and `docker compose up -d`.
-- Linux: `sudo ln -sfn /opt/vaultgate/<previous> /opt/vaultgate/current && sudo systemctl restart vaultgate`.
+- Linux: `sudo ln -sfn /opt/vaultgate/<previous> /opt/vaultgate/current && sudo systemctl restart vaultgate`;
+  with the code sidecar, move `/opt/vaultgate-code/current` back too and restart `vaultgate-code` first.
 - Azure: `az containerapp update … --image …:<previous>`.
 
 This works as long as the newer version applied no migration. Migrations are forward-only and

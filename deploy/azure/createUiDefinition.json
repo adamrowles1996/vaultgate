@@ -164,6 +164,14 @@
               ]
             },
             "visible": true
+          },
+          {
+            "name": "deployCodeSidecar",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Deploy the code search sidecar",
+            "toolTip": "Semble code search over GitHub repositories (the code connector) in a separate Container App with internal-only ingress. Turn the connector on afterwards with VAULTGATE_ENABLE_ACTIONS and VAULTGATE_ACTIONS_ENABLE_CODE.",
+            "constraints": { "required": false },
+            "visible": true
           }
         ]
       }
@@ -176,6 +184,7 @@
       "bitwardenServer": "[steps('options').bitwardenServer]",
       "enableWriteScope": "[bool(steps('options').enableWriteScope)]",
       "logLevel": "[steps('options').logLevel]",
+      "deployCodeSidecar": "[bool(steps('options').deployCodeSidecar)]",
       "bwPassword": "[steps('secrets').bwPassword]",
       "bwClientId": "[steps('secrets').bwClientId]",
       "bwClientSecret": "[steps('secrets').bwClientSecret]",
