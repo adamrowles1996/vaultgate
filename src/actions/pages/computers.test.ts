@@ -31,7 +31,7 @@ describe('the Computers page', () => {
     const { browser } = await signedInOperator(harness);
     const markup = await pageText(browser, '/account');
     expect(markup).not.toContain('/account/actions');
-    expect(sidebarOf(markup)).not.toContain('Add computer');
+    expect(sidebarOf(markup)).not.toContain('Add connection');
     const list = await browser.get('/account/actions');
     expect(list.status).toBe(404);
     const create = await browser.get('/account/actions/new?connector=http');
@@ -58,7 +58,7 @@ describe('the Computers page', () => {
     const response = await browser.get('/account/actions');
     const markup = await response.text();
     expect(response.status).toBe(200);
-    expect(markup).toContain('<h1>Computers</h1>');
+    expect(markup).toContain('<h1>Connections</h1>');
     const list = listOf(markup);
     expect(list).toContain('>HTTP APIs <span class="count">2</span');
     expect(list).toContain('<a class="mono strong" href="/account/actions/id-1">api</a');
@@ -138,11 +138,11 @@ describe('the Computers page', () => {
     const harness = createPagesHarness();
     const { browser } = await signedInOperator(harness, false);
     const empty = await pageText(browser, '/account/actions');
-    expect(empty).toContain('<strong>No computers yet.</strong>');
+    expect(empty).toContain('<strong>No connections yet.</strong>');
     expect(empty).not.toContain('<table class="computers">');
     const deleted = await pageText(browser, '/account/actions?notice=deleted');
     expect(deleted).toContain(
-      '<p class="notice">Computer deleted. Its calls stay in the audit trail.</p>',
+      '<p class="notice">Connection deleted. Its calls stay in the audit trail.</p>',
     );
     const constructor = await pageText(browser, '/account/actions?notice=constructor');
     expect(constructor).not.toContain('class="notice"');

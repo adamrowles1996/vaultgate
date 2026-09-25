@@ -97,7 +97,7 @@ which invalidates the old set.
 ## 5. Sign in and the console
 
 Opening the bare address (`https://vault.example.com/`) takes you to the login page or, when you
-are already signed in, into the console: the **Computers** page when the actions layer is on,
+are already signed in, into the console: the **Connections** page when the actions layer is on,
 otherwise **Agents**. A sign-in with no page to return to lands there too.
 
 `/login` asks for the e-mail address and password, then for a six-digit authenticator code or a
@@ -113,11 +113,11 @@ address before anything else, and from then on login asks for e-mail address and
 Sessions last 12 hours (`VAULTGATE_SESSION_TTL`, 15 minutes to 7 days) and expire after an hour
 of inactivity. Every page of the console has the same sidebar:
 
-- **Computers**, when the actions layer is on: the servers and APIs agents may use without seeing
+- **Connections**, when the actions layer is on: the servers, databases and APIs agents may use without seeing
   a password; see [Actions](actions.md).
 - **Agents**: the connected OAuth clients, each with a **Disconnect** button (once the
   authorization server is deployed, see [Connect Claude](connect-claude.md)) and, with the
-  actions layer on, which agent may use which computer.
+  actions layer on, which agent may use which connection.
 - **Activity**: the audit log export and, with the actions layer on, the latest calls and the
   unexpected writes.
 - **Vault**: the vault connection (next section). The foot of the sidebar shows the vault's state

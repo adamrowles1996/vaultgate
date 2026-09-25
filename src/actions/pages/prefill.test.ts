@@ -52,7 +52,7 @@ describe('Add computer', () => {
     const harness = createPagesHarness();
     const { browser } = await signedInOperator(harness);
     const chooser = compact(await pageText(browser, '/account/actions/new'));
-    expect(chooser).toContain('<h1>Add a computer</h1>');
+    expect(chooser).toContain('<h1>Add a connection</h1>');
     expect(chooser).toContain(
       '<a class="choice" href="/account/actions/new?connector=sql&amp;kind=mssql">',
     );

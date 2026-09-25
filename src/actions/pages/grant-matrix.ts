@@ -73,7 +73,7 @@ function row(computer: MatrixComputer, view: MatrixView): Html {
     ><a class="mono" href="${targetPath(computer.id)}">${computer.name}</a></span
   >`;
   return html`<tr>
-    ${cell('Computer', name)}
+    ${cell('Connection', name)}
     ${view.clients.map((client) => cell(nameOf(client), toggle(computer, client, view)))}
   </tr>`;
 }
@@ -89,7 +89,7 @@ function header(clients: readonly ClientChoice[]): Html {
   );
   return html`<thead>
     <tr>
-      <th scope="col">Computer</th>
+      <th scope="col">Connection</th>
       ${headings}
     </tr>
   </thead>`;
@@ -100,12 +100,12 @@ ACT-9: who may use what, across every computer and every connected agent.
 */
 export function grantMatrix(view: MatrixView): Html {
   const note = view.isReauthenticated
-    ? 'Press a square to grant or remove. Removing a grant also closes that agent’s sessions on the computer.'
+    ? 'Press a square to grant or remove. Removing a grant also closes that agent’s sessions on the connection.'
     : 'Confirm your password to change a grant here.';
   const table =
     view.computers.length === 0 || view.clients.length === 0
       ? html`<p class="empty">
-          Grants appear here once there is a computer and a connected agent.
+          Grants appear here once there is a connection and a connected agent.
         </p>`
       : html`<table class="matrix">
           ${header(view.clients)}

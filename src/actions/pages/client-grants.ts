@@ -40,9 +40,9 @@ export function createClientTargets(
   return (clientId) => {
     const granted = dependencies.targets.list().filter((target) => isGrantedTo(target, clientId));
     if (granted.length === 0) {
-      return html`<p class="card-note">No computer yet.</p>`;
+      return html`<p class="card-note">No connection yet.</p>`;
     }
-    return html`<p class="chips" aria-label="Computers">
+    return html`<p class="chips" aria-label="Connections">
       ${granted.map(
         (target) => html`<a class="tag mono" href="${targetPath(target.id)}">${target.name}</a>`,
       )}

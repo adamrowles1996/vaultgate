@@ -158,7 +158,7 @@ describe('POST /account/actions', () => {
     ]);
     const page = await browser.get('/account/actions/id-1?notice=created');
     const markup = await page.text();
-    expect(markup).toContain('<p class="notice">Computer created.</p>');
+    expect(markup).toContain('<p class="notice">Connection created.</p>');
     expect(markup).toContain('Example Login');
     const edit = await pageText(browser, '/account/actions/id-1/edit');
     expect(edit).toContain(
@@ -210,7 +210,7 @@ describe('POST /account/actions', () => {
       const markup = await response.text();
       expect(response.status).toBe(400);
       expect(markup).toContain(
-        'The computer was not saved; fix the problems shown against each field and try again.',
+        'The connection was not saved; fix the problems shown against each field and try again.',
       );
       expect(markup).toContain(problem);
       expect(markup).toContain(

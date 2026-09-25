@@ -23,14 +23,14 @@ import { type ActionsPagesDependencies, signedIn, targetPageView } from './view.
 import type { IdentityContext, IdentityEnvironment } from '../../identity/index.ts';
 
 const NOTICES: Readonly<Record<string, string>> = {
-  created: 'Computer created.',
-  updated: 'Computer saved; its revision has moved on and open confirmations are void.',
-  enabled: 'Computer enabled.',
-  disabled: 'Computer disabled; agents no longer see it.',
+  created: 'Connection created.',
+  updated: 'Connection saved; its revision has moved on and open confirmations are void.',
+  enabled: 'Connection enabled.',
+  disabled: 'Connection disabled; agents no longer see it.',
   granted: 'Grant added.',
-  'grant-revoked': 'Grant removed and the agent’s sessions on this computer closed.',
-  'sessions-closed': 'Every open session on this computer was closed.',
-  deleted: 'Computer deleted. Its calls stay in the audit trail.',
+  'grant-revoked': 'Grant removed and the agent’s sessions on this connection closed.',
+  'sessions-closed': 'Every open session on this connection was closed.',
+  deleted: 'Connection deleted. Its calls stay in the audit trail.',
 };
 
 /**

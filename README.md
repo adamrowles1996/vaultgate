@@ -109,7 +109,7 @@ the consent page. The `bw` CLI that vaultgate drives is bundled in the image and
 image: [`docs/guides/install-docker-compose.md`](docs/guides/install-docker-compose.md).
 
 To let agents use credentials rather than read them, set `VAULTGATE_ENABLE_ACTIONS=true` and the
-switch for each connector you want, restart, and add computers (targets) on the console's **Computers**
+switch for each connector you want, restart, and add connections (targets) on the console's **Connections**
 page: [`docs/guides/actions.md`](docs/guides/actions.md).
 
 ## How it works

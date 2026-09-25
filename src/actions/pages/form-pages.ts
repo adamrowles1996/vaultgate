@@ -62,8 +62,8 @@ export function createFrame(kind: ComputerKind, returnTo: string): StepFrame {
     title: `Add ${label}`,
     heading: `Add ${label}`,
     crumbs: [
-      { label: 'Computers', href: CREATE_PATH },
-      { label: 'Add computer', href: NEW_PATH },
+      { label: 'Connections', href: CREATE_PATH },
+      { label: 'Add connection', href: NEW_PATH },
       { label },
     ],
     returnTo,
@@ -78,7 +78,7 @@ export function editFrame(
     title: `Edit ${target.name}`,
     heading: `Edit ${target.name}`,
     crumbs: [
-      { label: 'Computers', href: CREATE_PATH },
+      { label: 'Connections', href: CREATE_PATH },
       { label: html`<span class="mono">${target.name}</span>`, href: targetPath(target.id) },
       { label: 'Edit' },
     ],
@@ -102,7 +102,7 @@ ID-15: outside the window a step offers the way to confirm the password and noth
 export function lockedPage(frame: StepFrame, what: string): ConsolePage {
   return stepPage(
     frame,
-    'Changes to computers need your password, confirmed in the last five minutes.',
+    'Changes to connections need your password, confirmed in the last five minutes.',
     lockedForm(frame.returnTo, what),
   );
 }
@@ -133,14 +133,14 @@ ACT-5: "Add computer" starts here, with one card per kind this build can create.
 */
 export function kindChooserPage(choices: readonly KindChoice[]): ConsolePage {
   return {
-    title: 'Add a computer',
+    title: 'Add a connection',
     active: 'computers',
-    crumbs: [{ label: 'Computers', href: CREATE_PATH }, { label: 'Add computer' }],
+    crumbs: [{ label: 'Connections', href: CREATE_PATH }, { label: 'Add connection' }],
     body: html`${pageHead(
-        'Add a computer',
-        'What are you connecting to? Each computer is one way in: a Windows server that also runs SQL Server is added once for WinRM and once for SQL Server.',
+        'Add a connection',
+        'What are you connecting to? Each connection is one way in: a Windows server that also runs SQL Server is added once for WinRM and once for SQL Server.',
       )}
-      <nav class="choices" aria-label="Kinds of computer">
+      <nav class="choices" aria-label="Kinds of connection">
         ${choices.map((option) => choice(option))}
       </nav>`,
     returnTo: NEW_PATH,
@@ -159,7 +159,7 @@ export function createPage(frame: StepFrame, view: FormPageView): ConsolePage {
       values: view.values,
       problems: view.problems,
       isNew: true,
-      submitLabel: 'Create computer',
+      submitLabel: 'Create connection',
       item: view.item,
     })}`,
   );
@@ -173,7 +173,7 @@ export interface EditPageView extends FormPageView {
 export function editPage(frame: StepFrame, view: EditPageView): ConsolePage {
   return stepPage(
     frame,
-    `A ${KINDS[view.kind].label} computer. Saving moves its revision on, so any confirmation still open for it is void.`,
+    `Saving this ${KINDS[view.kind].label} connection moves its revision on, so any confirmation still open for it is void.`,
     html`${outcome(view)}
     ${renderTargetForm({
       action: targetPath(view.targetId),

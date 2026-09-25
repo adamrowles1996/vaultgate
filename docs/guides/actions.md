@@ -28,14 +28,14 @@ VAULTGATE_ACTIONS_ENABLE_WINRM=true
 ```
 
 Restart after changing them. With the master switch off nothing changes: no `actions:*` scope
-is advertised, no tool is listed and the console has no Computers section. A connector switch
+is advertised, no tool is listed and the console has no Connections section. A connector switch
 set without the master switch is a start-up warning. Every variable is in
 [08 Configuration](../spec/08-configuration.md).
 
-## The Computers pages
+## The Connections pages
 
-Sign in: with the actions layer on, the console opens on **Computers**. It lists every target
-(the console calls one a _computer_) grouped by kind: SQL Server, PostgreSQL, Windows · WinRM,
+Sign in: with the actions layer on, the console opens on **Connections**. It lists every target
+(the console calls one a _connection_) grouped by kind: SQL Server, PostgreSQL, Windows · WinRM,
 Linux · SSH, HTTP APIs and Microsoft Graph. Each row shows the address (host and base path
 only), the vault item and the fields it signs in with, what its policy allows, the agents granted
 it, its last call and its state. A secret field appears as a sealed chip bearing only its name;
@@ -47,23 +47,23 @@ changes things without asking a person, and this week's unexpected writes, which
 cross-target review described under
 [Sessions, calls and the audit trail](#sessions-calls-and-the-audit-trail).
 
-**Add computer**, at the top of the sidebar, asks what kind of computer it is, then which vault
+**Add connection**, at the top of the sidebar, asks what kind of connection it is, then which vault
 item signs in there. Search by the item's name, its username or an address it holds (with nothing
 typed, the vault's first 20 items are listed), or paste an item id. Each result shows the item's
 login name, its first address and its fields, a secret field as a sealed chip bearing only its
 name. Choosing one opens that kind's form with its defaults filled in: a SQL Server starts on port
 1433 with the SQL Server engine chosen, a PostgreSQL database on 5432, a Microsoft Graph target
 with Graph's base URL. Every field that names a vault field is a list of the chosen item's
-fields with the usual one selected; one the item does not carry is flagged, and saving it would be refused. Below the address field, **Take the address from the vault item** lists the item's addresses and text fields (a SQL, SSH or WinRM host takes the host and any port, an HTTP base URL only a full `https://` or `http://` URL); on a new computer the first is chosen while nothing is typed. The address is copied when you save: the computer keeps it, the private-range check runs on it, and a later change in the vault does not move the computer. Typing an address and choosing a different one is refused, so keep one.
+fields with the usual one selected; one the item does not carry is flagged, and saving it would be refused. Below the address field, **Take the address from the vault item** lists the item's addresses and text fields (a SQL, SSH or WinRM host takes the host and any port, an HTTP base URL only a full `https://` or `http://` URL); on a new connection the first is chosen while nothing is typed. The address is copied when you save: the connection keeps it, the private-range check runs on it, and a later change in the vault does not move the connection. Typing an address and choosing a different one is refused, so keep one.
 
-Clicking a computer opens its page: where it points and its open sessions, what it signs in
+Clicking a connection opens its page: where it points and its open sessions, what it signs in
 with, its rules, the agents with access, its recent calls, and closing its sessions or deleting
 it. **Edit** opens the form on a page of its own, where **Choose another item** runs the same
 search.
 
 Every change (create, edit, enable, disable, delete, grant, remove a grant, close sessions) needs
 a fresh password confirmation, which lasts five minutes as for every other sensitive action; the
-top bar shows how long is left. Until then the pages show the computer, and each form gives way
+top bar shows how long is left. Until then the pages show the connection, and each form gives way
 to **Unlock editing**, which asks for your password and brings you back to the same page.
 
 A target whose stored documents no longer pass validation (for example after an upgrade that
@@ -91,10 +91,10 @@ the item's name, each mapped field (a secret one sealed, by name only) and anyth
 would refuse. Problems are also shown against their fields. It needs the same password
 confirmation as a save and records nothing in the audit log.
 
-**Check now** on a computer's page runs the same checks on what is saved, at any time and
+**Check now** on a connection's page runs the same checks on what is saved, at any time and
 without the password confirmation. A DNS record that moved, or a vault item that lost a field
-since the computer was saved, shows up there before an agent's call fails on it. Neither check
-connects to the computer or reads a secret.
+since the connection was saved, shows up there before an agent's call fails on it. Neither check
+connects to the destination or reads a secret.
 
 ### Confirmation is on for a new target
 
@@ -126,7 +126,7 @@ string or fragment (`http://` only on an internal target). Every request path th
 appended to it and must stay under it after normalisation. Saving resolves the host and checks
 every address against the private-range rule; it does not connect.
 
-**Credential mapping.** The vault item, chosen before the form (see [The Computers pages](#the-computers-pages)), and
+**Credential mapping.** The vault item, chosen before the form (see [The Connections pages](#the-connections-pages)), and
 how the secret is injected:
 
 | Mode     | What is sent                                                                              | Fields                                                                                                                                                                         |
@@ -927,15 +927,15 @@ fault cannot hand the agent a decodable pair.
 ## Grants
 
 A target is usable by an OAuth client only while you have granted it, and only while that
-client's consent stands. On the computer's page, **Agents with access** lists the granted clients
+client's consent stands. On the connection's page, **Agents with access** lists the granted clients
 and lets you grant among the clients currently connected (those on the **Agents** page) or
 remove a grant, which also closes that client's sessions on the target.
 
-The **Agents** page shows every grant at once under **Who can use what**: one row per computer,
-one column per connected agent, and a filled square where the agent may use the computer. Once
+The **Agents** page shows every grant at once under **Who can use what**: one row per connection,
+one column per connected agent, and a filled square where the agent may use the connection. Once
 your password is confirmed, each square is a button that grants or removes that one grant, with
-exactly the checks and the audit event of the computer's own page, and brings you back to the
-matrix. Each agent's card above it names the computers it may use, linking to them.
+exactly the checks and the audit event of the connection's own page, and brings you back to the
+matrix. Each agent's card above it names the connections it may use, linking to them.
 
 Disconnecting a client on the Agents page removes every grant it holds, so a reconnected client
 starts with none. A grant never widens a token: the client still needs the connector's scope
@@ -943,14 +943,14 @@ starts with none. A grant never widens a token: the client still needs the conne
 
 ## Sessions, calls and the audit trail
 
-The computer's page shows its open sessions (browser sessions, a later milestone), with **Close
+The connection's page shows its open sessions (browser sessions, a later milestone), with **Close
 sessions** under **Manage**, and the last 50 calls with their time, agent, tool, operation,
 classification, outcome, confirmation and output size. **Whole call history** above that table
 pages back through the rest, 50 at a time, newest first, following **Older calls** until the
 trail ends. Results are never stored; the arguments are, scrubbed, so an unexpected write can be
 read back.
 
-**Unexpected writes**, linked from the Activity page and from the Computers page when there are some, is the same trail across every target,
+**Unexpected writes**, linked from the Activity page and from the Connections page when there are some, is the same trail across every target,
 narrowed to the calls that matter when something has gone wrong: every call that was not a read
 and that no human accepted through a confirmation, newest first, with the time, the target, the
 client, the tool, the classification, the outcome and an excerpt of the arguments; an excerpt

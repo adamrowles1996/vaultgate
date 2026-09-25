@@ -103,9 +103,9 @@ export function grantsCard(view: GrantsCardView): Html {
   return html`<section class="card" id="grants">
     ${cardHead(
       'Agents with access',
-      'An agent also needs the scope for this kind of computer, which it asks for when it connects.',
+      'An agent also needs the scope for this kind of connection, which it asks for when it connects.',
     )}
-    ${when(view.grants.length === 0, () => html`<p class="muted">No agent is granted this computer.</p>`)}
+    ${when(view.grants.length === 0, () => html`<p class="muted">No agent is granted this connection.</p>`)}
     ${when(
       view.grants.length > 0,
       () =>
@@ -132,14 +132,14 @@ export function manageCard(view: ManageCardView): Html {
       html`<section class="card" id="manage">
         ${cardHead(
           'Manage',
-          'Deleting removes the computer, its grants and its sessions; its calls stay in the audit trail.',
+          'Deleting removes the connection, its grants and its sessions; its calls stay in the audit trail.',
         )}
         <div class="button-row">
           ${form(`${base}/sessions/close`, view, html`<button type="submit">Close sessions</button>`)}
           ${form(
             `${base}/delete`,
             view,
-            html`<button type="submit" class="danger">${icon('trash')}Delete computer</button>`,
+            html`<button type="submit" class="danger">${icon('trash')}Delete connection</button>`,
           )}
         </div>
       </section>`,

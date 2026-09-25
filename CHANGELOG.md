@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- ACT-5: **the console calls a target a _connection_ rather than a _computer_**, since most
+  targets are databases, APIs and servers. The sidebar entry, page titles and breadcrumbs read
+  **Connections**; the button reads **Add connection**, and the list, its empty state, the
+  notices, the create and edit forms, the target's page (**Delete connection**), the Agents page's
+  **Who can use what** matrix, the Activity page and the guides and spec say _connection_ where
+  they said _computer_. Nothing an operator or a script depends on moves: the routes under
+  `/account/actions`, their query parameters and form fields, the audit event names and the
+  spec's word _target_ are unchanged.
+
 ## [0.1.0-rc.20] - 2026-09-25
 
 ### Added
