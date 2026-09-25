@@ -6,7 +6,7 @@
  * written as it arrives; the response body is read up to a cap and no
  * further, so a misbehaving sidecar cannot make vaultgate buffer without end.
  */
-import { request as httpRequest, type IncomingMessage, type RequestOptions } from 'node:http';
+import { request as httpRequest, type RequestOptions } from 'node:http';
 import { Readable, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
@@ -37,7 +37,10 @@ export type LocalHttp = (request: LocalRequest) => Promise<LocalResponse>;
 /**
 The part of `http.IncomingMessage` the client reads.
 */
-export type LocalMessage = Pick<IncomingMessage, 'statusCode' | 'destroy'> & AsyncIterable<unknown>;
+export interface LocalMessage extends AsyncIterable<unknown> {
+  readonly statusCode?: number | undefined;
+  destroy(): unknown;
+}
 
 /**
 `http.request`, injected so the client is tested without a socket; the request is a `Writable`.
