@@ -73,8 +73,9 @@ function buildLine(build: BuildRecord | undefined, now: number): Html {
     build.reason === undefined
       ? pill('ok', 'Built')
       : html`${pill('bad', 'Failed')} <span class="mono">${build.reason}</span>`;
-  return html`${outcome} · ${commit(build.commit)} (<span class="mono">${build.ref}</span>) · on
-    ${build.trigger} · ${relativeTime(build.at, now)}`;
+  const built = html`${commit(build.commit)} (<span class="mono">${build.ref}</span>)`;
+  const when = `on ${build.trigger} · ${relativeTime(build.at, now)}`;
+  return html`${outcome} · ${built} · ${when}`;
 }
 
 function variants(snapshot: SnapshotStatus): Html {

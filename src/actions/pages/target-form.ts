@@ -24,10 +24,10 @@ import { fieldErrors, renderFields } from './form-render.ts';
 import { fieldName, type FormValues } from './form-values.ts';
 import { itemFields } from './item-fields.ts';
 import { itemChips, itemLine } from './item-view.ts';
-import { NO_OFFER, type RepoOffer } from './repo-source.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
 import type { FieldProblems } from './messages.ts';
+import type { RepoOffer } from './repo-source.ts';
 import type { ItemSummary } from '../../vault/client.ts';
 
 export const CONNECTOR_FIELD = 'connector';
@@ -79,7 +79,7 @@ export interface TargetFormView {
   /**
   ACT-119: the repositories the chosen token can read, for a code form.
   */
-  readonly repositories?: RepoOffer | undefined;
+  readonly repositories: RepoOffer;
 }
 
 function nameField(view: TargetFormView): Html {
@@ -226,7 +226,7 @@ export function renderTargetForm(view: TargetFormView): Html {
     itemFields: item.state === 'found' ? itemFields(item.summary) : undefined,
     addressCandidates: item.state === 'found' ? addressCandidates(item.summary) : [],
     isNew: view.isNew,
-    repositories: view.repositories ?? NO_OFFER,
+    repositories: view.repositories,
   };
   return html`<form method="post" action="${view.action}" class="target-form">
     ${hidden('csrf', view.csrfToken)} ${connectorField(view)} ${commonFields(view)}

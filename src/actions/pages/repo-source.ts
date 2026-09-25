@@ -64,15 +64,14 @@ export function describeFailure(failure: GitHubFailure): string {
   return sentence === undefined ? suffix : `${sentence} (${suffix})`;
 }
 
-function isOffered(field: FieldDescriptor): boolean {
-  return field.kind === 'text' && field.offered === 'repositories';
-}
-
 /**
-Whether the list can fill the field, so the browser must not insist on a typed value.
-*/
-export function canFillField(field: FieldDescriptor, offer: RepoOffer): boolean {
-  return isOffered(field) && offer.state === 'listed' && offer.repositories.length > 0;
+ * Whether the token's list is offered beside the field. The browser then
+ * never insists on a typed value: the list may fill the field, and the list
+ * of another token field appears only once the form comes back from a check,
+ * which a `required` empty box would stop the browser from sending.
+ */
+export function isOffered(field: FieldDescriptor): boolean {
+  return field.kind === 'text' && field.offered === 'repositories';
 }
 
 function option(value: string, label: string, isSelected: boolean): Html {

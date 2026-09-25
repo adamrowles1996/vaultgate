@@ -35,7 +35,7 @@ export interface FormPageView {
   /**
   ACT-119: the repositories the chosen token can read, for a code form.
   */
-  readonly repositories?: RepoOffer;
+  readonly repositories: RepoOffer;
 }
 
 /**

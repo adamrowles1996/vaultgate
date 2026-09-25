@@ -19,7 +19,7 @@ const destination: readonly FieldDescriptor[] = [
       'http://host:5985/wsman for the listener a stock Windows host already runs, or ' +
       'https://host:5986/wsman where one has been set up. With Negotiate authentication the ' +
       'plain endpoint gives nothing away — the password never crosses the network and the ' +
-      'payload is encrypted — but it is still accepted only on an internal target. The host is ' +
+      'payload is encrypted — but it is still accepted only on an internal connection. The host is ' +
       'resolved once per call and the connection goes to that address and nowhere else.',
   },
   {
@@ -104,7 +104,7 @@ const policy: readonly FieldDescriptor[] = [
   {
     document: 'policy',
     name: 'any_command',
-    label: 'Allow any command (this target becomes a shell)',
+    label: 'Allow any command (this connection becomes a shell)',
     kind: 'boolean',
     fallback: false,
     allowedBy: 'allowAnyCommand',

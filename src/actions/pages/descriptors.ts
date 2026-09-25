@@ -99,6 +99,10 @@ export interface ConnectorForm {
   readonly fields: readonly FieldDescriptor[];
   readonly common?: CommonPolicyChanges;
   /**
+  What each document's card says in place of the general note, where this connector differs.
+  */
+  readonly notes?: Readonly<Partial<Record<DocumentName, string>>>;
+  /**
   `public`: the destination is always on the internet (ACT-103), so the form offers no internal box.
   */
   readonly network?: 'public';

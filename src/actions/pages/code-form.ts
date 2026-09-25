@@ -19,7 +19,6 @@ const GIB = KIB * MIB;
 The one field a connection names its token in (ACT-103).
 */
 export const TOKEN_FIELD = 'credential.token_field';
-export const REPOSITORY_FIELD = 'destination.repository';
 
 function cap(
   name: string,
@@ -186,4 +185,13 @@ export const codeForm: ConnectorForm = {
   fields: [...destination, ...credential, ...reading, ...caps],
   common: { omit: ['confirm_writes'], replace: [TIMEOUT] },
   network: 'public',
+  notes: {
+    destination:
+      'The GitHub repository agents search. Saving checks that GitHub resolves to public ' +
+      'addresses, then builds the index in the background.',
+    credential:
+      'Which of the vault item’s fields holds the GitHub token, or none for a public ' +
+      'repository. Field names only: values stay in the vault.',
+    policy: 'What agents may search and read, and the caps every build runs under.',
+  },
 };

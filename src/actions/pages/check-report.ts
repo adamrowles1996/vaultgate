@@ -97,11 +97,9 @@ function githubLine(github: GitHubCheck): Html {
     case 'read': {
       const { repository, hasToken } = github;
       const who = hasToken ? 'The token can read' : 'GitHub answers without a token for';
-      return line(
-        true,
-        html`${who} <span class="mono">${repository.fullName}</span> · default branch
-          <span class="mono">${repository.defaultBranch}</span> · ${repository.visibility}`,
-      );
+      const name = html`<span class="mono">${repository.fullName}</span>`;
+      const branch = html`<span class="mono">${repository.defaultBranch}</span>`;
+      return line(true, html`${who} ${name} · default branch ${branch} · ${repository.visibility}`);
     }
     case 'failed': {
       const asked = github.hasToken ? 'with the token' : 'without a token';

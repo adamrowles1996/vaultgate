@@ -12,7 +12,7 @@ import { cardHead } from '../../identity/pages/ui.ts';
 import { type AddressCandidate, ADDRESS_FROM_FIELD, canTakeAddress } from './address-source.ts';
 import { fieldName, type FormValues, NO_FIELD, optionName } from './form-values.ts';
 import { type ItemField, offeredFields, pickedSelector } from './item-fields.ts';
-import { canFillField, type RepoOffer, repoSource } from './repo-source.ts';
+import { isOffered, type RepoOffer, repoSource } from './repo-source.ts';
 
 import type { ConnectorForm, DocumentName, FieldDescriptor, FieldPicker } from './descriptors.ts';
 import type { FieldProblems } from './messages.ts';
@@ -268,7 +268,7 @@ function addressSource(
 
 function renderField(field: FieldDescriptor, view: FieldsView): Html {
   const offered = offeredAddresses(field, view);
-  const isFilledBeside = offered.length > 0 || canFillField(field, view.repositories);
+  const isFilledBeside = offered.length > 0 || isOffered(field);
   return html`${fieldErrors(view.problems, fieldName(field))}
   ${control(field, view.values, view.itemFields, isFilledBeside)}
   ${addressSource(field, view, offered)} ${repoSource(field, view.repositories, view.values)}`;
@@ -284,7 +284,7 @@ export function renderFields(form: ConnectorForm, view: FieldsView): Html {
       .map((field) => renderField(field, view));
     const { title, note } = DOCUMENT_LABELS[document];
     return html`<section class="card">
-      ${cardHead(title, note)}
+      ${cardHead(title, form.notes?.[document] ?? note)}
       <div class="fields">${fields}</div>
     </section>`;
   });

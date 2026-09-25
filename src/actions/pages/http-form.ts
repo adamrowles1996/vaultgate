@@ -29,7 +29,7 @@ const destination: readonly FieldDescriptor[] = [
     required: true,
     help:
       'An https:// origin with an optional path prefix, no query or fragment; http:// only on an ' +
-      'internal target. Every request path is appended to it and must stay under it.',
+      'internal connection. Every request path is appended to it and must stay under it.',
   },
 ];
 
