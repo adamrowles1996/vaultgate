@@ -23,7 +23,10 @@ import {
   refusal,
   RELATED_FIELDS,
   respond,
+  routeOf,
+  type Route,
   SEARCH_FIELDS,
+  untilAborted,
   variantOf,
   type BuildSpecSeen,
   type FakeSnapshot,
@@ -31,15 +34,12 @@ import {
 
 import type { LocalHttp, LocalRequest, LocalResponse } from '../net/local-http.ts';
 
-export type { FakeSnapshot } from './fake-code-sidecar-protocol.ts';
+export type { FakeSnapshot, Route } from './fake-code-sidecar-protocol.ts';
 
 export interface FakeQuery {
   readonly path: string;
   readonly body: Readonly<Record<string, unknown>>;
 }
-
-export type Route =
-  'health' | 'build' | 'status' | 'list' | 'delete' | 'search' | 'related' | 'read';
 
 /**
 What the next request of a route gets instead of its answer.
@@ -57,6 +57,10 @@ export interface FakeSidecarOptions {
   */
   readonly files?: Readonly<Record<string, string>>;
   readonly now?: () => number;
+  /**
+  Snapshots the sidecar already holds when it starts, as a restarted vaultgate finds them.
+  */
+  readonly seed?: readonly FakeSnapshot[];
 }
 
 export interface FakeBuild {
@@ -69,6 +73,10 @@ export interface FakeSidecar {
   readonly http: LocalHttp;
   readonly snapshots: Map<string, FakeSnapshot>;
   readonly builds: FakeBuild[];
+  /**
+  Uploads whose stream failed part way, with how much of it arrived.
+  */
+  readonly cut: { readonly key: string; readonly bytes: number }[];
   readonly queries: FakeQuery[];
   readonly requests: { readonly method: string; readonly path: string }[];
   /**
@@ -91,32 +99,12 @@ interface Running {
   isAbandoned: boolean;
 }
 
-function routeOf(request: LocalRequest): { readonly route: Route; readonly argument: string } {
-  const [kind = '', argument = ''] = request.path.split('/').slice(2);
-  const decoded = decodeURIComponent(argument);
-  if (kind === 'snapshots') {
-    const byMethod: Readonly<Record<string, Route>> = { PUT: 'build', DELETE: 'delete' };
-    const route = byMethod[request.method] ?? (decoded === '' ? 'list' : 'status');
-    return { route, argument: decoded };
-  }
-  return kind === 'owners'
-    ? { route: 'delete', argument: `owner:${decoded}` }
-    : { route: kind as Route, argument: decoded };
-}
-
-function untilAborted(signal: AbortSignal): Promise<never> {
-  return new Promise((_resolve, reject) => {
-    signal.addEventListener('abort', () => {
-      reject(new DOMException('aborted', 'AbortError'));
-    });
-  });
-}
-
 export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar {
-  const snapshots = new Map<string, FakeSnapshot>();
+  const snapshots = new Map((options.seed ?? []).map((snapshot) => [snapshot.key, snapshot]));
   const running = new Map<string, Running>();
   const pending = new Map<string, Promise<LocalResponse>>();
   const builds: FakeBuild[] = [];
+  const cut: FakeSidecar['cut'] = [];
   const queries: FakeQuery[] = [];
   const requests: FakeSidecar['requests'] = [];
   const scripts = new Map<Route, Script[]>();
@@ -147,7 +135,14 @@ export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar
       return respond(200, metaOf(existing));
     }
     const joined = pending.get(key);
-    const archive = await drain(request.body);
+    const received: Buffer[] = [];
+    let archive: Buffer;
+    try {
+      archive = await drain(request.body, received);
+    } catch (error) {
+      cut.push({ key, bytes: Buffer.concat(received).length });
+      throw error;
+    }
     if (joined !== undefined) {
       return joined;
     }
@@ -271,6 +266,7 @@ export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar
     http,
     snapshots,
     builds,
+    cut,
     queries,
     requests,
     hold() {

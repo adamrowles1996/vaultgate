@@ -18,7 +18,7 @@ import { createRunSupport } from './run-support.ts';
 
 import type { Caller } from './caller.ts';
 import type { RepoArgument } from './connectors/connector.ts';
-import type { EngineContext, CallOutcome } from './engine.ts';
+import type { CallOutcome, EngineContext } from './engine-context.ts';
 
 interface Prepared {
   readonly facts: CallFacts;

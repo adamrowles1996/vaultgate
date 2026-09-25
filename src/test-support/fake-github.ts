@@ -38,7 +38,7 @@ export interface RecordedRequest {
 /**
 What `answer` may do with a request instead of the fake's own route.
 */
-export type Scripted = Response | Error | 'hang' | undefined;
+export type Scripted = Response | Promise<Response> | Error | 'hang' | undefined;
 
 export interface FakeGitHubOptions {
   readonly repos: readonly FakeRepo[];

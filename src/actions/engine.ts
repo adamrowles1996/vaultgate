@@ -6,60 +6,27 @@
  */
 import { ACTION_SCOPE_CONNECTORS } from '../scopes/registry.ts';
 
-import { type ConfirmationRequest, type Confirmations, createConfirmations } from './confirm.ts';
+import { createConfirmations } from './confirm.ts';
 import { confirmationStep } from './engine-confirm.ts';
-import { type ListingDependencies, listTargets, type TargetListing } from './engine-listing.ts';
+import { listTargets, type TargetListing } from './engine-listing.ts';
 import { callMany } from './engine-many.ts';
 import { type CallFacts, recordFailure, reserveCall } from './engine-record.ts';
-import {
-  type Invocation,
-  resolveCall,
-  type ResolveDependencies,
-  type ResolvedCall,
-} from './engine-resolve.ts';
+import { type Invocation, resolveCall, type ResolvedCall } from './engine-resolve.ts';
 import { fetchCredential, pinDestination, runConnector } from './engine-run.ts';
 import { connectorServices } from './engine-services.ts';
 import { ActionError } from './errors.ts';
-import { type ActionLimits, createActionLimits } from './limits.ts';
+import { createActionLimits } from './limits.ts';
 import { createRunSupport } from './run-support.ts';
 import { createTargetsService, type TargetsObserver, type TargetsService } from './targets.ts';
 
 import type { Caller } from './caller.ts';
+import type { ConnectorKind } from '../config/actions.ts';
 import type { CodeControl } from './connectors/code/control.ts';
 import type { CodeConnector } from './connectors/code/index.ts';
 import type { ConnectorControl, ConnectorTool } from './connectors/connector.ts';
-import type { ConnectorRegistry } from './connectors/registry.ts';
-import type { TargetsRepo } from './targets-repo.ts';
-import type { AuditSink } from '../audit/event.ts';
-import type { ActionsConfig, ConnectorKind } from '../config/actions.ts';
-import type { Logger } from '../logger.ts';
-import type { Lookup } from '../net/ip-ranges.ts';
-import type { VaultClient } from '../vault/client.ts';
-import type { DatabaseSync } from 'node:sqlite';
+import type { CallOutcome, EngineContext, EngineDependencies } from './engine-context.ts';
 
-export type CallOutcome =
-  | { readonly kind: 'ok'; readonly result: Readonly<Record<string, unknown>> }
-  | { readonly kind: 'error'; readonly error: ActionError }
-  | {
-      readonly kind: 'confirmation_required';
-      readonly request: ConfirmationRequest;
-      readonly requestState: string;
-    };
-
-export interface EngineDependencies {
-  readonly config: ActionsConfig;
-  readonly database: DatabaseSync;
-  readonly vault: VaultClient;
-  readonly connectors: ConnectorRegistry;
-  readonly lookup: Lookup;
-  readonly audit: AuditSink;
-  readonly logger: Logger;
-  readonly secretKey: Buffer;
-  readonly now: () => number;
-  readonly schedule: (callback: () => void, delayMs: number) => () => void;
-  readonly random: (bytes: number) => Buffer;
-  readonly newId: () => string;
-}
+export type { CallOutcome, EngineDependencies } from './engine-context.ts';
 
 export interface ActionsEngine {
   /**
@@ -77,13 +44,6 @@ export interface ActionsEngine {
   readonly code: CodeControl | undefined;
   listTargets(caller: Pick<Caller, 'clientId' | 'scopes'>): readonly TargetListing[];
   call(caller: Caller, invocation: Invocation): Promise<CallOutcome>;
-}
-
-export interface EngineContext extends EngineDependencies {
-  readonly confirmations: Confirmations;
-  readonly limits: ActionLimits;
-  readonly resolve: ListingDependencies & ResolveDependencies;
-  readonly repo: TargetsRepo;
 }
 
 /**

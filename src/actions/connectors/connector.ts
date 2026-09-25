@@ -19,13 +19,7 @@ import type { InjectedValues } from '../scrub.ts';
 import type { z } from 'zod';
 
 export type { ConnectorOutput, OperationDescription } from './output.ts';
-export type {
-  ConnectorTool,
-  OperationGrant,
-  OperationSchema,
-  RepoArgument,
-  TargetCapabilities,
-} from './tool.ts';
+export type { ConnectorTool, OperationSchema, RepoArgument, TargetCapabilities } from './tool.ts';
 
 /**
 One host a destination names and whether the transport to it is encrypted (ACT-57).

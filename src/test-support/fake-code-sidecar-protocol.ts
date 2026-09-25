@@ -8,6 +8,9 @@
  */
 import type { LocalRequest, LocalResponse } from '../net/local-http.ts';
 
+export type Route =
+  'health' | 'build' | 'status' | 'list' | 'delete' | 'search' | 'related' | 'read';
+
 export const KEY = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
 export const OWNER = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 export const LABEL = /^[a-z0-9][a-z0-9-]{0,62}$/u;
@@ -140,17 +143,17 @@ export function metaOf(snapshot: FakeSnapshot) {
 }
 
 /**
-Every byte of a streamed body; a stream that fails fails the request, as a reset connection does.
+Every byte of a streamed body, into `into`; a stream that fails fails the request, as a reset connection does.
 */
-export async function drain(body: LocalRequest['body']): Promise<Buffer> {
+export async function drain(body: LocalRequest['body'], into: Buffer[]): Promise<Buffer> {
   if (body === undefined || Buffer.isBuffer(body)) {
-    return body ?? Buffer.alloc(0);
+    into.push(body ?? Buffer.alloc(0));
+    return Buffer.concat(into);
   }
-  const chunks: Buffer[] = [];
   for await (const chunk of body) {
-    chunks.push(Buffer.from(chunk));
+    into.push(Buffer.from(chunk));
   }
-  return Buffer.concat(chunks);
+  return Buffer.concat(into);
 }
 
 export function jsonBody(request: LocalRequest): Record<string, unknown> | undefined {
@@ -197,5 +200,29 @@ export function healthAnswer(protocol: number, snapshots: number, building: numb
     python: '3.12.7',
     limits: { max_snapshots: 64, max_storage_bytes: 0, max_memory_bytes: 0, build_concurrency: 1 },
     usage: { snapshots, storage_bytes: 0, loaded_variants: 0, loaded_bytes: 0, building },
+  });
+}
+
+export function routeOf(request: LocalRequest): {
+  readonly route: Route;
+  readonly argument: string;
+} {
+  const [kind = '', argument = ''] = request.path.split('/').slice(2);
+  const decoded = decodeURIComponent(argument);
+  if (kind === 'snapshots') {
+    const byMethod: Readonly<Record<string, Route>> = { PUT: 'build', DELETE: 'delete' };
+    const route = byMethod[request.method] ?? (decoded === '' ? 'list' : 'status');
+    return { route, argument: decoded };
+  }
+  return kind === 'owners'
+    ? { route: 'delete', argument: `owner:${decoded}` }
+    : { route: kind as Route, argument: decoded };
+}
+
+export function untilAborted(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => {
+      reject(new DOMException('aborted', 'AbortError'));
+    });
   });
 }

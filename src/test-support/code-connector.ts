@@ -159,6 +159,25 @@ export async function createCodeTarget(
   return engine.targets.get(created.id) ?? created;
 }
 
+/**
+An edit of the target to these fields (everything but its name, connector and switch), then a settle.
+*/
+export async function updateCodeTarget(
+  code: CodeHarness,
+  id: string,
+  overrides: CodeTargetOverrides = {},
+): Promise<TargetSummary> {
+  const {
+    name: _name,
+    connector: _connector,
+    enabled: _enabled,
+    ...changes
+  } = codeTargetInput(overrides);
+  const updated = unwrapOk(await code.harness.engine.targets.update(id, changes, OPERATOR_ID));
+  await code.settle();
+  return updated;
+}
+
 export const CODE_SCOPES = ['actions:code'] as const;
 
 export function codeCaller(overrides: Partial<Caller> = {}): Caller {

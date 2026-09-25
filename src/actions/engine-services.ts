@@ -15,7 +15,7 @@ import { createRunSupport } from './run-support.ts';
 import { validateTarget } from './targets-schemas.ts';
 
 import type { ConnectorServices, StoredTarget } from './connectors/connector.ts';
-import type { EngineContext } from './engine.ts';
+import type { EngineContext } from './engine-context.ts';
 import type { ConnectorKind } from '../config/actions.ts';
 
 export function connectorServices(context: EngineContext, kind: ConnectorKind): ConnectorServices {

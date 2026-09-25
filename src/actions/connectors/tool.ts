@@ -57,7 +57,7 @@ export interface ConnectorTool<Operation> {
   readonly repo?: RepoArgument;
 }
 
-export interface OperationGrant {
+interface OperationGrant {
   readonly operation: OperationKind;
   readonly scope: ActionScope;
 }
