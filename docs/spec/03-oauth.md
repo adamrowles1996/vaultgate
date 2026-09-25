@@ -98,7 +98,12 @@ Three mechanisms, resolved in this order when a `client_id` is presented:
   browser; only that browser can claim the request after logging in. Pending requests expire after
   ten minutes.
 - **OAUTH-18** Consent is a `POST` with a synchroniser token; `GET` never issues a code.
-  The operator may untick individual scopes; the issued scope set is what was ticked.
+  The operator may untick individual scopes; the issued scope set is what was ticked. The page
+  also lists, unticked under **Not requested**, every scope the deployment enables that the
+  request did not name, and the operator may tick those too. A client that follows the
+  `WWW-Authenticate` challenge's `scope` hint, as the MCP authorization spec says it should,
+  asks for `vault:read` alone, and without this it could never receive an `actions:*` scope. A
+  scope the deployment does not enable is never issued, whatever the form carries.
 - **OAUTH-19** Approval issues a single-use authorization code (`vg_ac_…`, 32 random bytes,
   stored as SHA-256, 5 minute TTL) bound to client, redirect URI, PKCE challenge, resource,
   scopes and operator. The redirect includes `code`, `state` (if given) and `iss`.

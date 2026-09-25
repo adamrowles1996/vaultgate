@@ -10,7 +10,7 @@ import {
   redirectWithError,
   type LivePending,
 } from './authorize-shared.ts';
-import { pendingScopes } from './authorize.ts';
+import { offeredScopes, pendingScopes } from './authorize.ts';
 import { APPROVE, scopeFieldName } from './consent-page.ts';
 import { auditPrefix, CREDENTIAL_PREFIX, hashCredential, mintCredential } from './credentials.ts';
 import { OAuthError } from './errors.ts';
@@ -41,11 +41,18 @@ function target(pending: LivePending): {
 }
 
 /**
- * OAUTH-18: the ticked subset of what was requested; `vault:read` arrives
- * as a hidden field because its checkbox is disabled.
+ * OAUTH-18: the ticked subset of what was requested and of the enabled scopes the page offered;
+ * `vault:read` arrives as a hidden field because its checkbox is disabled. A scope the deployment
+ * does not enable is never granted, whatever the form says.
  */
-function tickedScopes(pending: LivePending, form: FormFields): readonly Scope[] {
-  return pendingScopes(pending).filter((scope) => form.get(scopeFieldName(scope)) === 'on');
+function tickedScopes(
+  dependencies: AuthorizeDependencies,
+  pending: LivePending,
+  form: FormFields,
+): readonly Scope[] {
+  return [...pendingScopes(pending), ...offeredScopes(dependencies, pending)].filter(
+    (scope) => form.get(scopeFieldName(scope)) === 'on',
+  );
 }
 
 function issueCode(
@@ -118,7 +125,7 @@ function approve(
   dependencies: AuthorizeDependencies,
   decision: Decision,
 ): Response {
-  const scopes = tickedScopes(decision.pending, decision.form);
+  const scopes = tickedScopes(dependencies, decision.pending, decision.form);
   if (scopes.length === 0) {
     return deny(context, dependencies, decision);
   }

@@ -1,5 +1,5 @@
 import { contentSecurityPolicy } from '../identity/browser.ts';
-import { isScope, type Scope } from '../scopes/registry.ts';
+import { enabledScopes, isScope, type Scope } from '../scopes/registry.ts';
 
 import { parseAuthorizationRequest, toPendingParameters } from './authorize-request.ts';
 import {
@@ -71,6 +71,17 @@ export function pendingScopes(pending: LivePending): readonly Scope[] {
   return pending.parameters.scope.split(' ').filter((entry) => isScope(entry));
 }
 
+/**
+ * OAUTH-18: the enabled scopes the request did not name, offered unticked on the consent page.
+ */
+export function offeredScopes(
+  dependencies: AuthorizeDependencies,
+  pending: LivePending,
+): readonly Scope[] {
+  const requested = new Set(pendingScopes(pending));
+  return enabledScopes(dependencies).filter((scope) => !requested.has(scope));
+}
+
 export type ConsentPageHandler = (context: OAuthContext, id: string) => Response;
 
 /**
@@ -112,6 +123,7 @@ export function createConsentPageHandler(dependencies: AuthorizeDependencies): C
       mode: parameters.client_mode,
       loopbackOnly: parameters.loopback_only === '1',
       scopes: pendingScopes(pending),
+      offeredScopes: offeredScopes(dependencies, pending),
     };
     return context.html(renderConsentPage(view));
   };
