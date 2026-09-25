@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.20] - 2026-09-25
+
 ### Added
 
 - OAUTH-18: **the consent page offers the scopes the client did not ask for.** Claude on
@@ -746,7 +748,8 @@ Release candidates 0.1.0-rc.1 to 0.1.0-rc.6 are in
 [`docs/changelog-archive.md`](docs/changelog-archive.md). They are kept verbatim; this file holds
 the current release and the ones after it, so it stays inside the repository's 64 KiB file gate.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.19...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.20...HEAD
+[0.1.0-rc.20]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.19...v0.1.0-rc.20
 [0.1.0-rc.19]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.18...v0.1.0-rc.19
 [0.1.0-rc.18]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.17...v0.1.0-rc.18
 [0.1.0-rc.17]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.16...v0.1.0-rc.17
