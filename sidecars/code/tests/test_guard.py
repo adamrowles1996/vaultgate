@@ -45,7 +45,7 @@ def tcp():
 
 def unix():
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-        sock.connect("/nonexistent/vaultgate-code.sock")
+        sock.connect("/missing/vaultgate-code.sock")
 
 attempt("getaddrinfo", lambda: socket.getaddrinfo("localhost", 80))
 attempt("gethostbyname", lambda: socket.gethostbyname("localhost"))

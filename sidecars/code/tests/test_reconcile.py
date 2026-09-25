@@ -21,7 +21,8 @@ SMALL = [
 
 def meta_of(state: Path, key: str) -> dict[str, Any]:
     """A snapshot's meta.json."""
-    return json.loads((state / "snapshots" / key / "meta.json").read_text())
+    meta: dict[str, Any] = json.loads((state / "snapshots" / key / "meta.json").read_text())
+    return meta
 
 
 def search(service: Any, key: str) -> dict[str, Any]:
@@ -41,7 +42,7 @@ def search(service: Any, key: str) -> dict[str, Any]:
 def test_start_up_removes_what_it_cannot_trust(
     make_service: ServiceFactory, tmp_path: Path
 ) -> None:
-    """PROTOCOL: tmp/ is emptied and snapshots with unreadable metadata are deleted."""
+    """ACT-113: tmp/ is emptied and snapshots with unreadable metadata are deleted."""
     state = tmp_path / "state"
     service = make_service(state=state)
     for key in ("good", "bad-json", "bad-type", "wrong-key", "no-tree", "tree-link"):
@@ -79,7 +80,7 @@ def test_start_up_removes_what_it_cannot_trust(
 def test_a_variant_from_another_semble_or_model_is_rebuilt(
     make_service: ServiceFactory, tmp_path: Path, field: str, value: object
 ) -> None:
-    """PROTOCOL: a variant built with another semble, model, revision or format is rebuilt."""
+    """ACT-113: a variant built with another semble, model, revision or format is rebuilt."""
     state = tmp_path / "state"
     put(make_service(state=state), "acme", SMALL)
     meta = meta_of(state, "acme")
@@ -96,7 +97,7 @@ def test_a_variant_from_another_semble_or_model_is_rebuilt(
 def test_variants_missing_or_unrecorded_on_disk_are_dropped(
     make_service: ServiceFactory, tmp_path: Path
 ) -> None:
-    """PROTOCOL: a recorded variant missing on disk is dropped; an unrecorded directory removed."""
+    """ACT-107: a recorded variant missing on disk is dropped; an unrecorded directory removed."""
     state = tmp_path / "state"
     put(make_service(state=state), "acme", SMALL, variants=[["code"], ["docs"]])
     variants = state / "snapshots" / "acme" / "variants"
@@ -109,7 +110,7 @@ def test_variants_missing_or_unrecorded_on_disk_are_dropped(
 
 
 def test_start_up_enforces_the_caps_once(make_service: ServiceFactory, tmp_path: Path) -> None:
-    """PROTOCOL: start-up enforces max_snapshots and max_storage_bytes, oldest first."""
+    """ACT-107: start-up enforces max_snapshots and max_storage_bytes, oldest first."""
     state = tmp_path / "state"
     service = make_service(state=state)
     for key in ("one", "two", "three"):
@@ -121,7 +122,7 @@ def test_start_up_enforces_the_caps_once(make_service: ServiceFactory, tmp_path:
 def test_a_moved_install_still_loads_its_variants(
     make_service: ServiceFactory, tmp_path: Path
 ) -> None:
-    """PROTOCOL: the model path semble's metadata records is not trusted; a moved state loads."""
+    """ACT-113: the model path semble's metadata records is not trusted; a moved state loads."""
     state = tmp_path / "state"
     put(make_service(state=state), "acme", SMALL)
     saved = json.loads(

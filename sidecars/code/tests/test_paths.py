@@ -107,7 +107,7 @@ def test_a_file_of_the_snapshot_is_read(shared: Service) -> None:
         "pipe.txt",
     ],
 )
-def test_links_and_fifos_planted_after_extraction_are_not_followed(
+def test_links_and_pipes_planted_after_extraction_are_not_followed(
     planted: Service, path: str
 ) -> None:
     """ACT-111: a link or FIFO planted in the tree after extraction is refused, never followed."""

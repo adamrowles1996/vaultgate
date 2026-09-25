@@ -44,7 +44,7 @@ def test_two_searches_needing_one_variant_build_it_once(make_service: ServiceFac
         assert release.wait(60)
         return real(*arguments)
 
-    service.runner.build = held  # type: ignore[method-assign]
+    service.runner.build = held  # type: ignore[method-assign,assignment]
     answers: list[dict[str, Any]] = []
     first = threading.Thread(
         target=lambda: answers.append(query.search(service, search("acme", ["docs"])))

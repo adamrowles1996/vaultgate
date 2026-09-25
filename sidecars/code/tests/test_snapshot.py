@@ -30,7 +30,7 @@ def record(**changes: Any) -> dict[str, Any]:
 
 
 def test_a_record_round_trips() -> None:
-    """PROTOCOL: what meta.json holds reads back to the same snapshot."""
+    """ACT-107: what meta.json holds reads back to the same snapshot."""
     snapshot = Snapshot.from_record(record(), VERSIONS)
     assert snapshot.record() == record()
     assert snapshot.public()["variants"] == {"code": VARIANT}
@@ -52,6 +52,6 @@ def test_a_record_round_trips() -> None:
     ],
 )
 def test_anything_else_is_refused(data: object, error: type[Exception]) -> None:
-    """PROTOCOL: a wrong type or a missing field makes the metadata unreadable."""
+    """ACT-107: a wrong type or a missing field makes the metadata unreadable."""
     with pytest.raises(error):
         Snapshot.from_record(data, VERSIONS)

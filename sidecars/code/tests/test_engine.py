@@ -55,12 +55,13 @@ def test_semble_is_the_pinned_version() -> None:
 
 def test_semble_cache_and_statistics_are_replaced(model_dir: Path) -> None:
     """ACT-113: semble's cache lookups find nothing, its statistics writer writes nothing."""
-    assert semble_index.get_validated_cache is engine.no_cached_index
-    assert semble_index.load_previous_for_incremental is engine.no_cached_index
-    assert semble_index.save_search_stats is engine.no_statistics
-    assert semble_index.load_model is engine.pinned_model
-    assert engine.no_cached_index("/repo", None, []) is None
-    assert engine.no_statistics([], "search", {}, 3) is None
+    replaced = vars(semble_index)
+    assert replaced["get_validated_cache"] is engine.no_cached_index
+    assert replaced["load_previous_for_incremental"] is engine.no_cached_index
+    assert replaced["save_search_stats"] is engine.no_statistics
+    assert replaced["load_model"] is engine.pinned_model
+    engine.no_cached_index("/repo", None, [])
+    engine.no_statistics([], "search", {}, 3)
     model, directory = engine.pinned_model("/a/path/an/index/recorded")
     assert directory == str(model_dir)
     assert model is engine.pinned_model(None)[0]

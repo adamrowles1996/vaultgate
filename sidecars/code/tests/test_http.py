@@ -94,7 +94,7 @@ ABSENT = b'{"key":"absent","file_path":"a","max_lines":1}'
     ],
 )
 def test_request_errors(serve: Serve, call: tuple[Any, ...], status: int, code: str) -> None:
-    """PROTOCOL: every error is JSON {"error", "message"}, with its status; unknown fields too."""
+    """ACT-113: every error is JSON {"error", "message"}, with its status; unknown fields too."""
     client = serve()
     answer, payload, _ = client.call(*call)
     assert (answer, payload["error"]) == (status, code)
@@ -103,7 +103,7 @@ def test_request_errors(serve: Serve, call: tuple[Any, ...], status: int, code: 
 
 
 def test_query_and_file_errors(serve: Serve) -> None:
-    """PROTOCOL: invalid_path, invalid_range, path_not_found, chunk_not_found and not_text."""
+    """ACT-111: invalid_path, invalid_range, path_not_found, chunk_not_found and not_text."""
     client = serve("unix")
     build(client)
     read = {"key": "acme", "max_lines": 5}
@@ -138,7 +138,7 @@ def test_query_and_file_errors(serve: Serve) -> None:
 def test_archive_errors_carry_counts(
     serve: Serve, members: list[archives.Member], spec: dict[str, Any], code: str
 ) -> None:
-    """PROTOCOL: 422 archive_invalid and archive_too_large with detail holding the counts."""
+    """ACT-106: 422 archive_invalid and archive_too_large with detail holding the counts."""
     client = serve()
     status, payload = build(client, members=members, **spec)
     assert (status, payload["error"]) == (422, code)
@@ -146,7 +146,7 @@ def test_archive_errors_carry_counts(
 
 
 def test_build_errors_and_storage_full(serve: Serve) -> None:
-    """PROTOCOL: 422 build_timeout and build_failed, 507 storage_full."""
+    """ACT-107: 422 build_timeout and build_failed, 507 storage_full."""
     client = serve()
     runner = client.app.service.runner  # type: ignore[attr-defined]
     runner._target = childtargets.sleep_forever
@@ -159,7 +159,7 @@ def test_build_errors_and_storage_full(serve: Serve) -> None:
 
 
 def test_an_unexpected_failure_is_a_bare_500(serve: Serve, monkeypatch: pytest.MonkeyPatch) -> None:
-    """PROTOCOL: an internal failure answers 500 internal_error with no detail."""
+    """ACT-113: an internal failure answers 500 internal_error with no detail."""
     client = serve()
 
     def broken() -> None:
@@ -171,7 +171,7 @@ def test_an_unexpected_failure_is_a_bare_500(serve: Serve, monkeypatch: pytest.M
 
 
 def test_a_put_for_an_existing_key_closes_without_reading(serve: Serve) -> None:
-    """PROTOCOL: an existing key answers 200 at once; the unread body closes the connection."""
+    """ACT-107: an existing key answers 200 at once; the unread body closes the connection."""
     client = serve()
     assert build(client)[0] == 200
     status, _, headers = client.call(
@@ -182,7 +182,7 @@ def test_a_put_for_an_existing_key_closes_without_reading(serve: Serve) -> None:
 
 
 def test_chunked_bodies_are_accepted(serve: Serve) -> None:
-    """PROTOCOL: the archive and JSON bodies may be chunked."""
+    """ACT-105: the archive and JSON bodies may be chunked."""
     client = serve()
     data = archives.archive(SMALL)
     connection = client.connect()
@@ -236,7 +236,7 @@ def raw_exchange(client: Client, request: bytes) -> bytes:
     ],
 )
 def test_framing_errors_are_json_too(serve: Serve, request_bytes: bytes, status: int) -> None:
-    """PROTOCOL: errors http.server raises itself are JSON as well, and close the connection."""
+    """ACT-113: errors http.server raises itself are JSON as well, and close the connection."""
     received = raw_exchange(serve(), request_bytes)
     head, _, body = received.partition(b"\r\n\r\n")
     assert head.startswith(f"HTTP/1.1 {status} ".encode())
@@ -245,7 +245,7 @@ def test_framing_errors_are_json_too(serve: Serve, request_bytes: bytes, status:
 
 
 def test_a_client_that_leaves_early_does_not_break_the_server(serve: Serve) -> None:
-    """PROTOCOL: a client closing before the answer costs nothing but its own request."""
+    """ACT-113: a client closing before the answer costs nothing but its own request."""
     client = serve()
     family = socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as sock:

@@ -20,7 +20,18 @@ queries and file reads.
   1 MiB (`413 {"error":"invalid_request"}` beyond).
 - Every error is `{"error": <code>, "message": <text>, "detail"?: {...}}` with the status below.
   `message` never contains file content, a query or a path that was not an argument.
-- Unknown fields in a JSON body are refused (`400 invalid_request`).
+- Unknown fields in a JSON body are refused (`400 invalid_request`), and so are a query string,
+  a body on `GET` or `DELETE`, a body with both `Content-Length` and `Transfer-Encoding`, and any
+  transfer encoding but `chunked`.
+- The request line and each header line are at most 64 KiB and a request has at most 100 headers
+  (the standard library's limits: `414` or `431`, `invalid_request`); the encoded
+  `X-Vaultgate-Build` header must therefore stay under 64 KiB. Path arguments are not
+  percent-decoded (no valid key or owner needs encoding).
+- A response to a request whose body the sidecar did not read (a `PUT` of an existing key, a
+  refused request) carries `Connection: close`; otherwise the connection is kept alive.
+- Beside the codes of each operation: `404 not_found` (no such operation),
+  `405 method_not_allowed`, and `500 internal_error` (the message is an exception class name
+  only).
 
 ## Identifiers
 
@@ -31,6 +42,7 @@ queries and file reads.
 | `label`   | `^[a-z0-9][a-z0-9-]{0,62}$`: the connection name results are prefixed with                                                                            |
 | `commit`  | `^[0-9a-f]{40}$`                                                                                                                                      |
 | `content` | a non-empty list drawn from `code`, `docs`, `config`; order and duplicates do not matter; the sidecar normalises it to `code`, `docs`, `config` order |
+| language  | `^[A-Za-z0-9_.+#-]{1,64}$`: a `semble` language name, as results carry it                                                                             |
 
 A variant is named by its normalised content joined with `+` (`code`, `docs`, `code+docs+config`).
 
@@ -83,9 +95,12 @@ Header `X-Vaultgate-Build`: the build spec, base64url (no padding) of this JSON:
 }
 ```
 
-`include` and `exclude` each hold at most 100 patterns of at most 1 024 characters; an empty
-`include` includes everything. `variants` (0–4 entries) are built before the response; the others
-are built on demand by search and related (below).
+`include` and `exclude` each hold at most 100 patterns of 1 to 1 024 characters, each a single
+line and each a valid gitignore pattern; an empty `include` includes everything. `variants` (0–4
+entries, duplicates dropped) are built before the response; the others are built on demand by
+search and related (below). The sidecar accepts `max_archive_bytes` up to 1 GiB, `max_files` up to
+200 000, `max_total_bytes` up to 4 GiB, `max_file_bytes` up to 64 MiB and `build_timeout_s` up to
+3 600, each at least 1.
 
 Rules, each failing the whole build with the named code and leaving any existing snapshot of the
 same key untouched:
@@ -118,12 +133,15 @@ same key untouched:
   in use by a running request or build) until the new one fits within `max_snapshots` and
   `max_storage_bytes`; if it cannot fit even then, `507 storage_full`.
 - A `PUT` for a key that already exists answers `200` with its metadata without reading the
-  body. A `PUT` for a key whose build is already running waits for that build and answers with
-  its result (single flight); its own body is discarded.
+  body (the header is still validated). A `PUT` for a key whose build is already running waits
+  for that build and answers with its result (single flight); its own body is discarded.
+- A `PUT` whose key is deleted while it builds answers `404 snapshot_missing`.
 
 `200`: the snapshot's metadata (below). `400 invalid_request` for a malformed key, header or spec;
 `422` with `archive_invalid`, `archive_too_large`, `build_timeout` or `build_failed` and
-`detail` holding the counts so far; `507 storage_full`.
+`detail` holding the counts so far (`members`, `files`, `bytes`, `skipped`), with `variant` naming
+the variant for `build_timeout` and `build_failed`; `507 storage_full` (also when the disk fills
+during extraction).
 
 ### Snapshot metadata
 
@@ -191,7 +209,9 @@ deleted key is abandoned and its result discarded. Idempotent: `200 {"deleted": 
 - One index is searched as it is. Several are merged with `SembleIndex.merge` exactly as
   `semble`'s MCP server merges repositories, the label standing for the repository name, so every
   `file_path` is `<label>/<path>`; the merged index is cached while its parts stay loaded.
-- `404 snapshot_missing` (`detail.key`) when a key has no snapshot.
+- `404 snapshot_missing` (`detail.key`) when a key has no snapshot or it is deleted while its
+  variant builds; a variant that cannot be built answers as a build does (`422 build_timeout` or
+  `build_failed` with `detail.variant`, `507 storage_full`).
 
 `200`:
 
@@ -213,8 +233,9 @@ deleted key is abandoned and its result discarded. Idempotent: `200 {"deleted": 
 ```
 
 `content` follows `semble`'s `format_results`: `null` gives the whole chunk, `0` leaves the field
-out, `N` gives the chunk's first `N` lines. `score` is a JSON number. An empty result list is
-`200` with `results: []`.
+out, `N` gives the chunk's first `N` lines. `score` is a JSON number. `language` is `semble`'s
+language of the chunk, or `null`. An empty result list is `200` with `results: []`. `variants`
+lists each index read, in the order of `indexes`.
 
 ### `POST /v1/related`
 
@@ -222,12 +243,14 @@ out, `N` gives the chunk's first `N` lines. `score` is a JSON number. An empty r
 `file_path` obeys the path rules below (with several indexes it starts with a label) and `line`
 is ≥ 1. The seed chunk is found with `semble`'s own rule (the chunk of that file containing the
 line, preferring one the line is not the last line of) and passed to `find_related`.
-`404 chunk_not_found` when no chunk holds that line. `200` as for search.
+`404 chunk_not_found` when no chunk holds that line (or the variant has no chunks). `200` as for
+search; `results` may be empty when nothing is related.
 
 ### `POST /v1/read`
 
 `{"key", "file_path", "start_line"?, "end_line"?, "max_lines"}`: `start_line` ≥ 1 (default 1),
-`end_line` ≥ `start_line` (default: the last line), `max_lines` 1–2 000.
+`end_line` ≥ `start_line` (default: the last line; an earlier one is `400 invalid_range`),
+`max_lines` 1–2 000.
 
 `200`:
 
@@ -270,8 +293,9 @@ excluded, whether or not the repository has it.
   snapshot's `storage_bytes`), least recently used first out. `last_used_at` is updated by every
   search, related and read.
 - **Memory:** loaded variants (and the cached merge) stay in memory while their estimated size
-  (the growth in resident memory measured when each was loaded) sums to at most
-  `max_memory_bytes`; the least recently used are dropped first, and `malloc_trim` is called
-  after a drop. A variant larger than the whole budget is still served, alone.
+  (the growth in resident memory measured when each was loaded, and at least its size on disk)
+  sums to at most `max_memory_bytes`; the least recently used are dropped first, and
+  `malloc_trim` is called after a drop. A variant larger than the whole budget is still served,
+  alone.
 - Start-up reconciles: temporary directories are removed, snapshots with unreadable metadata are
   deleted, and the caps are enforced once.

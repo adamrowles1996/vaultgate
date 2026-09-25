@@ -11,7 +11,20 @@ from vaultgate_code.memory import Loaded, Name, is_variant, load_trim, resident_
 
 def index(label: str) -> SembleIndex:
     """A stand-in for a loaded index: the bookkeeping never looks inside one."""
-    return cast("SembleIndex", label)
+    return cast("SembleIndex", Fake(label))
+
+
+class Fake:
+    """An object standing for an index."""
+
+    def __init__(self, label: str) -> None:
+        """Name it."""
+        self.label = label
+
+
+def label(found: SembleIndex | None) -> str | None:
+    """The label of a fake index, or None."""
+    return None if found is None else cast("Fake", found).label
 
 
 A: Name = (("a", "code"),)
@@ -28,7 +41,7 @@ def test_resident_memory_is_measured() -> None:
 
 def test_malloc_trim_or_nothing() -> None:
     """ACT-107: malloc_trim(0) from glibc; a C library without it gives a no-op."""
-    trims: list[Any] = [load_trim(), load_trim("libm.so.6"), load_trim("libabsent.so.404")]
+    trims: list[Any] = [load_trim(), load_trim("libm.so.6"), load_trim("absent-library.so.404")]
     for trim in trims:
         trim()
 
@@ -41,8 +54,7 @@ def test_a_merge_can_be_the_one_dropped() -> None:
     loaded.put(B, index("b"), 10, set())
     loaded.put(MERGE, index("merged"), 10, {A, B})
     assert (loaded.usage(), trims) == ((2, 30), [])
-    assert loaded.get(A) == "a"
-    assert loaded.get(B) == "b"
+    assert (label(loaded.get(A)), label(loaded.get(B))) == ("a", "b")
     loaded.put((("c", "code"),), index("c"), 10, set())
     assert loaded.get(MERGE) is None
     assert loaded.usage() == (3, 30)
@@ -60,7 +72,7 @@ def test_dropping_a_variant_drops_its_merges() -> None:
     loaded.put((("c", "code"),), index("c"), 10, set())
     assert loaded.get(A) is None
     assert loaded.get(MERGE) is None
-    assert loaded.get(B) == "b"
+    assert label(loaded.get(B)) == "b"
 
 
 def test_dropping_a_key_with_nothing_loaded_trims_nothing() -> None:

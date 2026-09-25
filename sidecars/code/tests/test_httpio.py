@@ -47,7 +47,7 @@ class Broken:
 
 
 def test_content_length_bodies() -> None:
-    """PROTOCOL: a Content-Length body is read in pieces, and completes at its length."""
+    """ACT-113: a Content-Length body is read in pieces, and completes at its length."""
     framed = body(b"hello world, and more", Content_Length="11")
     assert (framed.read(5), framed.read(), framed.read(3)) == (b"hello", b" world", b"")
     assert framed.complete
@@ -57,7 +57,7 @@ def test_content_length_bodies() -> None:
 
 
 def test_chunked_bodies_with_extensions_and_trailers() -> None:
-    """PROTOCOL: a chunked body, with chunk extensions and trailers, reads as its data."""
+    """ACT-105: a chunked body, with chunk extensions and trailers, reads as its data."""
     data = b"5;name=value\r\nhello\r\n1\r\n \r\n5\r\nworld\r\n0\r\nX-Trailer: 1\r\n\r\n"
     framed = body(data, Transfer_Encoding="chunked")
     assert not framed.empty
@@ -75,14 +75,14 @@ def test_chunked_bodies_with_extensions_and_trailers() -> None:
     ],
 )
 def test_ambiguous_framing_is_refused(values: dict[str, str], message: str) -> None:
-    """PROTOCOL: two framings, another transfer encoding or a bad length is invalid_request."""
+    """ACT-113: two framings, another transfer encoding or a bad length is invalid_request."""
     assert message in refused(lambda: body(b"", **values))
 
 
 @pytest.mark.parametrize(
     ("data", "message"),
     [
-        (b"5\r\nhel", "ended early"),
+        (b"5\r\n123", "ended early"),
         (b"5\r\nhelloXX0\r\n\r\n", "chunked body is malformed"),
         (b"zz\r\nhello\r\n", "chunked body is malformed"),
         (b"5\nhello\r\n", "chunked body is malformed"),
@@ -91,13 +91,13 @@ def test_ambiguous_framing_is_refused(values: dict[str, str], message: str) -> N
     ],
 )
 def test_malformed_chunked_bodies(data: bytes, message: str) -> None:
-    """PROTOCOL: a chunked body that is cut short or garbled is invalid_request."""
+    """ACT-113: a chunked body that is cut short or garbled is invalid_request."""
     framed = body(data, Transfer_Encoding="chunked")
     assert message in refused(framed.read_json)
 
 
 def test_a_connection_that_fails_mid_body() -> None:
-    """PROTOCOL: a body the connection cannot deliver is invalid_request."""
+    """ACT-113: a body the connection cannot deliver is invalid_request."""
     length = Body(Broken(), headers(Content_Length="10"))
     assert "could not be read" in refused(lambda: length.read(10))
     chunked = Body(Broken(), headers(Transfer_Encoding="chunked"))
@@ -105,7 +105,7 @@ def test_a_connection_that_fails_mid_body() -> None:
 
 
 def test_json_bodies_are_capped_at_1_mib() -> None:
-    """PROTOCOL: a JSON body over 1 MiB is 413."""
+    """ACT-113: a JSON body over 1 MiB is 413."""
     assert body(b"x" * MAX_JSON_BYTES, Content_Length=str(MAX_JSON_BYTES)).read_json()
     over = body(b"x" * (MAX_JSON_BYTES + 1), Content_Length=str(MAX_JSON_BYTES + 1))
     with pytest.raises(ApiError) as caught:
@@ -114,12 +114,12 @@ def test_json_bodies_are_capped_at_1_mib() -> None:
 
 
 def test_lingering_on_a_connection_already_gone() -> None:
-    """PROTOCOL: closing after an unread body tolerates a client that has already left."""
+    """ACT-113: closing after an unread body tolerates a client that has already left."""
 
     class Gone:
         def shutdown(self, _how: int) -> None:
             raise BrokenPipeError
 
     handler = object.__new__(Handler)
-    handler.connection = Gone()  # type: ignore[assignment]
+    handler.connection = Gone()
     handler._linger()

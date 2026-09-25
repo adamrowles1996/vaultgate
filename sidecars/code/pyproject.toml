@@ -74,6 +74,8 @@ max-statements = 50
 
 [tool.mypy]
 strict = true
-mypy_path = "src"
-packages = ["vaultgate_code"]
+# The tests import their helpers (`archives`, `repo`...) as top-level modules, as pytest does.
+mypy_path = ["src", "tests"]
+files = ["src", "tests"]
+explicit_package_bases = true
 warn_unreachable = true

@@ -1,0 +1,8 @@
+# Allow-list: the image build needs the project manifest, the lockfile and the
+# package sources. Tests, the local virtual environment and model download,
+# caches and anything else stay out of the build context.
+*
+!pyproject.toml
+!uv.lock
+!src/
+**/__pycache__

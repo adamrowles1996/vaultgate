@@ -61,14 +61,14 @@ def test_a_build_returns_the_snapshot_metadata(make_service: ServiceFactory) -> 
 
 
 def test_an_existing_key_answers_without_reading_the_body(make_service: ServiceFactory) -> None:
-    """PROTOCOL: a PUT for an existing key answers its metadata and never reads the body."""
+    """ACT-107: a PUT for an existing key answers its metadata and never reads the body."""
     service = make_service()
     meta = put(service, "acme", variants=[])
     assert service.put("acme", archives.header(owner="someone-else"), Refusing()) == meta
 
 
 def test_a_failed_build_leaves_the_existing_snapshot(make_service: ServiceFactory) -> None:
-    """PROTOCOL: a failing build leaves any existing snapshot of the key untouched."""
+    """ACT-107: a failing build leaves any existing snapshot of the key untouched."""
     service = make_service()
     put(service, "keep", [archives.file("a.py", "a = 1\n")], variants=[])
     bad = failure(lambda: service.put("other", archives.header(), io.BytesIO(b"not a tar")))
@@ -79,7 +79,7 @@ def test_a_failed_build_leaves_the_existing_snapshot(make_service: ServiceFactor
 
 
 def test_status_and_list_show_a_running_build(make_service: ServiceFactory) -> None:
-    """PROTOCOL: 202 building while a build runs; list shows it; 404 for an unknown key."""
+    """ACT-112: 202 building while a build runs; list shows it; 404 for an unknown key."""
     service = make_service()
     body = Gated(archives.archive(repo.members()))
     results: list[Any] = []
@@ -102,7 +102,7 @@ def test_status_and_list_show_a_running_build(make_service: ServiceFactory) -> N
 
 
 def test_concurrent_puts_of_one_key_build_once(make_service: ServiceFactory) -> None:
-    """PROTOCOL: a PUT while that key builds waits and answers its result; its body is unread."""
+    """ACT-108: a PUT while that key builds waits and answers its result; its body is unread."""
     service = make_service()
     builds: list[str] = []
     real = service.runner.build
@@ -111,7 +111,7 @@ def test_concurrent_puts_of_one_key_build_once(make_service: ServiceFactory) -> 
         builds.append(arguments[1])
         return real(*arguments)
 
-    service.runner.build = counting  # type: ignore[method-assign]
+    service.runner.build = counting  # type: ignore[method-assign,assignment]
     body = Gated(archives.archive(repo.members()))
     answers: list[Any] = []
     first = threading.Thread(
@@ -131,7 +131,7 @@ def test_concurrent_puts_of_one_key_build_once(make_service: ServiceFactory) -> 
 
 
 def test_deleting_a_key_abandons_its_extraction(make_service: ServiceFactory) -> None:
-    """PROTOCOL: a running build of a deleted key is abandoned and its result discarded."""
+    """ACT-109: a running build of a deleted key is abandoned and its result discarded."""
     service = make_service()
     body = Gated(archives.archive(repo.members()))
     errors: list[ApiError] = []
@@ -152,7 +152,7 @@ def test_deleting_a_key_abandons_its_extraction(make_service: ServiceFactory) ->
 
 
 def test_deleting_a_key_kills_its_variant_build(make_service: ServiceFactory) -> None:
-    """PROTOCOL: deleting a key during its variant build kills the child and discards it."""
+    """ACT-109: deleting a key during its variant build kills the child and discards it."""
     service = make_service()
     service.runner._target = childtargets.sleep_forever
     errors: list[ApiError] = []
@@ -168,7 +168,7 @@ def test_deleting_a_key_kills_its_variant_build(make_service: ServiceFactory) ->
 
 
 def test_delete_is_idempotent_and_owner_wide(make_service: ServiceFactory) -> None:
-    """PROTOCOL: DELETE of a key or of an owner removes everything it names; 0 when nothing."""
+    """ACT-109: DELETE of a key or of an owner removes everything it names; 0 when nothing."""
     service = make_service()
     small = [archives.file("a.py", "a = 1\n")]
     put(service, "one", small, variants=[], owner="owner-a")
@@ -183,7 +183,7 @@ def test_delete_is_idempotent_and_owner_wide(make_service: ServiceFactory) -> No
 
 
 def test_an_owner_delete_abandons_its_running_builds(make_service: ServiceFactory) -> None:
-    """PROTOCOL: DELETE /v1/owners/{owner} also abandons that owner's running builds."""
+    """ACT-109: DELETE /v1/owners/{owner} also abandons that owner's running builds."""
     service = make_service()
     body = Gated(archives.archive(repo.members()))
     errors: list[ApiError] = []

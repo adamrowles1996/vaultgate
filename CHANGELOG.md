@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- ACT-106, ACT-113, ACT-117: **the `code` connector's sidecar**, under `sidecars/code/`: Python
+  3.12 and `semble` 0.6.1 as a library, locked by hash with `uv`, and the embedding model pinned by
+  revision and SHA-256. It extracts archives under the hostile-archive rules, builds indexes in a
+  child process under disk and memory caps, and serves the protocol of
+  [`sidecars/code/PROTOCOL.md`](sidecars/code/PROTOCOL.md) over a Unix socket or TCP, with no
+  credential and no network. Its own suite holds 100% coverage; CI also builds and boots its image.
+
 ### Changed
 
 - ACT-5: **the console calls a target a _connection_ rather than a _computer_**, since most

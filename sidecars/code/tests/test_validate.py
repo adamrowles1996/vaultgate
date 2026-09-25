@@ -75,7 +75,7 @@ def test_a_query_names_every_required_field() -> None:
 
 
 def test_bodies_that_are_not_utf8_json() -> None:
-    """PROTOCOL: a body is UTF-8 JSON."""
+    """ACT-113: a body is UTF-8 JSON."""
     for raw in (b"\xff", b"{", b"[" * 100_000):
         assert refusal(lambda raw=raw: validate.parse_json(raw))[1] == "invalid_request"
     assert validate.parse_json(b'{"a": 1}') == {"a": 1}
@@ -104,14 +104,14 @@ def test_bodies_that_are_not_utf8_json() -> None:
     ],
 )
 def test_the_build_spec_header(header: str | None, message: str) -> None:
-    """PROTOCOL: the build spec is base64url JSON, every field checked, nothing unknown."""
+    """ACT-106: the build spec is base64url JSON, every field checked, nothing unknown."""
     status, code, text = refusal(lambda: validate.build_spec(header))
     assert (status, code) == (400, "invalid_request")
     assert message in text
 
 
 def test_a_valid_build_spec() -> None:
-    """PROTOCOL: variants normalised and deduplicated; an empty include includes everything."""
+    """ACT-107: variants normalised and deduplicated; an empty include includes everything."""
     spec = validate.build_spec(
         encoded(archives.spec(variants=[["docs", "code"], ["code", "docs", "code"], ["config"]]))
     )

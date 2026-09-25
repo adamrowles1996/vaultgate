@@ -45,7 +45,7 @@ def test_files_over_max_file_bytes_are_skipped(tmp_path: Path) -> None:
 
 
 def test_modes_are_fixed_and_modification_times_kept(tmp_path: Path) -> None:
-    """ACT-106: files are 0644 and directories 0755 whatever the archive says; mtimes are kept."""
+    """ACT-106: files are 0644 and directories 0755 whatever the archive says; times are kept."""
     tree, _ = run(tmp_path, archive([file("deep/er/x.sh", "#!/bin/sh\n")]))
     target = tree / "deep" / "er" / "x.sh"
     assert target.stat().st_mode & 0o7777 == 0o644

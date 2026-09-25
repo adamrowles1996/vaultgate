@@ -31,7 +31,7 @@ def test_links_are_skipped_and_counted(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("kind", [tarfile.CHRTYPE, tarfile.BLKTYPE, tarfile.FIFOTYPE, b"Z"])
-def test_devices_fifos_and_unknown_types_are_skipped(tmp_path: Path, kind: bytes) -> None:
+def test_devices_pipes_and_unknown_types_are_skipped(tmp_path: Path, kind: bytes) -> None:
     """ACT-106: character and block devices, FIFOs and unknown types are skipped and counted."""
     tree, counts = run(tmp_path, archive([special("dev", kind), file("b.md", "# b\n")]))
     assert written(tree) == {"b.md": b"# b\n"}

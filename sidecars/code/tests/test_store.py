@@ -24,7 +24,7 @@ def orphan(key: str) -> Snapshot:
 def test_a_snapshot_deleted_before_it_is_installed_is_abandoned(
     make_service: ServiceFactory,
 ) -> None:
-    """PROTOCOL: a build whose key was deleted is discarded, not installed."""
+    """ACT-109: a build whose key was deleted is discarded, not installed."""
     service = make_service()
     snapshot = orphan("gone")
     snapshot.cancelled.set()
@@ -36,7 +36,7 @@ def test_a_snapshot_deleted_before_it_is_installed_is_abandoned(
 def test_a_variant_for_a_snapshot_that_went_away_is_refused(
     make_service: ServiceFactory, tmp_path: Path
 ) -> None:
-    """PROTOCOL: an on-demand variant of a deleted or evicted snapshot is snapshot_missing."""
+    """ACT-109: an on-demand variant of a deleted or evicted snapshot is snapshot_missing."""
     service = make_service()
     built = tmp_path / "built"
     built.mkdir()
@@ -47,7 +47,7 @@ def test_a_variant_for_a_snapshot_that_went_away_is_refused(
 
 
 def test_a_use_of_a_replaced_snapshot_is_not_recorded(make_service: ServiceFactory) -> None:
-    """PROTOCOL: last_used_at is recorded only for the snapshot the store still holds."""
+    """ACT-107: last_used_at is recorded only for the snapshot the store still holds."""
     service = make_service()
     put(service, "acme", variants=SMALL_VARIANTS)
     held = service.store.get("acme")
@@ -59,5 +59,5 @@ def test_a_use_of_a_replaced_snapshot_is_not_recorded(make_service: ServiceFacto
 
 
 def test_the_clock_is_milliseconds_since_the_epoch() -> None:
-    """PROTOCOL: times are milliseconds since the epoch."""
+    """ACT-113: times are milliseconds since the epoch."""
     assert 1_700_000_000_000 < now_ms() < 10_000_000_000_000
