@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- OAUTH-7: **Claude Code could not sign in.** Its client metadata registers
+  `http://localhost/callback` and it listens on a port chosen per sign-in, but the RFC 8252
+  variable-port exception covered only `127.0.0.1` and `[::1]`, so the request was refused with
+  `redirect_uri is not registered for this client`. The exception now covers `localhost` too, still
+  only between URIs naming the same host, path and query.
+
 ## [0.1.0-rc.17] - 2026-09-25
 
 ### Fixed

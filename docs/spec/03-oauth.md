@@ -52,7 +52,11 @@ Three mechanisms, resolved in this order when a `client_id` is presented:
   `http://127.0.0.1`, `http://[::1]`, any port). Anything else is rejected at registration and at
   authorize time.
 - **OAUTH-7** Redirect URIs are compared by exact string match (after nothing more than the RFC 8252
-  loopback port exception, which is applied only to loopback literals).
+  loopback port exception). The exception covers `127.0.0.1`, `[::1]` and `localhost`, and only
+  between a requested and a registered URI naming the same host with the same path and query.
+  `localhost` is included because Claude Code's client metadata registers
+  `http://localhost/callback` and signs in on a port it chooses each time, and browsers resolve
+  `localhost` to loopback themselves.
 - **OAUTH-8** CIMD fetches MUST use the SSRF-safe fetcher: `https` only, DNS resolved and checked
   against private/link-local/loopback/multicast ranges before connecting and after each redirect,
   with the connection pinned to the validated address (the transport never resolves the name

@@ -75,8 +75,16 @@ describe('isRegisteredRedirect', () => {
     expect(isRegisteredRedirect('http://[::1]:61234/cb', registered)).toBe(true);
   });
 
-  it('OAUTH-7 does not apply the port exception to localhost', () => {
-    expect(isRegisteredRedirect('http://localhost:61234/cb', registered)).toBe(false);
+  it('OAUTH-7 applies the port exception to localhost, as Claude Code registers it', () => {
+    expect(isRegisteredRedirect('http://localhost:61234/cb', registered)).toBe(true);
+    expect(
+      isRegisteredRedirect('http://localhost:57877/callback', ['http://localhost/callback']),
+    ).toBe(true);
+  });
+
+  it('OAUTH-7 never lets the exception cross from one loopback host to another', () => {
+    expect(isRegisteredRedirect('http://localhost:61234/cb', ['http://127.0.0.1/cb'])).toBe(false);
+    expect(isRegisteredRedirect('http://127.0.0.1:61234/cb', ['http://localhost/cb'])).toBe(false);
   });
 
   it('OAUTH-7 requires scheme, host, path and query to match under the exception', () => {

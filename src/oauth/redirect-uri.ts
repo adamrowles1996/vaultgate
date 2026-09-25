@@ -5,13 +5,6 @@ import { fail, ok, type Result } from '../result.ts';
  */
 const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
 
-/**
- * OAUTH-7 / RFC 8252 §7.3: only the literal loopback addresses get the
- * variable-port exception; `localhost` does not, because it may resolve
- * anywhere.
- */
-const LOOPBACK_LITERALS: ReadonlySet<string> = new Set(['127.0.0.1', '[::1]']);
-
 export class RedirectUriError extends Error {
   constructor(message: string) {
     super(message);
@@ -72,7 +65,7 @@ function isLoopbackPortMatch(requested: string, registered: string): boolean {
     requestedUrl !== undefined &&
     registeredUrl !== undefined &&
     requestedUrl.protocol === 'http:' &&
-    LOOPBACK_LITERALS.has(requestedUrl.hostname) &&
+    LOOPBACK_HOSTS.has(requestedUrl.hostname) &&
     requestedUrl.protocol === registeredUrl.protocol &&
     requestedUrl.hostname === registeredUrl.hostname &&
     requestedUrl.pathname === registeredUrl.pathname &&
@@ -81,8 +74,10 @@ function isLoopbackPortMatch(requested: string, registered: string): boolean {
 }
 
 /**
- * OAUTH-7: exact string comparison, with the RFC 8252 loopback-port
- * exception applied only when the requested URI is a loopback literal.
+ * OAUTH-7: exact string comparison, with the RFC 8252 §7.3 loopback-port exception applied when
+ * the requested URI is a loopback address and the registered one names the same host. That
+ * includes `localhost`: Claude Code registers `http://localhost/callback` and listens on a port
+ * it picks per sign-in, and browsers resolve `localhost` to loopback without asking DNS.
  */
 export function isRegisteredRedirect(requested: string, registered: readonly string[]): boolean {
   return registered.some(
