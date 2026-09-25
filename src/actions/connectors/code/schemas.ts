@@ -157,4 +157,5 @@ export const codeSchemas: ConnectorSchemas<CodeDestination, CodeCredential, Code
   allowsNonRead() {
     return false;
   },
+  internalRefused: 'internal: a code target reaches GitHub over the internet and is never internal',
 };

@@ -12,7 +12,10 @@ import { normaliseContent } from './schemas.ts';
 import type { CodeCredential, CodeDestination, CodePolicy } from './schemas.ts';
 
 const FINGERPRINT_LENGTH = 16;
-const KEY = /^([\da-f-]{1,64})\.([\da-f]{16})\.([\da-f]{40})$/u;
+/**
+The target id is the sidecar protocol's `owner`: `^[a-z0-9][a-z0-9-]{0,63}$`.
+*/
+const KEY = /^([a-z\d][a-z\d-]{0,63})\.([\da-f]{16})\.([\da-f]{40})$/u;
 
 export interface CodeDocuments {
   readonly destination: CodeDestination;
@@ -46,14 +49,15 @@ export function extractionFingerprint(documents: CodeDocuments): string {
 
 /**
  * ACT-108: a revision that changes this deletes every snapshot of the
- * target first: the extraction, the content the policy allows, or the ref
- * the connection follows.
+ * target first: the extraction, the content the policy allows, the ref the
+ * connection follows, or the one cap the extraction does not depend on.
  */
 export function resetFingerprint(documents: CodeDocuments): string {
   return digest({
     extraction: extractionFingerprint(documents),
     content: normaliseContent(documents.policy.content),
     ref: documents.destination.ref ?? null,
+    build_timeout_s: documents.policy.build_timeout_s,
   });
 }
 

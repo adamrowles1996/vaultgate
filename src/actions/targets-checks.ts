@@ -230,6 +230,7 @@ async function inspect(
   const rules = [
     ...schemas.saveProblems(parsedDocuments),
     ...commandProblems(changes.policy, dependencies.allowAnyCommand),
+    ...(changes.internal && schemas.internalRefused !== undefined ? [schemas.internalRefused] : []),
   ];
   const endpoints = await endpointReports(prepared, dependencies.lookup);
   const credential = await credentialReport(

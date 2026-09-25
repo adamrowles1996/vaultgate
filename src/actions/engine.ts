@@ -4,6 +4,8 @@
  * failure; `listTargets` is ACT-19. The MCP tools and the account pages
  * consume this interface and nothing below it.
  */
+import { ACTION_SCOPE_CONNECTORS } from '../scopes/registry.ts';
+
 import { type ConfirmationRequest, type Confirmations, createConfirmations } from './confirm.ts';
 import { confirmationStep } from './engine-confirm.ts';
 import { type ListingDependencies, listTargets, type TargetListing } from './engine-listing.ts';
@@ -24,6 +26,7 @@ import { createTargetsService, type TargetsObserver, type TargetsService } from 
 
 import type { Caller } from './caller.ts';
 import type { CodeControl } from './connectors/code/control.ts';
+import type { CodeConnector } from './connectors/code/index.ts';
 import type { ConnectorControl, ConnectorTool } from './connectors/connector.ts';
 import type { ConnectorRegistry } from './connectors/registry.ts';
 import type { TargetsRepo } from './targets-repo.ts';
@@ -194,9 +197,7 @@ async function call(
 function targetsObserver(controls: ReadonlyMap<ConnectorKind, ConnectorControl>): TargetsObserver {
   return {
     saved(row, previous) {
-      if (row.enabled) {
-        controls.get(row.connector)?.saved(row.id, previous);
-      }
+      controls.get(row.connector)?.saved(row.id, previous);
     },
     removed(row) {
       controls.get(row.connector)?.removed(row.id);
@@ -207,6 +208,8 @@ function targetsObserver(controls: ReadonlyMap<ConnectorKind, ConnectorControl>)
 export function createActionsEngine(dependencies: EngineDependencies): ActionsEngine {
   const { config, connectors, now } = dependencies;
   const controls = new Map<ConnectorKind, ConnectorControl>();
+  // ACT-115: a connector that found itself unable to serve loses its tools and its listings.
+  const isAvailable = (kind: ConnectorKind): boolean => controls.get(kind)?.available() !== false;
   const targets = createTargetsService({
     database: dependencies.database,
     vault: dependencies.vault,
@@ -225,7 +228,7 @@ export function createActionsEngine(dependencies: EngineDependencies): ActionsEn
       now,
     }),
     limits: createActionLimits(now),
-    resolve: { config, targets: targets.repo, connectors },
+    resolve: { config, targets: targets.repo, connectors, available: isAvailable },
     repo: targets.repo,
   };
   for (const kind of connectors.kinds) {
@@ -234,17 +237,14 @@ export function createActionsEngine(dependencies: EngineDependencies): ActionsEn
       controls.set(kind, control);
     }
   }
-  const code = connectors.get('code') as { control?: () => CodeControl | undefined } | undefined;
+  const code = connectors.get('code') as CodeConnector | undefined;
   return {
     connectors: connectors.kinds,
     get tools() {
-      return connectors.tools.filter((tool) => {
-        const kind = connectors.forTool(tool.name)?.kind;
-        return kind === undefined || controls.get(kind)?.available() !== false;
-      });
+      return connectors.tools.filter((tool) => isAvailable(ACTION_SCOPE_CONNECTORS[tool.scope]));
     },
     targets,
-    code: code?.control?.(),
+    code: code?.control(),
     listTargets: (caller) => listTargets(context.resolve, caller),
     call: (caller, invocation) => call(context, caller, invocation),
   };

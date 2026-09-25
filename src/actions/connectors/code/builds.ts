@@ -1,21 +1,22 @@
 /**
- * Building a snapshot (ACT-105, ACT-108, ACT-116): the commit's archive is
- * opened on GitHub and streamed to the sidecar's build as it arrives, cut at
+ * Building a snapshot (ACT-105, ACT-108): the commit's archive is opened on
+ * GitHub and streamed to the sidecar's build as it arrives, cut at
  * `max_archive_bytes`; one build runs per key at a time and a second trigger
  * joins it. A build holds its own credential for as long as it runs (the
  * engine lends one through `withTarget` and disposes of it after), so it can
- * outlive the call that started it. Every build ends in one audit event.
+ * outlive the call that started it. Every build ends in `finished`, once.
  */
-import { type GitHubAccess, openArchive } from './github.ts';
+import { openArchive } from './archive.ts';
 import { extractionFingerprint, snapshotKey } from './keys.ts';
 import { GITHUB_API_HOST, GITHUB_ARCHIVE_HOST } from './schemas.ts';
 
-import type { PinnedFetch } from '../../../net/pinned-https.ts';
-import type { ConnectorServices, RunContext, TargetAccess } from '../connector.ts';
+import type { GitHubAccess } from './github-http.ts';
 import type { CodeDocuments } from './keys.ts';
 import type { ContentType } from './schemas.ts';
 import type { BuildSpec, SnapshotMeta } from './sidecar-schemas.ts';
 import type { SidecarClient } from './sidecar.ts';
+import type { PinnedFetch } from '../../../net/pinned-https.ts';
+import type { ConnectorServices, RunContext, TargetAccess } from '../connector.ts';
 
 export type Trigger = 'save' | 'operator' | 'call';
 
@@ -60,6 +61,10 @@ export interface Builds {
   Builds with a credential of its own, fetched now; a running build of the same key is joined.
   */
   start(request: BuildRequest): Promise<BuildOutcome>;
+  /**
+  Whether a build of the target is running in this process (ACT-115).
+  */
+  isBuilding(targetId: string): boolean;
 }
 
 type Access = TargetAccess | RunContext<unknown, unknown, unknown>;
@@ -76,7 +81,7 @@ export function documentsOf(access: Access): CodeDocuments {
 }
 
 /**
-The GitHub access of a call or a build: both pinned addresses, the token if any, the capture.
+The GitHub access of a call or a build: both pinned addresses, the token if any, the scrub table.
 */
 export function githubAccess(
   access: Access,
@@ -97,18 +102,12 @@ export function githubAccess(
     capture: (field, value) => {
       access.support.capture(field, value);
     },
+    scrub: (text) => access.support.scrub(text),
   };
 }
 
-class ArchiveTooLarge extends Error {
-  constructor() {
-    super('archive_too_large');
-    this.name = 'ArchiveTooLarge';
-  }
-}
-
 /**
-ACT-105: the archive as it arrives, failing the moment it passes `limit` bytes.
+ACT-105: the archive as it arrives, failing (and `overflowed` told) the moment it passes `limit`.
 */
 async function* capped(
   stream: ReadableStream<Uint8Array>,
@@ -120,7 +119,7 @@ async function* capped(
     total += chunk.byteLength;
     if (total > limit) {
       overflowed();
-      throw new ArchiveTooLarge();
+      throw new Error('archive_too_large');
     }
     yield chunk;
   }
@@ -152,55 +151,46 @@ function buildSpec(request: BuildRequest): BuildSpec {
   };
 }
 
-async function stream(
-  dependencies: BuildsDependencies,
-  access: TargetAccess,
-  request: BuildRequest,
-  signal: AbortSignal,
-): Promise<BuildOutcome> {
-  const archive = await openArchive(
-    githubAccess(access, dependencies, signal),
-    request.documents.destination.repository,
-    request.commit,
-  );
-  if (!archive.ok) {
-    return { ok: false, reason: archive.error.code };
-  }
-  // Read after the build: the stream is cut inside the upload, which the
-  // sidecar client then reports as an unreachable sidecar.
-  const overflow = { hasHappened: false };
-  const body = capped(archive.value, request.documents.policy.max_archive_bytes, () => {
-    overflow.hasHappened = true;
-  });
-  const built = await dependencies.sidecar.build(keyOf(request), buildSpec(request), body, signal);
-  if (overflow.hasHappened) {
-    return { ok: false, reason: 'archive_too_large' };
-  }
-  return built.ok ? { ok: true, meta: built.value } : { ok: false, reason: built.error.code };
-}
-
 /**
-One build under a timeout of its own: the sidecar's build time plus the download's.
-*/
+ * One build under a timeout of its own (the sidecar's build time plus the
+ * download's): the archive opened, streamed to the sidecar and cut at the
+ * cap, which aborts the upload so the sidecar never builds a partial archive.
+ */
 async function download(
   dependencies: BuildsDependencies,
   access: TargetAccess,
   request: BuildRequest,
 ): Promise<BuildOutcome> {
   const controller = new AbortController();
+  const { policy, destination } = request.documents;
   const cancel = dependencies.services.schedule(
     () => {
       controller.abort();
     },
-    request.documents.policy.build_timeout_s * MS_PER_SECOND + DOWNLOAD_ALLOWANCE_MS,
+    policy.build_timeout_s * MS_PER_SECOND + DOWNLOAD_ALLOWANCE_MS,
   );
   try {
-    return await stream(dependencies, access, request, controller.signal);
-  } catch (error) {
-    if (error instanceof ArchiveTooLarge) {
+    const github = githubAccess(access, dependencies, controller.signal);
+    const archive = await openArchive(github, destination.repository, request.commit);
+    if (!archive.ok) {
+      return { ok: false, reason: archive.error.code };
+    }
+    const overflow = { hasHappened: false };
+    const body = capped(archive.value, policy.max_archive_bytes, () => {
+      overflow.hasHappened = true;
+      controller.abort();
+    });
+    const key = keyOf(request);
+    const built = await dependencies.sidecar.build(
+      key,
+      buildSpec(request),
+      body,
+      controller.signal,
+    );
+    if (overflow.hasHappened) {
       return { ok: false, reason: 'archive_too_large' };
     }
-    return { ok: false, reason: controller.signal.aborted ? 'timeout' : 'index_unavailable' };
+    return built.ok ? { ok: true, meta: built.value } : { ok: false, reason: built.error.code };
   } finally {
     cancel();
   }
@@ -224,27 +214,46 @@ async function withOwnCredential(
 }
 
 export function createBuilds(dependencies: BuildsDependencies): Builds {
-  const running = new Map<string, Promise<BuildOutcome>>();
+  const running = new Map<
+    string,
+    { readonly targetId: string; readonly promise: Promise<BuildOutcome> }
+  >();
 
-  async function once(request: BuildRequest, build: () => Promise<BuildOutcome>) {
+  async function attempt(build: () => Promise<BuildOutcome>): Promise<BuildOutcome> {
+    try {
+      return await build();
+    } catch {
+      return { ok: false, reason: 'connector_fault' };
+    }
+  }
+
+  function once(request: BuildRequest, build: () => Promise<BuildOutcome>): Promise<BuildOutcome> {
     const key = keyOf(request);
     const current = running.get(key);
     if (current !== undefined) {
-      return current;
+      return current.promise;
     }
     const startedAt = dependencies.services.now();
     const promise = (async () => {
-      const outcome = await build();
+      const outcome = await attempt(build);
       running.delete(key);
       dependencies.finished(request, outcome, dependencies.services.now() - startedAt);
       return outcome;
     })();
-    running.set(key, promise);
+    running.set(key, { targetId: request.targetId, promise });
     return promise;
   }
 
   return {
     run: (access, request) => once(request, () => download(dependencies, access, request)),
     start: (request) => once(request, () => withOwnCredential(dependencies, request)),
+    isBuilding(targetId) {
+      for (const build of running.values()) {
+        if (build.targetId === targetId) {
+          return true;
+        }
+      }
+      return false;
+    },
   };
 }

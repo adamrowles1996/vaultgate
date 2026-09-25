@@ -42,9 +42,11 @@ only when it does not, including every file the policy does not exclude.
   - a branch or tag: `GET /repos/{repository}/commits/{ref}` with
     `Accept: application/vnd.github.sha`, whose body is the 40-hex SHA;
   - a 40-hex SHA: used as it is (the download proves it exists);
-  - `pr:<n>`, which only a call may name (ACT-110): `GET /repos/{repository}/pulls/{n}`, whose
-    `head.sha` is the commit; a pull request from a fork is still served from the base
-    repository, which holds its head.
+  - `pr:<n>`, which only a call may name (ACT-110):
+    `GET /repos/{repository}/commits/refs/pull/{n}/head` with
+    `Accept: application/vnd.github.sha`, whose body is the 40-hex SHA of the pull request's
+    head. It needs only `Contents: read`, and a pull request from a fork is still served from
+    the base repository, which keeps `refs/pull/{n}/head`.
 
   A `404` or `422` from a resolution is `ref_not_found`; any other failure, or a body that is not
   what the step expects, is `upstream_error`. The archive is `GET /repos/{repository}/tarball/{sha}`,

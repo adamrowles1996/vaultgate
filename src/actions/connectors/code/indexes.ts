@@ -4,7 +4,9 @@
  * commit is looked up, and one that does not exist is built while the call
  * waits, up to `build_wait_s`, as `semble` indexes a repository on its first
  * call. A configured ref that has moved is answered from the previous
- * commit's snapshot with `stale: true` while the new one builds.
+ * commit's snapshot with `stale: true` while the new one builds, and a
+ * configured ref that cannot be resolved is answered from it too, and
+ * recorded.
  */
 import { fail, ok, type Result } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
@@ -12,7 +14,8 @@ import { ActionError } from '../../errors.ts';
 import { documentsOf, githubAccess, keyOf, type Builds, type BuildRequest } from './builds.ts';
 import { resolveReference, type ResolvedReference } from './github.ts';
 import { extractionFingerprint } from './keys.ts';
-import { parseReference } from './references.ts';
+import { refusalError } from './refusals.ts';
+import { background, until } from './timing.ts';
 
 import type { PinnedFetch } from '../../../net/pinned-https.ts';
 import type { ConnectorServices, RunContext } from '../connector.ts';
@@ -36,6 +39,7 @@ export interface PrepareRequest {
 One repository of a call, ready to be read.
 */
 export interface Prepared {
+  readonly targetId: string;
   readonly key: string;
   readonly label: string;
   readonly repository: string;
@@ -72,62 +76,44 @@ function notReady(repo: string, state: 'building' | 'failed', reason?: string): 
   });
 }
 
-function noop(): void {
-  // Replaced by the timer's own cancel before it can be called.
+function isFresh(services: ConnectorServices, at: number, context: Context): boolean {
+  return services.now() - at < documentsOf(context).policy.refresh_interval_s * MS_PER_SECOND;
 }
 
 /**
-Resolves `wait`, or `'timeout'` at `deadline`, whichever is first.
-*/
-async function until<T>(
-  services: ConnectorServices,
-  wait: Promise<T>,
-  deadline: number,
-): Promise<T | 'timeout'> {
-  let cancel = noop;
-  const timedOut = new Promise<'timeout'>((resolve) => {
-    cancel = services.schedule(
-      () => {
-        resolve('timeout');
-      },
-      Math.max(0, deadline - services.now()),
-    );
-  });
-  try {
-    return await Promise.race([wait, timedOut]);
-  } finally {
-    cancel();
-  }
-}
-
-function isFresh(services: ConnectorServices, at: number, intervalS: number): boolean {
-  return services.now() - at < intervalS * MS_PER_SECOND;
-}
-
-/**
-ACT-104: the commit a ref names; the configured one from the cache while it is fresh (ACT-108).
-*/
+ * ACT-104, ACT-108: the commit a ref names. A ref the call names is resolved
+ * every time (a SHA needs no request); the configured one comes from the
+ * last resolution while it is fresh, and so does its failure while there is
+ * a snapshot to answer from instead, which is recorded once per resolution.
+ */
 async function resolveFor(
   dependencies: IndexesDependencies,
   request: PrepareRequest,
+  hasSnapshot: boolean,
 ): Promise<Result<ResolvedReference, ActionError>> {
   const { context } = request;
-  const { policy, destination } = documentsOf(context);
+  const { destination } = documentsOf(context);
   const github = githubAccess(context, dependencies, context.signal);
   if (request.ref !== undefined) {
-    const spec = parseReference(request.ref) ?? { kind: 'default' };
-    return resolveReference(github, destination.repository, spec);
+    return resolveReference(github, destination.repository, request.ref);
   }
-  const cached = dependencies.state.target(context.support.target.id).resolution;
-  if (
-    cached?.commit !== undefined &&
-    isFresh(dependencies.services, cached.at, policy.refresh_interval_s)
-  ) {
-    return ok({ commit: cached.commit, ref: cached.ref ?? cached.commit });
+  const { id: targetId, name: targetName } = context.support.target;
+  const cached = dependencies.state.target(targetId).resolution;
+  if (cached !== undefined && isFresh(dependencies.services, cached.at, context)) {
+    if ('commit' in cached) {
+      return ok({ commit: cached.commit, ref: cached.ref });
+    }
+    if (hasSnapshot) {
+      return fail(new ActionError(cached.failure));
+    }
   }
-  const spec = parseReference(destination.ref) ?? { kind: 'default' };
-  const resolved = await resolveReference(github, destination.repository, spec);
-  dependencies.state.resolved(context.support.target.id, resolved);
+  const resolved = await resolveReference(github, destination.repository, destination.ref);
+  dependencies.state.resolved(targetId, resolved);
+  if (hasSnapshot && !resolved.ok) {
+    const { content } = request;
+    const reason = resolved.error.code;
+    dependencies.state.refused({ targetId, targetName, trigger: 'call', content, reason });
+  }
   return resolved;
 }
 
@@ -149,7 +135,21 @@ function buildRequestFor(
 }
 
 /**
-ACT-112: the snapshot's build time once it exists, waiting for its build if need be.
+A build of `key` that failed within the refresh interval, so it is not tried again yet.
+*/
+function recentFailure(
+  dependencies: IndexesDependencies,
+  context: Context,
+  key: string,
+): string | undefined {
+  const failed = dependencies.state.target(context.support.target.id).failed.get(key);
+  return failed !== undefined && isFresh(dependencies.services, failed.at, context)
+    ? failed.reason
+    : undefined;
+}
+
+/**
+ACT-112: the snapshot's build time once it exists, waiting for its build up to the deadline.
 */
 async function ensureSnapshot(
   dependencies: IndexesDependencies,
@@ -159,17 +159,16 @@ async function ensureSnapshot(
 ): Promise<Result<number, ActionError>> {
   const { context } = request;
   const label = context.support.target.name;
-  const failed = dependencies.state.target(context.support.target.id).failed.get(key);
-  const interval = documentsOf(context).policy.refresh_interval_s;
-  if (failed !== undefined && isFresh(dependencies.services, failed.at, interval)) {
-    return fail(notReady(label, 'failed', failed.reason));
+  const failure = recentFailure(dependencies, context, key);
+  if (failure !== undefined) {
+    return fail(notReady(label, 'failed', failure));
   }
   const status = await dependencies.sidecar.status(key, context.signal);
-  if (status.ok && status.value.state === 'ready') {
-    return ok(status.value.meta.created_at);
+  if (!status.ok) {
+    return fail(refusalError(status.error, label));
   }
-  if (!status.ok && status.error instanceof ActionError) {
-    return fail(status.error);
+  if (status.value.state === 'ready') {
+    return ok(status.value.meta.created_at);
   }
   const building = dependencies.builds.start(
     buildRequestFor(request, resolved, request.ref === undefined),
@@ -181,20 +180,39 @@ async function ensureSnapshot(
   return outcome.ok ? ok(outcome.meta.created_at) : fail(notReady(label, 'failed', outcome.reason));
 }
 
-function fromCurrent(
+function prepared(
   request: PrepareRequest,
-  current: CurrentSnapshot,
+  snapshot: Omit<CurrentSnapshot, 'fingerprint'>,
   isStale: boolean,
 ): Prepared {
   return {
-    key: current.key,
+    targetId: request.context.support.target.id,
+    key: snapshot.key,
     label: request.context.support.target.name,
     repository: documentsOf(request.context).destination.repository,
-    commit: current.commit,
-    ref: current.ref,
+    commit: snapshot.commit,
+    ref: snapshot.ref,
     stale: isStale,
-    indexedAt: current.indexedAt,
+    indexedAt: snapshot.indexedAt,
   };
+}
+
+/**
+ACT-108: the configured ref moved; its new commit builds in the background unless it just failed.
+*/
+function buildMoved(
+  dependencies: IndexesDependencies,
+  request: PrepareRequest,
+  resolved: ResolvedReference,
+  key: string,
+): void {
+  if (recentFailure(dependencies, request.context, key) !== undefined) {
+    return;
+  }
+  const moved = buildRequestFor(request, resolved, true);
+  background(dependencies.services, 'a build of a moved ref', () =>
+    dependencies.builds.start(moved),
+  );
 }
 
 async function prepare(
@@ -203,45 +221,33 @@ async function prepare(
 ): Promise<Result<Prepared, ActionError>> {
   const { context } = request;
   const documents = documentsOf(context);
-  const target = dependencies.state.target(context.support.target.id);
+  const targetId = context.support.target.id;
+  const target = dependencies.state.target(targetId);
   const fingerprint = extractionFingerprint(documents);
   const current =
     request.ref === undefined && target.current?.fingerprint === fingerprint
       ? target.current
       : undefined;
-  const resolved = await resolveFor(dependencies, request);
+  const resolved = await resolveFor(dependencies, request, current !== undefined);
   if (!resolved.ok) {
     // ACT-108: a failed resolution with a snapshot to answer from never fails the call.
-    return current === undefined ? resolved : ok(fromCurrent(request, current, false));
+    return current === undefined ? resolved : ok(prepared(request, current, false));
   }
-  if (current !== undefined && current.commit !== resolved.value.commit) {
-    void dependencies.builds.start(buildRequestFor(request, resolved.value, true));
-    return ok(fromCurrent(request, current, true));
+  const { commit, ref } = resolved.value;
+  const key = keyOf({ targetId, documents, commit });
+  if (current !== undefined && current.commit !== commit) {
+    buildMoved(dependencies, request, resolved.value, key);
+    return ok(prepared(request, current, true));
   }
-  const key = keyOf({
-    targetId: context.support.target.id,
-    documents,
-    commit: resolved.value.commit,
-  });
   const built = await ensureSnapshot(dependencies, request, resolved.value, key);
   if (!built.ok) {
     return built;
   }
-  const snapshot = {
-    key,
-    commit: resolved.value.commit,
-    ref: resolved.value.ref,
-    indexedAt: built.value,
-  };
+  const snapshot = { key, commit, ref, indexedAt: built.value };
   if (request.ref === undefined) {
     target.current = { ...snapshot, fingerprint };
   }
-  return ok({
-    ...snapshot,
-    label: context.support.target.name,
-    repository: documents.destination.repository,
-    stale: false,
-  });
+  return ok(prepared(request, snapshot, false));
 }
 
 export function createIndexes(dependencies: IndexesDependencies): Indexes {

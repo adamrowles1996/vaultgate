@@ -4,7 +4,8 @@
  * or on Rebuild index), fetched and pinned exactly as a call's are (ACT-50,
  * ACT-54 to ACT-56) and zeroed when the work ends; and the stored targets of
  * the connector, for reconciliation. The connector never reaches the vault,
- * the resolver or the store itself.
+ * the resolver or the store itself. A disabled target lends nothing: its
+ * credential is never used by a build nobody could call.
  */
 import { fail, ok } from '../result.ts';
 
@@ -27,6 +28,9 @@ export function connectorServices(context: EngineContext, kind: ConnectorKind): 
       const row = context.repo.findById(targetId);
       if (row?.connector !== kind) {
         return fail(new ActionError('unknown_target'));
+      }
+      if (!row.enabled) {
+        return fail(new ActionError('target_disabled'));
       }
       const target = validateTarget(row);
       if (target.state === 'invalid') {

@@ -64,7 +64,7 @@ async function attemptMany(
 
 export async function runConnectorMany(
   dependencies: Pick<RunDependencies, 'logger' | 'now' | 'schedule'>,
-  calls: readonly ConnectorCall[],
+  calls: readonly [ConnectorCall, ...ConnectorCall[]],
   scrub: Scrubber,
 ): Promise<Result<RunOutput, ActionError>> {
   const common = calls.map((call) => call.resolved.target.documents.common);
@@ -84,11 +84,7 @@ export async function runConnectorMany(
   const contexts = contextsOf(dependencies, calls, { signal: controller.signal, maxBytes, scrub });
   const startedAt = dependencies.now();
   try {
-    const [first] = calls;
-    const output =
-      first === undefined
-        ? fail(new ActionError('connector_fault', { reason: 'internal', message: 'no target' }))
-        : await Promise.race([attemptMany(first, contexts), timedOut]);
+    const output = await Promise.race([attemptMany(calls[0], contexts), timedOut]);
     return output.ok
       ? ok(assemble(output.value, scrub, maxBytes, dependencies.now() - startedAt))
       : output;

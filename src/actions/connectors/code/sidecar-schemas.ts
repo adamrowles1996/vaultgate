@@ -95,9 +95,13 @@ export const readSchema = z.looseObject({
 
 export type SidecarRead = z.output<typeof readSchema>;
 
+/**
+ * A protocol error: its code is one of the protocol's own, never free text,
+ * so nothing a sidecar says beyond the code reaches a result, a row or an
+ * audit event.
+ */
 export const errorSchema = z.looseObject({
-  error: z.string(),
-  detail: z.record(z.string(), z.unknown()).optional(),
+  error: z.string().regex(/^[a-z][a-z_]{0,63}$/u),
 });
 
 /**

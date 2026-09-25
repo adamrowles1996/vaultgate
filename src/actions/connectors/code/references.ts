@@ -72,26 +72,6 @@ export function parseReference(text: string | undefined): ReferenceSpec | undefi
 }
 
 /**
-How a ref reads on the page, in a result and in the audit trail.
-*/
-export function describeReference(spec: ReferenceSpec): string | undefined {
-  switch (spec.kind) {
-    case 'default': {
-      return undefined;
-    }
-    case 'name': {
-      return spec.name;
-    }
-    case 'commit': {
-      return spec.sha;
-    }
-    case 'pull': {
-      return `pr:${String(spec.number)}`;
-    }
-  }
-}
-
-/**
 Each path segment percent-encoded, the separators kept, for a GitHub API path.
 */
 export function encodePath(text: string): string {

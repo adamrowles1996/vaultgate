@@ -6,6 +6,7 @@
  * and the line for the audit trail (ACT-116).
  */
 import {
+  CONTENT_TYPES,
   type CodeCredential,
   type CodeDestination,
   normaliseContent,
@@ -52,8 +53,19 @@ export function selectedContent(
   return policy.content.includes(selection) ? [selection] : undefined;
 }
 
-function contentOf(operation: CodeOperation): ContentSelection | undefined {
+export function contentOf(operation: CodeOperation): ContentSelection | undefined {
   return 'content' in operation ? operation.content : undefined;
+}
+
+/**
+ACT-110: the types every one of several policies allows for a call's selection; empty when none is shared.
+*/
+export function sharedContent(
+  policies: readonly Pick<CodePolicy, 'content'>[],
+  selection: ContentSelection | undefined,
+): readonly ContentType[] {
+  const allowed = policies.map((policy) => selectedContent(policy, selection) ?? []);
+  return CONTENT_TYPES.filter((type) => allowed.every((types) => types.includes(type)));
 }
 
 function topKOf(operation: CodeOperation): number | undefined {
@@ -74,6 +86,22 @@ export function authorizeCode(request: CodeRequest, operation: CodeOperation): P
   const topK = topKOf(operation);
   return topK !== undefined && topK > policy.max_top_k
     ? { allowed: false, reason: 'top_k' }
+    : { allowed: true, operation: 'read' };
+}
+
+/**
+ACT-110: several repositories searched together need a content type every one of them allows.
+*/
+export function authorizeCodeMany(
+  requests: readonly CodeRequest[],
+  operation: CodeOperation,
+): PolicyDecision {
+  const shared = sharedContent(
+    requests.map((request) => request.policy),
+    contentOf(operation),
+  );
+  return shared.length === 0
+    ? { allowed: false, reason: 'content' }
     : { allowed: true, operation: 'read' };
 }
 

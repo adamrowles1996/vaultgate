@@ -128,7 +128,8 @@ function instructionsFor(dependencies: ServerDependencies, context: CallContext)
     return VAULT_INSTRUCTIONS;
   }
   const hasCode =
-    context.scopes.includes('actions:code') && dependencies.engine.connectors.includes('code');
+    context.scopes.includes('actions:code') &&
+    dependencies.engine.tools.some((tool) => tool.scope === 'actions:code');
   return hasCode ? ACTIONS_INSTRUCTIONS + CODE_INSTRUCTIONS : ACTIONS_INSTRUCTIONS;
 }
 

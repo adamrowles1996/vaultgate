@@ -144,10 +144,12 @@ function registerRepoTool(
   context: ActionsCallContext,
 ): void {
   const { repo } = tool;
-  const names =
-    repo.max === 1
-      ? targetNameSchema
-      : z.union([targetNameSchema, z.array(targetNameSchema).min(1).max(repo.max)]);
+  const list = z
+    .array(targetNameSchema)
+    .min(1)
+    .max(repo.max)
+    .refine((items) => new Set(items).size === items.length, 'must not repeat a connection');
+  const names = repo.max === 1 ? targetNameSchema : z.union([targetNameSchema, list]);
   const inputSchema = z.strictObject({
     repo: names.describe(repo.description),
     ...tool.inputSchema.shape,
@@ -162,10 +164,10 @@ function registerRepoTool(
       annotations: tool.annotations,
     },
     async (input, serverContext) => {
-      const targets = Array.isArray(input.repo) ? [...new Set(input.repo)] : [input.repo];
+      const targets = typeof input.repo === 'string' ? [input.repo] : input.repo;
       const outcome = await dependencies.engine.call(callerFor(context, serverContext), {
         tool: tool.name,
-        target: targets[0] ?? '',
+        target: targets.join(','),
         targets,
         arguments: input,
       });

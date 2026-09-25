@@ -7,7 +7,7 @@
  * further, so a misbehaving sidecar cannot make vaultgate buffer without end.
  */
 import { request as httpRequest, type IncomingMessage, type RequestOptions } from 'node:http';
-import { Readable } from 'node:stream';
+import { Readable, type Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
 export type LocalMethod = 'GET' | 'PUT' | 'POST' | 'DELETE';
@@ -35,12 +35,17 @@ export interface LocalResponse {
 export type LocalHttp = (request: LocalRequest) => Promise<LocalResponse>;
 
 /**
-`http.request`, injected so the client is tested without a socket.
+The part of `http.IncomingMessage` the client reads.
+*/
+export type LocalMessage = Pick<IncomingMessage, 'statusCode' | 'destroy'> & AsyncIterable<unknown>;
+
+/**
+`http.request`, injected so the client is tested without a socket; the request is a `Writable`.
 */
 export type LocalRequestFunction = (
   options: RequestOptions,
-  callback: (message: IncomingMessage) => void,
-) => ReturnType<typeof httpRequest>;
+  callback: (message: LocalMessage) => void,
+) => Writable;
 
 /**
 Where `url` points: a socket path, or a host and port.
@@ -64,7 +69,7 @@ export class LocalResponseTooLarge extends Error {
   }
 }
 
-async function readCapped(message: IncomingMessage, limit: number): Promise<Buffer> {
+async function readCapped(message: LocalMessage, limit: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let received = 0;
   for await (const chunk of message) {
@@ -79,7 +84,7 @@ async function readCapped(message: IncomingMessage, limit: number): Promise<Buff
   return Buffer.concat(chunks);
 }
 
-function send(outgoing: ReturnType<typeof httpRequest>, body: LocalRequest['body']): void {
+function send(outgoing: Writable, body: LocalRequest['body']): void {
   if (body === undefined || Buffer.isBuffer(body)) {
     outgoing.end(body);
     return;
@@ -101,10 +106,12 @@ async function respond(
   request: LocalRequestFunction,
   options: RequestOptions,
   body: LocalRequest['body'],
-): Promise<IncomingMessage> {
+): Promise<LocalMessage> {
   return new Promise((resolve, reject) => {
     const outgoing = request(options, resolve);
-    outgoing.once('error', reject);
+    // `on`, not `once`: a request may report a second error after the first,
+    // and an `error` event nobody listens to would end the process.
+    outgoing.on('error', reject);
     send(outgoing, body);
   });
 }

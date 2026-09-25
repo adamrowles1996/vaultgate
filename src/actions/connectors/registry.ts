@@ -44,11 +44,12 @@ export const CONNECTOR_LOADERS: Partial<Readonly<Record<ConnectorKind, Connector
     return createWinrmConnector({ allowAnyCommand: config.allowAnyCommand });
   },
   code: async (config) => {
+    // The configuration refuses the switch without the URL (13.14); this is the backstop.
+    if (config.codeUrl === undefined) {
+      throw new Error('VAULTGATE_ACTIONS_CODE_URL is required with the code connector');
+    }
     const { createCodeConnector } = await import('./code/index.ts');
-    return createCodeConnector({
-      url: config.codeUrl ?? '',
-      userAgent: `vaultgate/${VERSION}`,
-    });
+    return createCodeConnector({ url: config.codeUrl, userAgent: `vaultgate/${VERSION}` });
   },
 };
 

@@ -33,6 +33,10 @@ export interface ListingDependencies {
   readonly config: Pick<ActionsConfig, 'enabled' | 'connectors'>;
   readonly targets: Pick<TargetsRepo, 'listGranted'>;
   readonly connectors: ConnectorRegistry;
+  /**
+  ACT-115: false for a connector that found itself unable to serve; its targets are not listed.
+  */
+  readonly available: (kind: ConnectorKind) => boolean;
 }
 
 function codeListing(code: TargetCapabilities['code']): Partial<TargetListing> {
@@ -47,6 +51,18 @@ function codeListing(code: TargetCapabilities['code']): Partial<TargetListing> {
   };
 }
 
+/**
+The connector a listed row belongs to, when its switch is on and it can serve (ACT-67, ACT-115).
+*/
+function servingConnector(
+  dependencies: ListingDependencies,
+  kind: ConnectorKind,
+): ReturnType<ConnectorRegistry['get']> {
+  return dependencies.config.connectors[kind] && dependencies.available(kind)
+    ? dependencies.connectors.get(kind)
+    : undefined;
+}
+
 export function listTargets(
   dependencies: ListingDependencies,
   caller: { readonly clientId: string; readonly scopes: readonly string[] },
@@ -56,9 +72,7 @@ export function listTargets(
   }
   const listings: TargetListing[] = [];
   for (const row of dependencies.targets.listGranted(caller.clientId)) {
-    const connector = dependencies.config.connectors[row.connector]
-      ? dependencies.connectors.get(row.connector)
-      : undefined;
+    const connector = servingConnector(dependencies, row.connector);
     const target = validateTarget(row);
     if (connector === undefined || target.state === 'invalid' || !row.enabled) {
       continue;

@@ -3,27 +3,30 @@
  * over GitHub repositories through the sidecar. Loaded only when
  * `VAULTGATE_ACTIONS_ENABLE_CODE` is on (ACT-73). It is the one connector
  * that keeps state between calls, so the engine attaches its services once:
- * builds on save and on Rebuild index, deletion with the target, start-up
- * reconciliation and the health check of ACT-115.
+ * builds on save and on Rebuild index, deletion with the target, the health
+ * check and reconciliation whenever the sidecar is found reachable (ACT-109,
+ * ACT-115).
  */
 import { createLocalHttp, type LocalHttp } from '../../../net/local-http.ts';
 import { createPinnedHttpsFetch, type PinnedFetch } from '../../../net/pinned-https.ts';
 import { fail } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
 
-import { authorizeCode, describeCode } from './authorize.ts';
-import { createBuilds, keyOf } from './builds.ts';
+import { authorizeCode, authorizeCodeMany, describeCode } from './authorize.ts';
+import { createBuilds, keyOf, type BuildOutcome, type BuildRequest } from './builds.ts';
 import { type CodeControl, createControl } from './control.ts';
 import { createIndexes } from './indexes.ts';
 import { type CodeDocuments, extractionFingerprint, resetFingerprint } from './keys.ts';
+import { watchReachability } from './reachability.ts';
 import { runCode } from './run.ts';
 import { codeSchemas, normaliseContent } from './schemas.ts';
 import { SIDECAR_PROTOCOL } from './sidecar-schemas.ts';
 import { createSidecarClient, type SidecarClient } from './sidecar.ts';
 import { type CodeState, createCodeState } from './state.ts';
+import { background, withDeadline } from './timing.ts';
 import { CODE_TOOLS, type CodeOperation } from './tools.ts';
 
-import type { Connector, ConnectorControl, ConnectorServices } from '../connector.ts';
+import type { Connector, ConnectorControl, ConnectorServices, RunContext } from '../connector.ts';
 import type { CodeCredential, CodeDestination, CodePolicy } from './schemas.ts';
 
 export interface CodeConnectorOptions {
@@ -48,36 +51,43 @@ export type CodeConnector = Connector<
   readonly control: () => CodeControl | undefined;
 };
 
+type Context = RunContext<CodeDestination, CodeCredential, CodePolicy>;
+
 const HEALTH_TIMEOUT_MS = 5000;
+const SIDECAR_TIMEOUT_MS = 10_000;
 
 /**
 What one attached connector holds between calls.
 */
 interface Attached {
   readonly control: CodeControl;
-  readonly state: CodeState;
   readonly run: (
-    contexts: Parameters<typeof runCode>[1],
+    contexts: readonly [Context, ...Context[]],
     operation: CodeOperation,
   ) => ReturnType<typeof runCode>;
-  isAvailable: boolean;
+  readonly isAvailable: () => boolean;
+}
+
+interface Parts {
+  readonly sidecar: SidecarClient;
+  readonly services: ConnectorServices;
+  readonly state: CodeState;
 }
 
 /**
- * ACT-115: the sidecar's versions logged at start-up, then ACT-109's
- * reconciliation; false for a sidecar whose protocol this build cannot
- * speak, which turns the code tools off. A sidecar that does not answer yet
- * is not incompatible: calls answer `index_unavailable` until it does.
+ * ACT-115: the sidecar's versions logged, then ACT-109's reconciliation;
+ * false for a sidecar whose protocol this build cannot speak, which turns
+ * the code tools off. A sidecar that does not answer is not incompatible:
+ * calls answer `index_unavailable` until it does, and then it is checked.
  */
-async function isCompatible(
-  sidecar: SidecarClient,
-  services: ConnectorServices,
-  control: CodeControl,
-): Promise<boolean> {
-  const health = await sidecar.health(AbortSignal.timeout(HEALTH_TIMEOUT_MS));
+async function checkSidecar(parts: Parts, control: CodeControl): Promise<boolean | undefined> {
+  const { services } = parts;
+  const health = await withDeadline(services, HEALTH_TIMEOUT_MS, (signal) =>
+    parts.sidecar.health(signal),
+  );
   if (!health.ok) {
     services.logger.warn({ reason: health.error.code }, 'code sidecar not answering yet');
-    return true;
+    return undefined;
   }
   const { protocol, semble, model, model_revision: revision } = health.value;
   if (protocol !== SIDECAR_PROTOCOL) {
@@ -92,57 +102,140 @@ async function isCompatible(
   return true;
 }
 
+/**
+Every build's end: recorded, and a snapshot of a target deleted while it built deleted too.
+*/
+function buildFinished(
+  parts: Parts,
+  request: BuildRequest,
+  outcome: BuildOutcome,
+  ms: number,
+): void {
+  const { services, state, sidecar } = parts;
+  state.finished(request, outcome, ms);
+  if (!outcome.ok || services.targets().some((target) => target.id === request.targetId)) {
+    return;
+  }
+
+  state.drop(request.targetId);
+  background(services, 'deleting a snapshot of a deleted target', () =>
+    withDeadline(services, SIDECAR_TIMEOUT_MS, (signal) =>
+      sidecar.deleteSnapshot(keyOf(request), signal),
+    ),
+  );
+}
+
+function resetOf(documents: unknown): string | undefined {
+  return documents === undefined ? undefined : resetFingerprint(documents as CodeDocuments);
+}
+
+/**
+ACT-108: a save builds an enabled target; a revision that changed the snapshots' inputs deletes them first.
+*/
+function saved(parts: Parts, control: CodeControl, targetId: string, previous: unknown): void {
+  const stored = parts.services.targets().find((target) => target.id === targetId);
+  const isReset = previous !== undefined && resetOf(previous) !== resetOf(stored?.documents);
+  if (stored?.enabled === true) {
+    background(parts.services, 'a build on save', () => control.refresh(targetId, 'save', isReset));
+  } else if (isReset) {
+    background(parts.services, 'deleting the snapshots of a changed target', () =>
+      control.forgetTarget(targetId),
+    );
+  }
+}
+
+/**
+The single-flight health check of ACT-115, run at start-up and whenever the sidecar is found again.
+*/
+function createCheck(
+  parts: Parts,
+  control: CodeControl,
+): {
+  readonly check: () => Promise<void>;
+  readonly isAvailable: () => boolean;
+} {
+  let isAvailable = true;
+  let checking: Promise<void> | undefined;
+  return {
+    check: () => {
+      checking ??= (async () => {
+        try {
+          isAvailable = (await checkSidecar(parts, control)) ?? isAvailable;
+        } finally {
+          checking = undefined;
+        }
+      })();
+      return checking;
+    },
+    isAvailable: () => isAvailable,
+  };
+}
+
 function attach(
   options: CodeConnectorOptions,
-  sidecar: SidecarClient,
+  raw: SidecarClient,
   fetch: PinnedFetch,
   services: ConnectorServices,
-): Attached {
+): { readonly attached: Attached; readonly control: ConnectorControl } {
+  const watched = watchReachability(raw);
+  const sidecar = watched.client;
   const state = createCodeState({
     services,
     fingerprintOf: (request) => extractionFingerprint(request.documents),
     keyOf,
   });
+  const parts: Parts = { sidecar, services, state };
   const builds = createBuilds({
     sidecar,
     fetch,
     services,
     userAgent: options.userAgent,
-    finished: (request, outcome, durationMs) => {
-      state.finished(request, outcome, durationMs);
+    finished: (request, outcome, ms) => {
+      buildFinished(parts, request, outcome, ms);
     },
   });
   const dependencies = { sidecar, fetch, services, userAgent: options.userAgent, builds, state };
+  const control = createControl(dependencies);
   const indexes = createIndexes(dependencies);
+  const health = createCheck(parts, control);
+  watched.onReachable(() => {
+    background(services, 'the sidecar check', health.check);
+  });
+  background(services, 'the sidecar check', health.check);
   return {
-    control: createControl(dependencies),
-    state,
-    run: (contexts, operation) =>
-      runCode({ sidecar, indexes, now: services.now }, contexts, operation),
-    isAvailable: true,
+    attached: {
+      control,
+      run: (contexts, operation) =>
+        runCode({ sidecar, indexes, clock: services }, contexts, operation),
+      isAvailable: health.isAvailable,
+    },
+    control: {
+      saved(targetId, previous) {
+        saved(parts, control, targetId, previous);
+      },
+      removed(targetId) {
+        background(services, 'deleting the snapshots of a deleted target', () =>
+          control.forgetTarget(targetId),
+        );
+      },
+      available: health.isAvailable,
+    },
   };
 }
 
-/**
-ACT-108: a revision that changes what the snapshots were built from deletes them first.
-*/
-function isReset(services: ConnectorServices, targetId: string, previous: unknown): boolean {
-  const current = services.targets().find((target) => target.id === targetId)?.documents;
-  return (
-    previous !== undefined &&
-    current !== undefined &&
-    resetFingerprint(previous as CodeDocuments) !== resetFingerprint(current as CodeDocuments)
-  );
-}
-
 export function createCodeConnector(options: CodeConnectorOptions): CodeConnector {
-  const sidecar = createSidecarClient(options.http ?? createLocalHttp(options.url));
+  const raw = createSidecarClient(options.http ?? createLocalHttp(options.url));
   const fetch = options.fetch ?? createPinnedHttpsFetch();
   let attached: Attached | undefined;
-  const runMany: CodeConnector['runMany'] = async (contexts, operation) =>
-    attached?.isAvailable === true
-      ? attached.run(contexts, operation)
-      : fail(new ActionError('index_unavailable'));
+  const runMany: CodeConnector['runMany'] = async (contexts, operation) => {
+    const [first, ...rest] = contexts;
+    if (attached?.isAvailable() !== true) {
+      return fail(new ActionError('index_unavailable'));
+    }
+    return first === undefined
+      ? fail(new ActionError('connector_fault', { reason: 'internal', message: 'no repo' }))
+      : attached.run([first, ...rest], operation);
+  };
   return {
     ...codeSchemas,
     tools: CODE_TOOLS,
@@ -156,24 +249,14 @@ export function createCodeConnector(options: CodeConnectorOptions): CodeConnecto
       },
     }),
     authorize: authorizeCode,
+    authorizeMany: authorizeCodeMany,
     describe: describeCode,
     run: async (context, operation) => runMany([context], operation),
     runMany,
     attach(services): ConnectorControl {
-      const current = attach(options, sidecar, fetch, services);
-      attached = current;
-      void (async () => {
-        current.isAvailable = await isCompatible(sidecar, services, current.control);
-      })();
-      return {
-        saved(targetId, previous) {
-          void current.control.refresh(targetId, 'save', isReset(services, targetId, previous));
-        },
-        removed(targetId) {
-          void current.control.forgetTarget(targetId);
-        },
-        available: () => current.isAvailable,
-      };
+      const made = attach(options, raw, fetch, services);
+      attached = made.attached;
+      return made.control;
     },
     control: () => attached?.control,
   };

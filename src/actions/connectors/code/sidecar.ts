@@ -1,10 +1,12 @@
 /**
  * The client of the code sidecar (ACT-113): one method per protocol
- * operation, every response validated by `./sidecar-schemas.ts`. An
- * unreachable sidecar is `index_unavailable`; an answer out of shape is a
- * `connector_fault`; the protocol's own error codes are handed back for the
- * snapshot layer to act on (`snapshot_missing` means "build it").
+ * operation, every response validated by `./sidecar-schemas.ts`, and never
+ * a throw. An unreachable sidecar is `index_unavailable`, the caller's own
+ * abort `timeout`, an answer out of shape a `connector_fault`; the protocol's
+ * own error codes come back as a `SidecarRefusal` for the snapshot layer to
+ * act on (`snapshot_missing` means "build it").
  */
+import { LocalResponseTooLarge } from '../../../net/local-http.ts';
 import { fail, ok, type Result } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
 
@@ -30,17 +32,15 @@ import type { LocalHttp, LocalMethod, LocalResponse } from '../../../net/local-h
 import type { z } from 'zod';
 
 /**
-A protocol error the sidecar answered with: its code and its detail.
+A protocol error the sidecar answered with, by its code.
 */
 export class SidecarRefusal extends Error {
   readonly code: string;
-  readonly detail: Readonly<Record<string, unknown>>;
 
-  constructor(code: string, detail: Readonly<Record<string, unknown>> = {}) {
+  constructor(code: string) {
     super(`the code sidecar refused the request: ${code}`);
     this.name = 'SidecarRefusal';
     this.code = code;
-    this.detail = detail;
   }
 }
 
@@ -105,12 +105,6 @@ interface Exchange {
   readonly json?: unknown;
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: AsyncIterable<Uint8Array>;
-  readonly accept?: readonly number[];
-}
-
-interface Answer<T> {
-  readonly status: number;
-  readonly value: T;
 }
 
 function parseJson(body: Buffer): unknown {
@@ -132,60 +126,60 @@ export function encodeBuildSpec(spec: BuildSpec): string {
   return Buffer.from(JSON.stringify(spec), 'utf8').toString('base64url');
 }
 
-/**
-The response, or `undefined` when the sidecar could not be reached; the caller's own abort is thrown.
-*/
-async function send(http: LocalHttp, request: Exchange): Promise<LocalResponse | undefined> {
+async function send(
+  http: LocalHttp,
+  request: Exchange,
+): Promise<Result<LocalResponse, ActionError>> {
   const isJson = request.json !== undefined;
   const payload = isJson ? Buffer.from(JSON.stringify(request.json), 'utf8') : request.body;
   try {
-    return await http({
-      method: request.method,
-      path: request.path,
-      headers: isJson
-        ? { 'content-type': 'application/json', ...request.headers }
-        : { ...request.headers },
-      ...(payload !== undefined && { body: payload }),
-      signal: request.signal,
-      maxResponseBytes: MAX_RESPONSE_BYTES,
-    });
+    return ok(
+      await http({
+        method: request.method,
+        path: request.path,
+        headers: isJson
+          ? { 'content-type': 'application/json', ...request.headers }
+          : { ...request.headers },
+        ...(payload !== undefined && { body: payload }),
+        signal: request.signal,
+        maxResponseBytes: MAX_RESPONSE_BYTES,
+      }),
+    );
   } catch (error) {
     if (request.signal.aborted) {
-      throw error;
+      return fail(new ActionError('timeout'));
     }
-    return undefined;
+    return fail(
+      error instanceof LocalResponseTooLarge
+        ? fault('the answer is too large')
+        : new ActionError('index_unavailable'),
+    );
   }
 }
 
+/**
+A `200` as `schema` has it; any other status is the protocol error it carries.
+*/
 function interpret<T>(
   response: LocalResponse,
   request: Exchange,
   schema: z.ZodType<T>,
-): SidecarOutcome<Answer<T>> {
+): SidecarOutcome<T> {
   const body = parseJson(response.body);
-  if (!(request.accept ?? [200]).includes(response.status)) {
+  if (response.status !== 200) {
     const refusal = errorSchema.safeParse(body);
     return fail(
       refusal.success
-        ? new SidecarRefusal(refusal.data.error, refusal.data.detail)
+        ? new SidecarRefusal(refusal.data.error)
         : fault(`unexpected status ${String(response.status)}`),
     );
   }
   const parsed = schema.safeParse(body);
   return parsed.success
-    ? ok({ status: response.status, value: parsed.data })
-    : fail(fault(`${request.method} ${request.path} answered out of shape`));
-}
-
-async function exchange<T>(
-  http: LocalHttp,
-  request: Exchange,
-  schema: z.ZodType<T>,
-): Promise<SidecarOutcome<Answer<T>>> {
-  const response = await send(http, request);
-  return response === undefined
-    ? fail(new ActionError('index_unavailable'))
-    : interpret(response, request, schema);
+    ? ok(parsed.data)
+    : fail(
+        fault(`${request.method} ${request.path.split('/', 3).join('/')} answered out of shape`),
+      );
 }
 
 async function value<T>(
@@ -193,8 +187,8 @@ async function value<T>(
   request: Exchange,
   schema: z.ZodType<T>,
 ): Promise<SidecarOutcome<T>> {
-  const answered = await exchange(http, request, schema);
-  return answered.ok ? ok(answered.value.value) : answered;
+  const sent = await send(http, request);
+  return sent.ok ? interpret(sent.value, request, schema) : sent;
 }
 
 function snapshotPath(key: string): string {
@@ -206,20 +200,21 @@ async function status(
   key: string,
   signal: AbortSignal,
 ): Promise<SidecarOutcome<SnapshotState>> {
-  const request: Exchange = { method: 'GET', path: snapshotPath(key), signal, accept: [200, 202] };
-  const answered = await exchange(http, request, snapshotMetaSchema.or(buildingSchema));
-  if (!answered.ok) {
-    const isMissing =
-      answered.error instanceof SidecarRefusal && answered.error.code === 'snapshot_missing';
-    return isMissing ? ok({ state: 'missing' }) : answered;
+  const request: Exchange = { method: 'GET', path: snapshotPath(key), signal };
+  const sent = await send(http, request);
+  if (!sent.ok) {
+    return sent;
   }
-  if (answered.value.status === BUILDING_STATUS) {
-    return ok({ state: 'building' });
+  if (sent.value.status === BUILDING_STATUS) {
+    const building = interpret({ ...sent.value, status: 200 }, request, buildingSchema);
+    return building.ok ? ok({ state: 'building' }) : building;
   }
-  const meta = snapshotMetaSchema.safeParse(answered.value.value);
-  return meta.success
-    ? ok({ state: 'ready', meta: meta.data })
-    : fail(fault('a snapshot answer out of shape'));
+  const meta = interpret(sent.value, request, snapshotMetaSchema);
+  if (meta.ok) {
+    return ok({ state: 'ready', meta: meta.value });
+  }
+  const isMissing = meta.error instanceof SidecarRefusal && meta.error.code === 'snapshot_missing';
+  return isMissing ? ok({ state: 'missing' }) : meta;
 }
 
 async function deleted(

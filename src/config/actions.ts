@@ -63,7 +63,8 @@ export function cdpUrlProblem(text: string): string | undefined {
  * Why a code sidecar URL is refused (ACT-113), or `undefined` when it is
  * acceptable: `unix:` and an absolute socket path, or an `http://` URL on an
  * address that is not public, since the sidecar is reached on an internal
- * network or a local socket, never across the internet.
+ * network or a local socket, never across the internet. The URL names the
+ * sidecar only: the protocol's paths are fixed, so a path would be ignored.
  */
 export function codeUrlProblem(text: string): string | undefined {
   if (text.startsWith('unix:')) {
@@ -72,6 +73,10 @@ export function codeUrlProblem(text: string): string | undefined {
       ? undefined
       : 'a unix: URL must name an absolute socket path';
   }
+  return httpSidecarProblem(text);
+}
+
+function httpSidecarProblem(text: string): string | undefined {
   let url: URL;
   try {
     url = new URL(text);
@@ -80,6 +85,9 @@ export function codeUrlProblem(text: string): string | undefined {
   }
   if (url.protocol !== 'http:' || url.username !== '' || url.password !== '') {
     return 'must be an http:// URL or unix: and a socket path';
+  }
+  if (url.pathname !== '/' || url.search !== '' || url.hash !== '') {
+    return 'must name the sidecar itself, with no path, query or fragment';
   }
   return classifyAddress(literalHost(url.hostname)) === 'public'
     ? 'must not be a public address; the sidecar is reached on an internal network'
