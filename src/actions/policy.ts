@@ -25,7 +25,11 @@ export type PolicyReason =
   | 'command_metacharacter'
   | 'command_size'
   | 'origin'
-  | 'element';
+  | 'element'
+  | 'content'
+  | 'ref'
+  | 'top_k'
+  | 'read';
 
 /**
 ACT-39, exactly.

@@ -7,15 +7,16 @@
  * it for the duration of `run` only (ACT-50). Output is raw: the engine
  * scrubs it (ACT-51) and cuts it at the cap (ACT-52).
  */
+import type { OmittedText } from './operation-summary.ts';
 import type { ConnectorKind } from '../../config/actions.ts';
 import type { Logger } from '../../logger.ts';
 import type { OutputSchema, ToolAnnotations } from '../../mcp/tools/definition.ts';
 import type { Result } from '../../result.ts';
 import type { ActionScope } from '../../scopes/registry.ts';
+import type { ActionsAuditSink } from '../audit.ts';
 import type { ActionError } from '../errors.ts';
 import type { CommonPolicy, OperationKind, PolicyDecision } from '../policy.ts';
 import type { InjectedValues } from '../scrub.ts';
-import type { OmittedText } from './operation-summary.ts';
 import type { z } from 'zod';
 
 /**
@@ -113,6 +114,19 @@ export type OperationSchema<Operation> = z.ZodObject<z.ZodRawShape, z.core.$stri
   z.ZodType<Operation>;
 
 /**
+ * ACT-110: a tool that names its target in `repo` rather than `target`, and
+ * may name up to `max` of them at once; the engine resolves each in the
+ * ACT-16 order and records a row for each. `singleOnly` lists the arguments
+ * that may be given with one target only. Only a read-only tool may take more
+ * than one target, so no confirmation is ever needed for such a call.
+ */
+export interface RepoArgument {
+  readonly max: number;
+  readonly description: string;
+  readonly singleOnly: readonly string[];
+}
+
+/**
  * One MCP tool a connector serves (spec §13.6): the name and scope the gate
  * checks, the LLM-facing description of ACT-17, the annotations of the
  * 13.6.1 table (ACT-18), the operation arguments and the strict result shape
@@ -133,6 +147,10 @@ export interface ConnectorTool<Operation> {
   What the engine returns for the tool, strict; never a place for a credential.
   */
   readonly outputSchema: OutputSchema;
+  /**
+  Present when the tool names its targets in `repo` (the `code` tools) instead of `target`.
+  */
+  readonly repo?: RepoArgument;
 }
 
 export interface OperationGrant {
@@ -147,6 +165,15 @@ export interface TargetCapabilities {
   readonly operations: readonly OperationGrant[];
   readonly engine?: 'mssql' | 'postgres';
   readonly unrestricted?: boolean;
+  /**
+  ACT-112: what an agent needs to know about a `code` target; never the token field.
+  */
+  readonly code?: {
+    readonly repository: string;
+    readonly ref: string | undefined;
+    readonly content: readonly string[];
+    readonly read: boolean;
+  };
 }
 
 export interface OutputLimit {
@@ -259,6 +286,62 @@ export interface ConnectorOutput {
   readonly bytes?: number;
 }
 
+/**
+ * A target's documents, injected values and pinned endpoints lent to a
+ * connector outside any call, for the work of ACT-108 that a save or the
+ * operator starts; disposed as soon as the work ends.
+ */
+export type TargetAccess = Omit<
+  RunContext<unknown, unknown, unknown>,
+  'tool' | 'signal' | 'outputLimit'
+>;
+
+/**
+What the engine lends a stateful connector (`code`) once, when it is constructed.
+*/
+export interface ConnectorServices {
+  readonly logger: Logger;
+  readonly now: () => number;
+  readonly schedule: (callback: () => void, delayMs: number) => () => void;
+  readonly audit: ActionsAuditSink;
+  /**
+  ACT-108: runs `work` with the target's credential and pinned endpoints; a failure to get them is the error.
+  */
+  withTarget<T>(
+    targetId: string,
+    work: (access: TargetAccess) => Promise<T>,
+  ): Promise<Result<T, ActionError>>;
+  /**
+  ACT-109: the ids and revisions of every stored target of the connector.
+  */
+  targets(): readonly StoredTarget[];
+}
+
+export interface StoredTarget {
+  readonly id: string;
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly documents: TargetDocuments<unknown, unknown, unknown> | undefined;
+}
+
+/**
+What a stateful connector answers to the engine, the targets service and the pages.
+*/
+export interface ConnectorControl {
+  /**
+  ACT-108: an enabled target was created, enabled or changed; `previous` holds its documents before a change.
+  */
+  saved(targetId: string, previous: TargetDocuments<unknown, unknown, unknown> | undefined): void;
+  /**
+  ACT-109: a target is about to be deleted.
+  */
+  removed(targetId: string): void;
+  /**
+  ACT-115: false once the connector found itself unable to serve (an incompatible sidecar); its tools go.
+  */
+  available(): boolean;
+}
+
 export interface Connector<Destination, Credential, Policy, Operation> extends ConnectorSchemas<
   Destination,
   Credential,
@@ -286,6 +369,17 @@ export interface Connector<Destination, Credential, Policy, Operation> extends C
     context: RunContext<Destination, Credential, Policy>,
     operation: Operation,
   ): Promise<Result<ConnectorOutput, ActionError>>;
+  /**
+  ACT-110: one operation over several targets at once, for a tool with a `repo` argument.
+  */
+  runMany?(
+    contexts: readonly RunContext<Destination, Credential, Policy>[],
+    operation: Operation,
+  ): Promise<Result<ConnectorOutput, ActionError>>;
+  /**
+  A connector that keeps state between calls is given the engine's services once.
+  */
+  attach?(services: ConnectorServices): ConnectorControl;
 }
 
 export type AnyConnectorSchemas = ConnectorSchemas<unknown, unknown, unknown>;

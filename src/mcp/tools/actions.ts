@@ -17,7 +17,7 @@ import { LIST_TARGETS_TOOL } from '../scopes.ts';
 import { type ActionsCallContext, callerFor, toActionResult } from './actions-call.ts';
 import { READ_ONLY, type ToolAnnotations } from './definition.ts';
 
-import type { ConnectorTool } from '../../actions/connectors/connector.ts';
+import type { ConnectorTool, RepoArgument } from '../../actions/connectors/connector.ts';
 import type { ActionsEngine } from '../../actions/engine.ts';
 import type { OperationKind } from '../../actions/policy.ts';
 import type { AuditSink } from '../../audit/event.ts';
@@ -45,7 +45,9 @@ const unrestrictedSchema = z.literal(true).describe('The target accepts any comm
 ACT-19: no place for a destination, an origin, a credential field name or a policy pattern.
 */
 const targetListingSchema = z.strictObject({
-  name: z.string().describe('Pass this as `target` to the other actions tools.'),
+  name: z
+    .string()
+    .describe('Pass this as `target` to the other actions tools, or as `repo` to the code tools.'),
   description: z
     .string()
     .describe('Operator prose: what the destination is and what to use it for.'),
@@ -56,6 +58,16 @@ const targetListingSchema = z.strictObject({
     .describe('True when every non-read call asks a human for confirmation first.'),
   engine: z.enum(['mssql', 'postgres']).optional(),
   unrestricted: unrestrictedSchema.optional(),
+  repository: z.string().describe('A code target: the GitHub repository, owner/name.').optional(),
+  ref: z
+    .string()
+    .describe('A code target: the branch, tag or SHA it follows; absent for the default branch.')
+    .optional(),
+  content: z
+    .array(z.string())
+    .describe('A code target: the content types it can search (code, docs, config).')
+    .optional(),
+  read: z.boolean().describe('A code target: whether code_read is allowed.').optional(),
 });
 
 export const listTargetsOutput = z.strictObject({ targets: z.array(targetListingSchema) });
@@ -71,9 +83,10 @@ export const LIST_TARGETS_DESCRIPTION =
   'destination is and what to use it for, its connector, the operations the target policy and ' +
   'your scopes allow (read, write, shell, act), whether non-read calls will ask a human for ' +
   'confirmation (confirm_writes), the database engine of a sql target and whether a shell ' +
-  'target accepts any command (unrestricted). Returns no destination address, no credential ' +
-  'and no policy pattern; never a secret. Call it before any other actions tool and pass a ' +
-  'name it returned as target.';
+  'target accepts any command (unrestricted), and for a code target its repository, ref, content ' +
+  'types and whether code_read is allowed. Returns no destination address, no credential and no ' +
+  'policy pattern; never a secret. Call it before any other actions tool and pass a name it ' +
+  'returned as target (or as repo for the code tools).';
 
 const TARGET_ARGUMENT = targetNameSchema.describe(
   'The target name, exactly as actions_list_targets returned it.',
@@ -120,12 +133,57 @@ function registerListTargets(
   );
 }
 
+/**
+ * ACT-110: a tool that names its targets in `repo` takes one name, or a list
+ * of up to `repo.max`, and refuses the single-target arguments with a list.
+ */
+function registerRepoTool(
+  server: McpServer,
+  tool: ConnectorTool<unknown> & { readonly repo: RepoArgument },
+  dependencies: ActionsToolDependencies,
+  context: ActionsCallContext,
+): void {
+  const { repo } = tool;
+  const names =
+    repo.max === 1
+      ? targetNameSchema
+      : z.union([targetNameSchema, z.array(targetNameSchema).min(1).max(repo.max)]);
+  const inputSchema = z.strictObject({
+    repo: names.describe(repo.description),
+    ...tool.inputSchema.shape,
+  });
+  server.registerTool(
+    tool.name,
+    {
+      title: tool.annotations.title,
+      description: tool.description,
+      inputSchema,
+      outputSchema: tool.outputSchema,
+      annotations: tool.annotations,
+    },
+    async (input, serverContext) => {
+      const targets = Array.isArray(input.repo) ? [...new Set(input.repo)] : [input.repo];
+      const outcome = await dependencies.engine.call(callerFor(context, serverContext), {
+        tool: tool.name,
+        target: targets[0] ?? '',
+        targets,
+        arguments: input,
+      });
+      return toActionResult(outcome);
+    },
+  );
+}
+
 function registerConnectorTool(
   server: McpServer,
   tool: ConnectorTool<unknown>,
   dependencies: ActionsToolDependencies,
   context: ActionsCallContext,
 ): void {
+  if (tool.repo !== undefined) {
+    registerRepoTool(server, { ...tool, repo: tool.repo }, dependencies, context);
+    return;
+  }
   const inputSchema = z.strictObject({ target: TARGET_ARGUMENT, ...tool.inputSchema.shape });
   server.registerTool(
     tool.name,

@@ -67,8 +67,16 @@ describe('loadConfig', () => {
       bitwarden: { server: undefined, bin: 'bw', clientId: 'user.abc', syncIntervalMs: 900_000 },
       actions: {
         enabled: false,
-        connectors: { http: false, sql: false, ssh: false, winrm: false, browser: false },
+        connectors: {
+          http: false,
+          sql: false,
+          ssh: false,
+          winrm: false,
+          browser: false,
+          code: false,
+        },
         browserCdpUrl: undefined,
+        codeUrl: undefined,
         allowAnyCommand: false,
       },
       secrets: {
@@ -144,8 +152,16 @@ describe('loadConfig', () => {
       },
       actions: {
         enabled: false,
-        connectors: { http: false, sql: false, ssh: false, winrm: false, browser: false },
+        connectors: {
+          http: false,
+          sql: false,
+          ssh: false,
+          winrm: false,
+          browser: false,
+          code: false,
+        },
         browserCdpUrl: undefined,
+        codeUrl: undefined,
         allowAnyCommand: false,
       },
       secrets: {

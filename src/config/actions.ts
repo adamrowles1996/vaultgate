@@ -7,7 +7,7 @@ import { classifyAddress } from '../net/ip-ranges.ts';
  * master switch is on, and each connector has its own switch; the scope
  * registry and the engine both read this object, never the environment.
  */
-export const CONNECTOR_KINDS = ['http', 'sql', 'ssh', 'winrm', 'browser'] as const;
+export const CONNECTOR_KINDS = ['http', 'sql', 'ssh', 'winrm', 'browser', 'code'] as const;
 
 export type ConnectorKind = (typeof CONNECTOR_KINDS)[number];
 
@@ -18,6 +18,10 @@ export interface ActionsConfig {
   `ws://` or `wss://` DevTools endpoint of the Chromium sidecar; required with the browser connector.
   */
   readonly browserCdpUrl: string | undefined;
+  /**
+  ACT-113: `http://` URL or `unix:` socket path of the code sidecar; required with the code connector.
+  */
+  readonly codeUrl: string | undefined;
   /**
   Lets `ssh`/`winrm` targets be saved with `any_command: true` (ACT-88).
   */
@@ -30,6 +34,7 @@ const CONNECTOR_VARIABLES: Readonly<Record<ConnectorKind, string>> = {
   ssh: 'VAULTGATE_ACTIONS_ENABLE_SSH',
   winrm: 'VAULTGATE_ACTIONS_ENABLE_WINRM',
   browser: 'VAULTGATE_ACTIONS_ENABLE_BROWSER',
+  code: 'VAULTGATE_ACTIONS_ENABLE_CODE',
 };
 
 function literalHost(hostname: string): string {
@@ -53,6 +58,45 @@ export function cdpUrlProblem(text: string): string | undefined {
     ? 'must not be a public address; the sidecar is reached on an internal network'
     : undefined;
 }
+
+/**
+ * Why a code sidecar URL is refused (ACT-113), or `undefined` when it is
+ * acceptable: `unix:` and an absolute socket path, or an `http://` URL on an
+ * address that is not public, since the sidecar is reached on an internal
+ * network or a local socket, never across the internet.
+ */
+export function codeUrlProblem(text: string): string | undefined {
+  if (text.startsWith('unix:')) {
+    const path = text.slice('unix:'.length);
+    return path.startsWith('/') && !path.includes('\0')
+      ? undefined
+      : 'a unix: URL must name an absolute socket path';
+  }
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    return 'must be an http:// URL or unix: and a socket path';
+  }
+  if (url.protocol !== 'http:' || url.username !== '' || url.password !== '') {
+    return 'must be an http:// URL or unix: and a socket path';
+  }
+  return classifyAddress(literalHost(url.hostname)) === 'public'
+    ? 'must not be a public address; the sidecar is reached on an internal network'
+    : undefined;
+}
+
+export const codeUrlSchema: z.ZodType<string | undefined, string | undefined> = z
+  .string()
+  .transform((text, context) => {
+    const problem = codeUrlProblem(text);
+    if (problem === undefined) {
+      return text;
+    }
+    context.addIssue({ code: 'custom', message: problem });
+    return z.NEVER;
+  })
+  .optional();
 
 export const cdpUrlSchema: z.ZodType<string | undefined, string | undefined> = z
   .string()

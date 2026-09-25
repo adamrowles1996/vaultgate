@@ -6,6 +6,7 @@
  */
 import { validateTarget } from './targets-schemas.ts';
 
+import type { TargetCapabilities } from './connectors/connector.ts';
 import type { ConnectorRegistry } from './connectors/registry.ts';
 import type { OperationKind } from './policy.ts';
 import type { TargetsRepo } from './targets-repo.ts';
@@ -19,12 +20,31 @@ export interface TargetListing {
   readonly confirm_writes: boolean;
   readonly engine?: 'mssql' | 'postgres';
   readonly unrestricted?: true;
+  /**
+  ACT-112: a code target's repository, configured ref, content types and whether code_read is allowed.
+  */
+  readonly repository?: string;
+  readonly ref?: string;
+  readonly content?: readonly string[];
+  readonly read?: boolean;
 }
 
 export interface ListingDependencies {
   readonly config: Pick<ActionsConfig, 'enabled' | 'connectors'>;
   readonly targets: Pick<TargetsRepo, 'listGranted'>;
   readonly connectors: ConnectorRegistry;
+}
+
+function codeListing(code: TargetCapabilities['code']): Partial<TargetListing> {
+  if (code === undefined) {
+    return {};
+  }
+  return {
+    repository: code.repository,
+    ...(code.ref !== undefined && { ref: code.ref }),
+    content: code.content,
+    read: code.read,
+  };
 }
 
 export function listTargets(
@@ -65,6 +85,7 @@ export function listTargets(
       confirm_writes: target.documents.common.confirm_writes,
       ...(capabilities.engine !== undefined && { engine: capabilities.engine }),
       ...(capabilities.unrestricted === true && { unrestricted: true }),
+      ...codeListing(capabilities.code),
     });
   }
   return listings;

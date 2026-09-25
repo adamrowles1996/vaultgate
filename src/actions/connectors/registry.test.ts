@@ -31,23 +31,30 @@ describe('connector registry', () => {
     expect(loaded).toStrictEqual(['http']);
   });
 
-  it('ACT-73 ACT-72 loads the http, sql, ssh and winrm runtimes in production when their switches are on, and no other connector before its milestone', async () => {
-    expect(Object.keys(CONNECTOR_LOADERS)).toStrictEqual(['http', 'sql', 'ssh', 'winrm']);
-    const everything = actionsEnabled(['http', 'sql', 'ssh', 'winrm', 'browser']);
+  it('ACT-73 ACT-72 ACT-113 loads the http, sql, ssh, winrm and code runtimes in production when their switches are on, and not browser before its milestone', async () => {
+    expect(Object.keys(CONNECTOR_LOADERS)).toStrictEqual(['http', 'sql', 'ssh', 'winrm', 'code']);
+    const everything = actionsEnabled(['http', 'sql', 'ssh', 'winrm', 'browser', 'code'], {
+      codeUrl: 'unix:/run/vaultgate-code/sidecar.sock',
+    });
     const production = await loadConnectors(everything);
-    expect(production.kinds).toStrictEqual(['http', 'sql', 'ssh', 'winrm']);
+    expect(production.kinds).toStrictEqual(['http', 'sql', 'ssh', 'winrm', 'code']);
     expect(production.tools.map((tool) => tool.name)).toStrictEqual([
       'http_request',
       'sql_query',
       'sql_execute',
       'ssh_run',
       'winrm_run',
+      'code_search',
+      'code_find_related',
+      'code_read',
     ]);
     expect(production.forTool('http_request')?.kind).toBe('http');
     expect(production.forTool('sql_query')?.kind).toBe('sql');
     expect(production.forTool('sql_execute')?.kind).toBe('sql');
     expect(production.forTool('ssh_run')?.kind).toBe('ssh');
     expect(production.forTool('winrm_run')?.kind).toBe('winrm');
+    expect(production.forTool('code_search')?.kind).toBe('code');
+    expect(schemasFor('code')?.kind).toBe('code');
     const withoutHttp = await loadConnectors(actionsEnabled(['browser']));
     expect(withoutHttp.kinds).toStrictEqual([]);
   });

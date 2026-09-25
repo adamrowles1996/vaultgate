@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { cdpUrlSchema } from './actions.ts';
+import { cdpUrlSchema, codeUrlSchema } from './actions.ts';
 import { durationSchema } from './duration.ts';
 import {
   bitwardenServerSchema,
@@ -72,6 +72,8 @@ const baseEnvironmentSchema = z.object({
   VAULTGATE_ACTIONS_ENABLE_WINRM: booleanSchema('false'),
   VAULTGATE_ACTIONS_ENABLE_BROWSER: booleanSchema('false'),
   VAULTGATE_ACTIONS_BROWSER_CDP_URL: cdpUrlSchema,
+  VAULTGATE_ACTIONS_ENABLE_CODE: booleanSchema('false'),
+  VAULTGATE_ACTIONS_CODE_URL: codeUrlSchema,
   VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND: booleanSchema('false'),
 });
 
@@ -87,6 +89,13 @@ export const environmentSchema = baseEnvironmentSchema.superRefine((data, contex
       code: 'custom',
       path: ['VAULTGATE_ACTIONS_BROWSER_CDP_URL'],
       message: 'is required when VAULTGATE_ACTIONS_ENABLE_BROWSER is true',
+    });
+  }
+  if (data.VAULTGATE_ACTIONS_ENABLE_CODE && data.VAULTGATE_ACTIONS_CODE_URL === undefined) {
+    context.addIssue({
+      code: 'custom',
+      path: ['VAULTGATE_ACTIONS_CODE_URL'],
+      message: 'is required when VAULTGATE_ACTIONS_ENABLE_CODE is true',
     });
   }
 });

@@ -14,6 +14,7 @@ import {
   summariseTarget,
   type TargetResult,
   type TargetsContext,
+  type TargetsObserver,
   type TargetSummary,
   withTarget,
 } from './targets-context.ts';
@@ -32,13 +33,14 @@ import type { CheckDependencies, CheckReport } from './targets-checks.ts';
 import type { TargetRow } from './targets-schemas.ts';
 import type { DatabaseSync } from 'node:sqlite';
 
-export type { TargetResult, TargetSummary } from './targets-context.ts';
+export type { TargetResult, TargetSummary, TargetsObserver } from './targets-context.ts';
 
 export interface TargetsServiceDependencies extends CheckDependencies {
   readonly database: DatabaseSync;
   readonly audit: ActionsAuditSink;
   readonly now: () => number;
   readonly newId: () => string;
+  readonly observer?: TargetsObserver;
 }
 
 export interface TargetsService {
@@ -135,9 +137,9 @@ function closeTargetSessions(
 }
 
 export function createTargetsService(dependencies: TargetsServiceDependencies): TargetsService {
-  const { database, audit, now, newId, ...checks } = dependencies;
+  const { database, audit, now, newId, observer, ...checks } = dependencies;
   const repo = createTargetsRepo(database);
-  const context: TargetsContext = { database, repo, audit, checks, now, newId };
+  const context: TargetsContext = { database, repo, audit, checks, now, newId, observer };
   return {
     repo,
     list: () => repo.list().map((row) => summariseTarget(repo, row)),

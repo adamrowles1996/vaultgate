@@ -26,6 +26,10 @@ export interface Invocation {
   The whole tool arguments, `target` included.
   */
   readonly arguments: Readonly<Record<string, unknown>>;
+  /**
+  ACT-110: every name a `repo` argument gave, in order; `target` is the first of them.
+  */
+  readonly targets?: readonly string[];
 }
 
 export interface ResolveDependencies {

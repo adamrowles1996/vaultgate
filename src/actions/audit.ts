@@ -20,7 +20,12 @@ export type ActionsAuditAction =
   /**
   ACT-83: a credential the layer rotated in the vault; the item and field, never the value.
   */
-  | 'credential_rotated';
+  | 'credential_rotated'
+  /**
+  ACT-116: a code index built or failed; the commit, the selection, the trigger and the counts.
+  */
+  | 'code_index_built'
+  | 'code_index_failed';
 
 export interface ActionsAuditEvent extends AuditEvent {
   readonly category: 'actions';

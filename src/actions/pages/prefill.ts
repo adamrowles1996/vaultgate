@@ -32,6 +32,7 @@ const KINDS_OF: Readonly<Record<ConnectorKind, readonly ComputerKind[]>> = {
   ssh: ['ssh'],
   http: ['http', 'graph'],
   browser: ['browser'],
+  code: ['code'],
 };
 
 /**

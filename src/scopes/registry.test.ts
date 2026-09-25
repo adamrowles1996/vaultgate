@@ -20,10 +20,11 @@ const ACTION_SCOPES = [
   'actions:ssh',
   'actions:winrm',
   'actions:browser',
+  'actions:code',
 ] as const;
 
 describe('scope registry', () => {
-  it('OAUTH-1 OAUTH-2 ACT-12 lists the four vault scopes then the six actions scopes in one order', () => {
+  it('OAUTH-1 OAUTH-2 ACT-12 lists the four vault scopes then the seven actions scopes in one order', () => {
     expect([...SCOPES]).toStrictEqual([...VAULT_SCOPES, ...ACTION_SCOPES]);
     expect(SCOPE_DEFINITIONS.map((definition) => definition.scope)).toStrictEqual([...SCOPES]);
   });
@@ -52,6 +53,7 @@ describe('scope registry', () => {
       'Run commands on servers the operator has configured, over SSH.',
       'Run commands on Windows hosts the operator has configured, over WinRM.',
       'Sign in to websites the operator has configured and act there as you, within the pages the operator allows.',
+      'Search and read code in repositories the operator has configured.',
     ]);
   });
 
@@ -63,6 +65,7 @@ describe('scope registry', () => {
       'actions:ssh': 'ssh',
       'actions:winrm': 'winrm',
       'actions:browser': 'browser',
+      'actions:code': 'code',
     });
     expect(VAULT_SCOPES.some((scope) => isActionScope(scope))).toBe(false);
   });
