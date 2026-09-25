@@ -12,10 +12,11 @@ import { registerCallPages } from './call-routes.ts';
 import { CHECK_NOW, CHECK_PARAM } from './check-report.ts';
 import { computersView } from './computers-view.ts';
 import { computersPage } from './computers.ts';
-import { savedInput } from './form-input.ts';
+import { savedCheck } from './form-check.ts';
 import { formRoutes } from './form-routes.ts';
 import { isComputerKind } from './kinds.ts';
 import { CREATE_PATH, NEW_PATH } from './paths.ts';
+import { registerRebuild } from './rebuild.ts';
 import { targetPage } from './target-page.ts';
 import { registerTargetWrites } from './target-writes.ts';
 import { type ActionsPagesDependencies, signedIn, targetPageView } from './view.ts';
@@ -31,6 +32,7 @@ const NOTICES: Readonly<Record<string, string>> = {
   'grant-revoked': 'Grant removed and the agent’s sessions on this connection closed.',
   'sessions-closed': 'Every open session on this connection was closed.',
   deleted: 'Connection deleted. Its calls stay in the audit trail.',
+  rebuilding: 'Rebuilding the index; this page shows it when it is done.',
 };
 
 /**
@@ -71,10 +73,7 @@ async function showTarget(
   const notice = noticeFor(context.req.query('notice'));
   const check =
     context.req.query(CHECK_PARAM) === CHECK_NOW
-      ? {
-          report: await dependencies.targets.checkChanges(target.connector, savedInput(target)),
-          at: dependencies.now(),
-        }
+      ? await savedCheck(dependencies, viewer, target)
       : undefined;
   const view = await targetPageView(dependencies, target, viewer, { notice, check });
   return context.html(await dependencies.renderConsole(viewer.session, targetPage(view)));
@@ -102,5 +101,6 @@ export function createActionsRoutes(
     formRoutes.update(context, dependencies, context.req.param('id')),
   );
   registerTargetWrites(app, dependencies);
+  registerRebuild(app, dependencies);
   return app;
 }

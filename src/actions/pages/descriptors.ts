@@ -39,10 +39,13 @@ interface FieldBase {
  * item is chosen the form offers its fields to pick from instead of a text
  * box: a `username` field any of them, a `secret` field all but the login
  * name. A field either has the schema's default (`fallback`), preselected
- * when the field is empty, or is `optional` and may name none.
+ * when the field is empty, or is `optional` and may name none. A field with
+ * a default may also offer `none`, the label of an explicit choice of no
+ * field at all, which the document records as `null` (ACT-119: no token for
+ * a public repository); leaving such a field empty still means the default.
  */
 export type FieldPicker = { readonly role: 'username' | 'secret' } & (
-  { readonly fallback: string } | { readonly optional: true }
+  { readonly fallback: string; readonly none?: string } | { readonly optional: true }
 );
 
 export type FieldDescriptor = FieldBase &
@@ -59,6 +62,10 @@ export type FieldDescriptor = FieldBase &
         The destination's address, which the vault item may supply (ACT-2): a host, or a URL.
         */
         readonly address?: 'host' | 'url';
+        /**
+        Values offered beside the field from outside the item: the repositories the chosen token can read (ACT-119).
+        */
+        readonly offered?: 'repositories';
       }
     | {
         readonly kind: 'number';
@@ -76,9 +83,25 @@ export type FieldDescriptor = FieldBase &
       }
   );
 
+/**
+ * How a connector's form departs from the common policy fields: the ones it
+ * leaves out (a read-only connector has no writes to confirm) and the ones it
+ * draws with a default, ceiling or help of its own (the code connector's
+ * longer timeout). The renderer never knows which connector asked.
+ */
+export interface CommonPolicyChanges {
+  readonly omit?: readonly string[];
+  readonly replace?: readonly FieldDescriptor[];
+}
+
 export interface ConnectorForm {
   readonly kind: ConnectorKind;
   readonly fields: readonly FieldDescriptor[];
+  readonly common?: CommonPolicyChanges;
+  /**
+  `public`: the destination is always on the internet (ACT-103), so the form offers no internal box.
+  */
+  readonly network?: 'public';
 }
 
 /**
@@ -131,6 +154,6 @@ export const COMMON_POLICY_FIELDS: readonly FieldDescriptor[] = [
     label: 'Ask a human to confirm every non-read call (MCP elicitation)',
     kind: 'boolean',
     fallback: true,
-    help: 'On for a new target; a client without elicitation is then refused non-read calls.',
+    help: 'On for a new connection; a client without elicitation is then refused non-read calls.',
   },
 ];

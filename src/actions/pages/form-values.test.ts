@@ -4,6 +4,7 @@ import { defaultValues, documentsFromForm, valuesFromDocuments } from './form-va
 import { editableConnectors, formFor } from './forms.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
+import type { ConnectorKind } from '../../config/actions.ts';
 
 const HTTP: ConnectorForm = formFor('http', { allowAnyCommand: false }) ?? {
   kind: 'http',
@@ -127,9 +128,17 @@ describe('valuesFromDocuments', () => {
   });
 });
 
+function isConfirming(kind: ConnectorKind): boolean {
+  const fields = formFor(kind, { allowAnyCommand: true })?.fields ?? [];
+  return fields.some((field) => field.name === 'confirm_writes');
+}
+
 describe('a new target’s defaults', () => {
-  it('ACT-49 starts every connector’s form with the confirmation on, and reads it back off only when the operator clears it', () => {
-    for (const kind of editableConnectors()) {
+  it('ACT-49 starts every form of a connector that can write with the confirmation on, and reads it back off only when the operator clears it', () => {
+    // ACT-49: nothing a code target does is a write, so its form asks nothing.
+    expect(editableConnectors().filter((kind) => !isConfirming(kind))).toStrictEqual(['code']);
+    const confirming = editableConnectors().filter((kind) => isConfirming(kind));
+    for (const kind of confirming) {
       const form = formFor(kind, { allowAnyCommand: true });
       expect(form).toBeDefined();
       if (form === undefined) {

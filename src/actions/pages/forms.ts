@@ -6,6 +6,7 @@
  */
 import { CONNECTOR_KINDS, type ConnectorKind } from '../../config/actions.ts';
 
+import { codeForm } from './code-form.ts';
 import {
   COMMON_POLICY_FIELDS,
   type ConnectorForm,
@@ -19,6 +20,7 @@ import { sshForm } from './ssh-form.ts';
 import { winrmForm } from './winrm-form.ts';
 
 const FORMS: Partial<Readonly<Record<ConnectorKind, ConnectorForm>>> = {
+  code: codeForm,
   http: httpForm,
   sql: sqlForm,
   ssh: sshForm,
@@ -68,6 +70,17 @@ export function deploymentProblems(
 }
 
 /**
+The common policy fields as one connector's form draws them: some left out, some its own.
+*/
+function commonFields(form: ConnectorForm): readonly FieldDescriptor[] {
+  const omitted = new Set(form.common?.omit);
+  const replaced = new Map((form.common?.replace ?? []).map((field) => [field.name, field]));
+  return COMMON_POLICY_FIELDS.filter((field) => !omitted.has(field.name)).map(
+    (field) => replaced.get(field.name) ?? field,
+  );
+}
+
+/**
 The form of a connector this build can edit targets for, with the common policy fields appended.
 */
 export function formFor(kind: ConnectorKind, switches: FormSwitches): ConnectorForm | undefined {
@@ -75,8 +88,8 @@ export function formFor(kind: ConnectorKind, switches: FormSwitches): ConnectorF
   return form === undefined
     ? undefined
     : {
-        kind,
-        fields: [...form.fields, ...COMMON_POLICY_FIELDS].filter((field) =>
+        ...form,
+        fields: [...form.fields, ...commonFields(form)].filter((field) =>
           isAllowed(field, switches),
         ),
       };

@@ -124,8 +124,9 @@ describe('checks as you go', () => {
 
   it('ACT-118 draws plain transport, a missing item and a check that stopped at the shape', () => {
     const plain = compact(
-      checkCard(
-        {
+      checkCard({
+        at: AT,
+        report: {
           problems: ['destination: plain transport to "h" needs internal: true'],
           endpoints: [
             {
@@ -141,8 +142,7 @@ describe('checks as you go', () => {
           },
           rules: [],
         },
-        AT,
-      ).markup,
+      }).markup,
     );
     expect(plain).toContain('<span class="pill pill-bad">1 problem</span>');
     expect(plain).toContain('· plain transport');
@@ -150,8 +150,10 @@ describe('checks as you go', () => {
     expect(plain).toContain('no such item in the vault');
     expect(plain).toContain('Run 2026-09-24 12:00 UTC.');
     const stopped = compact(
-      checkCard({ problems: ['name: Required'], endpoints: [], rules: ['name: Required'] }, AT)
-        .markup,
+      checkCard({
+        at: AT,
+        report: { problems: ['name: Required'], endpoints: [], rules: ['name: Required'] },
+      }).markup,
     );
     expect(stopped).toContain('name: Required');
     expect(stopped).not.toContain('Vault item');

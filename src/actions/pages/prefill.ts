@@ -23,7 +23,7 @@ const DESCRIPTIONS: Readonly<Record<ComputerKind, string>> = {
   http: 'Call a REST API. vaultgate adds the bearer, basic, header or query credential.',
   graph: 'Call Microsoft Graph with a token vaultgate obtains from Entra ID itself.',
   browser: 'Drive a signed-in browser confined to the origins you allow.',
-  code: 'Search a repository at a pinned commit, read-only.',
+  code: 'Search a GitHub repository with Semble, as your agents search a checkout: code, docs and config.',
 };
 
 const KINDS_OF: Readonly<Record<ConnectorKind, readonly ComputerKind[]>> = {

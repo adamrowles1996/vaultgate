@@ -13,9 +13,9 @@ const FIELD_MESSAGES: Readonly<Record<string, string>> = {
   'policy.max_output_bytes':
     'How much output one call may return, in bytes: 1024 to 1048576. Longer output is cut and ' +
     'the result says so.',
-  'policy.rate_limit_per_minute': 'How many calls this target accepts per minute: 1 to 600.',
+  'policy.rate_limit_per_minute': 'How many calls this connection accepts per minute: 1 to 600.',
   'policy.confirm_writes':
-    'Whether every non-read call asks a human to confirm it first. On for a new target.',
+    'Whether every non-read call asks a human to confirm it first. On for a new connection.',
   // http (§14.2)
   'policy.allowed_methods':
     'The HTTP methods an agent may use, at least one. GET, HEAD and OPTIONS count as reads; ' +
@@ -34,8 +34,8 @@ const FIELD_MESSAGES: Readonly<Record<string, string>> = {
     'Whether the credential may be put in the query string. The query credential mode needs it.',
   // sql (§14.4)
   'policy.operations':
-    'read runs sql_query; write also runs sql_execute. A target that allows write must allow ' +
-    'read as well.',
+    'read runs sql_query; write also runs sql_execute. A connection that allows write must ' +
+    'allow read as well.',
   'policy.max_rows': 'The most rows one query returns: 1 to 10000. Further rows are dropped.',
   'policy.statement_timeout_ms':
     'The server-side statement timeout, in milliseconds: 1000 to 300000. Never longer than the ' +
@@ -52,8 +52,35 @@ const FIELD_MESSAGES: Readonly<Record<string, string>> = {
     'matches within one line. A pattern that would allow every command is refused; say so with ' +
     '"Allow any command" instead.',
   'policy.any_command':
-    'Whether the target accepts any command at all. It needs the deployment switch ' +
+    'Whether the connection accepts any command at all. It needs the deployment switch ' +
     'VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND, and every call is audited with the full command.',
+  // code (§14.8)
+  'policy.content':
+    'The content agents may search, at least one of code, docs and config; a call may narrow it.',
+  'policy.allow_read': 'Whether code_read may return whole files, up to the most lines per read.',
+  'policy.allow_ref':
+    'Whether a call may name another branch, tag, commit or pull request than the configured ref.',
+  'policy.include':
+    'gitignore patterns of the files to index, one per line, at most 100 of up to 1024 ' +
+    'characters; empty indexes every file.',
+  'policy.exclude':
+    'gitignore patterns of the files never indexed, one per line, at most 100 of up to 1024 ' +
+    'characters. Replacing the list replaces the defaults.',
+  'policy.max_top_k': 'The most results one search may ask for: 1 to 200.',
+  'policy.max_read_lines': 'The most lines one code_read returns: 1 to 2000.',
+  'policy.build_wait_s':
+    'How long a call waits for an index being built, in seconds: 0 to 290, and at least 10 ' +
+    'seconds less than the call timeout.',
+  'policy.refresh_interval_s':
+    'How long a resolution of the configured ref stands, in seconds: 60 to 86400.',
+  'policy.max_archive_bytes':
+    'The largest archive a build downloads, in bytes: 1048576 to 1073741824.',
+  'policy.max_files': 'The most files a snapshot holds: 1 to 200000.',
+  'policy.max_total_bytes':
+    'The largest a snapshot may be uncompressed, in bytes: 1048576 to 4294967296.',
+  'policy.max_file_bytes':
+    'The largest file a snapshot keeps, in bytes: 1024 to 16777216; larger files are skipped.',
+  'policy.build_timeout_s': 'How long a build may run, in seconds: 10 to 3600.',
 };
 
 const SEPARATOR = ': ';

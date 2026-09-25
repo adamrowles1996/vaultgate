@@ -13,10 +13,13 @@ import { validateTarget } from '../targets-schemas.ts';
 import { targetCalls } from './calls-view.ts';
 import { defaultValues, type FormValues, valuesFromDocuments } from './form-values.ts';
 import { formFor } from './forms.ts';
+import { indexView } from './index-card.ts';
 import { type FieldProblems, groupProblems, NO_PROBLEMS } from './messages.ts';
 import { summarise } from './summary.ts';
 import { DESCRIPTION_FIELD, drawnPaths, INTERNAL_FIELD, ITEM_ID_FIELD } from './target-form.ts';
 
+import type { PageCheck } from './check-report.ts';
+import type { GitHubPagesAccess } from './code-github.ts';
 import type { ConnectorForm, FormSwitches } from './descriptors.ts';
 import type { ClientChoice, GrantItem, TargetPageView } from './target-page.ts';
 import type {
@@ -28,6 +31,7 @@ import type {
   SessionState,
 } from '../../identity/index.ts';
 import type { VaultClient } from '../../vault/client.ts';
+import type { CodeControl } from '../connectors/code/control.ts';
 import type { TargetsService, TargetSummary } from '../targets.ts';
 import type { MiddlewareHandler } from 'hono';
 import type { DatabaseSync } from 'node:sqlite';
@@ -46,13 +50,27 @@ export interface ActionsPagesDependencies {
   readonly targets: TargetsService;
   readonly database: DatabaseSync;
   /**
-  ACT-4: the item's name and fields, and the search that finds one; metadata only.
-  */
-  readonly vault: Pick<VaultClient, 'getItem' | 'searchItems'>;
+   * ACT-4: the item's name and fields, and the search that finds one;
+   * metadata only, except that a code target's token is read for the
+   * repository list and check of ACT-119 and ACT-120, inside ID-15's window.
+   */
+  readonly vault: Pick<VaultClient, 'getItem' | 'searchItems' | 'getSecret'>;
   /**
   The identity module's ID-18 and ID-15 gate, injected by the composition layer (ACT-70).
   */
   readonly sensitiveAction: SensitiveAction;
+  /**
+  ID-18 without ID-15, for Rebuild index (ACT-108), injected the same way.
+  */
+  readonly operatorAction: SensitiveAction;
+  /**
+  ACT-119, ACT-120: GitHub over the pinned transport, for the repository list and the check.
+  */
+  readonly github: GitHubPagesAccess;
+  /**
+  ACT-115: the code connector's index status and Rebuild index, when that connector is loaded.
+  */
+  readonly code: CodeControl | undefined;
   /**
    * ID-19's CSP and `no-store`, injected the same way. The pages set them
    * themselves rather than inheriting them from whatever identity happens to
@@ -82,7 +100,7 @@ What a page adds to a target's view: a notice, the error of a refused write, or 
 export interface PageExtras {
   readonly notice?: string | undefined;
   readonly error?: string | undefined;
-  readonly check?: TargetPageView['check'];
+  readonly check?: PageCheck | undefined;
 }
 
 /**
@@ -229,5 +247,6 @@ export async function targetPageView(
     calls: targetCalls(dependencies.database, target.id, undefined, names).calls,
     isEditable: formFor(target.connector, dependencies.switches) !== undefined,
     now: dependencies.now(),
+    index: target.connector === 'code' ? await indexView(dependencies.code, target.id) : undefined,
   };
 }
