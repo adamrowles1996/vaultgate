@@ -17,6 +17,18 @@ All notable changes to this project are documented here. The format follows
   `/account/actions`, their query parameters and form fields, the audit event names and the
   spec's word _target_ are unchanged.
 
+- ADR 0008, spec 14.8: **the planned `code` connector now matches `semble`'s own MCP server**, so
+  a hosted agent searches the operator's GitHub repositories the way a local agent searches its
+  checkout. `code_search` and `code_find_related` take `repo` (a connection name or a list of
+  them, searched together with `semble`'s path prefixes), `top_k` (default 5), `content`
+  (`code`, `docs`, `config` or `all`, per call, within the policy) and `max_snippet_lines`
+  (`0`, `N` or `null`), and return `semble`'s own result fields; a call may name a `ref`,
+  including `pr:<n>`. The first call on a commit waits for its index, indexes are kept per
+  connection, commit and content selection under the sidecar's disk and memory caps, and the
+  sidecar gains a systemd placement on a Unix socket in a private network namespace. The
+  connector moves to its own file, [14a](docs/spec/14a-code-connector.md), with two new
+  requirements for the console's repository picker and GitHub check (ACT-119, ACT-120) and two
+  new error codes, `ref_not_found` and `chunk_not_found`.
 ## [0.1.0-rc.20] - 2026-09-25
 
 ### Added

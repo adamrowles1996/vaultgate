@@ -11,6 +11,7 @@ const SPEC_FILES = [
   'docs/spec/13-actions.md',
   'docs/spec/13a-actions-operations.md',
   'docs/spec/14-actions-connectors.md',
+  'docs/spec/14a-code-connector.md',
 ];
 
 const TEST_ROOT = 'src';
@@ -43,7 +44,7 @@ const PENDING = [
   },
   {
     milestone: 'M16',
-    numbers: [103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117],
+    numbers: [103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 119, 120],
   },
 ];
 const ALLOWED = new Map(

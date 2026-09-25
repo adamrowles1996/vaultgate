@@ -1,6 +1,6 @@
 # ADR 0008: A `code` connector: search and read repositories through a sidecar
 
-Date: 2026-09-24. Status: accepted (planned for M16). Amends
+Date: 2026-09-24, amended 2026-09-25 (below). Status: accepted (planned for M16). Amends
 [ADR 0004](0004-no-remote-command-execution.md) and
 [ADR 0007](0007-typed-actions-with-operator-policy.md).
 
@@ -28,7 +28,7 @@ needs a snapshot of the repository and an index built from it, kept between call
 
 ## Decision
 
-vaultgate gains a seventh connector, `code` ([spec 14.8](../spec/14-actions-connectors.md)), off
+vaultgate gains a seventh connector, `code` ([spec 14.8](../spec/14a-code-connector.md)), off
 unless its own switch is on, with one scope, `actions:code`, and three read-only tools:
 `code_search`, `code_find_related` and `code_read`.
 
@@ -99,3 +99,39 @@ unless its own switch is on, with one scope, `actions:code`, and three read-only
 - Milestone M16 in `PLAN.md` delivers it, behind `VAULTGATE_ACTIONS_ENABLE_CODE`, with contract
   tests against a fake forge and a fake sidecar, a hostile-archive suite in the sidecar's own
   tests, and a live test against one of the maintainer's private repositories.
+
+## Amendment, 2026-09-25: parity with `semble`'s own MCP server
+
+The maintainer's agents already use `semble` locally through its MCP server, and the point of the
+connector is that a hosted agent can do the same against a private repository. The first design
+answered one repository at one ref with a result shape of its own, which an agent used to
+`semble` would have to learn afresh. The connector now matches that server
+([spec 14.8.6](../spec/14a-code-connector.md)):
+
+- **`repo`, not `target`.** The tools take `repo`: a connection name, or for the two search tools
+  a list of them, searched together through `SembleIndex.merge` with every path prefixed by the
+  connection name, as `semble` prefixes merged repositories. Each name still passes every check
+  of ACT-16 and gets its own audit row. Naming only connections the operator created keeps ADR
+  0004's rule: the agent never chooses a host, a URL or a local path, and the fetch hosts stay
+  `api.github.com` and `codeload.github.com`. Local paths and other forges are the parity gaps.
+- **The same arguments.** `top_k` (default 5), `content` (`code`, `docs`, `config` or `all`, per
+  call, within what the policy allows; all three by default, since a repository of documentation
+  is as searchable as one of code) and `max_snippet_lines` (`0`, `N` or `null`), with `semble`'s
+  own result fields (`file_path`, `start_line`, `end_line`, `score`, `content`). A call may name a
+  `ref`, including `pr:<n>`, unless the policy forbids it, which makes the trust a grant extends
+  read access to the repository rather than to one ref.
+- **Indexes on first use.** A snapshot is kept per connection and commit and an index per content
+  selection over it, as `semble` keeps one per repository and selection; the first call on a
+  commit waits for the build for up to `build_wait_s` before answering `index_not_ready`, as
+  `semble` indexes a repository on its first call. Snapshots are evicted least recently used
+  under the sidecar's own storage caps, and loaded indexes under a memory budget.
+- **A systemd placement.** Beside Compose and Azure, `install.sh` can install the sidecar as its
+  own unit and user, reached over a Unix domain socket, in a private network namespace with no
+  address family but `AF_UNIX`: no route to the internet and none to `bw serve`'s loopback.
+- **Two pages that use the token.** Picking the repository lists what the token can read, and
+  **Check without saving** asks GitHub whether it can read the chosen one, so the operator sees a
+  wrong or expired token before any agent does. These are the only operator pages that use a
+  secret; they do so inside ID-15's window, to `api.github.com` only, and never draw it (ACT-119,
+  ACT-120).
+- **The console's name for it.** Operators see the kind as **Semble · GitHub code search**; the
+  connector id `code` and the scope `actions:code` are unchanged.

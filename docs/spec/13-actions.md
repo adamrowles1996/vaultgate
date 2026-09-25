@@ -111,8 +111,8 @@ Design rules, in priority order:
 - **ACT-5** The console (ID-19) gains a **Connections** section, present only when
   `VAULTGATE_ENABLE_ACTIONS=true`, and then the console's home page (ID-23); the pages call a
   target a _connection_. `GET /account/actions` lists the targets grouped by kind (SQL Server,
-  PostgreSQL, Windows · WinRM, Linux · SSH, HTTP APIs, Microsoft Graph: the `sql` connector split
-  by engine, and `http` targets with a Graph mapping set apart), each with its name and
+  PostgreSQL, Windows · WinRM, Linux · SSH, HTTP APIs, Microsoft Graph, Semble · GitHub code
+  search: the `sql` connector split by engine, and `http` targets with a Graph mapping set apart), each with its name and
   description, destination summary, the vault item and the fields it maps (a secret field shown
   sealed, by name only; no value is ever drawn), what its policy allows, the granted clients, its
   last call and its state. `?kind=` shows one kind, and the sidebar has an entry per kind with its
@@ -161,7 +161,8 @@ Design rules, in priority order:
   offers **Check now** (`?check=now`) at any time, which runs the same checks on the saved target,
   resolving its hosts and reading its item's metadata again, so a DNS record or vault item that
   changed since the save shows before an agent's call fails. Neither connects to a destination or
-  reads a secret.
+  reads a secret, except for a code target, whose check also asks GitHub whether the token can
+  read the repository (ACT-120).
 
 ## 13.4 Grants
 
@@ -220,9 +221,10 @@ any of …"`), so a client learns in one challenge every scope that would satisf
   annotations, the operation arguments and the result schema) on its `Connector`, and the
   registration puts `target` in front of the arguments and advertises only the tools of the
   connectors whose runtime is loaded.
-- **ACT-16** Every tool takes `target` (the name, ACT-1) or `session_id` (browser tools, which
-  resolve the session's target) as its first argument and resolves it in this order, stopping at
-  the first failure: layer enabled → target exists → client granted → connector enabled →
+- **ACT-16** Every tool takes `target` (the name, ACT-1), `session_id` (browser tools, which
+  resolve the session's target) or `repo` (the code tools: one name, or for the two search tools a
+  list of names, each resolved in turn and one audit row each, ACT-110) as its first argument and
+  resolves it in this order, stopping at the first failure: layer enabled → target exists → client granted → connector enabled →
   target enabled → stored target valid (ACT-1) → token holds the tool's scope → arguments valid
   → policy allows the operation (13.7) → rate limits (13.11) → confirmation if required (13.8)
   → credential fetched (13.9) → destination pinned (13.10) → run. Each failure has its own error
@@ -264,6 +266,8 @@ operations, confirm_writes, engine?, unrestricted? }` where `operations` is the 
   `write`, `shell`, `act` the target's policy allows and the token's scopes can reach,
   `confirm_writes` says whether non-read calls will ask for confirmation, `engine` (`mssql` \|
   `postgres`) appears for `sql` targets and `unrestricted: true` marks an any-command target (ACT-88).
+  A `code` target adds `repository`, its configured `ref` (absent for the default branch),
+  `content` and `read` (whether `code_read` is allowed, ACT-112).
   The output schema has no place for a destination, an origin, a credential field name or a policy
   pattern. Only granted, enabled targets of enabled connectors appear.
 
@@ -392,11 +396,15 @@ before anything else (ACT-16) and a session opened by another client answers `un
 
 ### 13.6.7 `code_search`, `code_find_related` and `code_read`
 
-The three tools of the `code` connector (ADR 0008) search and read the snapshot of a repository
-the operator configured. They are read-only by construction: no argument reaches the forge, and
-the snapshot is fetched and indexed by vaultgate and the sidecar, never at the agent's direction.
-Their arguments, results, path rules and errors are ACT-110 to ACT-112 in 14.8; they carry
-`openWorldHint: false` because every answer comes from a snapshot rather than from the forge.
+The three tools of the `code` connector (ADR 0008) search and read snapshots of repositories the
+operator configured, and the two search tools do what `semble`'s own MCP server's `search` and
+`find_related` do (14.8.6). They take `repo`, one connection name or a list of them, in place of
+`target`. They are read-only by construction: no argument names a host, a URL or a path outside
+the snapshot, and the snapshot is fetched and indexed by vaultgate and the sidecar, never at the
+agent's direction; a `ref` the agent names selects a commit of the repository the operator chose.
+Their arguments, results, path rules and errors are ACT-110 to ACT-112 in
+[14a](14a-code-connector.md); they carry `openWorldHint: false` because every answer comes from a
+snapshot rather than from the forge.
 
 ## 13.7 Policy semantics
 

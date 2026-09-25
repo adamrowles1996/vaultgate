@@ -254,24 +254,32 @@ sessions close on token, consent and grant revocation and on target edit in the 
 suite; a live sign-in to two of the maintainer's own web applications through the Compose
 sidecar produces a scrubbed snapshot and a masked screenshot, recorded in the pull request.
 
-### M16 `code` (ACT-103…117; ADR 0008)
+### M16 `code` (ACT-103…120; ADR 0008 and its 2026-09-25 amendment)
 
 1. `build(sidecar)`: `sidecars/code/`: Python 3.12, `uv`-locked with hashes, `semble` pinned,
    the `minishlab/potion-code-16M-v2` model fetched at build time by pinned revision and SHA-256;
-   the standard-library JSON server with `health`, `build`, `status`, `search`, `related`, `read`
-   and `delete`; hostile-archive extraction; its own test suite at 100% and its own CI job.
-2. `build(docker)`: the optional `code` Compose profile on an internal network with the ACT-114
-   limits; the Azure template's `deployCodeSidecar` parameter as a separate internal-ingress
-   Container App; the sidecar image in the release workflow, signed and scanned like the core.
-3. `feat(actions)`: the `code` connector: GitHub resolve-then-download with the single-redirect
-   rule, the streamed archive, single-flight builds, freshness checks, deletion with the target,
-   migration `005-code-connector`, the target page's index status and Rebuild button;
-   `code_search`, `code_find_related` and `code_read`; `actions:code`.
+   the standard-library JSON server of `sidecars/code/PROTOCOL.md` over a Unix socket or internal
+   TCP; hostile-archive extraction; per-selection indexes built in a child process; disk and
+   memory LRU caps; its own test suite at 100%, a parity test against `semble`, and its own CI job.
+2. `feat(actions)`: the `code` connector: GitHub resolve-then-download for branches, tags, SHAs
+   and `pr:<n>`, the single-redirect rule, the streamed archive, single-flight builds, the
+   first-call wait, freshness and `stale`, deletion and reconciliation, migration
+   `005-code-connector`; `code_search`, `code_find_related` and `code_read` under `actions:code`
+   with `repo` as a name or a list; `semble`'s guidance in the tool descriptions and the MCP-16
+   instructions.
+3. `feat(console)`: **Semble · GitHub code search** on the Add connection page and in the
+   Connections list: the repository picker, Check without saving against GitHub, the index
+   status and **Rebuild index** (ACT-115, ACT-119, ACT-120).
+4. `build(deploy)`: the optional `code` Compose profile on an internal network with the ACT-114
+   limits; `install.sh --with-code-sidecar` as its own sandboxed systemd unit on a Unix socket;
+   the Azure template's `deployCodeSidecar` parameter as a separate internal-ingress Container
+   App; the sidecar image and bundle in the release workflow, signed and scanned like the core.
 
-Exit: the sidecar's hostile-archive suite and vaultgate's fake-forge and fake-sidecar contract
-suites pass (ACT-117) with the ACT-53 canary; a live index of one of the maintainer's private
-repositories through the Compose sidecar answers a search, a related-code query and a read,
-recorded in the pull request.
+Exit: the sidecar's hostile-archive and parity suites and vaultgate's fake-forge and fake-sidecar
+contract suites pass (ACT-117) with the ACT-53 canary; a live deployment indexes the maintainer's
+private repositories through the systemd sidecar, and a real MCP client's search, multi-repository
+search, related-code query, read, `pr:<n>` search and snippet sizes agree with `semble`'s own
+MCP server over a clone of the same commit, recorded in the pull request.
 
 ### Post-1.0 candidates
 
