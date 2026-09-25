@@ -80,7 +80,14 @@ export interface CodePages {
 
 export interface CodePagesOptions {
   readonly addresses?: Readonly<Record<string, readonly string[]>>;
+  /**
+  Answers every request to the API host with this status (401, 500…).
+  */
   readonly apiStatus?: number;
+  /**
+  ACT-53: the fake sends the request's `Authorization` back as the default branch's name.
+  */
+  readonly echo?: boolean;
   /**
   `false` composes the pages with the code connector off (`engine.code` undefined).
   */
@@ -89,9 +96,16 @@ export interface CodePagesOptions {
 }
 
 export function createCodePages(options: CodePagesOptions = {}): CodePages {
+  const { apiStatus } = options;
   const github = createFakeGitHub({
     repos: [PRIVATE_REPO, PUBLIC_REPO],
-    ...(options.apiStatus !== undefined && { apiStatus: options.apiStatus }),
+    ...(options.echo === true && { echo: true }),
+    ...(apiStatus !== undefined && {
+      answer: (url: URL) =>
+        url.hostname === 'api.github.com'
+          ? Response.json({ message: 'refused' }, { status: apiStatus })
+          : undefined,
+    }),
   });
   const sidecar = createFakeSidecar();
   const vault = new InMemoryVaultClient([...FIXTURE_ITEMS, GITHUB_ITEM, BROKEN_ITEM]);

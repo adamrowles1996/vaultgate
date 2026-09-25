@@ -107,4 +107,17 @@ describe('the token never leaves the vault for a page (ACT-53, ACT-119)', () => 
     }
     expect(seen.join('\n')).toContain('The token can read');
   });
+
+  it('ACT-51 ACT-120 scrubs the token out of what GitHub sends back before a page draws it', async () => {
+    const { harness } = createCodePages({ echo: true });
+    const { browser, csrf } = await signedInOperator(harness);
+    const response = await browser.submit('/account/actions', {
+      ...CODE_FORM,
+      csrf,
+      intent: 'check',
+    });
+    const markup = compact(await response.text());
+    expect(markup).toContain('default branch <span class="mono">Bearer [redacted:token]</span>');
+    expect(markup).not.toContain(FAKE_TOKEN);
+  });
 });
