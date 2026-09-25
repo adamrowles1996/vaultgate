@@ -47,7 +47,7 @@ def shape(results: list[dict[str, Any]]) -> list[tuple[Any, ...]]:
 
 
 def build(root: Path, content: list[str]) -> SembleIndex:
-    """semble's own index over a directory."""
+    """Semble's own index over a directory."""
     return SembleIndex.from_path(
         root, content=[ContentType(c) for c in content], model_path=str(MODEL_DIR)
     )

@@ -1,4 +1,4 @@
-"""The operations: health, build, status, list and delete, and the variants queries need."""
+"""The operations health, build, status, list and delete, over the store and the build runner."""
 
 from __future__ import annotations
 
@@ -6,12 +6,11 @@ import platform
 import shutil
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
-from semble import SembleIndex
 
 from vaultgate_code import PROTOCOL_VERSION, child, engine, rules, validate
 from vaultgate_code.builder import Flights, Runner
@@ -19,7 +18,7 @@ from vaultgate_code.config import Config
 from vaultgate_code.errors import ApiError
 from vaultgate_code.extract import Abandoned, Counts, Extractor, Readable
 from vaultgate_code.fetch_model import Manifest
-from vaultgate_code.memory import Loaded, Name, load_trim, resident_bytes
+from vaultgate_code.memory import Loaded, load_trim
 from vaultgate_code.snapshot import Snapshot, disk_usage
 from vaultgate_code.store import Store
 
@@ -43,19 +42,8 @@ class _Building:
     cancel: threading.Event
 
 
-@dataclass(frozen=True)
-class Part:
-    """One index of a query: its snapshot, its variant and the loaded index (None if empty)."""
-
-    label: str
-    snapshot: Snapshot
-    variant: str
-    info: dict[str, Any]
-    index: SembleIndex | None
-
-
 class Service:
-    """Every operation of PROTOCOL.md except the three queries (`vaultgate_code.query`)."""
+    """Every operation of PROTOCOL.md except the queries (`query`, which use `indexes`)."""
 
     def __init__(
         self,
@@ -194,6 +182,17 @@ class Service:
                 if self._building.get(key) is state:
                     del self._building[key]
 
+    @contextmanager
+    def building(self) -> Iterator[None]:
+        """Count a variant build that is not a snapshot's own in health's `usage.building`."""
+        with self._lock:
+            self._active += 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._active -= 1
+
     def _assemble(
         self,
         key: str,
@@ -224,7 +223,7 @@ class Service:
         )
         for content in spec.variants:
             name = rules.variant_name(content)
-            snapshot.variants[name] = self._build_variant(
+            snapshot.variants[name] = self.build_variant(
                 tree, variants / name, content, spec.build_timeout_s, cancel, counts
             )
         snapshot.storage_bytes = disk_usage(tree) + disk_usage(variants)
@@ -232,7 +231,7 @@ class Service:
         self.store.install(staged, snapshot)
         return snapshot.public()
 
-    def _build_variant(
+    def build_variant(
         self,
         tree: Path,
         out: Path,
@@ -241,6 +240,10 @@ class Service:
         cancel: threading.Event,
         counts: Counts | None,
     ) -> dict[str, Any]:
+        """Build one variant into `out` in the build child; its metadata, versions included.
+
+        A build error gains the variant's name, and the extraction's counts when there are any.
+        """
         try:
             files, chunks, duration_ms = self.runner.build(
                 str(tree), str(out), content, timeout_s, cancel
@@ -256,77 +259,3 @@ class Service:
             "storage_bytes": disk_usage(out),
             **self.versions,
         }
-
-    # variants for queries -------------------------------------------------------------------
-
-    def part(
-        self, label: str, snapshot: Snapshot, content: tuple[str, ...], protect: set[Name]
-    ) -> Part:
-        """The variant of `snapshot` for `content`, built and loaded as needed (single flight)."""
-        name = rules.variant_name(content)
-        info = snapshot.variants.get(name) or self.flights.run(
-            ("variant", snapshot.key, name), lambda: self._build_on_demand(snapshot, content)
-        )
-        index = None
-        if info["chunks"]:
-            loaded = self.loaded.get(((snapshot.key, name),))
-            index = loaded or self.flights.run(
-                ("load", snapshot.key, name), lambda: self._load(snapshot, name, info, protect)
-            )
-        return Part(label, snapshot, name, info, index)
-
-    def _build_on_demand(self, snapshot: Snapshot, content: tuple[str, ...]) -> dict[str, Any]:
-        name = rules.variant_name(content)
-        known = snapshot.variants.get(name)
-        if known is not None:
-            return known
-        with self._lock:
-            self._active += 1
-        staged = self.store.staging()
-        try:
-            tree = self.store.path(snapshot.key) / "tree"
-            info = self._build_variant(
-                tree, staged / name, content, snapshot.build_timeout_s, snapshot.cancelled, None
-            )
-            self.store.add_variant(snapshot, name, staged / name, info)
-        except Abandoned:
-            raise abandoned(snapshot.key) from None
-        finally:
-            shutil.rmtree(staged, ignore_errors=True)
-            with self._lock:
-                self._active -= 1
-        return info
-
-    def _load(
-        self, snapshot: Snapshot, name: str, info: dict[str, Any], protect: set[Name]
-    ) -> SembleIndex:
-        part: Name = ((snapshot.key, name),)
-        known = self.loaded.get(part)
-        if known is not None:
-            return known
-        with self.loaded.measure_lock:
-            before = resident_bytes()
-            index = engine.load_variant(str(self.store.path(snapshot.key) / "variants" / name))
-            size = max(resident_bytes() - before, info["storage_bytes"])
-        self.loaded.put(part, index, size, protect)
-        return index
-
-    def combined(self, parts: list[Part]) -> SembleIndex | None:
-        """One index as it is; several merged as semble's MCP server merges repositories."""
-        if len(parts) == 1:
-            return parts[0].index
-        present = [p for p in parts if p.index is not None]
-        if not present:
-            return None
-        name: Name = tuple((p.snapshot.key, p.variant, p.label) for p in present)
-        known = self.loaded.get(name)
-        if known is not None:
-            return known
-        protect: set[Name] = {((p.snapshot.key, p.variant),) for p in present}
-        with self.loaded.measure_lock:
-            before = resident_bytes()
-            merged = engine.merge([(p.label, p.index) for p in present if p.index is not None])
-            floor = sum(p.info["storage_bytes"] for p in present)
-            size = max(resident_bytes() - before, floor)
-        self.loaded.put(name, merged, size, protect)
-        return merged

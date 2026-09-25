@@ -60,60 +60,43 @@ def test_the_protocol_end_to_end(serve: Serve, transport: str) -> None:
     assert client.call("DELETE", "/v1/snapshots/acme")[1] == {"deleted": 0}
 
 
+JSON = {"Content-Type": "application/json"}
+EXTRA = json.dumps({**QUERY, "extra": 1}).encode()
+ABSENT = b'{"key":"absent","file_path":"a","max_lines":1}'
+
+
 @pytest.mark.parametrize(
-    ("method", "path", "body", "headers", "status", "code"),
+    ("call", "status", "code"),
     [
-        ("GET", "/v1/nowhere", None, {}, 404, "not_found"),
-        ("GET", "/v1/snapshots/a/b", None, {}, 404, "not_found"),
-        ("POST", "/v1/health", b"{}", {}, 405, "method_not_allowed"),
-        ("PATCH", "/v1/health", None, {}, 405, "method_not_allowed"),
-        ("GET", "/v1/health?verbose=1", None, {}, 400, "invalid_request"),
-        ("GET", "/v1/health", b"body", {}, 400, "invalid_request"),
-        ("GET", "/v1/snapshots/UPPER", None, {}, 400, "invalid_request"),
-        ("DELETE", "/v1/owners/bad_owner", None, {}, 400, "invalid_request"),
-        ("GET", "/v1/snapshots/absent", None, {}, 404, "snapshot_missing"),
-        ("POST", "/v1/search", b"{", {"Content-Type": "application/json"}, 400, "invalid_request"),
-        ("POST", "/v1/search", b"{}", {"Content-Type": "text/plain"}, 400, "invalid_request"),
+        (("GET", "/v1/nowhere"), 404, "not_found"),
+        (("GET", "/v1/snapshots/a/b"), 404, "not_found"),
+        (("POST", "/v1/health", b"{}"), 405, "method_not_allowed"),
+        (("PATCH", "/v1/health"), 405, "method_not_allowed"),
+        (("GET", "/v1/health?verbose=1"), 400, "invalid_request"),
+        (("GET", "/v1/health", b"body"), 400, "invalid_request"),
+        (("GET", "/v1/snapshots/UPPER"), 400, "invalid_request"),
+        (("DELETE", "/v1/owners/bad_owner"), 400, "invalid_request"),
+        (("DELETE", "/v1/snapshots/bad%20key"), 400, "invalid_request"),
+        (("GET", "/v1/snapshots/absent"), 404, "snapshot_missing"),
+        (("POST", "/v1/search", b"{", JSON), 400, "invalid_request"),
+        (("POST", "/v1/search", b"[]", JSON), 400, "invalid_request"),
+        (("POST", "/v1/search", b"{}", {"Content-Type": "text/plain"}), 400, "invalid_request"),
+        (("POST", "/v1/search", b"{}"), 400, "invalid_request"),
+        (("POST", "/v1/search", EXTRA, JSON), 400, "invalid_request"),
         (
-            "POST",
-            "/v1/search",
-            json.dumps({**QUERY, "extra": 1}).encode(),
-            {"Content-Type": "application/json"},
-            400,
-            "invalid_request",
-        ),
-        (
-            "POST",
-            "/v1/read",
-            b'{"key":"absent","file_path":"a","max_lines":1}',
-            {"Content-Type": "application/json; charset=utf-8"},
+            ("POST", "/v1/read", ABSENT, {"Content-Type": "application/json; charset=utf-8"}),
             404,
             "snapshot_missing",
         ),
-        (
-            "POST",
-            "/v1/search",
-            b" " * ((1 << 20) + 1),
-            {"Content-Type": "application/json"},
-            413,
-            "invalid_request",
-        ),
-        ("PUT", "/v1/snapshots/acme", b"", {}, 400, "invalid_request"),
-        ("PUT", "/v1/snapshots/acme", b"", {"X-Vaultgate-Build": "!!"}, 400, "invalid_request"),
+        (("POST", "/v1/search", b" " * ((1 << 20) + 1), JSON), 413, "invalid_request"),
+        (("PUT", "/v1/snapshots/acme", b""), 400, "invalid_request"),
+        (("PUT", "/v1/snapshots/acme", b"", {"X-Vaultgate-Build": "!!"}), 400, "invalid_request"),
     ],
 )
-def test_request_errors(
-    serve: Serve,
-    method: str,
-    path: str,
-    body: bytes | None,
-    headers: dict[str, str],
-    status: int,
-    code: str,
-) -> None:
-    """PROTOCOL: every error is JSON {"error", "message"} with its status; unknown fields refused."""
+def test_request_errors(serve: Serve, call: tuple[Any, ...], status: int, code: str) -> None:
+    """PROTOCOL: every error is JSON {"error", "message"}, with its status; unknown fields too."""
     client = serve()
-    answer, payload, _ = client.call(method, path, body, headers)
+    answer, payload, _ = client.call(*call)
     assert (answer, payload["error"]) == (status, code)
     assert isinstance(payload["message"], str)
     assert client.call("GET", "/v1/health")[0] == 200  # the server is still serving
@@ -256,9 +239,7 @@ def test_framing_errors_are_json_too(serve: Serve, request_bytes: bytes, status:
     """PROTOCOL: errors http.server raises itself are JSON as well, and close the connection."""
     received = raw_exchange(serve(), request_bytes)
     head, _, body = received.partition(b"\r\n\r\n")
-    assert head.startswith(f"HTTP/1.1 {status} ".encode()) or head.startswith(
-        f"HTTP/1.0 {status} ".encode()
-    )
+    assert head.startswith(f"HTTP/1.1 {status} ".encode())
     assert b"Connection: close" in head
     assert json.loads(body)["error"] in {"invalid_request", "method_not_allowed"}
 

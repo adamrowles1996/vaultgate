@@ -60,7 +60,7 @@ def test_the_storage_cap_evicts_until_the_new_snapshot_fits(make_service: Servic
 
 
 def test_a_snapshot_in_use_is_never_evicted(make_service: ServiceFactory) -> None:
-    """PROTOCOL: never evict a snapshot in use by a running request; storage_full if nothing can go."""
+    """PROTOCOL: a snapshot in use is never evicted; storage_full if nothing else can go."""
     service = make_service(max_snapshots=1)
     put(service, "busy", SMALL, variants=[])
     with service.store.using(["busy"]):
@@ -149,7 +149,8 @@ def test_merges_are_cached_while_their_parts_stay(
     assert search(service, "a", "b") == first
     assert merges == [1]
     _, loaded_bytes = service.loaded.usage()
-    assert service.health()["usage"]["loaded_variants"] == 2 and loaded_bytes > 0
+    assert service.health()["usage"]["loaded_variants"] == 2
+    assert loaded_bytes > 0
     search(service, "c")  # over budget: a, b and their merge go
     assert service.health()["usage"]["loaded_variants"] == 1
     search(service, "a", "b")

@@ -8,11 +8,12 @@ from typing import Any
 
 from semble.utils import resolve_chunk
 
-from vaultgate_code import engine, validate
+from vaultgate_code import engine, indexes, validate
 from vaultgate_code.errors import ApiError
+from vaultgate_code.indexes import Part
 from vaultgate_code.memory import Name
 from vaultgate_code.rules import path_not_found, variant_name
-from vaultgate_code.service import Part, Service
+from vaultgate_code.service import Service
 
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
@@ -23,7 +24,7 @@ def _parts(service: Service, request: validate.Query, snapshots: list[Any]) -> l
     protect: set[Name] = {((key, variant_name(request.content)),) for key, _ in request.indexes}
     labels = [label for _, label in request.indexes]
     return [
-        service.part(label, snapshot, request.content, protect)
+        indexes.part(service, label, snapshot, request.content, protect)
         for label, snapshot in zip(labels, snapshots, strict=True)
     ]
 
@@ -50,7 +51,7 @@ def search(service: Service, body: object) -> dict[str, Any]:
     request = validate.search(body)
     with service.store.using(key for key, _ in request.indexes) as snapshots:
         parts = _parts(service, request, snapshots)
-        index = service.combined(parts)
+        index = indexes.combined(service, parts)
         results = []
         if index is not None:
             results = index.search(
@@ -69,7 +70,7 @@ def related(service: Service, body: object) -> dict[str, Any]:
     request = validate.related(body)
     with service.store.using(key for key, _ in request.indexes) as snapshots:
         parts = _parts(service, request, snapshots)
-        index = service.combined(parts)
+        index = indexes.combined(service, parts)
         chunk = (
             None if index is None else resolve_chunk(index.chunks, request.file_path, request.line)
         )

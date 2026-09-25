@@ -48,12 +48,9 @@ class Body:
         if length is not None and not _digits(length.strip()):
             raise invalid_request("Content-Length is malformed")
         self._remaining = 0 if length is None else int(length)
-        self.complete = not self._chunked and self._remaining == 0
-
-    @property
-    def empty(self) -> bool:
-        """True when the request declared no body at all."""
-        return self.complete and not self._chunked
+        # `empty`: the request declared no body at all; `complete`: all of it has been read.
+        self.empty = not self._chunked and self._remaining == 0
+        self.complete = self.empty
 
     def _read_exact(self, size: int) -> bytes:
         try:

@@ -5,6 +5,7 @@ and it reloads the model from the path an index was saved with. Four of its modu
 therefore replaced, here and nowhere else: its cache lookup and incremental reuse find nothing,
 its statistics writer does nothing, and every model load returns the one model this process
 verified at start-up. `semble`'s MCP server module and `SembleIndex.from_git` are never used.
+The package's `__init__` has already fixed the environment `semble` reads when it is imported.
 """
 
 from __future__ import annotations
@@ -21,8 +22,6 @@ from model2vec import StaticModel
 from semble import ContentType, SearchResult, SembleIndex
 from semble.index.types import CACHE_FORMAT_VERSION
 from semble.utils import format_results
-
-from vaultgate_code import environment  # noqa: F401 - sets the environment before semble loads
 
 SEMBLE_VERSION = "0.6.1"
 NOTHING_TO_INDEX = "No supported files found"

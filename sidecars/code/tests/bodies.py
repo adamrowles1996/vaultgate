@@ -30,6 +30,6 @@ class Gated:
 class Refusing:
     """A body that must never be read."""
 
-    def read(self, size: int = -1, /) -> bytes:
+    def read(self, _size: int = -1, /) -> bytes:
         """Fail the test."""
         raise AssertionError("this body must not be read")

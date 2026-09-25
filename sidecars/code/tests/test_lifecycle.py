@@ -15,6 +15,7 @@ import childtargets
 import repo
 from bodies import Gated, Refusing
 from conftest import ServiceFactory, put
+from vaultgate_code import query
 from vaultgate_code.errors import ApiError
 from vaultgate_code.service import Service
 
@@ -230,8 +231,6 @@ def test_an_on_demand_variant_that_times_out(make_service: ServiceFactory) -> No
     service = make_service()
     put(service, "acme", variants=[], build_timeout_s=1)
     service.runner._target = childtargets.sleep_forever
-    from vaultgate_code import query
-
     error = failure(
         lambda: query.search(
             service,

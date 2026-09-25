@@ -90,8 +90,10 @@ def put(
 def shared(
     tmp_path_factory: pytest.TempPathFactory, model_dir: Path, manifest: fetch_model.Manifest
 ) -> Iterator[Service]:
-    """One service holding the fixture repository as `acme` (all variants built) and as
-    `acme-code` (code only), for tests that only read."""
+    """One service with the fixture repository as `acme` (every variant) and `acme-code` (code).
+
+    For tests that only read.
+    """
     state = tmp_path_factory.mktemp("shared") / "state"
     config = Config(state=state, model=model_dir, listen=("127.0.0.1", 0))
     service = Service(config, manifest, Clock(), lambda: None)

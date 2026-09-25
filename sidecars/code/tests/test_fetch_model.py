@@ -109,7 +109,7 @@ def test_verify_dir(tmp_path: Path) -> None:
         fetch_model.verify_dir(dest, pinned)
     (dest / "config.json").unlink()
     (dest / "config.json").mkdir()
-    with pytest.raises(ModelError, match="config.json is not a regular file"):
+    with pytest.raises(ModelError, match=r"config\.json is not a regular file"):
         fetch_model.verify_dir(dest, pinned)
     with pytest.raises(ModelError, match="cannot be read"):
         fetch_model.verify_dir(tmp_path / "absent", pinned)
