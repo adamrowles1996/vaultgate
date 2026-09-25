@@ -7,5 +7,12 @@
     "MD024": { "siblings_only": true },
   },
   "globs": ["**/*.md"],
-  "ignores": ["node_modules/**", "dist/**", "coverage/**"],
+  // The code sidecar's virtual environment and model download are local, untracked state.
+  "ignores": [
+    "node_modules/**",
+    "dist/**",
+    "coverage/**",
+    "sidecars/code/.venv/**",
+    "sidecars/code/.model/**",
+  ],
 }

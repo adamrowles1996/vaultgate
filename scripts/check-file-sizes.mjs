@@ -10,11 +10,23 @@ const MAX_LINES_CODE = 300;
 const MAX_LINES_PROSE = 1200;
 
 /**
-Generated or externally-authored files that the limits do not apply to.
+Generated or externally-authored files that the limits do not apply to: the npm
+lockfile, the licence and the code sidecar's `uv` lockfile (every hash of every
+wheel it may install).
 */
-const EXEMPT = new Set(['package-lock.json', 'LICENSE']);
+const EXEMPT = new Set(['package-lock.json', 'LICENSE', 'sidecars/code/uv.lock']);
 
-const CODE_EXTENSIONS = new Set(['.ts', '.mjs', '.cjs', '.js', '.json', '.yml', '.yaml', '.sh']);
+const CODE_EXTENSIONS = new Set([
+  '.ts',
+  '.mjs',
+  '.cjs',
+  '.js',
+  '.json',
+  '.yml',
+  '.yaml',
+  '.sh',
+  '.py',
+]);
 const PROSE_EXTENSIONS = new Set(['.md']);
 
 function extensionOf(path) {

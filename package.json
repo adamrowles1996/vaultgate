@@ -36,7 +36,7 @@
     "lint:code": "eslint . --max-warnings=0",
     "lint:code:fix": "eslint . --fix",
     "lint:dependencies": "depcruise src",
-    "lint:docker": "hadolint Dockerfile",
+    "lint:docker": "hadolint Dockerfile sidecars/code/Dockerfile",
     "lint:editorconfig": "editorconfig-checker",
     "lint:lockfile": "lockfile-lint --path package-lock.json --type npm --allowed-hosts npm --validate-https --validate-integrity --validate-package-names",
     "lint:manifest": "sort-package-json --check",
