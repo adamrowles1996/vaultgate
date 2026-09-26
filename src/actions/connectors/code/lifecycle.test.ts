@@ -86,7 +86,7 @@ describe('an unreachable sidecar (ACT-109, ACT-113)', () => {
     expect(code.harness.engine.tools).toHaveLength(3);
   });
 
-  it('ACT-109 ACT-115 found reachable again, the sidecar is checked and reconciled before it serves on', async () => {
+  it('ACT-117 ACT-109 ACT-115 found reachable again, the sidecar is checked and reconciled before it serves on', async () => {
     const code = createCodeHarness({
       sidecar: { answer: () => [sidecarResult('widgets')] },
       startUnreachable: true,
@@ -129,7 +129,7 @@ describe('an unreachable sidecar (ACT-109, ACT-113)', () => {
 });
 
 describe('deleting a target (ACT-109)', () => {
-  it('ACT-109 tells the sidecar to delete every snapshot of the target before the row is removed', async () => {
+  it('ACT-117 ACT-109 tells the sidecar to delete every snapshot of the target before the row is removed', async () => {
     const code = createCodeHarness();
     const target = await createCodeTarget(code);
     expect(code.sidecar.snapshots.size).toBe(1);

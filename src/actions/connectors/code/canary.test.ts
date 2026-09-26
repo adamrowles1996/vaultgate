@@ -112,7 +112,7 @@ const EVERY_TOOL: readonly Invocation[] = [
 ];
 
 describe('the ACT-53 canary over the code connector', () => {
-  it('ACT-53 ACT-51 no token, and no archive redirect token, reaches a result, a row, an audit event or a log line, when the repository holds them', async () => {
+  it('ACT-117 ACT-53 ACT-51 no token, and no archive redirect token, reaches a result, a row, an audit event or a log line, when the repository holds them', async () => {
     const code = hostileHarness({ echo: false });
     await targets(code);
     const outcomes = await callAll(code, EVERY_TOOL);

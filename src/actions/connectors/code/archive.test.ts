@@ -34,7 +34,7 @@ async function openOver(fake: ReturnType<typeof github>, commit: string = SHA.ma
 const CODELOAD = `https://codeload.github.com/${REPO}/legacy.tar.gz/${SHA.main}?token=${FAKE_ARCHIVE_TOKEN}`;
 
 describe('the archive download (ACT-104, ACT-105)', () => {
-  it('ACT-104 asks the API for the tarball of the SHA with the token, then follows one redirect to codeload without it', async () => {
+  it('ACT-117 ACT-104 asks the API for the tarball of the SHA with the token, then follows one redirect to codeload without it', async () => {
     const fake = github();
     const { access } = recordedAccess(fake.fetch);
     const stream = unwrapOk(await openArchive(access, REPO, SHA.main));
@@ -81,7 +81,7 @@ describe('the archive download (ACT-104, ACT-105)', () => {
     expect(recorded.captured).toStrictEqual([]);
   });
 
-  it('ACT-104 refuses a redirect anywhere but codeload under the same repository, and asks nothing more', async () => {
+  it('ACT-117 ACT-104 refuses a redirect anywhere but codeload under the same repository, and asks nothing more', async () => {
     const elsewhere = [
       ['http://codeload.github.com/acme/widgets/x', 'the redirect leaves the archive host'],
       ['https://evil.example/acme/widgets/x', 'the redirect leaves the archive host'],

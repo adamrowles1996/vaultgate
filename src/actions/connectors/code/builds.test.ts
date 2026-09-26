@@ -62,7 +62,7 @@ describe('the build on save (ACT-105, ACT-108)', () => {
     expect(everything).not.toContain('ARCHIVE-CONTENT-MARKER');
   });
 
-  it('ACT-105 cuts the stream at max_archive_bytes, which fails the build with archive_too_large', async () => {
+  it('ACT-117 ACT-105 cuts the stream at max_archive_bytes, which fails the build with archive_too_large', async () => {
     const big = Buffer.alloc(MIB + 64 * 1024, 7);
     const code = createCodeHarness({
       github: { repos: [fakeRepo({ archives: { [SHA.main]: big } })] },
@@ -98,7 +98,7 @@ describe('the build on save (ACT-105, ACT-108)', () => {
 });
 
 describe('single flight and the wait (ACT-108, ACT-112)', () => {
-  it('ACT-108 one build runs per target and commit: a call that needs it joins the save build', async () => {
+  it('ACT-117 ACT-108 one build runs per target and commit: a call that needs it joins the save build', async () => {
     const code = createCodeHarness({ sidecar: { answer: () => [sidecarResult('widgets')] } });
     const release = code.sidecar.hold();
     await createCodeTarget(code);
@@ -112,7 +112,7 @@ describe('single flight and the wait (ACT-108, ACT-112)', () => {
     expect([code.sidecar.builds.length, tarballRequests(code).length]).toStrictEqual([1, 1]);
   });
 
-  it('ACT-112 a call waits up to build_wait_s, then answers index_not_ready building; the build carries on and a later call finds it', async () => {
+  it('ACT-117 ACT-112 a call waits up to build_wait_s, then answers index_not_ready building; the build carries on and a later call finds it', async () => {
     const code = createCodeHarness({ sidecar: { answer: () => [sidecarResult('widgets')] } });
     await createCodeTarget(code, { policy: { build_wait_s: 30 } });
     const release = code.sidecar.hold();

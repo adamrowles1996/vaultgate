@@ -56,7 +56,7 @@ describe('the freshness of the configured ref (ACT-108)', () => {
     expect(apiRequests(code)).toHaveLength(4);
   });
 
-  it('ACT-108 a ref that moved is answered from the previous snapshot with stale: true while the new one builds', async () => {
+  it('ACT-117 ACT-108 a ref that moved is answered from the previous snapshot with stale: true while the new one builds', async () => {
     const references = { main: SHA.main };
     const code = movable(references);
     await createCodeTarget(code);

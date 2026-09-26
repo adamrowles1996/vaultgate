@@ -35,7 +35,7 @@ function pathsOf(fake: ReturnType<typeof github>): readonly string[] {
 }
 
 describe('resolving a ref (ACT-104)', () => {
-  it('ACT-104 resolves the default branch through /repos, then as a branch with the sha media type', async () => {
+  it('ACT-117 ACT-104 resolves the default branch through /repos, then as a branch with the sha media type', async () => {
     const fake = github();
     const { access } = recordedAccess(fake.fetch);
     expect(unwrapOk(await resolveReference(access, REPO, undefined))).toStrictEqual({
@@ -75,7 +75,7 @@ describe('resolving a ref (ACT-104)', () => {
     expect(fake.requests).toStrictEqual([]);
   });
 
-  it('ACT-104 resolves pr:<n> through refs/pull/<n>/head of the base repository with the sha media type', async () => {
+  it('ACT-117 ACT-104 resolves pr:<n> through refs/pull/<n>/head of the base repository with the sha media type', async () => {
     const fake = github();
     const { access } = recordedAccess(fake.fetch);
     expect(unwrapOk(await resolveReference(access, REPO, 'pr:7'))).toStrictEqual({
