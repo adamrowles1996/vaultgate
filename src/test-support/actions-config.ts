@@ -5,8 +5,9 @@ The actions layer as every deployment starts: off, every connector off.
 */
 export const ACTIONS_OFF: ActionsConfig = {
   enabled: false,
-  connectors: { http: false, sql: false, ssh: false, winrm: false, browser: false },
+  connectors: { http: false, sql: false, ssh: false, winrm: false, browser: false, code: false },
   browserCdpUrl: undefined,
+  codeUrl: undefined,
   allowAnyCommand: false,
 };
 
@@ -15,7 +16,7 @@ The layer on with the named connectors on; everything else stays off.
 */
 export function actionsEnabled(
   kinds: readonly ConnectorKind[],
-  overrides: Partial<Pick<ActionsConfig, 'allowAnyCommand' | 'browserCdpUrl'>> = {},
+  overrides: Partial<Pick<ActionsConfig, 'allowAnyCommand' | 'browserCdpUrl' | 'codeUrl'>> = {},
 ): ActionsConfig {
   return {
     ...ACTIONS_OFF,

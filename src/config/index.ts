@@ -112,8 +112,10 @@ function toConfig(data: ParsedEnvironment): Config {
         ssh: data.VAULTGATE_ACTIONS_ENABLE_SSH,
         winrm: data.VAULTGATE_ACTIONS_ENABLE_WINRM,
         browser: data.VAULTGATE_ACTIONS_ENABLE_BROWSER,
+        code: data.VAULTGATE_ACTIONS_ENABLE_CODE,
       },
       browserCdpUrl: data.VAULTGATE_ACTIONS_BROWSER_CDP_URL,
+      codeUrl: data.VAULTGATE_ACTIONS_CODE_URL,
       allowAnyCommand: data.VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND,
     },
     secrets: {

@@ -105,7 +105,10 @@ function itemCell(row: ComputerRow): Html {
   const name = row.isItemMissing
     ? html`<span class="bad">${icon('alert')} ${row.itemName}</span>`
     : html`<span>${icon('vault')} ${row.itemName}</span>`;
-  return html`<span class="cell-main">${name}${fields(row.summary.fields)}</span>`;
+  const { credentialNote } = row.summary;
+  const note =
+    credentialNote === undefined ? EMPTY : html`<span class="cell-sub">${credentialNote}</span>`;
+  return html`<span class="cell-main">${name}${fields(row.summary.fields)}${note}</span>`;
 }
 
 function lastCallCell(row: ComputerRow, now: number): Html {

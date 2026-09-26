@@ -18,6 +18,7 @@ export const SCOPES = [
   'actions:ssh',
   'actions:winrm',
   'actions:browser',
+  'actions:code',
 ] as const;
 
 export type Scope = (typeof SCOPES)[number];
@@ -34,6 +35,7 @@ export const ACTION_SCOPE_CONNECTORS: Readonly<Record<ActionScope, ConnectorKind
   'actions:ssh': 'ssh',
   'actions:winrm': 'winrm',
   'actions:browser': 'browser',
+  'actions:code': 'code',
 };
 
 export interface ScopeDefinition {
@@ -100,6 +102,11 @@ export const SCOPE_DEFINITIONS: readonly ScopeDefinition[] = [
     scope: 'actions:browser',
     explanation:
       'Sign in to websites the operator has configured and act there as you, within the pages the operator allows.',
+    risky: true,
+  },
+  {
+    scope: 'actions:code',
+    explanation: 'Search and read code in repositories the operator has configured.',
     risky: true,
   },
 ];

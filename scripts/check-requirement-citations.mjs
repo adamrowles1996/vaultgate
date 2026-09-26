@@ -33,19 +33,14 @@ const CITATION = /\bACT-\d+\b/g;
 
 /**
  * Requirements no test proves, each with the reason. `M15` marks the
- * `browser` connector (spec 13.6.6 and 14.7) and `M16` the `code` connector
- * (spec 13.6.7 and 14.8, ADR 0008), each deliberately unimplemented until its
- * milestone; their tests land with them. Remove an entry when its milestone
- * lands — never to silence this gate.
+ * `browser` connector (spec 13.6.6 and 14.7), deliberately unimplemented
+ * until its milestone; its tests land with it. Remove an entry when its
+ * milestone lands — never to silence this gate.
  */
 const PENDING = [
   {
     milestone: 'M15',
     numbers: [29, 30, 31, 32, 33, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102],
-  },
-  {
-    milestone: 'M16',
-    numbers: [103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 119, 120],
   },
 ];
 const ALLOWED = new Map(

@@ -46,3 +46,10 @@ ACT-5: the page that edits a target, behind the same ID-15 window as every chang
 export function editPath(id: string): string {
   return `${targetPath(id)}/edit`;
 }
+
+/**
+ACT-118: Check now on a saved target, a `POST` behind the operator's session and synchroniser token.
+*/
+export function checkPath(id: string): string {
+  return `${targetPath(id)}/check`;
+}

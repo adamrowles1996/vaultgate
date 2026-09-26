@@ -99,6 +99,88 @@ expect_contains "libatomic1 is installed when the library is absent" \
   "$(ensure_packages)" "apt-get install -y -q --no-install-recommends"
 expect_contains "libatomic1 is in the apt list" "$(ensure_packages)" "libatomic1"
 
+# The code sidecar (ACT-114): the flag, the upgrade-with-the-core rule and the
+# environment settings it appends without touching anything else.
+WITH_CODE_SIDECAR=0
+parse_arguments --with-code-sidecar --version 1.2.3
+expect_equal "--with-code-sidecar sets WITH_CODE_SIDECAR" "$WITH_CODE_SIDECAR" "1"
+if wants_code_sidecar; then pass "the flag asks for the sidecar"; else fail "the flag asks for the sidecar"; fi
+WITH_CODE_SIDECAR=0
+if [ -e /etc/systemd/system/vaultgate-code.service ]; then
+  pass "an installed sidecar is upgraded with the core (skipped: this host has one)"
+elif wants_code_sidecar; then
+  fail "without the flag or an installed sidecar, none is installed"
+else
+  pass "without the flag or an installed sidecar, none is installed"
+fi
+# shellcheck source=deploy/lib/code-sidecar.sh
+. "$root/deploy/lib/code-sidecar.sh"
+CONFIG_DIR="$work/etc"
+mkdir -p "$CONFIG_DIR"
+printf 'VAULTGATE_ENABLE_ACTIONS=true\n#VAULTGATE_ACTIONS_ENABLE_CODE=false\nVAULTGATE_HOST=127.0.0.1\n' \
+  >"$CONFIG_DIR/vaultgate.env"
+connect_code_sidecar >/dev/null
+connect_code_sidecar >/dev/null
+env_file=$(<"$CONFIG_DIR/vaultgate.env")
+expect_contains "the code switch is appended" "$env_file" $'\nVAULTGATE_ACTIONS_ENABLE_CODE=true\n'
+expect_contains "the socket URL is appended" "$env_file" "VAULTGATE_ACTIONS_CODE_URL=unix:/run/vaultgate-code/code.sock"
+expect_contains "the commented-out default stays" "$env_file" "#VAULTGATE_ACTIONS_ENABLE_CODE=false"
+expect_equal "a second run appends nothing" \
+  "$(grep -c '^VAULTGATE_ACTIONS_' "$CONFIG_DIR/vaultgate.env")" "2"
+printf 'VAULTGATE_ACTIONS_CODE_URL=http://code:8000\n' >"$CONFIG_DIR/vaultgate.env"
+expect_contains "an operator's URL is kept" "$(connect_code_sidecar)" "VAULTGATE_ACTIONS_CODE_URL already set"
+expect_contains "a missing master switch is pointed out" "$(connect_code_sidecar)" "VAULTGATE_ENABLE_ACTIONS=true as well"
+expect_equal "an operator's URL is not replaced" \
+  "$(grep -c '^VAULTGATE_ACTIONS_CODE_URL=http://code:8000$' "$CONFIG_DIR/vaultgate.env")" "1"
+if (CODE_PYTHON=python9.99 ensure_code_python >/dev/null 2>&1); then
+  fail "a system without Python 3.12 is refused"
+else
+  pass "a system without Python 3.12 is refused"
+fi
+expect_contains "the refusal points at the image" \
+  "$( (CODE_PYTHON=python9.99 ensure_code_python) 2>&1 || true)" "install-docker-compose.md"
+
+# A release older than the sidecar: refused with the flag, left alone without it.
+RELEASE_DIR="$work/old-release"
+mkdir -p "$RELEASE_DIR/deploy/lib"
+if (WITH_CODE_SIDECAR=1 load_code_sidecar >/dev/null 2>&1); then
+  fail "a release without the sidecar refuses --with-code-sidecar"
+else
+  pass "a release without the sidecar refuses --with-code-sidecar"
+fi
+expect_equal "a release without the sidecar leaves an installed one alone" "$(
+  CODE_SIDECAR=0
+  WITH_CODE_SIDECAR=0
+  load_code_sidecar >/dev/null
+  echo "loaded=${CODE_SIDECAR}"
+)" "loaded=0"
+
+# A sidecar that does not come up is reported, and the core's upgrade goes on.
+expect_contains "a missing socket is a warning, not a failure" "$(
+  CODE_SOCKET="$work/no.sock" CODE_SOCKET_WAIT=0 wait_for_code_socket
+  echo "went on"
+)" "went on"
+
+# A re-run of the installed version keeps the running tree until the staged one replaces it.
+CODE_ROOT="$work/opt-code"
+VERSION=1.2.3
+mkdir -p "$CODE_ROOT/1.2.3" "$CODE_ROOT/.staging-1.2.3"
+echo old >"$CODE_ROOT/1.2.3/marker"
+echo new >"$CODE_ROOT/.staging-1.2.3/marker"
+CODE_STAGING="$CODE_ROOT/.staging-1.2.3"
+place_code_tree >/dev/null
+expect_equal "the staged tree replaces the installed one" "$(<"$CODE_ROOT/current/marker")" "new"
+expect_equal "no staging or previous tree is left behind" \
+  "$(find "$CODE_ROOT" -mindepth 1 -maxdepth 1 -name '.staging-*' -o -mindepth 1 -maxdepth 1 -name '*.previous' | wc -l)" "0"
+
+# A group left behind by an earlier userdel is reused.
+getent() { [ "$1" = group ]; }
+useradd() { printf 'useradd %s\n' "$*"; }
+usermod() { :; }
+id() { echo vaultgate; }
+expect_contains "a leftover group is reused" "$(create_code_user)" "--gid vaultgate-code"
+unset -f getent useradd usermod id
+
 if [ "$failures" -gt 0 ]; then
   printf '%s check(s) failed\n' "$failures" >&2
   exit 1

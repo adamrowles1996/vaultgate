@@ -32,6 +32,10 @@ export interface ComputerSummary {
   readonly address: string;
   readonly addressDetail: string;
   readonly fields: readonly MappedField[];
+  /**
+  What it signs in with when it maps no field at all: a public repository read without a token.
+  */
+  readonly credentialNote?: string;
   readonly allows: string;
   readonly confirmation: Confirmation;
   readonly state: ComputerState;
@@ -45,27 +49,73 @@ const commandPolicy = z.object({
   allowed_commands: z.array(z.string()).default([]),
 });
 const httpPolicy = z.object({ allowed_methods: z.array(z.string()) });
+const codePolicy = z.object({ content: z.array(z.string()), allow_read: z.boolean() });
+const codeDestination = z.object({ ref: z.string().optional() });
+
+/**
+ACT-119: a public repository read without a token signs in with nothing.
+*/
+const NO_TOKEN = 'No token: a public repository';
 
 function plural(count: number, noun: string): string {
   return `${String(count)} ${noun}${count === 1 ? '' : 's'}`;
 }
 
+type Allows = (policy: unknown) => string | undefined;
+
+function commandsAllowed(policy: unknown): string | undefined {
+  const commands = commandPolicy.safeParse(policy);
+  if (!commands.success) {
+    return undefined;
+  }
+  return commands.data.any_command
+    ? 'Any command'
+    : plural(commands.data.allowed_commands.length, 'command');
+}
+
+/**
+What each connector's policy allows, in a few words; `undefined` for a policy out of shape.
+*/
+const ALLOWS: Readonly<Partial<Record<TargetSummary['connector'], Allows>>> = {
+  sql(policy) {
+    const sql = sqlPolicy.safeParse(policy);
+    if (!sql.success) {
+      return;
+    }
+    return sql.data.operations.includes('write') ? 'Read and write' : 'Read only';
+  },
+  ssh: commandsAllowed,
+  winrm: commandsAllowed,
+  http(policy) {
+    const http = httpPolicy.safeParse(policy);
+    return http.success ? http.data.allowed_methods.join(', ') : undefined;
+  },
+  code(policy) {
+    const code = codePolicy.safeParse(policy);
+    if (!code.success) {
+      return;
+    }
+    return [...code.data.content, ...(code.data.allow_read ? ['read files'] : [])].join(', ');
+  },
+};
+
 /**
 What the policy in force lets an agent do, in a few words; `policy` has its defaults filled in.
 */
 export function allowsOf(connector: TargetSummary['connector'], policy: unknown): string {
-  const sql = sqlPolicy.safeParse(policy);
-  if (connector === 'sql' && sql.success) {
-    return sql.data.operations.includes('write') ? 'Read and write' : 'Read only';
+  return ALLOWS[connector]?.(policy) ?? '';
+}
+
+/**
+Where the destination is: the network and the transport, or for a repository which ref it follows.
+*/
+function addressDetailOf(target: TargetSummary, isEncrypted: boolean): string {
+  const code = codeDestination.safeParse(target.destination);
+  if (target.connector === 'code' && code.success) {
+    return code.data.ref === undefined ? 'GitHub · default branch' : 'GitHub · configured ref';
   }
-  const commands = commandPolicy.safeParse(policy);
-  if ((connector === 'ssh' || connector === 'winrm') && commands.success) {
-    return commands.data.any_command
-      ? 'Any command'
-      : plural(commands.data.allowed_commands.length, 'command');
-  }
-  const http = httpPolicy.safeParse(policy);
-  return connector === 'http' && http.success ? http.data.allowed_methods.join(', ') : '';
+  const network = target.internal ? 'internal' : 'public';
+  return `${network} · ${isEncrypted ? 'encrypted' : 'plain transport'}`;
 }
 
 function stateOf(target: TargetSummary): ComputerState {
@@ -93,7 +143,6 @@ export function summarise(target: TargetSummary): ComputerSummary {
   }
   const { documents, schemas } = validated;
   const isEncrypted = schemas.endpoints(documents.destination).every((endpoint) => endpoint.tls);
-  const network = target.internal ? 'internal' : 'public';
   const fields = schemas.credentialFields(documents.credential).map((field) => ({
     selector: field.selector,
     isSecret: field.selector !== USERNAME_SELECTOR,
@@ -104,9 +153,10 @@ export function summarise(target: TargetSummary): ComputerSummary {
   }
   return {
     ...base,
-    addressDetail: `${network} · ${isEncrypted ? 'encrypted' : 'plain transport'}`,
+    addressDetail: addressDetailOf(target, isEncrypted),
     allows: allowsOf(target.connector, documents.policy),
     fields,
+    ...(fields.length === 0 && target.connector === 'code' && { credentialNote: NO_TOKEN }),
     confirmation,
   };
 }

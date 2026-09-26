@@ -123,11 +123,12 @@ describe('migrate', () => {
   it('STORE-5 STORE-9 ACT-65 creates the current schema with every table and hot-path index', () => {
     const database = new DatabaseSync(':memory:');
     expect(unwrapOk(migrate(database, MIGRATIONS, NOW))).toStrictEqual({
-      applied: [1, 2, 3, 4],
-      version: 4,
+      applied: [1, 2, 3, 4, 5],
+      version: 5,
     });
     expect(tables(database)).toStrictEqual([
       'action_calls',
+      'action_code_snapshots',
       'action_grants',
       'action_sessions',
       'action_targets',

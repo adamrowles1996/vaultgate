@@ -21,6 +21,7 @@ import { createLogger } from './logger.ts';
 import { createPinnedHttpsFetch } from './net/pinned-https.ts';
 import { createAuthorizationServer } from './oauth/server.ts';
 import { openStore } from './storage/index.ts';
+import { VERSION } from './version.ts';
 
 const loaded = loadConfig(process.env);
 if (!loaded.ok) {
@@ -127,7 +128,15 @@ const actionsPages =
         database: store.db,
         vault: vault.client,
         sensitiveAction: (context) => identity.sensitiveAction(context),
+        operatorAction: (context) => identity.operatorAction(context),
         pageHeaders: (context, next) => identity.pageHeaders(context, next),
+        // ACT-119, ACT-120: the repository list and check reach GitHub pinned, as calls do.
+        github: {
+          fetch: createPinnedHttpsFetch(),
+          lookup: resolveAddresses,
+          userAgent: `vaultgate/${VERSION}`,
+        },
+        code: engine.code,
         listClients: (operatorId) =>
           authorization.listConnectedClients(operatorId).map((client) => ({
             clientId: client.clientId,

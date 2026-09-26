@@ -8,7 +8,7 @@ import { notFound } from './not-found.ts';
 import { EMPTY } from './pages/template.ts';
 import { createLocalProvider, type IdentityProvider } from './provider.ts';
 import { createIdentityStores } from './repositories/index.ts';
-import { type SensitiveAction, sensitiveAction } from './routes-account.ts';
+import { actionGates, type SensitiveAction } from './routes-account.ts';
 import { type ConsoleAccess, consoleAccess } from './routes-console.ts';
 import { createIdentityRoutes } from './routes.ts';
 import { createSessionManager } from './session-manager.ts';
@@ -104,6 +104,10 @@ export interface Identity {
   */
   readonly sensitiveAction: SensitiveAction;
   /**
+  ID-18 without ID-15, for a write another layer serves that changes no setting (ACT-108).
+  */
+  readonly operatorAction: SensitiveAction;
+  /**
    * ID-19 on a page another layer serves (ACT-5): the strict CSP and
    * `Cache-Control: no-store`. Injected rather than inherited, so an account
    * page keeps them whatever order the composition layer mounts it in.
@@ -185,7 +189,7 @@ export function createIdentity(dependencies: IdentityDependencies): Identity {
     provider: createLocalProvider(),
     bootstrap,
     cookiePolicy,
-    sensitiveAction: sensitiveAction(services),
+    ...actionGates(services),
     pageHeaders,
     renderConsole: createConsoleRenderer(services),
     consoleAccess: consoleAccess(services),

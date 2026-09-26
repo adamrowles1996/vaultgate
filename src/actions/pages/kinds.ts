@@ -55,7 +55,12 @@ export const KINDS: Readonly<Record<ComputerKind, KindDescription>> = {
     tools: 'http_request',
   },
   browser: { label: 'Browser', plural: 'Browsers', icon: 'globe', tools: 'browser_*' },
-  code: { label: 'Code', plural: 'Code', icon: 'file', tools: 'code_search' },
+  code: {
+    label: 'Semble · GitHub code search',
+    plural: 'Semble · GitHub code search',
+    icon: 'code',
+    tools: 'code_search · code_find_related · code_read',
+  },
 };
 
 /**

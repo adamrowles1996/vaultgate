@@ -7,31 +7,34 @@
  * it for the duration of `run` only (ACT-50). Output is raw: the engine
  * scrubs it (ACT-51) and cuts it at the cap (ACT-52).
  */
+import type { Endpoint, RunContext, TargetDocuments } from './context.ts';
+import type { ConnectorOutput, OperationDescription } from './output.ts';
+import type { ConnectorControl, ConnectorServices } from './stateful.ts';
+import type { ConnectorTool, TargetCapabilities } from './tool.ts';
 import type { ConnectorKind } from '../../config/actions.ts';
-import type { Logger } from '../../logger.ts';
-import type { OutputSchema, ToolAnnotations } from '../../mcp/tools/definition.ts';
 import type { Result } from '../../result.ts';
-import type { ActionScope } from '../../scopes/registry.ts';
 import type { ActionError } from '../errors.ts';
-import type { CommonPolicy, OperationKind, PolicyDecision } from '../policy.ts';
-import type { InjectedValues } from '../scrub.ts';
-import type { OmittedText } from './operation-summary.ts';
+import type { PolicyDecision } from '../policy.ts';
 import type { z } from 'zod';
 
-/**
-One host a destination names and whether the transport to it is encrypted (ACT-57).
-*/
-export interface Endpoint {
-  readonly host: string;
-  readonly tls: boolean;
-}
-
-/**
-An endpoint with the address the engine resolved and validated once for this call (ACT-55).
-*/
-export interface PinnedEndpoint extends Endpoint {
-  readonly address: string;
-}
+export type {
+  Endpoint,
+  PinnedEndpoint,
+  RunContext,
+  RunSupport,
+  TargetDocuments,
+} from './context.ts';
+export type { ConnectorOutput, OperationDescription } from './output.ts';
+export type {
+  ConnectorControl,
+  ConnectorServices,
+  KeptSnapshot,
+  KeptSnapshots,
+  SavedTarget,
+  StoredTarget,
+  TargetAccess,
+} from './stateful.ts';
+export type { ConnectorTool, OperationSchema, RepoArgument, TargetCapabilities } from './tool.ts';
 
 /**
  * A vault field a credential mapping needs: the marker name, the selector
@@ -43,12 +46,6 @@ export interface CredentialField {
   readonly name: string;
   readonly selector: string;
   readonly role: 'secret' | 'username';
-}
-
-export interface TargetDocuments<Destination, Credential, Policy> {
-  readonly destination: Destination;
-  readonly credential: Credential;
-  readonly policy: Policy;
 }
 
 /**
@@ -102,161 +99,10 @@ export interface ConnectorSchemas<Destination, Credential, Policy> {
    * target and can say so when the operator turns it off.
    */
   allowsNonRead(policy: Policy): boolean;
-}
-
-/**
- * The operation half of a tool's arguments: a strict object, so the MCP layer
- * can put `target` in front of its shape when it advertises the tool (ACT-16)
- * and the engine can parse the arguments minus `target` with it.
- */
-export type OperationSchema<Operation> = z.ZodObject<z.ZodRawShape, z.core.$strict> &
-  z.ZodType<Operation>;
-
-/**
- * One MCP tool a connector serves (spec §13.6): the name and scope the gate
- * checks, the LLM-facing description of ACT-17, the annotations of the
- * 13.6.1 table (ACT-18), the operation arguments and the strict result shape
- * (ACT-15). `src/mcp/tools/actions.ts` registers every tool of every loaded
- * connector and dispatches its calls to the engine; a connector adds a tool
- * by declaring one of these.
- */
-export interface ConnectorTool<Operation> {
-  readonly name: string;
-  readonly scope: ActionScope;
-  readonly description: string;
-  readonly annotations: ToolAnnotations;
   /**
-  The tool's arguments minus `target` (and `session_id`), strict.
+  ACT-103: the problem a save reports for `internal: true`, for a connector whose destinations never are.
   */
-  readonly inputSchema: OperationSchema<Operation>;
-  /**
-  What the engine returns for the tool, strict; never a place for a credential.
-  */
-  readonly outputSchema: OutputSchema;
-}
-
-export interface OperationGrant {
-  readonly operation: OperationKind;
-  readonly scope: ActionScope;
-}
-
-/**
-What `actions_list_targets` may say about a target (ACT-19), before the scope filter.
-*/
-export interface TargetCapabilities {
-  readonly operations: readonly OperationGrant[];
-  readonly engine?: 'mssql' | 'postgres';
-  readonly unrestricted?: boolean;
-}
-
-export interface OutputLimit {
-  readonly maxBytes: number;
-  /**
-  ACT-52: capture this many bytes beyond `maxBytes` so a value straddling the cut is still scrubbed.
-  */
-  readonly guardBytes: number;
-}
-
-/**
-The target a call runs against, as a connector may name it: the cache key of an adapter token (ACT-82) and the audit subject (ACT-83). Never the vault item id.
-*/
-export interface CallTarget {
-  readonly id: string;
-  readonly name: string;
-  readonly revision: number;
-}
-
-/**
- * What a connector may ask of the engine during a run, so it never reaches
- * the vault, the resolver or the audit trail itself: a second host resolved
- * under the ACT-55 rules, a secret obtained mid-call added to the scrub table
- * (ACT-51) and zeroed with the rest, and the credential rotation of ACT-83.
- */
-export interface RunSupport {
-  readonly target: CallTarget;
-  /**
-  ACT-55: resolves and validates a host beyond the destination, such as the `graph` token endpoint.
-  */
-  resolve(endpoint: Endpoint): Promise<Result<PinnedEndpoint, ActionError>>;
-  /**
-  ACT-51: a value obtained during the call joins the scrub table at once; its buffer is zeroed at the end.
-  */
-  capture(field: string, value: Buffer): void;
-  /**
-  ACT-83: writes a rotated credential back to the credential's vault item and records the event.
-  */
-  rotate(field: string, value: string): Promise<Result<void, ActionError>>;
-  /**
-   * ACT-51, ACT-53: upstream text the connector is about to log rather than
-   * return. The engine scrubs everything that leaves it, but a log line the
-   * connector writes itself never passes through that, and OPS-1's pino
-   * backstop redacts by field name, not by content: this is the one way a
-   * driver message reaches the log without the call's scrub table seeing it.
-   */
-  scrub(text: string): string;
-}
-
-export interface RunContext<Destination, Credential, Policy> extends TargetDocuments<
-  Destination,
-  Credential,
-  Policy
-> {
-  readonly common: CommonPolicy;
-  /**
-  The tool the agent called; `sql` serves two and runs them differently (ACT-24, ACT-25).
-  */
-  readonly tool: string;
-  readonly injected: InjectedValues;
-  readonly support: RunSupport;
-  /**
-  ACT-55: connect to `address`; `host` is for TLS (SNI, verification), `Host` and host-key lookup only.
-  */
-  readonly pinned: readonly PinnedEndpoint[];
-  /**
-  ACT-59: aborted when the policy timeout elapses; the connector cancels its work.
-  */
-  readonly signal: AbortSignal;
-  readonly outputLimit: OutputLimit;
-  readonly logger: Logger;
-}
-
-export interface OperationDescription {
-  /**
-  ACT-43: the method and path, the statement or command, or the page URL and element; an excerpt when it is long.
-  */
-  readonly summary: string;
-  /**
-  ACT-43: what the excerpt leaves out, when it is one; the confirmation message says so where the agent cannot forge it.
-  */
-  readonly omitted?: OmittedText;
-  /**
-  ACT-60: the SQL class, the HTTP method, `command`, or the browser page URL.
-  */
-  readonly classification: string;
-}
-
-export interface ConnectorOutput {
-  /**
-  The tool result before scrubbing; every string inside is scrubbed by the engine.
-  */
-  readonly result: Readonly<Record<string, unknown>>;
-  /**
-  Byte streams captured up to `maxBytes + guardBytes` (`body`, `stdout`, `stderr`, `snapshot`); the
-  engine scrubs and cuts each and writes the text into `result` under the same key.
-  */
-  readonly captured: Readonly<Record<string, Buffer>>;
-  /**
-   * ACT-51, ACT-52: the `captured` keys the engine returns base64-encoded. A
-   * connector hands over the raw bytes and names the key here; it never encodes
-   * them itself, because base64 is positional and the scrub table holds the
-   * value's own encodings, not the encoding of a buffer that contains it.
-   */
-  readonly base64?: readonly string[];
-  /**
-  ACT-60: the size of a result that is not a byte stream (the `sql` rows), for `output_bytes`;
-  without it the engine adds up what `captured` holds.
-  */
-  readonly bytes?: number;
+  readonly internalRefused?: string;
 }
 
 export interface Connector<Destination, Credential, Policy, Operation> extends ConnectorSchemas<
@@ -286,6 +132,24 @@ export interface Connector<Destination, Credential, Policy, Operation> extends C
     context: RunContext<Destination, Credential, Policy>,
     operation: Operation,
   ): Promise<Result<ConnectorOutput, ActionError>>;
+  /**
+  ACT-110: one operation over several targets at once, for a tool with a `repo` argument.
+  */
+  runMany?(
+    contexts: readonly RunContext<Destination, Credential, Policy>[],
+    operation: Operation,
+  ): Promise<Result<ConnectorOutput, ActionError>>;
+  /**
+  ACT-16, ACT-110: the decision over every target of such a call together, once each has passed `authorize`.
+  */
+  authorizeMany?(
+    requests: readonly OperationRequest<Destination, Credential, Policy>[],
+    operation: Operation,
+  ): PolicyDecision;
+  /**
+  A connector that keeps state between calls is given the engine's services once.
+  */
+  attach?(services: ConnectorServices): ConnectorControl;
 }
 
 export type AnyConnectorSchemas = ConnectorSchemas<unknown, unknown, unknown>;

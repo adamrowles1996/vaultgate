@@ -46,6 +46,7 @@ describe('openStore', () => {
       { version: 2 },
       { version: 3 },
       { version: 4 },
+      { version: 5 },
     ]);
     expect(lines().map((line) => line['msg'])).toStrictEqual([
       'store ready',
@@ -53,8 +54,8 @@ describe('openStore', () => {
     ]);
     expect(lines()[0]).toMatchObject({
       path: join(dataDirectory, 'vaultgate.sqlite'),
-      applied: [1, 2, 3, 4],
-      version: 4,
+      applied: [1, 2, 3, 4, 5],
+      version: 5,
     });
     vi.advanceTimersByTime(3_600_000);
     expect(lines()).toHaveLength(3);

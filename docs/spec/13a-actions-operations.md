@@ -95,15 +95,19 @@
 
 Migration `004-actions` adds four tables (conventions of 07.1). Migration `005-code-connector`
 (M16, ADR 0008) rebuilds `action_targets` with the same columns to widen its `connector` `CHECK`
-to admit `code`, because SQLite cannot alter a `CHECK` in place; no column is added, and nothing
-about a repository, snapshot or index is stored in vaultgate's database:
+to admit `code`, because SQLite cannot alter a `CHECK` in place, and adds `action_code_snapshots`:
+for each code target, the snapshot its calls without a `ref` answer from, so that after a restart
+a moved ref is still answered from it with `stale: true` (ACT-108). Nothing else about a
+repository, snapshot or index, and nothing of a repository's content, is stored in vaultgate's
+database:
 
-| Table             | Columns                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `action_targets`  | `id`, `name` (unique), `description`, `connector`, `destination` (JSON), `internal`, `credential` (JSON: item id and field names only), `policy` (JSON), `enabled`, `revision`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                   |
-| `action_grants`   | `target_id` (FK, cascade), `client_id` (FK `oauth_clients.client_id`), `granted_at`, `granted_by`, `revoked_at`; primary key (`target_id`, `client_id`)                                                                                                                                                                                                                    |
-| `action_calls`    | `id`, `at`, `target_id` (no FK; outlives the target), `target_name`, `connector`, `revision`, `tool`, `session_id_hash`, `client_id`, `token_prefix`, `operation`, `classification`, `arguments` (JSON), `arguments_truncated`, `output_bytes`, `output_truncated`, `duration_ms`, `outcome`, `elicitation`, `confirmation_nonce` (unique, nullable), `request_id`, `ip`   |
-| `action_sessions` | `id_hash` (SHA-256 of the session id), `target_id`, `client_id`, `token_prefix`, `opened_at`, `last_used_at`, `expires_at`, `closed_at`, `close_reason` (`agent` \| `idle` \| `absolute` \| `revoked` \| `target_changed` \| `operator` \| `shutdown` \| `error`), `calls`; the live context lives in the sidecar, this row is the record and the revocation handle (14.7) |
+| Table                   | Columns                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `action_targets`        | `id`, `name` (unique), `description`, `connector`, `destination` (JSON), `internal`, `credential` (JSON: item id and field names only), `policy` (JSON), `enabled`, `revision`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                   |
+| `action_grants`         | `target_id` (FK, cascade), `client_id` (FK `oauth_clients.client_id`), `granted_at`, `granted_by`, `revoked_at`; primary key (`target_id`, `client_id`)                                                                                                                                                                                                                    |
+| `action_calls`          | `id`, `at`, `target_id` (no FK; outlives the target), `target_name`, `connector`, `revision`, `tool`, `session_id_hash`, `client_id`, `token_prefix`, `operation`, `classification`, `arguments` (JSON), `arguments_truncated`, `output_bytes`, `output_truncated`, `duration_ms`, `outcome`, `elicitation`, `confirmation_nonce` (unique, nullable), `request_id`, `ip`   |
+| `action_sessions`       | `id_hash` (SHA-256 of the session id), `target_id`, `client_id`, `token_prefix`, `opened_at`, `last_used_at`, `expires_at`, `closed_at`, `close_reason` (`agent` \| `idle` \| `absolute` \| `revoked` \| `target_changed` \| `operator` \| `shutdown` \| `error`), `calls`; the live context lives in the sidecar, this row is the record and the revocation handle (14.7) |
+| `action_code_snapshots` | `target_id` (primary key, FK `action_targets.id`, cascade), `snapshot_key`, `fingerprint` (of the extraction policy), `commit_sha`, `ref` (the name it was resolved from), `indexed_at`; rewritten as the configured ref moves on, deleted with the target's snapshots                                                                                                     |
 
 - **ACT-64** No column holds an injected value, a vault secret, a token, a raw session id or a
   `requestState` (STORE-4 extended). `credential` holds the item id and field names; the vault
@@ -129,7 +133,7 @@ about a repository, snapshot or index is stored in vaultgate's database:
 | `VAULTGATE_ACTIONS_ENABLE_BROWSER`    | `false` | Enables the `browser` connector and `actions:browser`. Requires `VAULTGATE_ACTIONS_BROWSER_CDP_URL`.                                   |
 | `VAULTGATE_ACTIONS_BROWSER_CDP_URL`   |         | `ws://` or `wss://` URL of the Chromium sidecar's DevTools endpoint (14.7). Must not be a public address.                              |
 | `VAULTGATE_ACTIONS_ENABLE_CODE`       | `false` | Enables the `code` connector and `actions:code` (14.8). Requires `VAULTGATE_ACTIONS_CODE_URL`.                                         |
-| `VAULTGATE_ACTIONS_CODE_URL`          |         | The code sidecar (ACT-113, ACT-114): an `http://` URL on an address that is not public, or `unix:` and a socket's absolute path.       |
+| `VAULTGATE_ACTIONS_CODE_URL`          |         | The code sidecar (ACT-113, ACT-114): `http://` on a private address or a name but `localhost`, or `unix:` and an absolute socket path. |
 | `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` | `false` | Allows `ssh`/`winrm` targets to be saved with `any_command: true` (ACT-88). Turning it off later makes such targets refuse every call. |
 
 - **ACT-67** The connector switches are meaningful only with the master switch on; a connector

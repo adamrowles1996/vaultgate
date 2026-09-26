@@ -59,6 +59,25 @@ The first start logs the bootstrap URL; open it to create the operator account.
 `docker compose ps` reports `healthy` once `/healthz` answers, and
 `curl -fsS https://vault.example.com/healthz` should return `{"status":"ok"}`.
 
+## 4. The code search sidecar (optional)
+
+The [code connector](code-search.md) (Semble code search over GitHub repositories) needs its
+sidecar, the `code` service under the `code` profile. In `.env` set
+`VAULTGATE_ENABLE_ACTIONS=true`, `VAULTGATE_ACTIONS_ENABLE_CODE=true` and
+`VAULTGATE_ACTIONS_CODE_URL=http://code:8000`, then:
+
+```bash
+docker compose --profile code up -d
+docker compose logs -f code
+```
+
+The sidecar shares only the internal `code` network with vaultgate (`internal: true`), so it has
+no route to the internet, the host or Caddy, and it publishes no port. It runs with a read-only
+root filesystem, every capability dropped, a memory limit (`VAULTGATE_CODE_MEMORY_LIMIT`, 2 GB by
+default) and a process limit, and keeps its snapshots and indexes in the `vaultgate-code` volume,
+which can always be rebuilt (spec [ACT-114](../spec/14a-code-connector.md)). Pass
+`--profile code` to every later `up` and `pull` as well.
+
 ## What the Compose file enforces
 
 - Read-only root filesystem, `tmpfs` on `/tmp`, every capability dropped, `no-new-privileges`.
@@ -82,3 +101,7 @@ cosign verify ghcr.io/adamrowles1996/vaultgate:<version> \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 gh attestation verify oci://ghcr.io/adamrowles1996/vaultgate:<version> --owner adamrowles1996
 ```
+
+The code sidecar's image, `ghcr.io/adamrowles1996/vaultgate-code:<version>`, is signed and
+attested the same way, and so are the release's two tarballs
+(`gh attestation verify vaultgate-code-<version>.tgz --owner adamrowles1996`).

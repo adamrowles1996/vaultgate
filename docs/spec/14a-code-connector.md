@@ -26,8 +26,12 @@ only when it does not, including every file the policy does not exclude.
 | `policy`      | The common fields, `timeout_ms` defaulting to 150 000 here; `refresh_interval_s` (300 default, 60 to 86 400); `content` (a non-empty subset of `code`, `docs` and `config`, all three by default); `allow_ref` (`true` default); `max_top_k` (50 default, ceiling 200); `build_wait_s` (90 default, ceiling 290, and at most `timeout_ms` less 10 s); `include` and `exclude` (below).           |
 |               | The caps: `max_archive_bytes` (256 MiB default, ceiling 1 GiB); `max_files` (50 000 default, ceiling 200 000); `max_total_bytes` (uncompressed, 1 GiB default, ceiling 4 GiB); `max_file_bytes` (1 MiB default, ceiling 16 MiB); `build_timeout_s` (600 default, ceiling 3 600). Reading: `allow_read` (`true` default) and `max_read_lines` (400 default, ceiling 2 000).                       |
 
-`include` and `exclude` are gitignore-syntax pattern lists of at most 100 entries each;
-`exclude` defaults to ACT-106's list.
+`include` and `exclude` are gitignore-syntax pattern lists of at most 100 entries each, every
+pattern a single line of 1 to 1 024 characters that the sidecar can compile (no `!` alone, no
+backwards range such as `[z-a]`, no trailing backslash), and the two together at most 32 KiB as
+JSON: the build spec travels base64url-encoded in one header line, which the sidecar caps at
+64 KiB (`sidecars/code/PROTOCOL.md`). A policy that saves is one the sidecar accepts. `exclude`
+defaults to ACT-106's list.
 
 ### 14.8.1 Fetching
 
@@ -42,20 +46,24 @@ only when it does not, including every file the policy does not exclude.
   - a branch or tag: `GET /repos/{repository}/commits/{ref}` with
     `Accept: application/vnd.github.sha`, whose body is the 40-hex SHA;
   - a 40-hex SHA: used as it is (the download proves it exists);
-  - `pr:<n>`, which only a call may name (ACT-110): `GET /repos/{repository}/pulls/{n}`, whose
-    `head.sha` is the commit; a pull request from a fork is still served from the base
-    repository, which holds its head.
+  - `pr:<n>`, which only a call may name (ACT-110):
+    `GET /repos/{repository}/commits/refs/pull/{n}/head` with
+    `Accept: application/vnd.github.sha`, whose body is the 40-hex SHA of the pull request's
+    head. It needs only `Contents: read`, and a pull request from a fork is still served from
+    the base repository, which keeps `refs/pull/{n}/head`.
 
   A `404` or `422` from a resolution is `ref_not_found`; any other failure, or a body that is not
-  what the step expects, is `upstream_error`. The archive is `GET /repos/{repository}/tarball/{sha}`,
-  so the snapshot is exactly the commit it is labelled with. vaultgate follows **one** redirect,
-  and only to an `https://codeload.github.com/` URL whose path begins with `/{repository}/`,
-  compared case-insensitively because GitHub redirects to the repository's canonical name; any
-  other redirect, or a second one, is `upstream_error`. `Authorization` is never sent to
+  what the step expects, is `upstream_error`. The archive is
+  `GET /repos/{repository}/tarball/{sha}`, so the snapshot is exactly the commit it is labelled
+  with; a `404` or `422` for it (a SHA the repository does not have) is `ref_not_found` too, which
+  the call answers as it is. vaultgate follows **one** redirect, and only to an
+  `https://codeload.github.com/` URL whose path begins with `/{repository}/`, compared
+  case-insensitively because GitHub redirects to the repository's canonical name; any other
+  redirect, or a second one, is `upstream_error`. `Authorization` is never sent to
   `codeload.github.com`. The redirect URL carries a short-lived token of its own, so it joins the
-  call's injected values (ACT-50) and is scrubbed, never logged and never audited. A ref name is
-  1 to 255 characters of `[A-Za-z0-9._/-]` with no `..` segment and no leading or trailing `/`,
-  and is percent-encoded into the path.
+  call's injected values (ACT-50) and is scrubbed, never logged and never audited. A ref name is 1
+  to 255 characters of `[A-Za-z0-9._/-]` with no `..` segment and no leading or trailing `/`, and is
+  percent-encoded into the path.
 
 - **ACT-105** The archive is streamed from the forge to the sidecar's build request as it
   arrives. vaultgate neither decompresses it nor writes it to disk, and it cuts the stream at
@@ -104,16 +112,31 @@ only when it does not, including every file the policy does not exclude.
   - When the operator presses **Rebuild index** on the target's page: every snapshot of the
     target is deleted and the configured ref is built again (trigger `operator`). This needs the
     operator session and CSRF token; it is not a target write, so ID-15's re-authentication does
-    not apply.
+    not apply. A disabled target lends no credential to build with, so its page offers no
+    Rebuild index, and one posted for it is refused with a notice before anything is deleted.
   - When a call needs a snapshot or an index that does not exist (trigger `call`); the call waits
-    for it (ACT-112). The configured ref is resolved again when its last resolution is older than
-    `refresh_interval_s`. If it moved and the previous commit's snapshot exists, the call is
+    for it (ACT-112). The snapshot calls without a `ref` answer from is kept in the database
+    (13.13), so after a restart too a moved ref is answered from it with `stale: true`, and the
+    start-up reconciliation of ACT-109 keeps it. A call's build of the configured ref, moved or not,
+    makes the index of the policy's whole `content` beside the call's own selection, as a save does,
+    so the next call without a `content` finds it built; a build of a ref the call names makes the
+    call's selection only. The configured ref is resolved again when its last resolution is older
+    than `refresh_interval_s`. If it moved and the previous commit's snapshot exists, the call is
     answered from that snapshot with `stale: true` while the new one builds in the background. A
     failed resolution with a snapshot to answer from never fails the call; it is recorded on the
     target page and in the audit trail. A ref a call names is resolved on every call, except a
     40-hex SHA, which never moves.
 
-  One build runs per target and commit at a time; a second trigger while one runs joins it.
+  One build runs per target and commit at a time; a second trigger while one runs, or while it
+  waits for a slot, joins it. Each build downloads and extracts up to its caps, so at most four run
+  at once across every code target, and at most two of one target's are builds that calls started
+  for a ref they named. Such a build past either cap is not started: the call answers
+  `rate_limited` with `detail.retry_after_s` (30) and `detail.repo`, fetches nothing and records
+  no build. Every other build (a save, Rebuild index, and the configured ref a call needs or found
+  moved) waits for a slot, in order, and is never refused. A build takes the target's credential
+  when its slot comes and holds none while it waits: one whose target is disabled meanwhile builds
+  nothing (`target_disabled`), and one whose target's snapshots are deleted meanwhile never
+  downloads (`target_changed`).
 
 - **ACT-109** Deleting a target tells the sidecar to delete every snapshot of it before the row is
   removed; an unreachable sidecar does not block the deletion. Whenever vaultgate starts or finds
@@ -126,7 +149,8 @@ only when it does not, including every file the policy does not exclude.
 - **ACT-110** The three tools take `repo` in place of `target` (ACT-16): the name of a code
   target, or for the two search tools a list of 1 to 10 distinct names, searched together.
   - `code_search`: `query` (1–1 000 characters); `repo`; optional `ref`; optional `content`
-    (`code`, `docs`, `config` or `all`); `top_k` (1–200, default 5); `max_snippet_lines` (an
+    (`code`, `docs`, `config` or `all`); `top_k` (1–200; default 5, lowered to the smallest
+    `max_top_k` of the call's repositories when that is below 5); `max_snippet_lines` (an
     integer 0–1 000 or `null`, default 10); optional `paths` and `languages` (at most 20 each,
     passed to `semble` as its path and language filters).
   - `code_find_related`: `file_path` and `line` (a location from a search result); `repo`;
@@ -134,14 +158,14 @@ only when it does not, including every file the policy does not exclude.
   - `code_read`: `repo` (one name); `file_path`; optional `ref`, `start_line` and `end_line`
     (inclusive, 1-based).
 
-  `ref` is a branch, a tag, a 40-hex SHA or `pr:<n>`; it may be given with one `repo` only, and
-  it is `policy_denied` (`reason: ref`) when the target's `allow_ref` is `false`. `content`
-  defaults to every type the policy's `content` allows; `all` means the same; a single type the
-  policy does not allow is `policy_denied` (`reason: content`). With several repositories the
-  selection is the types every one of their policies allows, and a selection none of them
-  shares is `policy_denied` (`reason: content`). A `top_k` above a target's `max_top_k` is
-  `policy_denied` (`reason: top_k`). `code_read` is `policy_denied` (`reason: read`) when
-  `allow_read` is `false`.
+  `ref` is a branch, a tag, a 40-hex SHA or `pr:<n>`; it may be given with one `repo` only, and it
+  is `policy_denied` (`reason: ref`) when the target's `allow_ref` is `false`. `content` defaults to
+  every type the policy's `content` allows; `all` means the same; a single type the policy does not
+  allow is `policy_denied` (`reason: content`). With several repositories the selection is the types
+  every one of their policies allows, and a selection none of them shares is `policy_denied`
+  (`reason: content`). A `top_k` the call gives above a target's `max_top_k` is `policy_denied`
+  (`reason: top_k`); one it leaves out is never refused. `code_read` is `policy_denied`
+  (`reason: read`) when `allow_read` is `false`.
 
   Both search tools return `{ query, results, repos }`. Each result is
   `{ repo, file_path, start_line, end_line, score, language, content? }`, ranked as `semble`
@@ -161,13 +185,23 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
   including every excluded or skipped file, is `path_not_found`, whether or not the repository
   contains it; a line that no indexed chunk holds is `chunk_not_found`. The sidecar resolves the
   path inside the snapshot and refuses anything whose resolved path leaves it. A file with a NUL
-  byte in its first 8 KiB is `not_text` for `code_read`.
+  byte in its first 8 KiB is `not_text` for `code_read`. So that `code_read` can follow a result of
+  a search over several repositories, a path the snapshot does not hold as given that begins with
+  the read repository's own connection name and a `/` is tried once more without that prefix;
+  the tool's description says so.
 - **ACT-112** A call whose snapshot or index does not exist yet waits for its build for up to
   `build_wait_s` (the smallest of its repositories'), as `semble`'s MCP server indexes a
   repository on its first call. After that it answers `index_not_ready` with `detail.state`
   `building` and `detail.repo`; the build carries on and a later call finds it. A build that
   failed answers `index_not_ready` with `detail.state` `failed` and the reason code in
-  `detail.reason` (never a message); the operator's page shows the rest. `actions_list_targets`
+  `detail.reason` (never a message); the operator's page shows the rest. Such a failure, and a
+  commit with no archive (`ref_not_found`, ACT-104), is remembered for `refresh_interval_s`: a call
+  within it answers the same at once, without fetching the archive or the credential again or
+  recording another build. A build of a ref the call named that ACT-108's caps refuse answers
+  `rate_limited` at once, without waiting. With several repositories, an error of one of them (a
+  ref that does not resolve, a credential or build that fails, a sidecar refusal that names its
+  snapshot in `detail.key`) carries that connection's name in `detail.repo`, and a
+  `snapshot_missing` that names one snapshot prepares only that one again. `actions_list_targets`
   reports a code target's `repository`, its configured `ref` (absent for the default branch),
   the `content` it allows, whether `code_read` is allowed (`read`) and `read` as its only
   operation (ACT-19).
@@ -189,9 +223,12 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
   - It never receives a credential. It holds no state beyond its snapshots and indexes, and loses
     none it cannot rebuild.
 
-  vaultgate reaches it at `VAULTGATE_ACTIONS_CODE_URL`, an `http://` URL on an internal address
-  or `unix:` followed by the absolute path of the socket, validates every response against a
-  schema, and treats an unreachable sidecar as `index_unavailable`.
+  vaultgate reaches it at `VAULTGATE_ACTIONS_CODE_URL`, an `http://` URL on a private address
+  or a host name, or `unix:` followed by the absolute path of the socket, validates every response
+  against a schema, and treats an unreachable sidecar as `index_unavailable`. An `http://` URL on
+  a loopback, link-local or other forbidden address (ACT-56), or on `localhost` or a name under
+  `.localhost`, is refused at start-up: it would put the sidecar in vaultgate's own network
+  namespace beside `bw serve` (ACT-114), and a sidecar on the same host is reached on its socket.
 
 - **ACT-114** There are three placements, each keeping the sidecar away from the internet and
   from `bw serve`'s unauthenticated loopback (ACT-56):
@@ -200,9 +237,9 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
     host. It has no published port, `cap_drop: [ALL]`, `no-new-privileges`, a read-only root
     filesystem with `tmpfs` for `/tmp`, a named volume for its state, a memory limit (2 GiB
     default) and a `pids` limit.
-  - **systemd** (`install.sh --with-code-sidecar`): its own unit and its own system user, a state
-    directory outside vaultgate's data directory, and a Unix socket that only vaultgate's group
-    may open. The unit runs with `PrivateNetwork=yes`, `IPAddressDeny=any` and
+  - **systemd** (`install.sh --with-code-sidecar`): its own unit and its own system user and
+    group, a state directory outside vaultgate's data directory, and a Unix socket that only that
+    group may open, whose one other member is vaultgate's user. The unit runs with `PrivateNetwork=yes`, `IPAddressDeny=any` and
     `RestrictAddressFamilies=AF_UNIX`, so it has no network interface but a loopback of its own,
     together with the rest of systemd's sandboxing (`ProtectSystem=strict`, `ProtectHome`,
     `PrivateTmp`, `PrivateDevices`, `NoNewPrivileges`, an empty capability bounding set, a
@@ -231,15 +268,19 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
   branch when empty), the content types, `include` and `exclude`, whether `code_read` is
   allowed, and the caps. The token field defaults to `password` and lists the item's fields,
   hidden custom fields included, with a choice of no token for a public repository. The
-  repository field lists every repository the chosen token can read (`GET /user/repos`, 100 per
-  page and at most 10 pages, through the pinned transport of ACT-55 to ACT-57 with the token
-  injected server-side), and takes a typed `owner/name` instead. This page and ACT-120 are the
-  only places a page uses a secret: the token is fetched inside the ID-15 window, sent to
-  `api.github.com` only and never drawn, and a failure shows its code, scrubbed.
-- **ACT-120** **Check without saving** (ACT-118) of a code target also asks GitHub for the
-  repository (`GET /repos/{repository}`) with the chosen token, and shows whether the token can
-  read it, its default branch and its visibility, never the token. A public repository answers
-  without one.
+  repository field takes a typed `owner/name`; once the operator has chosen the token field and
+  pressed **Check without saving**, it also lists every repository that token can read
+  (`GET /user/repos`, 100 per page and at most 10 pages, through the pinned transport of ACT-55 to
+  ACT-57 with the token injected server-side). Until then it says to do so. This check and
+  ACT-120's are the only places a page uses a secret, and only on a `POST` behind the operator's
+  session and synchroniser token (ID-18): no page load reads a secret, so a link from another
+  site cannot make vaultgate send a vault field to GitHub. The token is fetched inside the ID-15
+  window, sent to `api.github.com` only and never drawn, and a failure shows its code, scrubbed.
+  Like the rest of ACT-118's check, these reads record no audit event.
+- **ACT-120** **Check without saving** (ACT-118) of a code target, and **Check now** on its page,
+  also ask GitHub for the repository (`GET /repos/{repository}`) with the chosen token, and show
+  whether the token can read it, its default branch and its visibility, never the token. A public
+  repository answers without one. Outside the ID-15 window Check now reads no token and says so.
 
 ### 14.8.6 Parity with `semble`'s MCP server
 
@@ -265,8 +306,10 @@ straight to the returned file and line, use `code_find_related` after a search, 
 ### 14.8.7 Audit and verification
 
 - **ACT-116** Calls are audited per ACT-60, one row per repository, with operation `read` and
-  classification `search`, `related` or `read`; `arguments` records the query, the path and the
-  line numbers. A build is an audit event (`actions.code_index_built` or
+  classification `search`, `related` or `read`; a call that fails before it runs (a name that
+  does not resolve, a rate limit, a credential or destination refused) leaves a row for every
+  repository it named, with the first failure's code; `arguments` records the query, the path
+  and the line numbers. A build is an audit event (`actions.code_index_built` or
   `actions.code_index_failed`) carrying the target, the commit, the content selection, the
   trigger (`save`, `operator` or `call`), the counts, the duration and, on failure, the reason
   code. No file name beyond the arguments, and no content, is ever recorded.

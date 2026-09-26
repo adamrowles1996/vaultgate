@@ -13,6 +13,20 @@ export type FormValues = ReadonlyMap<string, string>;
 
 export type Documents = Readonly<Record<DocumentName, Readonly<Record<string, unknown>>>>;
 
+/**
+ * What a picker that offers `none` submits for that choice (ACT-119: no
+ * token). It is no field selector (`src/vault/fields.ts`), so it can never
+ * name a real field, and the document records it as `null`.
+ */
+export const NO_FIELD = 'none';
+
+/**
+Whether the field is a picker with an explicit choice of no field.
+*/
+export function hasNoFieldChoice(field: FieldDescriptor): boolean {
+  return field.kind === 'text' && field.picker !== undefined && 'none' in field.picker;
+}
+
 export function fieldName(field: Pick<FieldDescriptor, 'document' | 'name'>): string {
   return `${field.document}.${field.name}`;
 }
@@ -66,6 +80,9 @@ The document value a submitted field stands for.
 */
 function readField(field: FieldDescriptor, values: FormValues): unknown {
   const raw = values.get(fieldName(field)) ?? '';
+  if (raw.trim() === NO_FIELD && hasNoFieldChoice(field)) {
+    return null;
+  }
   switch (field.kind) {
     case 'lines': {
       return orAbsent(splitLines(raw));
@@ -130,7 +147,10 @@ function writeField(field: FieldDescriptor, value: unknown, values: Map<string, 
       return;
     }
     default: {
-      values.set(fieldName(field), scalar(field, value));
+      values.set(
+        fieldName(field),
+        value === null && hasNoFieldChoice(field) ? NO_FIELD : scalar(field, value),
+      );
     }
   }
 }

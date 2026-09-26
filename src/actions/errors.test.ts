@@ -38,6 +38,12 @@ const CODES = [
   'session_expired',
   'session_limit',
   'element_not_found',
+  'index_unavailable',
+  'index_not_ready',
+  'ref_not_found',
+  'path_not_found',
+  'chunk_not_found',
+  'not_text',
 ];
 
 const byName = (left: string, right: string): number => left.localeCompare(right);

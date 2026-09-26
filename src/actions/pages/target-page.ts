@@ -22,16 +22,16 @@ import {
 import { cardHead, fieldChip, pill, relativeTime, sealed, tag } from '../../identity/pages/ui.ts';
 
 import { renderCallTable } from './calls.ts';
-import { CHECK_NOW, CHECK_PARAM, checkCard } from './check-report.ts';
+import { checkCard, type PageCheck } from './check-report.ts';
+import { indexCard, type IndexView } from './index-card.ts';
 import { KINDS } from './kinds.ts';
-import { callsPath, CREATE_PATH, editPath, targetPath } from './paths.ts';
+import { callsPath, checkPath, CREATE_PATH, editPath, targetPath } from './paths.ts';
 import { grantsCard, manageCard } from './target-grants.ts';
 
 import type { CallItem } from './calls.ts';
 import type { ComputerSummary } from './summary.ts';
 import type { ClientChoice, GrantItem } from './target-grants.ts';
 import type { ConsolePage } from '../../identity/index.ts';
-import type { CheckReport } from '../targets-checks.ts';
 import type { TargetSummary } from '../targets.ts';
 
 export interface TargetPageView {
@@ -63,25 +63,29 @@ export interface TargetPageView {
   readonly isEditable: boolean;
   readonly now: number;
   /**
-  What "Check now" found (ACT-118), when the page was asked for it.
+  What "Check now" found (ACT-118, ACT-120), when the page was asked for it.
   */
-  readonly check: { readonly report: CheckReport; readonly at: number } | undefined;
+  readonly check: PageCheck | undefined;
+  /**
+  ACT-115: a code target's index, or `undefined` for every other connector.
+  */
+  readonly index: IndexView | undefined;
 }
 
 /**
 ACT-88: the standing warning an any-command target carries, shown whether or not it is being edited.
 */
 const UNRESTRICTED_WARNING =
-  'This target allows any command: a granted client can run anything its login can, and every ' +
-  'call is audited with the full command.';
+  'This connection allows any command: a granted client can run anything its login can, and ' +
+  'every call is audited with the full command.';
 
 /**
 ACT-49: the note a target carries once the operator turns the confirmation off.
 */
 const UNCONFIRMED_NOTE =
   'Confirmation is off: a granted client can change things here without asking anyone. New ' +
-  'targets ask for a confirmation on every non-read call; this one relies on the grant and on ' +
-  'the prompt the client may show. Review the unexpected writes below.';
+  'connections ask for a confirmation on every non-read call; this one relies on the grant and ' +
+  'on the prompt the client may show. Review the unexpected writes below.';
 
 function actionForm(action: string, view: TargetPageView, button: Html, body: Html = EMPTY): Html {
   return html`<form method="post" action="${action}">
@@ -108,9 +112,11 @@ function stateTags(view: TargetPageView): Html {
 
 function headerActions(view: TargetPageView): Html {
   const base = targetPath(view.target.id);
-  const check = html`<a class="button" href="${base}?${CHECK_PARAM}=${CHECK_NOW}"
-    >${icon('check')}Check now</a
-  >`;
+  const check = actionForm(
+    checkPath(view.target.id),
+    view,
+    html`<button type="submit">${icon('check')}Check now</button>`,
+  );
   if (!view.isReauthenticated) {
     return html`${check}
       <a class="button" href="${unlockPath(base)}">${icon('lock')}Unlock editing</a>`;
@@ -157,7 +163,7 @@ function banners(view: TargetPageView): Html {
   const invalid = when(view.target.state === 'invalid', () =>
     errorBanner(`target_invalid: ${view.target.problems.join('; ')}`),
   );
-  const check = view.check === undefined ? EMPTY : checkCard(view.check.report, view.check.at);
+  const check = view.check === undefined ? EMPTY : checkCard(view.check);
   return html`${check} ${errorBanner(view.error)} ${invalid}
   ${when(view.isUnrestricted, () => errorBanner(UNRESTRICTED_WARNING))}
   ${when(view.isUnconfirmed, () => errorBanner(UNCONFIRMED_NOTE))} ${noticeBanner(view.notice)}`;
@@ -198,6 +204,12 @@ function credentialCard(view: TargetPageView): Html {
         <span class="mono cell-sub">${view.target.credential.item_id}</span>
       </dd>
       ${fields}
+      ${
+        view.summary.credentialNote === undefined
+          ? EMPTY
+          : html`<dt>Token</dt>
+              <dd>${view.summary.credentialNote}</dd>`
+      }
     </dl>
   </section>`;
 }
@@ -251,6 +263,11 @@ export function targetPage(view: TargetPageView): ConsolePage {
         ${connectionCard(view)} ${credentialCard(view)} ${rulesCard(view)}
         ${grantsCard({ ...context, grants: view.grants, candidates: view.candidates })}
       </div>
+      ${
+        view.index === undefined
+          ? EMPTY
+          : indexCard({ ...context, now: view.now, index: view.index, isEnabled: target.enabled })
+      }
       ${callsCard(view)} ${manageCard({ ...context, isEnabled: target.enabled })}`,
     returnTo: targetPath(target.id),
   };

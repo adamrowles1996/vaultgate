@@ -81,6 +81,44 @@ sudo journalctl -u vaultgate -n 50
 
 The log contains the first-run bootstrap URL; open it to create the operator account.
 
+## 5. The code search sidecar (optional)
+
+The [code connector](code-search.md) (Semble code search over GitHub repositories) needs its
+sidecar. Add `--with-code-sidecar` to the installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh | sudo bash -s -- --with-code-sidecar
+```
+
+It downloads `vaultgate-code-<version>.tgz` from the same release and verifies it against its
+`.sha256`, creates the system user `vaultgate-code`, installs the Python dependencies from the
+release's hash-locked `requirements.txt` (wheels only) into a virtual environment, downloads the
+embedding model at its pinned revision and checks every file against the SHA-256 in `model.json`,
+and runs the sidecar as `vaultgate-code.service` on the Unix socket
+`/run/vaultgate-code/code.sock`, which only the `vaultgate-code` group may open. The `vaultgate`
+user is added to that group, and `/etc/vaultgate/vaultgate.env` gains
+`VAULTGATE_ACTIONS_ENABLE_CODE=true` and `VAULTGATE_ACTIONS_CODE_URL=unix:/run/vaultgate-code/code.sock`
+when they are not set yet; nothing else in the file changes. The connector also needs the actions
+layer itself, `VAULTGATE_ENABLE_ACTIONS=true`. It needs Python 3.12 (Ubuntu 24.04 has it; apt adds
+`python3.12-venv` when it is missing) and about 1 GB of free memory for the model, a build and
+the loaded indexes.
+
+The sidecar's unit has no network interface but a loopback of its own
+(`PrivateNetwork=yes`, `IPAddressDeny=any`, `RestrictAddressFamilies=AF_UNIX`) and systemd's other
+sandboxing, so it can reach neither the internet nor `bw serve`; vaultgate fetches each
+repository itself and streams it in (spec [ACT-114](../spec/14a-code-connector.md)). Its limits
+are commented out in `/etc/vaultgate/vaultgate-code.env`. The unit caps the service at 2 GB
+(`MemoryMax`); for large repositories, raise it in a drop-in that upgrades keep
+(`sudo systemctl edit vaultgate-code`, then `[Service]` and `MemoryMax=4G`) together with
+`VAULTGATE_CODE_MAX_MEMORY_BYTES`. Once installed, every re-run of the installer upgrades the
+sidecar with the core, since the two speak one protocol version.
+
+```bash
+sudo systemctl status vaultgate-code
+sudo journalctl -u vaultgate-code -n 50
+systemd-analyze security vaultgate-code
+```
+
 ## Layout
 
 | Path                                    | Purpose                                              |
@@ -93,6 +131,17 @@ The log contains the first-run bootstrap URL; open it to create the operator acc
 | `/usr/local/bin/node`                   | Node 26 from nodejs.org (or your existing Node ≥ 26) |
 | `/usr/local/bin/bw`                     | Bitwarden CLI, version pinned in the script          |
 | `/etc/systemd/system/vaultgate.service` | The unit from `deploy/systemd/`                      |
+
+With `--with-code-sidecar`:
+
+| Path                                         | Purpose                                                           |
+| -------------------------------------------- | ----------------------------------------------------------------- |
+| `/opt/vaultgate-code/<version>`              | The sidecar: `app`, its `venv` and the verified `model`           |
+| `/opt/vaultgate-code/current`                | Symlink to the active sidecar release                             |
+| `/etc/vaultgate/vaultgate-code.env`          | The sidecar's limits (optional), never overwritten                |
+| `/var/lib/vaultgate-code`                    | Snapshots and indexes; losing it costs only the time to rebuild   |
+| `/run/vaultgate-code/code.sock`              | The socket vaultgate reaches it on (group `vaultgate-code`, 0660) |
+| `/etc/systemd/system/vaultgate-code.service` | The unit from `deploy/systemd/`                                   |
 
 ## Upgrading and rolling back
 

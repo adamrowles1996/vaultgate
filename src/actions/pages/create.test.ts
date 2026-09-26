@@ -76,7 +76,7 @@ describe('GET /account/actions/new', () => {
     const markup = await after.text();
     expect(markup).toContain('<form method="post" action="/account/actions" class="target-form">');
     expect(markup).toContain('name="name"');
-    expect(markup).toContain('pattern="[a-z0-9][a-z0-9-]{0,62}"');
+    expect(markup).toContain(String.raw`pattern="[a-z0-9][a-z0-9\-]{0,62}"`);
     expect(markup).toContain('name="policy.confirm_writes" type="checkbox" checked');
     expect(markup).toContain('name="policy.allowed_methods.GET" type="checkbox" checked');
     expect(markup).toContain('name="policy.allowed_methods.HEAD" type="checkbox" checked');

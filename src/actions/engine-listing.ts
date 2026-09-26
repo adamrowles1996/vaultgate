@@ -6,6 +6,7 @@
  */
 import { validateTarget } from './targets-schemas.ts';
 
+import type { TargetCapabilities } from './connectors/connector.ts';
 import type { ConnectorRegistry } from './connectors/registry.ts';
 import type { OperationKind } from './policy.ts';
 import type { TargetsRepo } from './targets-repo.ts';
@@ -19,12 +20,47 @@ export interface TargetListing {
   readonly confirm_writes: boolean;
   readonly engine?: 'mssql' | 'postgres';
   readonly unrestricted?: true;
+  /**
+  ACT-112: a code target's repository, configured ref, content types and whether code_read is allowed.
+  */
+  readonly repository?: string;
+  readonly ref?: string;
+  readonly content?: readonly string[];
+  readonly read?: boolean;
 }
 
 export interface ListingDependencies {
   readonly config: Pick<ActionsConfig, 'enabled' | 'connectors'>;
   readonly targets: Pick<TargetsRepo, 'listGranted'>;
   readonly connectors: ConnectorRegistry;
+  /**
+  ACT-115: false for a connector that found itself unable to serve; its targets are not listed.
+  */
+  readonly available: (kind: ConnectorKind) => boolean;
+}
+
+function codeListing(code: TargetCapabilities['code']): Partial<TargetListing> {
+  if (code === undefined) {
+    return {};
+  }
+  return {
+    repository: code.repository,
+    ...(code.ref !== undefined && { ref: code.ref }),
+    content: code.content,
+    read: code.read,
+  };
+}
+
+/**
+The connector a listed row belongs to, when its switch is on and it can serve (ACT-67, ACT-115).
+*/
+function servingConnector(
+  dependencies: ListingDependencies,
+  kind: ConnectorKind,
+): ReturnType<ConnectorRegistry['get']> {
+  return dependencies.config.connectors[kind] && dependencies.available(kind)
+    ? dependencies.connectors.get(kind)
+    : undefined;
 }
 
 export function listTargets(
@@ -36,9 +72,7 @@ export function listTargets(
   }
   const listings: TargetListing[] = [];
   for (const row of dependencies.targets.listGranted(caller.clientId)) {
-    const connector = dependencies.config.connectors[row.connector]
-      ? dependencies.connectors.get(row.connector)
-      : undefined;
+    const connector = servingConnector(dependencies, row.connector);
     const target = validateTarget(row);
     if (connector === undefined || target.state === 'invalid' || !row.enabled) {
       continue;
@@ -65,6 +99,7 @@ export function listTargets(
       confirm_writes: target.documents.common.confirm_writes,
       ...(capabilities.engine !== undefined && { engine: capabilities.engine }),
       ...(capabilities.unrestricted === true && { unrestricted: true }),
+      ...codeListing(capabilities.code),
     });
   }
   return listings;

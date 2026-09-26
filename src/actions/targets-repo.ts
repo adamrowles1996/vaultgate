@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 
+import { CONNECTOR_KINDS } from '../config/actions.ts';
 import { all, get, run } from '../storage/query.ts';
 
 import type { TargetCredential, TargetRow } from './targets-schemas.ts';
@@ -19,7 +20,7 @@ const targetRowSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string(),
-  connector: z.enum(['http', 'sql', 'ssh', 'winrm', 'browser']),
+  connector: z.enum(CONNECTOR_KINDS),
   destination: json,
   internal: flag,
   credential: json.pipe(credentialSchema),

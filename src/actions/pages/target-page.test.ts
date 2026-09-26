@@ -203,7 +203,8 @@ describe('GET /account/actions/:id', () => {
     const { browser } = await signedInOperator(harness, false);
     const markup = compact(await pageText(browser, `/account/actions/${target.id}`));
     expect(markup).toContain('href="/account/unlock?next=%2Faccount%2Factions%2Fid-1"');
-    expect(markup).not.toContain('action="/account/actions/');
+    const writes = markup.match(/action="\/account\/actions\/[^"]*"/gu);
+    expect(writes).toStrictEqual(['action="/account/actions/id-1/check"']);
     expect(markup).not.toContain('id="manage"');
     expect(markup).toContain('<span>Agent One</span>');
     const edit = compact(await pageText(browser, `/account/actions/${target.id}/edit`));

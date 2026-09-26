@@ -80,7 +80,7 @@ async function secretOf(
  */
 export async function fetchCredential(
   dependencies: Pick<RunDependencies, 'vault' | 'logger'>,
-  resolved: ResolvedCall,
+  resolved: Pick<ResolvedCall, 'target'>,
 ): Promise<Result<Credential, ActionError>> {
   const { row, documents, schemas } = resolved.target;
   const unavailable = (field: string, reason: string): Result<never, ActionError> => {
@@ -117,7 +117,7 @@ ACT-55, ACT-56: every host the destination names, resolved once and validated.
 */
 export async function pinDestination(
   lookup: Lookup,
-  resolved: ResolvedCall,
+  resolved: Pick<ResolvedCall, 'target'>,
 ): Promise<Result<readonly PinnedEndpoint[], ActionError>> {
   const { row, documents, schemas } = resolved.target;
   const pinned: PinnedEndpoint[] = [];
@@ -153,7 +153,7 @@ function capture(
   );
 }
 
-function assemble(
+export function assemble(
   output: ConnectorOutput,
   scrub: Scrubber,
   maxBytes: number,
@@ -179,7 +179,7 @@ function assemble(
   };
 }
 
-const THROWN_MESSAGE_CAP = 1024;
+export const THROWN_MESSAGE_CAP = 1024;
 
 /**
  * A connector that throws instead of answering is a bug in the connector or

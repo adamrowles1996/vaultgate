@@ -10,8 +10,9 @@ import { EMPTY, type Html, html, when } from '../../identity/pages/template.ts';
 import { cardHead } from '../../identity/pages/ui.ts';
 
 import { type AddressCandidate, ADDRESS_FROM_FIELD, canTakeAddress } from './address-source.ts';
-import { fieldName, type FormValues, optionName } from './form-values.ts';
+import { fieldName, type FormValues, NO_FIELD, optionName } from './form-values.ts';
 import { type ItemField, offeredFields, pickedSelector } from './item-fields.ts';
+import { isOffered, type RepoOffer, repoSource } from './repo-source.ts';
 
 import type { ConnectorForm, DocumentName, FieldDescriptor, FieldPicker } from './descriptors.ts';
 import type { FieldProblems } from './messages.ts';
@@ -81,18 +82,24 @@ function describe(field: ItemField): string {
 /**
  * ACT-4 as the operator picks: the item's own fields, the one in use
  * selected. A name the item does not carry stays selected and is flagged, so
- * a save cannot quietly map a different field.
+ * a save cannot quietly map a different field. A picker that offers no field
+ * at all (ACT-119's public repository) lists that choice last.
  */
 function fieldPicker(field: PickerField, value: string, fields: readonly ItemField[]): Html {
-  const offered = offeredFields(fields, field.picker);
-  const chosen = pickedSelector(value, field.picker);
-  const isMissing = chosen !== '' && offered.every((candidate) => candidate.selector !== chosen);
+  const { picker } = field;
+  const offered = offeredFields(fields, picker);
+  const chosen = pickedSelector(value, picker);
+  const none = 'none' in picker ? picker.none : undefined;
+  const isNone = none !== undefined && chosen === NO_FIELD;
+  const isMissing =
+    chosen !== '' && !isNone && offered.every((candidate) => candidate.selector !== chosen);
   const options = [
-    ...('optional' in field.picker ? [pickerOption('', 'None', chosen === '')] : []),
+    ...('optional' in picker ? [pickerOption('', 'None', chosen === '')] : []),
     ...(isMissing ? [pickerOption(chosen, `${chosen} · not on this item`, true)] : []),
     ...offered.map((candidate) =>
       pickerOption(candidate.selector, describe(candidate), candidate.selector === chosen),
     ),
+    ...(none === undefined ? [] : [pickerOption(NO_FIELD, none, isNone)]),
   ];
   const note = isMissing
     ? html`<small class="warn"
@@ -209,6 +216,10 @@ export interface FieldsView {
   A new computer with no address typed takes the item's first one unless the operator says otherwise.
   */
   readonly isNew: boolean;
+  /**
+  The repositories the chosen token can read, for the repository field (ACT-119).
+  */
+  readonly repositories: RepoOffer;
 }
 
 /**
@@ -257,9 +268,10 @@ function addressSource(
 
 function renderField(field: FieldDescriptor, view: FieldsView): Html {
   const offered = offeredAddresses(field, view);
+  const isFilledBeside = offered.length > 0 || isOffered(field);
   return html`${fieldErrors(view.problems, fieldName(field))}
-  ${control(field, view.values, view.itemFields, offered.length > 0)}
-  ${addressSource(field, view, offered)}`;
+  ${control(field, view.values, view.itemFields, isFilledBeside)}
+  ${addressSource(field, view, offered)} ${repoSource(field, view.repositories, view.values)}`;
 }
 
 /**
@@ -272,7 +284,7 @@ export function renderFields(form: ConnectorForm, view: FieldsView): Html {
       .map((field) => renderField(field, view));
     const { title, note } = DOCUMENT_LABELS[document];
     return html`<section class="card">
-      ${cardHead(title, note)}
+      ${cardHead(title, form.notes?.[document] ?? note)}
       <div class="fields">${fields}</div>
     </section>`;
   });

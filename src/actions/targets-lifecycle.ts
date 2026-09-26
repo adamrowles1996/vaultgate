@@ -12,6 +12,7 @@ import { closeSessions } from './sessions.ts';
 import { type CheckReport, changedFields, checkChanges, prepareChanges } from './targets-checks.ts';
 import {
   bumped,
+  documentsOf,
   recordTargetEvent,
   summariseTarget,
   type TargetResult,
@@ -62,6 +63,7 @@ export async function createTarget(
   };
   context.repo.insert(row);
   recordTargetEvent(context, { action: 'target_created', row, operatorId });
+  context.observer?.saved(row, undefined);
   return ok(summariseTarget(context.repo, row));
 }
 
@@ -123,7 +125,9 @@ export async function updateTarget(
     });
     context.repo.update(id, prepared.value.changes, at, operatorId);
   });
-  return ok(summariseTarget(context.repo, bumped(before, prepared.value.changes, at, operatorId)));
+  const after = bumped(before, prepared.value.changes, at, operatorId);
+  context.observer?.saved(after, documentsOf(before));
+  return ok(summariseTarget(context.repo, after));
 }
 
 export function setTargetEnabled(
@@ -146,7 +150,9 @@ export function setTargetEnabled(
       });
       context.repo.setEnabled(id, isEnabled, at, operatorId);
     });
-    return ok(summariseTarget(context.repo, bumped(row, { enabled: isEnabled }, at, operatorId)));
+    const after = bumped(row, { enabled: isEnabled }, at, operatorId);
+    context.observer?.saved(after, undefined);
+    return ok(summariseTarget(context.repo, after));
   });
 }
 
@@ -163,6 +169,7 @@ export function removeTarget(
     return unknownTarget();
   }
   const at = context.now();
+  context.observer?.removed(row);
   transaction(context.database, () => {
     const sessions = closeSessions(context.database, { targetId: id }, 'target_changed', at);
     context.repo.remove(id);

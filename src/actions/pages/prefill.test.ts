@@ -27,6 +27,7 @@ describe('Add computer', () => {
       ['ssh', '/account/actions/new?connector=ssh&kind=ssh'],
       ['http', '/account/actions/new?connector=http&kind=http'],
       ['graph', '/account/actions/new?connector=http&kind=graph'],
+      ['code', '/account/actions/new?connector=code&kind=code'],
     ]);
     expect(kindChoices().every((choice) => choice.description.length > 0)).toBe(true);
   });

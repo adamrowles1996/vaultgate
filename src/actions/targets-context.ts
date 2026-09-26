@@ -6,13 +6,28 @@
  */
 import { fail, type Result } from '../result.ts';
 
-import { type TargetRow, TargetProblems, validateTarget } from './targets-schemas.ts';
+import {
+  type TargetDocuments,
+  type TargetRow,
+  TargetProblems,
+  validateTarget,
+} from './targets-schemas.ts';
 
 import type { ActionsAuditAction, ActionsAuditSink } from './audit.ts';
 import type { CheckDependencies } from './targets-checks.ts';
 import type { GrantRecord, TargetsRepo } from './targets-repo.ts';
 import type { AuditDetails } from '../audit/event.ts';
 import type { DatabaseSync } from 'node:sqlite';
+
+/**
+ * ACT-108, ACT-109: told of every saved, enabled and deleted target, after
+ * the row is written and before it is removed; `previous` is the target's
+ * documents before an update, when they validated.
+ */
+export interface TargetsObserver {
+  saved(row: TargetRow, previous: TargetDocuments | undefined): void;
+  removed(row: TargetRow): void;
+}
 
 export interface TargetsContext {
   readonly database: DatabaseSync;
@@ -21,6 +36,15 @@ export interface TargetsContext {
   readonly checks: CheckDependencies;
   readonly now: () => number;
   readonly newId: () => string;
+  readonly observer: TargetsObserver | undefined;
+}
+
+/**
+The documents of a row as they validate now, for an observer comparing a revision with its predecessor.
+*/
+export function documentsOf(row: TargetRow): TargetDocuments | undefined {
+  const validated = validateTarget(row);
+  return validated.state === 'valid' ? validated.documents : undefined;
 }
 
 /**

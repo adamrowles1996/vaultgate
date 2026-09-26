@@ -7,7 +7,8 @@
 import { CONNECTOR_KINDS } from '../../config/actions.ts';
 
 import { documentsFromForm, type FormValues } from './form-values.ts';
-import { formFor } from './forms.ts';
+import { deploymentProblems, formFor } from './forms.ts';
+import { applyChoices } from './repo-source.ts';
 import { DESCRIPTION_FIELD, INTERNAL_FIELD, ITEM_ID_FIELD, NAME_FIELD } from './target-form.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
@@ -20,6 +21,31 @@ export function editableForm(
 ): ConnectorForm | undefined {
   const known = CONNECTOR_KINDS.find((candidate) => candidate === kind);
   return known === undefined ? undefined : formFor(known, dependencies.switches);
+}
+
+/**
+A submission with what it chose beside its fields copied in, and what a save refuses before the service.
+*/
+export interface Submitted {
+  readonly values: FormValues;
+  readonly refused: readonly string[];
+}
+
+/**
+ * The values a submission stands for (ACT-2's address and ACT-119's
+ * repository applied) and every refusal a save gives before the targets
+ * service sees it: a field the deployment does not allow (ACT-88) and a
+ * choice beside a field that contradicts what is typed in it. An internal
+ * box on a connection that is never internal is the service's to refuse
+ * (ACT-103); the form does not draw one.
+ */
+export function submitted(
+  dependencies: Pick<ActionsPagesDependencies, 'switches'>,
+  form: ConnectorForm,
+  sent: FormValues,
+): Submitted {
+  const { values, problems } = applyChoices(form, sent);
+  return { values, refused: [...deploymentProblems(sent, dependencies.switches), ...problems] };
 }
 
 export function text(values: FormValues, name: string): string {

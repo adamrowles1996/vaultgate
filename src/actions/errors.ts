@@ -45,6 +45,14 @@ export const ACTION_ERROR_MESSAGES = {
   session_expired: 'the browser session has ended',
   session_limit: 'this client already holds the maximum number of open sessions on this target',
   element_not_found: 'the element reference is not in the current page',
+  index_unavailable: 'the code search sidecar did not answer',
+  index_not_ready:
+    'the index for this repository is not ready yet; see detail.state, and retry shortly when ' +
+    'it is building',
+  ref_not_found: 'the repository has no branch, tag, commit or pull request of that name',
+  path_not_found: 'no indexed file of that path exists in this snapshot of the repository',
+  chunk_not_found: 'no indexed chunk of that file holds that line; pass a location from a search',
+  not_text: 'the file is not text',
 } as const satisfies Readonly<Record<string, string>>;
 
 export type ActionErrorCode = keyof typeof ACTION_ERROR_MESSAGES;

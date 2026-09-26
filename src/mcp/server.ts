@@ -38,6 +38,18 @@ const ACTIONS_INSTRUCTIONS =
   'get_secret is the sole way to read a secret value and every call is audited. Vault read ' +
   'tools return metadata only; search first, then act on ids.';
 
+/**
+ * MCP-16, spec 14.8.6: `semble`'s own guidance for the code tools, given to a
+ * token that holds `actions:code`, as `semble`'s MCP server gives it.
+ */
+const CODE_INSTRUCTIONS =
+  ' Code search: call code_search once with a focused query and a repo from ' +
+  'actions_list_targets (connector code); it returns the file path and exact line. Go straight ' +
+  'to that file and line (code_read, or your own checkout) and do not search again for the same ' +
+  'thing. Use code_find_related to discover similar code elsewhere in the same repos. When a ' +
+  'snippet does not show enough, call again with max_snippet_lines: null. Pass a list of repos ' +
+  'to search several at once; results then prefix file_path with the repo name.';
+
 export interface CallContext {
   readonly token: VerifiedToken;
   /**
@@ -112,9 +124,13 @@ function registerVaultTool(
 }
 
 function instructionsFor(dependencies: ServerDependencies, context: CallContext): string {
-  return dependencies.engine !== undefined && context.scopes.some((scope) => isActionScope(scope))
-    ? ACTIONS_INSTRUCTIONS
-    : VAULT_INSTRUCTIONS;
+  if (dependencies.engine === undefined || context.scopes.every((scope) => !isActionScope(scope))) {
+    return VAULT_INSTRUCTIONS;
+  }
+  const hasCode =
+    context.scopes.includes('actions:code') &&
+    dependencies.engine.tools.some((tool) => tool.scope === 'actions:code');
+  return hasCode ? ACTIONS_INSTRUCTIONS + CODE_INSTRUCTIONS : ACTIONS_INSTRUCTIONS;
 }
 
 export function createVaultMcpServer(

@@ -42,7 +42,7 @@ describe('cdpUrlProblem', () => {
     expect(cdpUrlProblem('ws://93.184.216.34:9222')).toBe(PUBLIC_ADDRESS_PROBLEM);
     expect(cdpUrlProblem('https://browser:9222')).toBe('must be a ws:// or wss:// URL');
     expect(cdpUrlProblem('not a url')).toBe('must be a ws:// or wss:// URL');
-    expect(CONNECTOR_KINDS).toStrictEqual(['http', 'sql', 'ssh', 'winrm', 'browser']);
+    expect(CONNECTOR_KINDS).toStrictEqual(['http', 'sql', 'ssh', 'winrm', 'browser', 'code']);
   });
 
   it('13.14 the schema is optional and carries the problem as its issue', () => {
@@ -57,7 +57,7 @@ describe('cdpUrlProblem', () => {
 });
 
 describe('actions configuration', () => {
-  it('ACT-68 CFG-3 reads the eight actions variables into config.actions and lists them in the summary', () => {
+  it('ACT-68 CFG-3 reads the ten actions variables into config.actions and lists them in the summary', () => {
     const { config, warnings } = unwrapOk(
       load({
         ...REQUIRED,
@@ -68,13 +68,16 @@ describe('actions configuration', () => {
         VAULTGATE_ACTIONS_ENABLE_WINRM: 'true',
         VAULTGATE_ACTIONS_ENABLE_BROWSER: 'true',
         VAULTGATE_ACTIONS_BROWSER_CDP_URL: 'ws://browser:9222',
+        VAULTGATE_ACTIONS_ENABLE_CODE: 'true',
+        VAULTGATE_ACTIONS_CODE_URL: 'unix:/run/vaultgate-code/sidecar.sock',
         VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND: 'true',
       }),
     );
     const actions = {
       enabled: true,
-      connectors: { http: true, sql: true, ssh: true, winrm: true, browser: true },
+      connectors: { http: true, sql: true, ssh: true, winrm: true, browser: true, code: true },
       browserCdpUrl: 'ws://browser:9222',
+      codeUrl: 'unix:/run/vaultgate-code/sidecar.sock',
       allowAnyCommand: true,
     };
     expect(config.actions).toStrictEqual(actions);

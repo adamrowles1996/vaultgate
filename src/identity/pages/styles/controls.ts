@@ -4,7 +4,7 @@
  * table cells and the pieces of the consent and recovery-code pages. The
  * per-kind and per-agent colours are generated from one list each.
  */
-const KINDS = ['mssql', 'postgres', 'winrm', 'ssh', 'http', 'graph'] as const;
+const KINDS = ['mssql', 'postgres', 'winrm', 'ssh', 'http', 'graph', 'code'] as const;
 const TONES = [1, 2, 3] as const;
 
 const kindRules = KINDS.map(

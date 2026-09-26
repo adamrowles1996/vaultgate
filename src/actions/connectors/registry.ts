@@ -6,7 +6,9 @@
  * a connector never loads its module or its dependencies (ACT-72).
  */
 import { CONNECTOR_KINDS, type ActionsConfig, type ConnectorKind } from '../../config/actions.ts';
+import { VERSION } from '../../version.ts';
 
+import { codeSchemas } from './code/schemas.ts';
 import { httpSchemas } from './http/schemas.ts';
 import { sqlSchemas } from './sql/schemas.ts';
 import { sshSchemas } from './ssh/schemas.ts';
@@ -21,7 +23,7 @@ export type ConnectorLoader = (config: ActionsConfig) => Promise<AnyConnector>;
 
 /**
  * One line per connector milestone (M9: `http`, M11: `sql`, M12: `ssh`,
- * M13: `winrm`, M15: `browser`); a connector without a line has no runtime
+ * M13: `winrm`, M15: `browser`, M16: `code`); a connector without a line has no runtime
  * in this build and its targets answer `connector_disabled`.
  */
 export const CONNECTOR_LOADERS: Partial<Readonly<Record<ConnectorKind, ConnectorLoader>>> = {
@@ -41,6 +43,14 @@ export const CONNECTOR_LOADERS: Partial<Readonly<Record<ConnectorKind, Connector
     const { createWinrmConnector } = await import('./winrm/index.ts');
     return createWinrmConnector({ allowAnyCommand: config.allowAnyCommand });
   },
+  code: async (config) => {
+    // The configuration refuses the switch without the URL (13.14); this is the backstop.
+    if (config.codeUrl === undefined) {
+      throw new Error('VAULTGATE_ACTIONS_CODE_URL is required with the code connector');
+    }
+    const { createCodeConnector } = await import('./code/index.ts');
+    return createCodeConnector({ url: config.codeUrl, userAgent: `vaultgate/${VERSION}` });
+  },
 };
 
 const CONNECTOR_SCHEMAS: Partial<Readonly<Record<ConnectorKind, AnyConnectorSchemas>>> = {
@@ -48,6 +58,7 @@ const CONNECTOR_SCHEMAS: Partial<Readonly<Record<ConnectorKind, AnyConnectorSche
   sql: sqlSchemas,
   ssh: sshSchemas,
   winrm: winrmSchemas,
+  code: codeSchemas,
 };
 
 /**
