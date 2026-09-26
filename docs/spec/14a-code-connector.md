@@ -195,9 +195,12 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
   - It never receives a credential. It holds no state beyond its snapshots and indexes, and loses
     none it cannot rebuild.
 
-  vaultgate reaches it at `VAULTGATE_ACTIONS_CODE_URL`, an `http://` URL on an internal address
-  or `unix:` followed by the absolute path of the socket, validates every response against a
-  schema, and treats an unreachable sidecar as `index_unavailable`.
+  vaultgate reaches it at `VAULTGATE_ACTIONS_CODE_URL`, an `http://` URL on a private address
+  or a host name, or `unix:` followed by the absolute path of the socket, validates every response
+  against a schema, and treats an unreachable sidecar as `index_unavailable`. An `http://` URL on
+  a loopback, link-local or other forbidden address (ACT-56), or on `localhost` or a name under
+  `.localhost`, is refused at start-up: it would put the sidecar in vaultgate's own network
+  namespace beside `bw serve` (ACT-114), and a sidecar on the same host is reached on its socket.
 
 - **ACT-114** There are three placements, each keeping the sidecar away from the internet and
   from `bw serve`'s unauthenticated loopback (ACT-56):

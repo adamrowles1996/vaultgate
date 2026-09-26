@@ -129,7 +129,7 @@ about a repository, snapshot or index is stored in vaultgate's database:
 | `VAULTGATE_ACTIONS_ENABLE_BROWSER`    | `false` | Enables the `browser` connector and `actions:browser`. Requires `VAULTGATE_ACTIONS_BROWSER_CDP_URL`.                                   |
 | `VAULTGATE_ACTIONS_BROWSER_CDP_URL`   |         | `ws://` or `wss://` URL of the Chromium sidecar's DevTools endpoint (14.7). Must not be a public address.                              |
 | `VAULTGATE_ACTIONS_ENABLE_CODE`       | `false` | Enables the `code` connector and `actions:code` (14.8). Requires `VAULTGATE_ACTIONS_CODE_URL`.                                         |
-| `VAULTGATE_ACTIONS_CODE_URL`          |         | The code sidecar (ACT-113, ACT-114): an `http://` URL on an address that is not public, or `unix:` and a socket's absolute path.       |
+| `VAULTGATE_ACTIONS_CODE_URL`          |         | The code sidecar (ACT-113, ACT-114): `http://` on a private address or a name but `localhost`, or `unix:` and an absolute socket path. |
 | `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` | `false` | Allows `ssh`/`winrm` targets to be saved with `any_command: true` (ACT-88). Turning it off later makes such targets refuse every call. |
 
 - **ACT-67** The connector switches are meaningful only with the master switch on; a connector

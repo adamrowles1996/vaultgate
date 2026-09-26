@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 import { z } from 'zod';
 
 import { classifyAddress } from '../net/ip-ranges.ts';
@@ -37,6 +39,9 @@ const CONNECTOR_VARIABLES: Readonly<Record<ConnectorKind, string>> = {
   code: 'VAULTGATE_ACTIONS_ENABLE_CODE',
 };
 
+const LOCAL_SIDECAR =
+  'must not be a loopback, link-local or other reserved address, or localhost; a local sidecar is reached on a unix: socket';
+
 function literalHost(hostname: string): string {
   return hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
 }
@@ -60,10 +65,14 @@ export function cdpUrlProblem(text: string): string | undefined {
 }
 
 /**
- * Why a code sidecar URL is refused (ACT-113), or `undefined` when it is
- * acceptable: `unix:` and an absolute socket path, or an `http://` URL on an
- * address that is not public, since the sidecar is reached on an internal
- * network or a local socket, never across the internet. The URL names the
+ * Why a code sidecar URL is refused (ACT-113, ACT-114), or `undefined` when
+ * it is acceptable: `unix:` and an absolute socket path, or an `http://` URL
+ * on a private address or a host name, since the sidecar is reached on an
+ * internal network or a local socket, never across the internet. Loopback,
+ * link-local and every other forbidden address, and the `localhost` names,
+ * are refused too: a sidecar there would share vaultgate's own network
+ * namespace with `bw serve`'s unauthenticated loopback (ACT-56), and a
+ * local sidecar is reached on a `unix:` socket instead. The URL names the
  * sidecar only: the protocol's paths are fixed, so a path would be ignored.
  */
 export function codeUrlProblem(text: string): string | undefined {
@@ -86,12 +95,35 @@ function httpSidecarProblem(text: string): string | undefined {
   if (url.protocol !== 'http:' || url.username !== '' || url.password !== '') {
     return 'must be an http:// URL or unix: and a socket path';
   }
-  if (url.pathname !== '/' || url.search !== '' || url.hash !== '') {
-    return 'must name the sidecar itself, with no path, query or fragment';
+  return url.pathname !== '/' || url.search !== '' || url.hash !== ''
+    ? 'must name the sidecar itself, with no path, query or fragment'
+    : sidecarHostProblem(url.hostname);
+}
+
+/**
+ * ACT-114: an IP literal must be a private address, and a name must not be
+ * `localhost` or under `.localhost` (RFC 6761), which always mean loopback.
+ * An address the classifier cannot place (an IPv4-mapped form written in
+ * hex) is refused rather than let through as if it were a name.
+ */
+function sidecarHostProblem(hostname: string): string | undefined {
+  const host = literalHost(hostname);
+  if (isIP(host) === 0) {
+    const name = host.toLowerCase().replace(/\.$/u, '');
+    return name === 'localhost' || name.endsWith('.localhost') ? LOCAL_SIDECAR : undefined;
   }
-  return classifyAddress(literalHost(url.hostname)) === 'public'
-    ? 'must not be a public address; the sidecar is reached on an internal network'
-    : undefined;
+  switch (classifyAddress(host)) {
+    case 'private': {
+      return undefined;
+    }
+    case 'public': {
+      return 'must not be a public address; the sidecar is reached on an internal network';
+    }
+    case 'forbidden':
+    case 'invalid': {
+      return LOCAL_SIDECAR;
+    }
+  }
 }
 
 export const codeUrlSchema: z.ZodType<string | undefined, string | undefined> = z

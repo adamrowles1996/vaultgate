@@ -13,16 +13,39 @@ const REQUIRED = {
 const NOT_A_SIDECAR_URL = 'must be an http:// URL or unix: and a socket path';
 
 describe('the code sidecar URL (ACT-113, 13.14)', () => {
-  it('ACT-113 accepts unix: and an absolute socket path, and http:// on a private, loopback or named host', () => {
+  it('ACT-113 accepts unix: and an absolute socket path, and http:// on a private address or a named host', () => {
     const accepted = [
       'unix:/run/vaultgate-code/sidecar.sock',
       'http://code:8080',
       'http://10.0.0.5:8080',
-      'http://127.0.0.1:8080/',
       'http://[fd00::7]:8080',
       'http://vaultgate-code.internal.example.net',
+      'http://localhost-code:8080',
     ];
     expect(accepted.filter((url) => codeUrlProblem(url) !== undefined)).toStrictEqual([]);
+  });
+
+  it('ACT-114 refuses loopback, link-local and every other forbidden address, and localhost, for an http:// sidecar', () => {
+    const local = [
+      'http://127.0.0.1:8080/',
+      'http://127.8.9.1:8080',
+      'http://2130706433:8080',
+      'http://0x7f.1:8080',
+      'http://[::1]:8080',
+      'http://[::ffff:127.0.0.1]:8080',
+      'http://0.0.0.0:8080',
+      'http://169.254.169.254',
+      'http://[fe80::1]:8080',
+      'http://224.0.0.1:8080',
+      'http://localhost:8080',
+      'http://LOCALHOST.:8080',
+      'http://code.localhost:8080',
+    ];
+    expect(new Set(local.map((url) => codeUrlProblem(url)))).toStrictEqual(
+      new Set([
+        'must not be a loopback, link-local or other reserved address, or localhost; a local sidecar is reached on a unix: socket',
+      ]),
+    );
   });
 
   it('ACT-113 refuses a public address, another scheme, credentials, a path, a relative or NUL socket path', () => {
