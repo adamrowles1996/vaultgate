@@ -185,4 +185,23 @@ describe('what the Index card says of each state (ACT-115)', () => {
       { targetId: 'id-1', trigger: 'operator', isReset: true },
     ]);
   });
+
+  it('ACT-108 a disabled connection offers no Rebuild index, and one posted for it is refused with a notice before anything is deleted', async () => {
+    const { browser, csrf, sidecar } = await codeTarget();
+    await vi.waitFor(() => {
+      expect(sidecar.snapshots.size).toBe(1);
+    });
+    const disabled = await browser.submit('/account/actions/id-1/disable', { csrf });
+    expect(disabled.status).toBe(303);
+    const card = compact(indexCardOf(await pageText(browser, '/account/actions/id-1')));
+    expect(card).not.toContain('/rebuild');
+    expect(card).toContain('This connection is disabled, so its index is not rebuilt');
+    const refused = await browser.submit('/account/actions/id-1/rebuild', { csrf });
+    expect(refused.status).toBe(400);
+    expect(compact(await refused.text())).toContain(
+      'This connection is disabled, so its index is not rebuilt: enable it, which builds the configured ref again.',
+    );
+    expect(sidecar.snapshots.size).toBe(1);
+    expect(sidecar.requests.some((request) => request.method === 'DELETE')).toBe(false);
+  });
 });

@@ -7,7 +7,8 @@
  * the configured ref; the last build and the last failure, by reason code
  * and trigger. **Rebuild index** posts behind the operator's session and
  * synchroniser token (ID-18), not ID-15's window: it deletes every snapshot
- * and builds the configured ref again, and changes no setting.
+ * and builds the configured ref again, and changes no setting. A disabled
+ * connection offers no Rebuild index, since nothing would build.
  */
 import { icon } from '../../identity/pages/icons.ts';
 import { cell, EMPTY, hidden, type Html, html, tableHead } from '../../identity/pages/template.ts';
@@ -29,7 +30,17 @@ export interface IndexCardView {
   readonly csrfToken: string;
   readonly now: number;
   readonly index: IndexView;
+  /**
+  ACT-108: a disabled connection is not rebuilt, so its card offers no Rebuild index.
+  */
+  readonly isEnabled: boolean;
 }
+
+/**
+What a disabled connection's card, and a Rebuild index posted for one, say instead.
+*/
+export const REBUILD_DISABLED =
+  'This connection is disabled, so its index is not rebuilt: enable it, which builds the configured ref again.';
 
 const COLUMNS = ['Commit', 'Ref', 'Built', 'Calls', 'Indexes', 'Skipped'] as const;
 const SHORT_COMMIT = 12;
@@ -150,10 +161,12 @@ function statusBody(status: CodeIndexStatus, now: number): Html {
 }
 
 function rebuildButton(view: IndexCardView): Html {
-  return html`<form method="post" action="${rebuildPath(view.targetId)}">
-    ${hidden('csrf', view.csrfToken)}
-    <button type="submit">${icon('refresh')}Rebuild index</button>
-  </form>`;
+  return view.isEnabled
+    ? html`<form method="post" action="${rebuildPath(view.targetId)}">
+        ${hidden('csrf', view.csrfToken)}
+        <button type="submit">${icon('refresh')}Rebuild index</button>
+      </form>`
+    : EMPTY;
 }
 
 export function indexCard(view: IndexCardView): Html {
@@ -170,7 +183,9 @@ export function indexCard(view: IndexCardView): Html {
   return html`<section class="card" id="index">
     ${cardHead(
       'Index',
-      'The snapshots of the repository and the semble indexes calls search. Rebuilding deletes every snapshot and builds the configured ref again.',
+      view.isEnabled
+        ? 'The snapshots of the repository and the semble indexes calls search. Rebuilding deletes every snapshot and builds the configured ref again.'
+        : `The snapshots of the repository and the semble indexes calls search. ${REBUILD_DISABLED}`,
       rebuildButton(view),
     )}
     ${statusBody(index.status, now)}

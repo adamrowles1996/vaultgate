@@ -263,7 +263,11 @@ export function targetPage(view: TargetPageView): ConsolePage {
         ${connectionCard(view)} ${credentialCard(view)} ${rulesCard(view)}
         ${grantsCard({ ...context, grants: view.grants, candidates: view.candidates })}
       </div>
-      ${view.index === undefined ? EMPTY : indexCard({ ...context, now: view.now, index: view.index })}
+      ${
+        view.index === undefined
+          ? EMPTY
+          : indexCard({ ...context, now: view.now, index: view.index, isEnabled: target.enabled })
+      }
       ${callsCard(view)} ${manageCard({ ...context, isEnabled: target.enabled })}`,
     returnTo: targetPath(target.id),
   };

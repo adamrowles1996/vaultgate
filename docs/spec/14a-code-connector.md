@@ -111,7 +111,8 @@ defaults to ACT-106's list.
   - When the operator presses **Rebuild index** on the target's page: every snapshot of the
     target is deleted and the configured ref is built again (trigger `operator`). This needs the
     operator session and CSRF token; it is not a target write, so ID-15's re-authentication does
-    not apply.
+    not apply. A disabled target lends no credential to build with, so its page offers no
+    Rebuild index, and one posted for it is refused with a notice before anything is deleted.
   - When a call needs a snapshot or an index that does not exist (trigger `call`); the call waits
     for it (ACT-112). A call's build of the configured ref, moved or not, makes the index of the
     policy's whole `content` beside the call's own selection, as a save does, so the next call

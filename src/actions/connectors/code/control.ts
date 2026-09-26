@@ -14,7 +14,7 @@ import { normaliseContent } from './schemas.ts';
 import { withDeadline } from './timing.ts';
 
 import type { PinnedFetch } from '../../../net/pinned-https.ts';
-import type { ConnectorServices, TargetAccess } from '../connector.ts';
+import type { ConnectorServices, StoredTarget, TargetAccess } from '../connector.ts';
 import type { SnapshotList, SnapshotMeta } from './sidecar-schemas.ts';
 import type { SidecarClient } from './sidecar.ts';
 import type { BuildRecord, CodeState, Resolution, SnapshotNote, TargetState } from './state.ts';
@@ -128,30 +128,52 @@ async function buildConfigured(
   await dependencies.builds.run(access, request);
 }
 
+function storedTarget(dependencies: ControlDependencies, targetId: string) {
+  return dependencies.services.targets().find((target) => target.id === targetId);
+}
+
+function refusedRefresh(
+  dependencies: ControlDependencies,
+  stored: StoredTarget,
+  trigger: 'save' | 'operator',
+  reason: string,
+): void {
+  const policy = (stored.documents as CodeDocuments | undefined)?.policy;
+  dependencies.state.refused({
+    targetId: stored.id,
+    targetName: stored.name,
+    trigger,
+    content: policy === undefined ? [] : normaliseContent(policy.content),
+    reason,
+  });
+}
+
+/**
+ * ACT-108: a disabled target is refused before anything is deleted, since
+ * it lends no credential to build again with; the snapshots stay until it is
+ * enabled (which builds) or changed.
+ */
 async function refresh(
   dependencies: ControlDependencies,
   targetId: string,
   trigger: 'save' | 'operator',
   isReset: boolean,
 ): Promise<void> {
+  const before = storedTarget(dependencies, targetId);
+  if (before?.enabled === false) {
+    refusedRefresh(dependencies, before, trigger, 'target_disabled');
+    return;
+  }
   if (isReset) {
     await forgetTarget(dependencies, targetId);
   }
   const outcome = await dependencies.services.withTarget(targetId, async (access) => {
     await buildConfigured(dependencies, access, trigger);
   });
-  const stored = dependencies.services.targets().find((target) => target.id === targetId);
-  if (stored === undefined || outcome.ok) {
-    return;
+  const stored = storedTarget(dependencies, targetId);
+  if (stored !== undefined && !outcome.ok) {
+    refusedRefresh(dependencies, stored, trigger, outcome.error.code);
   }
-  const policy = (stored.documents as CodeDocuments | undefined)?.policy;
-  dependencies.state.refused({
-    targetId,
-    targetName: stored.name,
-    trigger,
-    content: policy === undefined ? [] : normaliseContent(policy.content),
-    reason: outcome.error.code,
-  });
 }
 
 /**

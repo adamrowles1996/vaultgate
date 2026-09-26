@@ -5,7 +5,9 @@
  * re-authentication, because it changes no setting: the build runs in the
  * background under the target's own credential, the page answers at once
  * with a notice, and the build's end is an audit event of its own (ACT-116).
+ * A disabled connection is refused with a notice before anything is deleted.
  */
+import { REBUILD_DISABLED } from './index-card.ts';
 import { targetPath } from './paths.ts';
 import { targetPage } from './target-page.ts';
 import { type ActionsPagesDependencies, targetPageView, viewerOf } from './view.ts';
@@ -45,8 +47,10 @@ async function rebuild(
     return context.notFound();
   }
   const { code } = dependencies;
-  if (code === undefined || target.connector !== 'code') {
-    const extras = { error: NOTHING_TO_REBUILD };
+  const isIndexed = code !== undefined && target.connector === 'code';
+  if (!isIndexed || !target.enabled) {
+    // ACT-108: a disabled connection is refused before any snapshot is deleted.
+    const extras = isIndexed ? { notice: REBUILD_DISABLED } : { error: NOTHING_TO_REBUILD };
     const view = await targetPageView(dependencies, target, viewerOf(gate.session), extras);
     return context.html(await dependencies.renderConsole(gate.session, targetPage(view)), 400);
   }

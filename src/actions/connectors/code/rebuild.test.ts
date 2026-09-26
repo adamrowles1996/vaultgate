@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resultOf } from '../../../test-support/actions-fixtures.ts';
+import { OPERATOR_ID, resultOf } from '../../../test-support/actions-fixtures.ts';
 import {
   codeCaller,
   createCodeHarness,
@@ -9,6 +9,7 @@ import {
   SHA,
   sidecarResult,
 } from '../../../test-support/code-connector.ts';
+import { unwrapOk } from '../../../test-support/result.ts';
 
 describe('Rebuild index (ACT-108)', () => {
   it('ACT-108 Rebuild during a running build deletes it and builds afresh rather than joining the build it deleted', async () => {
@@ -35,6 +36,24 @@ describe('Rebuild index (ACT-108)', () => {
     const result = resultOf(await code.harness.engine.call(codeCaller(), search('widgets')));
     expect(result['repos']).toStrictEqual([
       expect.objectContaining({ commit: SHA.main, stale: false }),
+    ]);
+  });
+
+  it('ACT-108 Rebuild of a disabled target is refused before anything is deleted', async () => {
+    const code = createCodeHarness();
+    const target = await createCodeTarget(code);
+    unwrapOk(code.harness.engine.targets.setEnabled(target.id, false, OPERATOR_ID));
+    await code.settle();
+    await code.harness.engine.code?.refresh(target.id, 'operator', true);
+    await code.settle();
+    expect(code.sidecar.snapshots.size).toBe(1);
+    expect(code.sidecar.requests.filter((request) => request.method === 'DELETE')).toStrictEqual(
+      [],
+    );
+    const status = await code.harness.engine.code?.status(target.id);
+    expect([status?.lastFailure?.reason, status?.lastFailure?.trigger]).toStrictEqual([
+      'target_disabled',
+      'operator',
     ]);
   });
 });
