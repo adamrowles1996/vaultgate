@@ -92,7 +92,20 @@ export interface CodeHarnessOptions {
 
 const SETTLE_ROUNDS = 12;
 
-export function createCodeHarness(options: CodeHarnessOptions = {}): CodeHarness {
+export interface CodeFakes {
+  readonly github: FakeGitHub;
+  readonly sidecar: FakeSidecar;
+  readonly connector: CodeConnector;
+  /**
+  Points the fake sidecar's clock at the harness's once there is one.
+  */
+  readonly useClock: (now: () => number) => void;
+}
+
+/**
+The real connector over a fake GitHub (both fixture repositories) and a fake sidecar.
+*/
+export function codeFakes(options: Omit<CodeHarnessOptions, 'harness'> = {}): CodeFakes {
   const time = { now: (): number => 0 };
   const github = createFakeGitHub({
     repos: [fakeRepo(), fakeRepo({ fullName: OTHER_REPO, refs: { main: SHA.other } })],
@@ -107,17 +120,34 @@ export function createCodeHarness(options: CodeHarnessOptions = {}): CodeHarness
     http: sidecar.http,
     fetch: github.fetch,
   });
+  return {
+    github,
+    sidecar,
+    connector,
+    useClock: (now) => {
+      time.now = now;
+    },
+  };
+}
+
+/**
+Twelve rounds of the event loop: every chain the connector started in the background has ended.
+*/
+export async function settleAll(harness: ActionsHarness): Promise<void> {
+  for (let round = 0; round < SETTLE_ROUNDS; round += 1) {
+    await harness.clock.settle();
+  }
+}
+
+export function createCodeHarness(options: CodeHarnessOptions = {}): CodeHarness {
+  const { github, sidecar, connector, useClock } = codeFakes(options);
   const harness = createActionsHarness({
     ...options.harness,
     config: actionsEnabled(['code'], { codeUrl: CODE_URL }),
     runtime: connector,
   });
-  time.now = () => harness.clock.now();
-  const settle = async (): Promise<void> => {
-    for (let round = 0; round < SETTLE_ROUNDS; round += 1) {
-      await harness.clock.settle();
-    }
-  };
+  useClock(() => harness.clock.now());
+  const settle = (): Promise<void> => settleAll(harness);
   return { harness, github, sidecar, connector, settle };
 }
 
