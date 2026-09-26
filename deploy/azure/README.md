@@ -143,7 +143,9 @@ issuer.
   restart costs only the time to rebuild the indexes. A Container Apps
   environment without VNet integration cannot deny the sidecar egress; the
   sidecar never makes an outbound connection, and
-  [the threat model](../../docs/THREAT_MODEL.md) records the gap.
+  [the threat model](../../docs/THREAT_MODEL.md) records the gap. The sidecar's
+  protocol has no authentication of its own, so any app in the same environment
+  could read its snapshots: deploy nothing else into that environment.
 - **Redeploying an existing installation** with the same name is safe: every
   resource name is derived from `name` and the resource group id, so
   `az deployment group create` re-applies the same resources. Supply the same

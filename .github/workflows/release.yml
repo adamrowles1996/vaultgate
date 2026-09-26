@@ -154,7 +154,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - run: npm ci
+      # No install scripts in a job that holds an OIDC token: a dependency's script could
+      # otherwise mint provenance for tarballs of its own making.
+      - run: npm ci --ignore-scripts
       - run: npm run build
       - name: Build vaultgate-<version>.tgz, vaultgate-code-<version>.tgz, their .sha256 and the release notes
         run: scripts/release-assets.sh "${GITHUB_REF_NAME#v}"

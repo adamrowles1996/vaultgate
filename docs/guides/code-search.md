@@ -69,7 +69,10 @@ and starts the first build in the background.
 
 A repository that holds credentials in files the exclude list does not name is still a
 repository of credentials: the agent can read what the index holds. Extend the list, or leave
-the repository out.
+the repository out. The content types limit what is searched, not what `code_read` reads: it
+reads any file the patterns keep. With a per-call ref allowed, an agent may also name a commit
+SHA, and GitHub serves every commit of a repository's fork network through each repository in
+it; turn the per-call ref off for a repository whose forks hold what the grant should not cover.
 
 ## 4. Grant it
 

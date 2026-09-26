@@ -149,7 +149,15 @@ Planned with the actions layer:
   sidecar's storage; encryption at rest there is the host's (or the cloud volume's)
   responsibility. On Azure without VNet integration the sidecar cannot be denied egress, so a
   compromised sidecar could send what it holds elsewhere; it holds no credential, and the
-  snapshot is what it could lose.
+  snapshot is what it could lose. The sidecar's protocol has no authentication of its own:
+  placement is the control, so on Azure every other app in the same Container Apps environment
+  (or a peered network) could read its snapshots. The template gives vaultgate an environment of
+  its own; keep it that way.
+- A commit SHA a call names is used as given. GitHub serves any commit of a repository's fork
+  network through each repository in it, so with `allow_ref` on an agent can snapshot a commit
+  that exists only in a fork of the configured repository. `allow_ref: false` confines a target to
+  its configured ref, and is the setting for a repository whose forks hold what the grant should
+  not cover.
 - A repository's own files can contain secrets the default exclusions do not name. The scrubber
   removes only the values vaultgate injected, so such a secret reaches the agent like any other
   file content.
