@@ -301,7 +301,9 @@ straight to the returned file and line, use `code_find_related` after a search, 
 ### 14.8.7 Audit and verification
 
 - **ACT-116** Calls are audited per ACT-60, one row per repository, with operation `read` and
-  classification `search`, `related` or `read`; `arguments` records the query, the path and the
+  classification `search`, `related` or `read`; a call that fails before it runs (a name that
+  does not resolve, a rate limit, a credential or destination refused) leaves a row for every
+  repository it named, with the first failure's code; `arguments` records the query, the path and the
   line numbers. A build is an audit event (`actions.code_index_built` or
   `actions.code_index_failed`) carrying the target, the commit, the content selection, the
   trigger (`save`, `operator` or `call`), the counts, the duration and, on failure, the reason

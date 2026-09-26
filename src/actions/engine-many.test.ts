@@ -82,7 +82,10 @@ describe('a call over several targets that fails before it runs (ACT-16, ACT-60,
       'rate_limited',
       { retry_after_s: 60, repo: 'gadgets' },
     ]);
-    expect(rows(code).at(-1)).toStrictEqual(['gadgets', 'denied:rate_limited']);
+    expect(rows(code).slice(-2)).toStrictEqual([
+      ['widgets', 'denied:rate_limited'],
+      ['gadgets', 'denied:rate_limited'],
+    ]);
     await code.harness.clock.advance(60_000);
     const later = await code.harness.engine.call(codeCaller(), search(['widgets', 'gadgets']));
     expect(later.kind).toBe('ok');
@@ -92,8 +95,35 @@ describe('a call over several targets that fails before it runs (ACT-16, ACT-60,
     const code = await twoRepos();
     code.connector.authorize = () => ({ allowed: true, operation: 'write' });
     const outcome = await code.harness.engine.call(codeCaller(), search(['widgets', 'gadgets']));
-    expect(failure(outcome)).toStrictEqual(['connector_fault', { reason: 'multi_target_write' }]);
-    expect(rows(code)).toStrictEqual([['widgets', 'error:connector_fault']]);
+    expect(failure(outcome)).toStrictEqual([
+      'connector_fault',
+      { reason: 'multi_target_write', repo: 'widgets' },
+    ]);
+    expect(rows(code)).toStrictEqual([
+      ['widgets', 'error:connector_fault'],
+      ['gadgets', 'error:connector_fault'],
+    ]);
+  });
+
+  it('ACT-116 ACT-60 a name of several that cannot be resolved fails the call with one row per repository, naming the first failure', async () => {
+    const code = await twoRepos();
+    unwrapOk(code.harness.engine.targets.setEnabled('id-2', false, OPERATOR_ID));
+    const outcome = await code.harness.engine.call(
+      codeCaller(),
+      search(['widgets', 'gadgets', 'nowhere']),
+    );
+    expect(failure(outcome)).toStrictEqual(['target_disabled', { repo: 'gadgets' }]);
+    expect(rows(code)).toStrictEqual([
+      ['widgets', 'denied:target_disabled'],
+      ['gadgets', 'denied:target_disabled'],
+      ['nowhere', 'denied:target_disabled'],
+    ]);
+    const events = code.harness.audit.filter((event) => event.category === 'mcp');
+    expect(events.map((event) => event.details?.['target'])).toStrictEqual([
+      'widgets',
+      'gadgets',
+      'nowhere',
+    ]);
   });
 
   it('ACT-110 with no joint decision of its own, a connector is judged target by target only', async () => {

@@ -51,6 +51,12 @@ function withRepo(error: ActionError, repo: string): ActionError {
   return new ActionError(error.code, { ...error.detail, repo });
 }
 
+/**
+ * Every name resolved in the ACT-16 order; the first that fails fails the
+ * call, and then every name of it gets its row with that error (ACT-116),
+ * as `failAll` does for a failure after resolution. The agent learns only
+ * the first failure, with the name it concerns.
+ */
 function resolveAll(
   context: EngineContext,
   caller: Caller,
@@ -58,25 +64,40 @@ function resolveAll(
   names: readonly string[],
 ): { readonly prepared: readonly Prepared[] } | { readonly error: ActionError } {
   const prepared: Prepared[] = [];
+  const facts: CallFacts[] = [];
+  let first: { readonly index: number; readonly error: ActionError } | undefined;
   for (const name of names) {
     const audited: Invocation = { ...invocation, target: name };
     const resolution = resolveCall(context.resolve, caller, perTarget(invocation, name));
-    const facts: CallFacts = {
+    const known: CallFacts = {
       ...factsFor(context, caller, audited),
       row: resolution.row,
       resolved: resolution.call.ok ? resolution.call.value : undefined,
       description: resolution.description,
     };
-    if (!resolution.call.ok) {
-      return { error: withRepo(recordFailure(context, facts, resolution.call.error), name) };
+    facts.push(known);
+    const error = resolutionError(resolution.call);
+    if (error === undefined && resolution.call.ok) {
+      prepared.push({ facts: known, resolved: resolution.call.value });
+    } else if (first === undefined && error !== undefined) {
+      first = { index: facts.length - 1, error };
     }
-    if (resolution.call.value.decision.operation !== 'read') {
-      const error = new ActionError('connector_fault', { reason: 'multi_target_write' });
-      return { error: recordFailure(context, facts, error) };
-    }
-    prepared.push({ facts, resolved: resolution.call.value });
   }
-  return { prepared };
+  return first === undefined
+    ? { prepared }
+    : { error: failAll(context, facts, first.index, first.error).error };
+}
+
+/**
+Why one name cannot join the call: its resolution's error, or a write a list may not carry.
+*/
+function resolutionError(call: ReturnType<typeof resolveCall>['call']): ActionError | undefined {
+  if (!call.ok) {
+    return call.error;
+  }
+  return call.value.decision.operation === 'read'
+    ? undefined
+    : new ActionError('connector_fault', { reason: 'multi_target_write' });
 }
 
 /**
@@ -162,13 +183,10 @@ export async function callMany(
   try {
     const refusedAt = limits.findIndex((limit) => !limit.allowed);
     const limited = limits[refusedAt];
-    const entry = resolved.prepared[refusedAt];
-    if (limited !== undefined && entry !== undefined && !limited.allowed) {
+    if (limited !== undefined && !limited.allowed) {
       const error = new ActionError('rate_limited', { retry_after_s: limited.retryAfterSeconds });
-      return {
-        kind: 'error',
-        error: withRepo(recordFailure(context, entry.facts, error), entry.facts.invocation.target),
-      };
+      const facts = resolved.prepared.map((entry) => entry.facts);
+      return failAll(context, facts, refusedAt, error);
     }
     return await executeMany(context, resolved.prepared);
   } finally {
@@ -190,7 +208,7 @@ function failAll(
   facts: readonly CallFacts[],
   failing: number,
   error: ActionError,
-): CallOutcome {
+): { readonly kind: 'error'; readonly error: ActionError } {
   let final = error;
   for (const [index, entry] of facts.entries()) {
     const recorded = recordFailure(context, entry, error);
