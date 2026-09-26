@@ -19,6 +19,11 @@ FIXED = {
     "SEMBLE_CACHE_LOCATION": f"{_UNUSABLE}/semble",
     "XDG_CACHE_HOME": f"{_UNUSABLE}/cache",
     "TOKENIZERS_PARALLELISM": "false",
+    # One thread for the linear algebra under numpy, in the server and in every build child:
+    # by default it starts one per CPU, which a many-CPU host's task limit cannot hold.
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
 }
 
 # Loggers whose messages can carry file paths or repository content (semble names every file

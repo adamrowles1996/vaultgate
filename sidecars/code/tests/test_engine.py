@@ -46,6 +46,34 @@ def test_the_environment_is_fixed_before_semble_loads() -> None:
     assert FIXED["SEMBLE_CACHE_LOCATION"].startswith("/dev/null/")
 
 
+THREADS_PROBE = r"""
+import os
+import vaultgate_code.memory  # numpy and semble load after the package fixed the environment
+import numpy
+numpy.ones((64, 64)) @ numpy.ones((64, 64))
+print(len(os.listdir("/proc/self/task")))
+"""
+
+
+def test_the_linear_algebra_runs_on_one_thread() -> None:
+    """ACT-114: one BLAS thread whatever the caller asks, so a many-CPU host's task limit holds."""
+    environment = {
+        **os.environ,
+        "PYTHONPATH": str(SIDECAR / "src"),
+        "OPENBLAS_NUM_THREADS": "64",
+        "OMP_NUM_THREADS": "64",
+    }
+    finished = subprocess.run(  # noqa: S603 - this interpreter, fixed arguments
+        [sys.executable, "-c", THREADS_PROBE],
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert int(finished.stdout) <= 2
+    assert FIXED["OPENBLAS_NUM_THREADS"] == FIXED["OMP_NUM_THREADS"] == "1"
+
+
 def test_semble_is_the_pinned_version() -> None:
     """ACT-113: the sidecar refuses any semble but 0.6.1, whose internals it replaces."""
     engine.check_semble()

@@ -203,6 +203,21 @@ wants_code_sidecar() {
   [ "$WITH_CODE_SIDECAR" -eq 1 ] || [ -e /etc/systemd/system/vaultgate-code.service ]
 }
 
+# Sources the release's sidecar installer, or says why there is none: a release older than the
+# sidecar leaves an installed one as it is and refuses --with-code-sidecar.
+load_code_sidecar() {
+  local lib="${RELEASE_DIR}/deploy/lib/code-sidecar.sh"
+  if [ -f "$lib" ]; then
+    # shellcheck source=deploy/lib/code-sidecar.sh
+    . "$lib"
+    CODE_SIDECAR=1
+    return
+  fi
+  [ "$WITH_CODE_SIDECAR" -eq 0 ] ||
+    die "vaultgate ${VERSION} has no code sidecar; it arrived after 0.1.0-rc.20"
+  info "vaultgate ${VERSION} has no code sidecar; the installed one is left as it is"
+}
+
 install_service() {
   step "Installing the systemd unit"
   install -m 0644 -o root -g root "${RELEASE_DIR}/deploy/systemd/vaultgate.service" \
@@ -223,7 +238,7 @@ install_service() {
 
 print_next_steps() {
   step "Done: vaultgate ${VERSION} is installed"
-  if wants_code_sidecar; then
+  if [ "${CODE_SIDECAR:-0}" -eq 1 ]; then
     info "The code sidecar runs as vaultgate-code on ${CODE_SOCKET:-/run/vaultgate-code/code.sock}:"
     info "  systemctl status vaultgate-code; journalctl -u vaultgate-code -n 50"
   fi
@@ -266,13 +281,15 @@ main() {
   ensure_node
   ensure_bw
   create_service_user
+  CODE_SIDECAR=0
+  if wants_code_sidecar; then
+    load_code_sidecar
+  fi
+  # The sidecar's fallible steps run before the core's current symlink moves.
+  [ "$CODE_SIDECAR" -eq 0 ] || stage_code_sidecar
   install_release
   write_environment_file
-  if wants_code_sidecar; then
-    # shellcheck source=deploy/lib/code-sidecar.sh
-    . "${RELEASE_DIR}/deploy/lib/code-sidecar.sh"
-    install_code_sidecar
-  fi
+  [ "$CODE_SIDECAR" -eq 0 ] || activate_code_sidecar
   install_service
   print_next_steps
 }

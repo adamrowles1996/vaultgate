@@ -4,6 +4,12 @@
 # and unpacked, when --with-code-sidecar is given or the sidecar is already installed.
 # Expects: step, info, die, WORK, VERSION, REPO, RELEASE_DIR, CONFIG_DIR, SERVICE_USER.
 #
+# It runs in two halves around the core's own install. stage_code_sidecar does everything
+# that can fail (Python, the bundle, the virtual environment, the model) into a staging
+# directory before anything installed changes; activate_code_sidecar then moves it into place
+# and restarts the sidecar, and a sidecar that does not come up is reported without stopping
+# the core's upgrade.
+#
 # The bundle vaultgate-code-<version>.tgz is published beside the core tarball and verified
 # against its .sha256 the same way. Its Python dependencies are installed from the release's
 # hash-locked requirements (pip --require-hashes, wheels only) into a virtual environment,
@@ -63,7 +69,10 @@ create_code_user() {
   if getent passwd "$CODE_USER" >/dev/null; then
     info "user exists"
   else
-    useradd --system --user-group --home-dir "$CODE_STATE_DIR" --no-create-home \
+    # A group left behind by an earlier userdel is reused rather than refused.
+    local group=(--user-group)
+    getent group "$CODE_USER" >/dev/null && group=(--gid "$CODE_USER")
+    useradd --system "${group[@]}" --home-dir "$CODE_STATE_DIR" --no-create-home \
       --shell /usr/sbin/nologin "$CODE_USER"
   fi
   # vaultgate opens the sidecar's socket through this group, and nobody else can.
@@ -76,27 +85,38 @@ create_code_user() {
 }
 
 # The application, a virtual environment built from the locked requirements, and the
-# verified model, under /opt/vaultgate-code/<version>; every file is root's and read-only
-# to the service.
-install_code_release() {
+# verified model, built in a staging directory beside the installed releases; every file is
+# root's and read-only to the service.
+build_code_tree() {
+  CODE_STAGING="${CODE_ROOT}/.staging-${VERSION}"
+  step "Building the code sidecar ${VERSION} in ${CODE_STAGING}"
+  install -d -m 0755 "$CODE_ROOT"
+  rm -rf "${CODE_STAGING:?}"
+  install -d -m 0755 "$CODE_STAGING"
+  cp -R "${CODE_BUNDLE_DIR}/app" "${CODE_BUNDLE_DIR}/requirements.txt" "$CODE_STAGING"/
+  info "creating the virtual environment"
+  "$CODE_PYTHON" -m venv "${CODE_STAGING}/venv"
+  info "pip install --require-hashes --only-binary=:all: -r requirements.txt"
+  PIP_DISABLE_PIP_VERSION_CHECK=1 "${CODE_STAGING}/venv/bin/pip" install --quiet --no-cache-dir \
+    --require-hashes --no-deps --only-binary=:all: -r "${CODE_STAGING}/requirements.txt"
+  info "downloading the embedding model at its pinned revision and checking its digests"
+  PYTHONPATH="${CODE_STAGING}/app" "${CODE_STAGING}/venv/bin/python" -m vaultgate_code.fetch_model \
+    --dest "${CODE_STAGING}/model"
+  "${CODE_STAGING}/venv/bin/python" -m compileall -q "${CODE_STAGING}/app"
+  chown -R root:root "$CODE_STAGING"
+  chmod -R u=rwX,go=rX "$CODE_STAGING"
+}
+
+# Moves the staged tree to /opt/vaultgate-code/<version> and points current at it. A re-run of
+# the installed version keeps the running tree until the staged one is complete.
+place_code_tree() {
   local target="${CODE_ROOT}/${VERSION}"
   step "Installing the code sidecar to ${target} (current -> ${VERSION})"
-  install -d -m 0755 "$CODE_ROOT"
-  rm -rf "${target:?}"
-  install -d -m 0755 "$target"
-  cp -R "${CODE_BUNDLE_DIR}/app" "${CODE_BUNDLE_DIR}/requirements.txt" "$target"/
-  info "creating the virtual environment"
-  "$CODE_PYTHON" -m venv "${target}/venv"
-  info "pip install --require-hashes --only-binary=:all: -r requirements.txt"
-  PIP_DISABLE_PIP_VERSION_CHECK=1 "${target}/venv/bin/pip" install --quiet --no-cache-dir \
-    --require-hashes --no-deps --only-binary=:all: -r "${target}/requirements.txt"
-  info "downloading the embedding model at its pinned revision and checking its digests"
-  PYTHONPATH="${target}/app" "${target}/venv/bin/python" -m vaultgate_code.fetch_model \
-    --dest "${target}/model"
-  "${target}/venv/bin/python" -m compileall -q "${target}/app"
-  chown -R root:root "$target"
-  chmod -R u=rwX,go=rX "$target"
+  rm -rf "${target:?}.previous"
+  [ ! -e "$target" ] || mv "$target" "${target}.previous"
+  mv "$CODE_STAGING" "$target"
   ln -sfn "$target" "${CODE_ROOT}/current"
+  rm -rf "${target:?}.previous"
 }
 
 write_code_environment_file() {
@@ -141,12 +161,16 @@ connect_code_sidecar() {
     info "note: the connector needs VAULTGATE_ENABLE_ACTIONS=true as well (${file})"
 }
 
-# Waits for the sidecar's socket: it verifies the model's digests before it listens.
+# Waits for the sidecar's socket: it verifies the model's digests before it listens. A sidecar
+# that does not come up is reported, not fatal: the core's upgrade goes on, and the code tools
+# answer index_unavailable until the sidecar answers.
 wait_for_code_socket() {
   local waited=0
   while [ ! -S "$CODE_SOCKET" ]; do
-    if [ "$waited" -ge 90 ]; then
-      die "the sidecar did not open ${CODE_SOCKET} within 90 s; see journalctl -u vaultgate-code -n 50"
+    if [ "$waited" -ge "${CODE_SOCKET_WAIT:-90}" ]; then
+      info "WARNING: the sidecar did not open ${CODE_SOCKET} within ${CODE_SOCKET_WAIT:-90} s;" \
+        "see journalctl -u vaultgate-code -n 50"
+      return 0
     fi
     sleep 1
     waited=$((waited + 1))
@@ -164,11 +188,16 @@ install_code_service() {
   wait_for_code_socket
 }
 
-install_code_sidecar() {
+# Everything that can fail, before anything installed changes.
+stage_code_sidecar() {
   ensure_code_python
   fetch_code_bundle
   create_code_user
-  install_code_release
+  build_code_tree
+}
+
+activate_code_sidecar() {
+  place_code_tree
   install_code_service
   connect_code_sidecar
 }

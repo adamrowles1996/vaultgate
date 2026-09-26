@@ -140,6 +140,47 @@ fi
 expect_contains "the refusal points at the image" \
   "$( (CODE_PYTHON=python9.99 ensure_code_python) 2>&1 || true)" "install-docker-compose.md"
 
+# A release older than the sidecar: refused with the flag, left alone without it.
+RELEASE_DIR="$work/old-release"
+mkdir -p "$RELEASE_DIR/deploy/lib"
+if (WITH_CODE_SIDECAR=1 load_code_sidecar >/dev/null 2>&1); then
+  fail "a release without the sidecar refuses --with-code-sidecar"
+else
+  pass "a release without the sidecar refuses --with-code-sidecar"
+fi
+expect_equal "a release without the sidecar leaves an installed one alone" "$(
+  CODE_SIDECAR=0
+  WITH_CODE_SIDECAR=0
+  load_code_sidecar >/dev/null
+  echo "loaded=${CODE_SIDECAR}"
+)" "loaded=0"
+
+# A sidecar that does not come up is reported, and the core's upgrade goes on.
+expect_contains "a missing socket is a warning, not a failure" "$(
+  CODE_SOCKET="$work/no.sock" CODE_SOCKET_WAIT=0 wait_for_code_socket
+  echo "went on"
+)" "went on"
+
+# A re-run of the installed version keeps the running tree until the staged one replaces it.
+CODE_ROOT="$work/opt-code"
+VERSION=1.2.3
+mkdir -p "$CODE_ROOT/1.2.3" "$CODE_ROOT/.staging-1.2.3"
+echo old >"$CODE_ROOT/1.2.3/marker"
+echo new >"$CODE_ROOT/.staging-1.2.3/marker"
+CODE_STAGING="$CODE_ROOT/.staging-1.2.3"
+place_code_tree >/dev/null
+expect_equal "the staged tree replaces the installed one" "$(<"$CODE_ROOT/current/marker")" "new"
+expect_equal "no staging or previous tree is left behind" \
+  "$(find "$CODE_ROOT" -mindepth 1 -maxdepth 1 -name '.staging-*' -o -mindepth 1 -maxdepth 1 -name '*.previous' | wc -l)" "0"
+
+# A group left behind by an earlier userdel is reused.
+getent() { [ "$1" = group ]; }
+useradd() { printf 'useradd %s\n' "$*"; }
+usermod() { :; }
+id() { echo vaultgate; }
+expect_contains "a leftover group is reused" "$(create_code_user)" "--gid vaultgate-code"
+unset -f getent useradd usermod id
+
 if [ "$failures" -gt 0 ]; then
   printf '%s check(s) failed\n' "$failures" >&2
   exit 1
