@@ -7,7 +7,7 @@
  * engine for as long as it runs, and a build that could not start is
  * recorded on the page and in the audit trail like one that failed.
  */
-import { documentsOf, githubAccess, type Builds, type BuildRequest } from './builds.ts';
+import { documentsOf, githubAccess, keyOf, type Builds, type BuildRequest } from './builds.ts';
 import { resolveReference } from './github.ts';
 import { type CodeDocuments, extractionFingerprint, parseSnapshotKey } from './keys.ts';
 import { normaliseContent } from './schemas.ts';
@@ -107,6 +107,14 @@ async function buildConfigured(
     return;
   }
   dependencies.state.target(targetId).failed.clear();
+  const key = keyOf({ targetId, documents, commit: resolved.value.commit });
+  const status = await withDeadline(dependencies.services, SIDECAR_TIMEOUT_MS, (signal) =>
+    dependencies.sidecar.status(key, signal),
+  );
+  if (status.ok && status.value.state === 'ready') {
+    // The snapshot this save would build exists already; the next call adopts it.
+    return;
+  }
   const request: BuildRequest = {
     targetId,
     targetName,

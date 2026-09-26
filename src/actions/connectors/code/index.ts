@@ -106,17 +106,22 @@ function resetOf(documents: unknown): string | undefined {
 }
 
 /**
-ACT-108: a save builds an enabled target; a revision that changed the snapshots' inputs deletes them first.
-*/
-function saved(parts: Parts, control: CodeControl, targetId: string, previous: unknown): void {
-  const stored = parts.services.targets().find((target) => target.id === targetId);
+ * ACT-108: a save builds an enabled target; a revision that changed the
+ * snapshots' inputs deletes them first, and a disabled target's too. It runs
+ * after the save has answered: nothing here can fail the operator's save.
+ */
+async function saved(
+  services: ConnectorServices,
+  control: CodeControl,
+  targetId: string,
+  previous: unknown,
+): Promise<void> {
+  const stored = services.targets().find((target) => target.id === targetId);
   const isReset = previous !== undefined && resetOf(previous) !== resetOf(stored?.documents);
   if (stored?.enabled === true) {
-    background(parts.services, 'a build on save', () => control.refresh(targetId, 'save', isReset));
+    await control.refresh(targetId, 'save', isReset);
   } else if (isReset) {
-    background(parts.services, 'deleting the snapshots of a changed target', () =>
-      control.forgetTarget(targetId),
-    );
+    await control.forgetTarget(targetId);
   }
 }
 
@@ -187,7 +192,9 @@ function attach(
     },
     control: {
       saved(targetId, previous) {
-        saved(parts, control, targetId, previous);
+        background(services, 'the work of a save', () =>
+          saved(services, control, targetId, previous),
+        );
       },
       removed(targetId) {
         background(services, 'deleting the snapshots of a deleted target', () =>

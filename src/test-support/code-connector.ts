@@ -84,6 +84,10 @@ export interface CodeHarnessOptions {
   readonly github?: Partial<FakeGitHubOptions>;
   readonly sidecar?: Omit<FakeSidecarOptions, 'now'>;
   readonly harness?: Omit<HarnessOptions, 'runtime' | 'config'>;
+  /**
+  The sidecar does not answer from the start, as when vaultgate starts before it.
+  */
+  readonly startUnreachable?: boolean;
 }
 
 const SETTLE_ROUNDS = 12;
@@ -96,6 +100,7 @@ export function createCodeHarness(options: CodeHarnessOptions = {}): CodeHarness
     ...options.github,
   });
   const sidecar = createFakeSidecar({ ...options.sidecar, now: () => time.now() });
+  sidecar.unreachable(options.startUnreachable === true);
   const connector = createCodeConnector({
     url: CODE_URL,
     userAgent: 'vaultgate/9.9.9',

@@ -177,7 +177,14 @@ async function ensureSnapshot(
   if (outcome === 'timeout') {
     return fail(notReady(label, 'building'));
   }
-  return outcome.ok ? ok(outcome.meta.created_at) : fail(notReady(label, 'failed', outcome.reason));
+  if (outcome.ok) {
+    return ok(outcome.meta.created_at);
+  }
+  return fail(
+    outcome.reason === 'index_unavailable'
+      ? new ActionError('index_unavailable')
+      : notReady(label, 'failed', outcome.reason),
+  );
 }
 
 function prepared(

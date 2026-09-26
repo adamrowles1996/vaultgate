@@ -17,6 +17,9 @@ const PASSED_THROUGH: ReadonlySet<string> = new Set([
 
 const INVALID: ReadonlySet<string> = new Set(['invalid_path', 'invalid_range']);
 
+/**
+The sidecar's own reasons a build failed: the archive or the index, not the way to them.
+*/
 const BUILD_FAILURES: ReadonlySet<string> = new Set([
   'archive_invalid',
   'archive_too_large',
@@ -24,6 +27,16 @@ const BUILD_FAILURES: ReadonlySet<string> = new Set([
   'build_timeout',
   'storage_full',
 ]);
+
+/**
+ * ACT-112: whether a build's reason is the build's own, so a call answers
+ * `index_not_ready` with it and the archive is not fetched again within the
+ * refresh interval. An unreachable sidecar, a transport failure or a
+ * credential that could not be lent is none of these.
+ */
+export function isBuildFailure(reason: string): boolean {
+  return BUILD_FAILURES.has(reason);
+}
 
 function fromRefusal(code: string, repo: string): ActionError {
   if (PASSED_THROUGH.has(code)) {

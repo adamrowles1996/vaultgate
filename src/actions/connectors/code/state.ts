@@ -8,6 +8,8 @@
  * next call resolves and looks up afresh. Every build, and every build that
  * could not start, ends in one audit event (ACT-116).
  */
+import { isBuildFailure } from './refusals.ts';
+
 import type { BuildEnd, BuildOutcome, BuildRequest, Trigger } from './builds.ts';
 import type { ResolvedReference } from './github.ts';
 import type { Result } from '../../../result.ts';
@@ -204,7 +206,9 @@ export function createCodeState(dependencies: StateDependencies): CodeState {
       found.current = currentAfter(dependencies, found, request, outcome.meta);
     } else {
       found.lastFailure = found.lastBuild;
-      found.failed.set(key, { reason: outcome.reason, at });
+      if (isBuildFailure(outcome.reason)) {
+        found.failed.set(key, { reason: outcome.reason, at });
+      }
     }
   }
 
