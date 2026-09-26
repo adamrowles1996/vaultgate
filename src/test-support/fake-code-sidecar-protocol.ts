@@ -9,7 +9,7 @@
 import type { LocalRequest, LocalResponse } from '../net/local-http.ts';
 
 export type Route =
-  'health' | 'build' | 'status' | 'list' | 'delete' | 'search' | 'related' | 'read';
+  'health' | 'build' | 'status' | 'list' | 'delete' | 'owner' | 'search' | 'related' | 'read';
 
 export const KEY = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
 export const OWNER = /^[a-z0-9][a-z0-9-]{0,63}$/u;
@@ -167,27 +167,44 @@ export function jsonBody(request: LocalRequest): Record<string, unknown> | undef
   }
 }
 
+const LINE_BREAK_POINTS = [0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x85, 0x20_28, 0x20_29];
+const LINE_BREAKS = new RegExp(
+  String.raw`\r\n|[${LINE_BREAK_POINTS.map((point) => String.raw`\u{${point.toString(16)}}`).join('')}]`,
+  'u',
+);
+
 /**
-A read as the protocol answers it: lines split, the range cut at `max_lines`, `not_text` for a NUL.
+Python's `str.splitlines()`: every line break it knows ends a line, and a final one adds none.
+*/
+export function splitLines(text: string): string[] {
+  const lines = text.split(LINE_BREAKS);
+  if (lines.at(-1) === '') {
+    lines.pop();
+  }
+  return lines;
+}
+
+/**
+A read as the sidecar answers it: `not_text` for a NUL, lines as `splitlines`, the range cut at `max_lines`.
 */
 export function readAnswer(body: Readonly<Record<string, unknown>>, text: string): LocalResponse {
   if (text.slice(0, 8192).includes('\0')) {
     return refusal(422, 'not_text');
   }
-  const lines = text === '' ? [] : text.split('\n');
+  const lines = splitLines(text);
   const start = Number(body['start_line'] ?? 1);
-  if (lines.length > 0 && start > lines.length) {
+  if (start > Math.max(lines.length, 1)) {
     return refusal(400, 'invalid_range');
   }
-  const last = Math.min(Number(body['end_line'] ?? lines.length), lines.length);
-  const end = Math.min(last, start + Number(body['max_lines']) - 1);
+  const end = Math.min(Number(body['end_line'] ?? lines.length), lines.length);
+  const last = Math.min(end, start + Number(body['max_lines']) - 1);
   return respond(200, {
     file_path: body['file_path'],
     start_line: start,
-    end_line: end,
+    end_line: last,
     total_lines: lines.length,
-    text: lines.slice(start - 1, end).join('\n'),
-    truncated: end < last,
+    text: lines.slice(start - 1, last).join('\n'),
+    truncated: last < end,
   });
 }
 
@@ -203,20 +220,33 @@ export function healthAnswer(protocol: number, snapshots: number, building: numb
   });
 }
 
-export function routeOf(request: LocalRequest): {
-  readonly route: Route;
-  readonly argument: string;
-} {
-  const [kind = '', argument = ''] = request.path.split('/').slice(2);
-  const decoded = decodeURIComponent(argument);
-  if (kind === 'snapshots') {
-    const byMethod: Readonly<Record<string, Route>> = { PUT: 'build', DELETE: 'delete' };
-    const route = byMethod[request.method] ?? (decoded === '' ? 'list' : 'status');
-    return { route, argument: decoded };
+const OPERATIONS: readonly (readonly [RegExp, Readonly<Record<string, Route>>])[] = [
+  [/^\/v1\/health$/u, { GET: 'health' }],
+  [/^\/v1\/snapshots$/u, { GET: 'list' }],
+  [/^\/v1\/snapshots\/[^/]+$/u, { PUT: 'build', GET: 'status', DELETE: 'delete' }],
+  [/^\/v1\/owners\/[^/]+$/u, { DELETE: 'owner' }],
+  [/^\/v1\/search$/u, { POST: 'search' }],
+  [/^\/v1\/related$/u, { POST: 'related' }],
+  [/^\/v1\/read$/u, { POST: 'read' }],
+];
+
+/**
+ * The operation a request names and its path argument (never percent-decoded,
+ * as the sidecar leaves it), or the general error the sidecar answers:
+ * `404 not_found` for no such operation, `405 method_not_allowed`.
+ */
+export function routeOf(
+  request: LocalRequest,
+): { readonly route: Route; readonly argument: string } | { readonly refused: LocalResponse } {
+  const found = OPERATIONS.find(([pattern]) => pattern.test(request.path));
+  if (found === undefined) {
+    return { refused: refusal(404, 'not_found') };
   }
-  return kind === 'owners'
-    ? { route: 'delete', argument: `owner:${decoded}` }
-    : { route: kind as Route, argument: decoded };
+  const route = found[1][request.method];
+  const argument = request.path.split('/', 4)[3] ?? '';
+  return route === undefined
+    ? { refused: refusal(405, 'method_not_allowed') }
+    : { route, argument };
 }
 
 export function untilAborted(signal: AbortSignal): Promise<never> {

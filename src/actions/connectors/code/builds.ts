@@ -37,6 +37,14 @@ export interface BuildRequest {
   readonly configured: boolean;
 }
 
+export interface BuildEnd {
+  readonly durationMs: number;
+  /**
+  The target's snapshots were deleted while it ran (`forget`), so nothing it built may be used.
+  */
+  readonly isAbandoned: boolean;
+}
+
 export type BuildOutcome =
   | { readonly ok: true; readonly meta: SnapshotMeta }
   | { readonly ok: false; readonly reason: string };
@@ -47,9 +55,9 @@ export interface BuildsDependencies {
   readonly services: ConnectorServices;
   readonly userAgent: string;
   /**
-  Told of every build's end, once, whichever trigger started it.
+  Told of every build's end, once, whichever trigger started it; `ended` says whether it was abandoned.
   */
-  readonly finished: (request: BuildRequest, outcome: BuildOutcome, durationMs: number) => void;
+  readonly finished: (request: BuildRequest, outcome: BuildOutcome, ended: BuildEnd) => void;
 }
 
 export interface Builds {
@@ -65,6 +73,10 @@ export interface Builds {
   Whether a build of the target is running in this process (ACT-115).
   */
   isBuilding(targetId: string): boolean;
+  /**
+  ACT-108, ACT-109: the target's running builds are abandoned; the next trigger starts afresh.
+  */
+  forget(targetId: string): void;
 }
 
 type Access = TargetAccess | RunContext<unknown, unknown, unknown>;
@@ -213,19 +225,22 @@ async function withOwnCredential(
   return outcome.ok ? outcome.value : { ok: false, reason: outcome.error.code };
 }
 
-export function createBuilds(dependencies: BuildsDependencies): Builds {
-  const running = new Map<
-    string,
-    { readonly targetId: string; readonly promise: Promise<BuildOutcome> }
-  >();
+interface Running {
+  readonly targetId: string;
+  readonly promise: Promise<BuildOutcome>;
+  isAbandoned: boolean;
+}
 
-  async function attempt(build: () => Promise<BuildOutcome>): Promise<BuildOutcome> {
-    try {
-      return await build();
-    } catch {
-      return { ok: false, reason: 'connector_fault' };
-    }
+async function attempt(build: () => Promise<BuildOutcome>): Promise<BuildOutcome> {
+  try {
+    return await build();
+  } catch {
+    return { ok: false, reason: 'connector_fault' };
   }
+}
+
+export function createBuilds(dependencies: BuildsDependencies): Builds {
+  const running = new Map<string, Running>();
 
   function once(request: BuildRequest, build: () => Promise<BuildOutcome>): Promise<BuildOutcome> {
     const key = keyOf(request);
@@ -234,13 +249,18 @@ export function createBuilds(dependencies: BuildsDependencies): Builds {
       return current.promise;
     }
     const startedAt = dependencies.services.now();
-    const promise = (async () => {
+    const { promise, resolve } = Promise.withResolvers<BuildOutcome>();
+    const entry: Running = { targetId: request.targetId, promise, isAbandoned: false };
+    running.set(key, entry);
+    void (async () => {
       const outcome = await attempt(build);
-      running.delete(key);
-      dependencies.finished(request, outcome, dependencies.services.now() - startedAt);
-      return outcome;
+      if (running.get(key) === entry) {
+        running.delete(key);
+      }
+      const durationMs = dependencies.services.now() - startedAt;
+      dependencies.finished(request, outcome, { durationMs, isAbandoned: entry.isAbandoned });
+      resolve(outcome);
     })();
-    running.set(key, { targetId: request.targetId, promise });
     return promise;
   }
 
@@ -254,6 +274,16 @@ export function createBuilds(dependencies: BuildsDependencies): Builds {
         }
       }
       return false;
+    },
+    forget(targetId) {
+      for (const [key, build] of running) {
+        if (build.targetId !== targetId) {
+          continue;
+        }
+
+        build.isAbandoned = true;
+        running.delete(key);
+      }
     },
   };
 }

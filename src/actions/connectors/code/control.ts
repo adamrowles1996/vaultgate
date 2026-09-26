@@ -68,8 +68,9 @@ const SIDECAR_TIMEOUT_MS = 10_000;
 const RESOLUTION_TIMEOUT_MS = 30_000;
 
 async function forgetTarget(dependencies: ControlDependencies, targetId: string): Promise<void> {
-  const { services, sidecar, state } = dependencies;
+  const { services, sidecar, state, builds } = dependencies;
   state.drop(targetId);
+  builds.forget(targetId);
   const deleted = await withDeadline(services, SIDECAR_TIMEOUT_MS, (signal) =>
     sidecar.deleteOwner(targetId, signal),
   );

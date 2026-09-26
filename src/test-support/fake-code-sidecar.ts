@@ -16,6 +16,7 @@ import {
   KEY,
   LABEL,
   metaOf,
+  OWNER,
   hasOnlyFields,
   parseSpec,
   READ_FIELDS,
@@ -29,75 +30,25 @@ import {
   untilAborted,
   variantOf,
   type BuildSpecSeen,
-  type FakeSnapshot,
 } from './fake-code-sidecar-protocol.ts';
 
+import type {
+  FakeBuild,
+  FakeQuery,
+  FakeSidecar,
+  FakeSidecarOptions,
+  Running,
+  Script,
+} from './fake-code-sidecar-types.ts';
 import type { LocalHttp, LocalRequest, LocalResponse } from '../net/local-http.ts';
 
 export type { FakeSnapshot, Route } from './fake-code-sidecar-protocol.ts';
-
-export interface FakeQuery {
-  readonly path: string;
-  readonly body: Readonly<Record<string, unknown>>;
-}
-
-/**
-What the next request of a route gets instead of its answer.
-*/
-export type Script = LocalResponse | 'hang';
-
-export interface FakeSidecarOptions {
-  readonly protocol?: number;
-  /**
-  The results of every search and related query, each with the `label` of its index.
-  */
-  readonly answer?: (query: FakeQuery) => readonly Record<string, unknown>[];
-  /**
-  File text by path, for reads; a path absent here is `path_not_found`.
-  */
-  readonly files?: Readonly<Record<string, string>>;
-  readonly now?: () => number;
-  /**
-  Snapshots the sidecar already holds when it starts, as a restarted vaultgate finds them.
-  */
-  readonly seed?: readonly FakeSnapshot[];
-}
-
-export interface FakeBuild {
-  readonly key: string;
-  readonly spec: BuildSpecSeen;
-  readonly archive: Buffer;
-}
-
-export interface FakeSidecar {
-  readonly http: LocalHttp;
-  readonly snapshots: Map<string, FakeSnapshot>;
-  readonly builds: FakeBuild[];
-  /**
-  Uploads whose stream failed part way, with how much of it arrived.
-  */
-  readonly cut: { readonly key: string; readonly bytes: number }[];
-  readonly queries: FakeQuery[];
-  readonly requests: { readonly method: string; readonly path: string }[];
-  /**
-  Holds every build open until the returned function is called.
-  */
-  hold(): () => void;
-  /**
-  Makes every request fail as if nothing listened on the socket, until turned off.
-  */
-  unreachable(isUnreachable: boolean): void;
-  /**
-  The next request of `route` gets `script` instead of its answer.
-  */
-  script(route: Route, script: Script): void;
-}
-
-interface Running {
-  readonly owner: string;
-  readonly startedAt: number;
-  isAbandoned: boolean;
-}
+export type {
+  FakeQuery,
+  FakeSidecar,
+  FakeSidecarOptions,
+  Script,
+} from './fake-code-sidecar-types.ts';
 
 export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar {
   const snapshots = new Map((options.seed ?? []).map((snapshot) => [snapshot.key, snapshot]));
@@ -114,8 +65,10 @@ export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar
 
   async function finish(key: string, spec: BuildSpecSeen, entry: Running): Promise<LocalResponse> {
     await gate;
-    running.delete(key);
-    pending.delete(key);
+    if (running.get(key) === entry) {
+      running.delete(key);
+      pending.delete(key);
+    }
     if (entry.isAbandoned) {
       return refusal(404, 'snapshot_missing');
     }
@@ -154,21 +107,28 @@ export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar
     return done;
   }
 
-  function remove(argument: string): LocalResponse {
-    const owner = argument.startsWith('owner:') ? argument.slice('owner:'.length) : undefined;
-    const doomed = [
-      ...snapshots.values(),
-      ...[...running].map(([key, value]) => ({ key, ...value })),
-    ]
-      .filter((entry) => (owner === undefined ? entry.key === argument : entry.owner === owner))
-      .map((entry) => entry.key);
+  /**
+  Deletes snapshots and abandons running builds: of one key, or of every key of an owner.
+  */
+  function remove(isDoomed: (key: string, owner: string) => boolean): LocalResponse {
+    const entries = [
+      ...Array.from(snapshots.values(), (snapshot) => [snapshot.key, snapshot.owner] as const),
+      ...Array.from(running, ([key, build]) => [key, build.owner] as const),
+    ];
+    const doomed = new Set(
+      entries.filter(([key, owner]) => isDoomed(key, owner)).map(([key]) => key),
+    );
+    let deleted = 0;
     for (const key of doomed) {
       const build = running.get(key);
       if (build !== undefined) {
         build.isAbandoned = true;
+        running.delete(key);
+        pending.delete(key);
       }
+      const wasStored = snapshots.delete(key);
+      deleted += build !== undefined || wasStored ? 1 : 0;
     }
-    const deleted = doomed.filter((key) => snapshots.delete(key)).length;
     return respond(200, { deleted });
   }
 
@@ -194,12 +154,17 @@ export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar
         ? { ...result, file_path: `${String(result['label'])}/${String(result['file_path'])}` }
         : result,
     );
-    return path === '/v1/related' && results.length === 0
-      ? refusal(404, 'chunk_not_found')
-      : respond(200, { results, variants: [] });
+    return respond(200, { results, variants: [] });
   }
 
   function read(body: Record<string, unknown>): LocalResponse {
+    const isBackwards = Number(body['end_line'] ?? Infinity) < Number(body['start_line'] ?? 1);
+    if (!KEY.test(String(body['key']))) {
+      return invalid();
+    }
+    if (isBackwards) {
+      return refusal(400, 'invalid_range');
+    }
     queries.push({ path: '/v1/read', body });
     if (!snapshots.has(String(body['key']))) {
       return refusal(404, 'snapshot_missing');
@@ -213,6 +178,9 @@ export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar
   }
 
   function status(key: string): LocalResponse {
+    if (!KEY.test(key)) {
+      return invalid();
+    }
     const found = snapshots.get(key);
     if (found !== undefined) {
       return respond(200, metaOf(found));
@@ -242,7 +210,8 @@ export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar
       build: () => build(request, argument),
       status: () => status(argument),
       list,
-      delete: () => remove(argument),
+      delete: () => (KEY.test(argument) ? remove((key) => key === argument) : invalid()),
+      owner: () => (OWNER.test(argument) ? remove((_key, owner) => owner === argument) : invalid()),
       search: () => (hasOnlyFields(body, SEARCH_FIELDS) ? query(body, '/v1/search') : invalid()),
       related: () => (hasOnlyFields(body, RELATED_FIELDS) ? query(body, '/v1/related') : invalid()),
       read: () => (hasOnlyFields(body, READ_FIELDS) ? read(body) : invalid()),
@@ -255,11 +224,14 @@ export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar
     if (isUnreachable) {
       throw Object.assign(new Error('connect ENOENT'), { code: 'ENOENT' });
     }
-    const { route, argument } = routeOf(request);
-    const scripted = scripts.get(route)?.shift();
+    const routed = routeOf(request);
+    if ('refused' in routed) {
+      return routed.refused;
+    }
+    const scripted = scripts.get(routed.route)?.shift();
     return scripted === 'hang'
       ? untilAborted(request.signal)
-      : (scripted ?? answerOf(request, route, argument));
+      : (scripted ?? answerOf(request, routed.route, routed.argument));
   };
 
   return {

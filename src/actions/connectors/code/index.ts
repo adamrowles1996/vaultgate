@@ -13,7 +13,7 @@ import { fail } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
 
 import { authorizeCode, authorizeCodeMany, describeCode } from './authorize.ts';
-import { createBuilds, keyOf, type BuildOutcome, type BuildRequest } from './builds.ts';
+import { createBuilds, keyOf } from './builds.ts';
 import { type CodeControl, createControl } from './control.ts';
 import { createIndexes } from './indexes.ts';
 import { type CodeDocuments, extractionFingerprint, resetFingerprint } from './keys.ts';
@@ -54,7 +54,6 @@ export type CodeConnector = Connector<
 type Context = RunContext<CodeDestination, CodeCredential, CodePolicy>;
 
 const HEALTH_TIMEOUT_MS = 5000;
-const SIDECAR_TIMEOUT_MS = 10_000;
 
 /**
 What one attached connector holds between calls.
@@ -100,29 +99,6 @@ async function checkSidecar(parts: Parts, control: CodeControl): Promise<boolean
   services.logger.info({ protocol, semble, model, revision }, 'code sidecar ready');
   await control.reconcile();
   return true;
-}
-
-/**
-Every build's end: recorded, and a snapshot of a target deleted while it built deleted too.
-*/
-function buildFinished(
-  parts: Parts,
-  request: BuildRequest,
-  outcome: BuildOutcome,
-  ms: number,
-): void {
-  const { services, state, sidecar } = parts;
-  state.finished(request, outcome, ms);
-  if (!outcome.ok || services.targets().some((target) => target.id === request.targetId)) {
-    return;
-  }
-
-  state.drop(request.targetId);
-  background(services, 'deleting a snapshot of a deleted target', () =>
-    withDeadline(services, SIDECAR_TIMEOUT_MS, (signal) =>
-      sidecar.deleteSnapshot(keyOf(request), signal),
-    ),
-  );
 }
 
 function resetOf(documents: unknown): string | undefined {
@@ -190,8 +166,8 @@ function attach(
     fetch,
     services,
     userAgent: options.userAgent,
-    finished: (request, outcome, ms) => {
-      buildFinished(parts, request, outcome, ms);
+    finished: (request, outcome, ended) => {
+      state.finished(request, outcome, ended);
     },
   });
   const dependencies = { sidecar, fetch, services, userAgent: options.userAgent, builds, state };

@@ -187,6 +187,10 @@ describe('code_find_related and code_read through the engine (ACT-110, ACT-111)'
   it('ACT-111 a line no indexed chunk holds is chunk_not_found', async () => {
     const code = createCodeHarness();
     await createCodeTarget(code);
+    code.sidecar.script('related', {
+      status: 404,
+      body: Buffer.from('{"error":"chunk_not_found","message":"no chunk holds that line"}'),
+    });
     const outcome = await code.harness.engine.call(
       codeCaller(),
       codeInvocation('code_find_related', 'widgets', { file_path: 'src/widget.ts', line: 900 }),

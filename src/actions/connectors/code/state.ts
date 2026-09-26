@@ -8,7 +8,7 @@
  * next call resolves and looks up afresh. Every build, and every build that
  * could not start, ends in one audit event (ACT-116).
  */
-import type { BuildOutcome, BuildRequest, Trigger } from './builds.ts';
+import type { BuildEnd, BuildOutcome, BuildRequest, Trigger } from './builds.ts';
 import type { ResolvedReference } from './github.ts';
 import type { Result } from '../../../result.ts';
 import type { ActionError, ActionErrorCode } from '../../errors.ts';
@@ -73,7 +73,10 @@ export interface CodeState {
   peek(id: string): TargetState | undefined;
   drop(id: string): void;
   resolved(targetId: string, resolved: Result<ResolvedReference, ActionError>): void;
-  finished(request: BuildRequest, outcome: BuildOutcome, durationMs: number): void;
+  /**
+  A build's end: recorded in the audit trail always, and on the target's state unless it was abandoned.
+  */
+  finished(request: BuildRequest, outcome: BuildOutcome, ended: BuildEnd): void;
   refused(refusal: Refusal): void;
 }
 
@@ -153,6 +156,26 @@ function currentAfter(
     : target.current;
 }
 
+/**
+A build that never started, in the audit trail; the record the page shows as the last build and failure.
+*/
+function recordRefusal(services: StateDependencies['services'], refusal: Refusal): BuildRecord {
+  services.audit.record({
+    category: 'actions',
+    action: 'code_index_failed',
+    outcome: `error:${refusal.reason}`,
+    durationMs: 0,
+    details: {
+      target: refusal.targetName,
+      connector: 'code',
+      trigger: refusal.trigger,
+      content: [refusal.content.join('+')],
+      reason: refusal.reason,
+    },
+  });
+  return { at: services.now(), trigger: refusal.trigger, durationMs: 0, reason: refusal.reason };
+}
+
 export function createCodeState(dependencies: StateDependencies): CodeState {
   const { services } = dependencies;
   const targets = new Map<string, TargetState>();
@@ -163,7 +186,12 @@ export function createCodeState(dependencies: StateDependencies): CodeState {
     return found;
   }
 
-  function finished(request: BuildRequest, outcome: BuildOutcome, durationMs: number): void {
+  function finished(request: BuildRequest, outcome: BuildOutcome, ended: BuildEnd): void {
+    const { durationMs } = ended;
+    recordBuild(services, request, outcome, durationMs);
+    if (ended.isAbandoned) {
+      return;
+    }
     const found = target(request.targetId);
     const at = services.now();
     const key = dependencies.keyOf(request);
@@ -178,27 +206,6 @@ export function createCodeState(dependencies: StateDependencies): CodeState {
       found.lastFailure = found.lastBuild;
       found.failed.set(key, { reason: outcome.reason, at });
     }
-    recordBuild(services, request, outcome, durationMs);
-  }
-
-  function refused(refusal: Refusal): void {
-    const found = target(refusal.targetId);
-    const record = { at: services.now(), trigger: refusal.trigger, durationMs: 0 };
-    found.lastBuild = { ...record, reason: refusal.reason };
-    found.lastFailure = found.lastBuild;
-    services.audit.record({
-      category: 'actions',
-      action: 'code_index_failed',
-      outcome: `error:${refusal.reason}`,
-      durationMs: 0,
-      details: {
-        target: refusal.targetName,
-        connector: 'code',
-        trigger: refusal.trigger,
-        content: [refusal.content.join('+')],
-        reason: refusal.reason,
-      },
-    });
   }
 
   return {
@@ -213,6 +220,10 @@ export function createCodeState(dependencies: StateDependencies): CodeState {
         : { at: services.now(), failure: resolved.error.code };
     },
     finished,
-    refused,
+    refused(refusal) {
+      const found = target(refusal.targetId);
+      found.lastBuild = recordRefusal(services, refusal);
+      found.lastFailure = found.lastBuild;
+    },
   };
 }

@@ -156,12 +156,17 @@ const relatedArguments = z.strictObject({
   max_snippet_lines: snippetSchema,
 }) satisfies OperationSchema<RelatedOperation>;
 
-const readArguments = z.strictObject({
-  file_path: filePathSchema.describe('Repository-relative path of the file, as results give it.'),
-  ref: referenceSchema.optional(),
-  start_line: z.number().int().min(1).optional().describe('First line to return (1-based).'),
-  end_line: z.number().int().min(1).optional().describe('Last line to return (inclusive).'),
-}) satisfies OperationSchema<ReadOperation>;
+const readArguments = z
+  .strictObject({
+    file_path: filePathSchema.describe('Repository-relative path of the file, as results give it.'),
+    ref: referenceSchema.optional(),
+    start_line: z.number().int().min(1).optional().describe('First line to return (1-based).'),
+    end_line: z.number().int().min(1).optional().describe('Last line to return (inclusive).'),
+  })
+  .refine((read) => (read.end_line ?? Infinity) >= (read.start_line ?? 1), {
+    path: ['end_line'],
+    message: 'must not be before start_line',
+  }) satisfies OperationSchema<ReadOperation>;
 
 const resultEntry = z.strictObject({
   repo: z.string().describe('The connection the result comes from.'),
