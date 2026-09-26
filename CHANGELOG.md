@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.21] - 2026-09-26
+
 ### Added
 
 - ACT-106, ACT-113, ACT-117: **the `code` connector's sidecar**, under `sidecars/code/`: Python
@@ -561,7 +563,8 @@ Release candidates 0.1.0-rc.1 to 0.1.0-rc.9 are in
 [`docs/changelog-archive.md`](docs/changelog-archive.md). They are kept verbatim; this file holds
 the current release and the ones after it, so it stays inside the repository's 64 KiB file gate.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.20...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.21...HEAD
+[0.1.0-rc.21]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.20...v0.1.0-rc.21
 [0.1.0-rc.20]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.19...v0.1.0-rc.20
 [0.1.0-rc.19]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.18...v0.1.0-rc.19
 [0.1.0-rc.18]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.17...v0.1.0-rc.18
