@@ -11,7 +11,15 @@
 import { fail, ok, type Result } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
 
-import { documentsOf, githubAccess, keyOf, type Builds, type BuildRequest } from './builds.ts';
+import { BUILD_RETRY_AFTER_S } from './build-slots.ts';
+import {
+  BUSY,
+  documentsOf,
+  githubAccess,
+  keyOf,
+  type Builds,
+  type BuildRequest,
+} from './builds.ts';
 import { resolveReference, type ResolvedReference } from './github.ts';
 import { extractionFingerprint } from './keys.ts';
 import { refusalError } from './refusals.ts';
@@ -173,6 +181,12 @@ async function ensureSnapshot(
   const building = dependencies.builds.start(
     buildRequestFor(request, resolved, request.ref === undefined),
   );
+  if (building === BUSY) {
+    // T46: the target or the process builds as many refs as calls may start.
+    return fail(
+      new ActionError('rate_limited', { retry_after_s: BUILD_RETRY_AFTER_S, repo: label }),
+    );
+  }
   const outcome = await until(dependencies.services, building, request.deadline);
   if (outcome === 'timeout') {
     return fail(notReady(label, 'building'));
@@ -217,7 +231,7 @@ function buildMoved(
     return;
   }
   const moved = buildRequestFor(request, resolved, true);
-  background(dependencies.services, 'a build of a moved ref', () =>
+  background(dependencies.services, 'a build of a moved ref', async () =>
     dependencies.builds.start(moved),
   );
 }

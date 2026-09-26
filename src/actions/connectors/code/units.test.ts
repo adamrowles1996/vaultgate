@@ -4,7 +4,8 @@ import { captureLogger } from '../../../test-support/logging.ts';
 import { ManualClock } from '../../../test-support/manual-clock.ts';
 import { recordedSupport } from '../../../test-support/run-support.ts';
 
-import { createBuilds, githubAccess, type BuildRequest } from './builds.ts';
+import { createBuilds } from './build-flight.ts';
+import { githubAccess, type BuildRequest } from './builds.ts';
 import { codeCredentialSchema, codeDestinationSchema, codePolicySchema } from './schemas.ts';
 import { background } from './timing.ts';
 

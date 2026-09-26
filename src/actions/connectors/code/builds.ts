@@ -1,10 +1,10 @@
 /**
  * Building a snapshot (ACT-105, ACT-108): the commit's archive is opened on
  * GitHub and streamed to the sidecar's build as it arrives, cut at
- * `max_archive_bytes`; one build runs per key at a time and a second trigger
- * joins it. A build holds its own credential for as long as it runs (the
- * engine lends one through `withTarget` and disposes of it after), so it can
- * outlive the call that started it. Every build ends in `finished`, once.
+ * `max_archive_bytes`. A build holds its own credential for as long as it
+ * runs (the engine lends one through `withTarget` and disposes of it after),
+ * so it can outlive the call that started it. `./build-flight.ts` runs one
+ * build per key at a time, within the caps of `./build-slots.ts`.
  */
 import { openArchive } from './archive.ts';
 import { extractionFingerprint, snapshotKey } from './keys.ts';
@@ -60,15 +60,22 @@ export interface BuildsDependencies {
   readonly finished: (request: BuildRequest, outcome: BuildOutcome, ended: BuildEnd) => void;
 }
 
+/**
+The answer to a call's build of a ref it named when the target or the process runs as many as it may.
+*/
+export const BUSY = 'busy';
+
 export interface Builds {
   /**
-  Builds with a credential the caller holds for the whole build.
+  Builds with a credential the caller holds for the whole build, once a slot is free.
   */
   run(access: TargetAccess, request: BuildRequest): Promise<BuildOutcome>;
   /**
-  Builds with a credential of its own, fetched now; a running build of the same key is joined.
-  */
-  start(request: BuildRequest): Promise<BuildOutcome>;
+   * Builds with a credential of its own, fetched when the build starts; a
+   * running build of the same key is joined. A call's build of a ref it
+   * named is `BUSY` past the caps; every other build waits for a slot.
+   */
+  start(request: BuildRequest): Promise<BuildOutcome> | typeof BUSY;
   /**
   Whether a build of the target is running in this process (ACT-115).
   */
@@ -168,7 +175,7 @@ function buildSpec(request: BuildRequest): BuildSpec {
  * download's): the archive opened, streamed to the sidecar and cut at the
  * cap, which aborts the upload so the sidecar never builds a partial archive.
  */
-async function download(
+export async function download(
   dependencies: BuildsDependencies,
   access: TargetAccess,
   request: BuildRequest,
@@ -212,7 +219,7 @@ async function download(
  * ACT-108: a build started with its own credential, refused when the target
  * changed under it so that no snapshot is keyed by documents it was not built from.
  */
-async function withOwnCredential(
+export async function withOwnCredential(
   dependencies: BuildsDependencies,
   request: BuildRequest,
 ): Promise<BuildOutcome> {
@@ -223,67 +230,4 @@ async function withOwnCredential(
       : { ok: false as const, reason: 'target_changed' },
   );
   return outcome.ok ? outcome.value : { ok: false, reason: outcome.error.code };
-}
-
-interface Running {
-  readonly targetId: string;
-  readonly promise: Promise<BuildOutcome>;
-  isAbandoned: boolean;
-}
-
-async function attempt(build: () => Promise<BuildOutcome>): Promise<BuildOutcome> {
-  try {
-    return await build();
-  } catch {
-    return { ok: false, reason: 'connector_fault' };
-  }
-}
-
-export function createBuilds(dependencies: BuildsDependencies): Builds {
-  const running = new Map<string, Running>();
-
-  function once(request: BuildRequest, build: () => Promise<BuildOutcome>): Promise<BuildOutcome> {
-    const key = keyOf(request);
-    const current = running.get(key);
-    if (current !== undefined) {
-      return current.promise;
-    }
-    const startedAt = dependencies.services.now();
-    const { promise, resolve } = Promise.withResolvers<BuildOutcome>();
-    const entry: Running = { targetId: request.targetId, promise, isAbandoned: false };
-    running.set(key, entry);
-    void (async () => {
-      const outcome = await attempt(build);
-      if (running.get(key) === entry) {
-        running.delete(key);
-      }
-      const durationMs = dependencies.services.now() - startedAt;
-      dependencies.finished(request, outcome, { durationMs, isAbandoned: entry.isAbandoned });
-      resolve(outcome);
-    })();
-    return promise;
-  }
-
-  return {
-    run: (access, request) => once(request, () => download(dependencies, access, request)),
-    start: (request) => once(request, () => withOwnCredential(dependencies, request)),
-    isBuilding(targetId) {
-      for (const build of running.values()) {
-        if (build.targetId === targetId) {
-          return true;
-        }
-      }
-      return false;
-    },
-    forget(targetId) {
-      for (const [key, build] of running) {
-        if (build.targetId !== targetId) {
-          continue;
-        }
-
-        build.isAbandoned = true;
-        running.delete(key);
-      }
-    },
-  };
 }

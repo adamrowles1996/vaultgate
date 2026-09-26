@@ -137,6 +137,9 @@ vaultgate adds `ref`, `code_read`, the `paths` and `languages` filters, and each
   patterns or caps change (every old snapshot is deleted first), when you press Rebuild index,
   and when a call needs a commit that is not indexed yet. The configured ref is checked again
   when its last check is older than `refresh_interval_s`; nothing rebuilds on a timer.
+- **At most four builds run at once**, and calls may start at most two builds of refs they
+  named on one connection. A call past that answers `rate_limited` and starts nothing; saves,
+  Rebuild index and the configured ref wait for a slot instead.
 - **Deleting a connection** deletes its snapshots. An unreachable sidecar does not block that;
   vaultgate deletes what is left over when it next reaches the sidecar.
 - **Storage and memory** belong to the sidecar: by default 64 snapshots and 8 GiB on disk, and

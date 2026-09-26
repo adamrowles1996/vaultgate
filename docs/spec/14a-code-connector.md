@@ -119,7 +119,14 @@ defaults to ACT-106's list.
     target page and in the audit trail. A ref a call names is resolved on every call, except a
     40-hex SHA, which never moves.
 
-  One build runs per target and commit at a time; a second trigger while one runs joins it.
+  One build runs per target and commit at a time; a second trigger while one runs, or while it
+  waits for a slot, joins it. Each build downloads and extracts up to its caps, so at most four run
+  at once across every code target, and at most two of one target's are builds that calls started
+  for a ref they named. Such a build past either cap is not started: the call answers
+  `rate_limited` with `detail.retry_after_s` (30) and `detail.repo`, fetches nothing and records
+  no build. Every other build (a save, Rebuild index, and the configured ref a call needs or found
+  moved) waits for a slot, in order, and is never refused; one whose target's snapshots are deleted
+  while it waits never downloads, and ends as `target_changed`.
 
 - **ACT-109** Deleting a target tells the sidecar to delete every snapshot of it before the row is
   removed; an unreachable sidecar does not block the deletion. Whenever vaultgate starts or finds
@@ -173,7 +180,8 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
   repository on its first call. After that it answers `index_not_ready` with `detail.state`
   `building` and `detail.repo`; the build carries on and a later call finds it. A build that
   failed answers `index_not_ready` with `detail.state` `failed` and the reason code in
-  `detail.reason` (never a message); the operator's page shows the rest. `actions_list_targets`
+  `detail.reason` (never a message); the operator's page shows the rest. A build of a ref the call
+  named that ACT-108's caps refuse answers `rate_limited` at once, without waiting. `actions_list_targets`
   reports a code target's `repository`, its configured `ref` (absent for the default branch),
   the `content` it allows, whether `code_read` is allowed (`read`) and `read` as its only
   operation (ACT-19).

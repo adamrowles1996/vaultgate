@@ -13,7 +13,8 @@ import { fail } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
 
 import { authorizeCode, authorizeCodeMany, describeCode } from './authorize.ts';
-import { createBuilds, keyOf } from './builds.ts';
+import { createBuilds } from './build-flight.ts';
+import { keyOf } from './builds.ts';
 import { type CodeControl, createControl } from './control.ts';
 import { createIndexes } from './indexes.ts';
 import { type CodeDocuments, extractionFingerprint, resetFingerprint } from './keys.ts';
