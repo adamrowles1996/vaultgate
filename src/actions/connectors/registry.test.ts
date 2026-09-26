@@ -77,11 +77,18 @@ describe('connector registry', () => {
     }
   });
 
-  it('14.1 knows the http, sql, ssh and winrm schemas in every build and no other connector before its milestone', () => {
+  it('ACT-113 refuses to build the code runtime without the sidecar URL, which the configuration already requires', async () => {
+    await expect(loadConnectors(actionsEnabled(['code']))).rejects.toThrow(
+      'VAULTGATE_ACTIONS_CODE_URL is required with the code connector',
+    );
+  });
+
+  it('14.1 knows the http, sql, ssh, winrm and code schemas in every build and no other connector before its milestone', () => {
     expect(schemasFor('http')?.kind).toBe('http');
     expect(schemasFor('sql')?.kind).toBe('sql');
     expect(schemasFor('ssh')?.kind).toBe('ssh');
     expect(schemasFor('winrm')?.kind).toBe('winrm');
+    expect(schemasFor('code')?.kind).toBe('code');
     expect(schemasFor('browser')).toBeUndefined();
     expect(connectorRegistry([]).kinds).toStrictEqual([]);
   });
