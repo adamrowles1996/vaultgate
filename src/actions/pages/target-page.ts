@@ -22,10 +22,10 @@ import {
 import { cardHead, fieldChip, pill, relativeTime, sealed, tag } from '../../identity/pages/ui.ts';
 
 import { renderCallTable } from './calls.ts';
-import { CHECK_NOW, CHECK_PARAM, checkCard, type PageCheck } from './check-report.ts';
+import { checkCard, type PageCheck } from './check-report.ts';
 import { indexCard, type IndexView } from './index-card.ts';
 import { KINDS } from './kinds.ts';
-import { callsPath, CREATE_PATH, editPath, targetPath } from './paths.ts';
+import { callsPath, checkPath, CREATE_PATH, editPath, targetPath } from './paths.ts';
 import { grantsCard, manageCard } from './target-grants.ts';
 
 import type { CallItem } from './calls.ts';
@@ -112,9 +112,11 @@ function stateTags(view: TargetPageView): Html {
 
 function headerActions(view: TargetPageView): Html {
   const base = targetPath(view.target.id);
-  const check = html`<a class="button" href="${base}?${CHECK_PARAM}=${CHECK_NOW}"
-    >${icon('check')}Check now</a
-  >`;
+  const check = actionForm(
+    checkPath(view.target.id),
+    view,
+    html`<button type="submit">${icon('check')}Check now</button>`,
+  );
   if (!view.isReauthenticated) {
     return html`${check}
       <a class="button" href="${unlockPath(base)}">${icon('lock')}Unlock editing</a>`;

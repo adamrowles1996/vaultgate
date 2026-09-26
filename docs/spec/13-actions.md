@@ -158,11 +158,12 @@ Design rules, in priority order:
   host would be pinned to or why it is refused, whether the item is there, each mapped field on
   it (a secret one by name only), and every other problem. Unlike a save it does not stop at a
   taken name. Each problem is also shown against its field, as for a refused save. A target's page
-  offers **Check now** (`?check=now`) at any time, which runs the same checks on the saved target,
-  resolving its hosts and reading its item's metadata again, so a DNS record or vault item that
-  changed since the save shows before an agent's call fails. Neither connects to a destination or
-  reads a secret, except for a code target, whose check also asks GitHub whether the token can
-  read the repository (ACT-120).
+  offers **Check now** at any time, a `POST` behind the operator's session and synchroniser token
+  (ID-18) but not ID-15's window, which runs the same checks on the saved target, resolving its
+  hosts and reading its item's metadata again, so a DNS record or vault item that changed since the
+  save shows before an agent's call fails. No page load runs a check. Neither check connects to a
+  destination or reads a secret, except for a code target, whose check also asks GitHub whether the
+  token can read the repository inside the ID-15 window (ACT-120).
 
 ## 13.4 Grants
 

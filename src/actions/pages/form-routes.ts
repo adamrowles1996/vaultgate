@@ -5,8 +5,9 @@
  * recorded there. A rejected create or edit answers `400` with the form
  * re-rendered, every problem listed and the submitted values shown again.
  * Outside the ID-15 window every step after the kind offers Unlock editing
- * and reads nothing from the vault; inside it, every vault read here is
- * metadata only.
+ * and reads nothing from the vault; inside it, every vault read of a page
+ * load is metadata only. A code form's token is read on Check without
+ * saving alone (ACT-119, ACT-120), which is a `POST` behind the gate.
  */
 import { CHECK_INTENT, INTENT_FIELD, withRefusals } from './check-report.ts';
 import { repoOffer as repoOffer } from './code-github.ts';
@@ -32,7 +33,7 @@ import { chosenItem, renderPicker } from './item-step.ts';
 import { kindOf } from './kinds.ts';
 import { editPath, NEW_PATH, targetPath } from './paths.ts';
 import { formKind, kindChoices, prefilled } from './prefill.ts';
-import { CONNECTOR_FIELD, ITEM_ID_FIELD } from './target-form.ts';
+import { type ChosenItem, CONNECTOR_FIELD, ITEM_ID_FIELD } from './target-form.ts';
 import {
   type ActionsPagesDependencies,
   fieldProblems,
@@ -69,6 +70,30 @@ function isCheck(values: FormValues): boolean {
   return values.get(INTENT_FIELD) === CHECK_INTENT;
 }
 
+/**
+ * The form's part of a create or an edit page. The token's repositories are
+ * listed only when the form comes back from Check without saving (ACT-119):
+ * no page load reads a secret.
+ */
+async function formView(
+  dependencies: ActionsPagesDependencies,
+  viewer: Viewer,
+  request: CreateRequest,
+  item: ChosenItem,
+): Promise<FormPageView> {
+  const { form, values, check } = request;
+  const offer = { form, values, item, isReauthenticated: viewer.isReauthenticated };
+  return {
+    csrfToken: viewer.csrfToken,
+    problems: fieldProblems(form, request.problems),
+    form,
+    values,
+    item,
+    repositories: await repoOffer(dependencies, { ...offer, isChecking: check !== undefined }),
+    ...(check !== undefined && { check }),
+  };
+}
+
 async function renderCreate(
   dependencies: ActionsPagesDependencies,
   viewer: Viewer,
@@ -83,17 +108,8 @@ async function renderCreate(
     [ITEM_PARAM]: itemId,
   });
   const item = await chosenItem(dependencies, itemId, restart);
-  const { isReauthenticated } = viewer;
-  const page = createPage(createFrame(kind, returnTo), {
-    csrfToken: viewer.csrfToken,
-    problems: fieldProblems(form, request.problems),
-    form,
-    values,
-    item,
-    repositories: await repoOffer(dependencies, { form, values, item, isReauthenticated }),
-    ...(request.check !== undefined && { check: request.check }),
-  });
-  return dependencies.renderConsole(viewer.session, page);
+  const view = await formView(dependencies, viewer, request, item);
+  return dependencies.renderConsole(viewer.session, createPage(createFrame(kind, returnTo), view));
 }
 
 async function showCreate(
@@ -182,11 +198,7 @@ function editable(dependencies: ActionsPagesDependencies, id: string): Editable 
   return target === undefined || form === undefined ? undefined : { target, form };
 }
 
-interface EditRequest {
-  readonly values: FormValues;
-  readonly problems?: readonly string[];
-  readonly check?: FormPageView['check'];
-}
+type EditRequest = Omit<CreateRequest, 'form'>;
 
 async function renderEdit(
   dependencies: ActionsPagesDependencies,
@@ -199,19 +211,8 @@ async function renderEdit(
   const changeHref = withParameters(editPath(target.id), { [CHANGE_PARAM]: ITEM_PARAM });
   const frame = editFrame(target, editPath(target.id));
   const item = await chosenItem(dependencies, itemId, changeHref);
-  const { values } = request;
-  const { isReauthenticated } = viewer;
-  const page = editPage(frame, {
-    csrfToken: viewer.csrfToken,
-    problems: fieldProblems(form, request.problems),
-    form,
-    values,
-    item,
-    repositories: await repoOffer(dependencies, { form, values, item, isReauthenticated }),
-    targetId: target.id,
-    kind: kindOf(target),
-    ...(request.check !== undefined && { check: request.check }),
-  });
+  const view = await formView(dependencies, viewer, { ...request, form }, item);
+  const page = editPage(frame, { ...view, targetId: target.id, kind: kindOf(target) });
   return dependencies.renderConsole(viewer.session, page);
 }
 

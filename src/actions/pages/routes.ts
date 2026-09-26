@@ -9,7 +9,6 @@
 import { Hono } from 'hono';
 
 import { registerCallPages } from './call-routes.ts';
-import { CHECK_NOW, CHECK_PARAM } from './check-report.ts';
 import { computersView } from './computers-view.ts';
 import { computersPage } from './computers.ts';
 import { savedCheck } from './form-check.ts';
@@ -19,7 +18,7 @@ import { CREATE_PATH, NEW_PATH } from './paths.ts';
 import { registerRebuild } from './rebuild.ts';
 import { targetPage } from './target-page.ts';
 import { registerTargetWrites } from './target-writes.ts';
-import { type ActionsPagesDependencies, signedIn, targetPageView } from './view.ts';
+import { type ActionsPagesDependencies, signedIn, targetPageView, viewerOf } from './view.ts';
 
 import type { IdentityContext, IdentityEnvironment } from '../../identity/index.ts';
 
@@ -71,12 +70,33 @@ async function showTarget(
     return context.notFound();
   }
   const notice = noticeFor(context.req.query('notice'));
-  const check =
-    context.req.query(CHECK_PARAM) === CHECK_NOW
-      ? await savedCheck(dependencies, viewer, target)
-      : undefined;
-  const view = await targetPageView(dependencies, target, viewer, { notice, check });
+  const view = await targetPageView(dependencies, target, viewer, { notice });
   return context.html(await dependencies.renderConsole(viewer.session, targetPage(view)));
+}
+
+/**
+ * ACT-118, ACT-120: Check now on a saved target. A `POST` behind the
+ * operator's session and synchroniser token (ID-18) but not ID-15's window,
+ * so a check outside it still runs; a code target's token is read only
+ * inside the window, and no page load ever reads one.
+ */
+async function checkTarget(
+  context: IdentityContext,
+  dependencies: ActionsPagesDependencies,
+  id: string,
+): Promise<Response> {
+  const gate = await dependencies.operatorAction(context);
+  if (gate instanceof Response) {
+    return gate;
+  }
+  const target = dependencies.targets.get(id);
+  if (target === undefined) {
+    return context.notFound();
+  }
+  const viewer = viewerOf(gate.session);
+  const check = await savedCheck(dependencies, viewer, target);
+  const view = await targetPageView(dependencies, target, viewer, { check });
+  return context.html(await dependencies.renderConsole(gate.session, targetPage(view)));
 }
 
 export function createActionsRoutes(
@@ -99,6 +119,9 @@ export function createActionsRoutes(
   );
   app.post(`${CREATE_PATH}/:id`, (context) =>
     formRoutes.update(context, dependencies, context.req.param('id')),
+  );
+  app.post(`${CREATE_PATH}/:id/check`, (context) =>
+    checkTarget(context, dependencies, context.req.param('id')),
   );
   registerTargetWrites(app, dependencies);
   registerRebuild(app, dependencies);

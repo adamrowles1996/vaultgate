@@ -1,12 +1,15 @@
 /**
  * GitHub as the operator pages reach it (ACT-119, ACT-120): the repositories
  * a token can read, offered beside the repository field, and the repository
- * itself for a check. These are the only places a page uses a secret. The
- * token is read from the vault only inside the ID-15 window, at the moment
- * of the request, and sent to `api.github.com` only, resolved and pinned as
- * a call's destination is (ACT-55 to ACT-57, `internal` false); it is never
- * drawn, logged or put in a response, and a failure is shown by its code.
- * A page never opens an archive, so nothing here reaches the archive host.
+ * itself for a check. These are the only places a page uses a secret, and
+ * only on a check: a `POST` behind the operator's session and synchroniser
+ * token (ID-18), never a page load, so no link from another site can make
+ * vaultgate read a vault field and send it anywhere. The token is read from
+ * the vault only inside the ID-15 window, at the moment of the request, and
+ * sent to `api.github.com` only, resolved and pinned as a call's destination
+ * is (ACT-55 to ACT-57, `internal` false); it is never drawn, logged or put
+ * in a response, and a failure is shown by its code. A page never opens an
+ * archive, so nothing here reaches the archive host.
  */
 import { ok } from '../../result.ts';
 import { isFieldPresent, parseFieldSelector } from '../../vault/fields.ts';
@@ -213,11 +216,17 @@ export interface OfferRequest {
   readonly values: FormValues;
   readonly item: ChosenItem;
   readonly isReauthenticated: boolean;
+  /**
+  The form came back from Check without saving, a `POST` behind the gate; nothing else lists.
+  */
+  readonly isChecking: boolean;
 }
 
 /**
-ACT-119: every repository the chosen token can read, for a code form inside the ID-15 window.
-*/
+ * ACT-119: every repository the chosen token can read, for a code form inside
+ * the ID-15 window that the operator checked. Any other rendering of the form
+ * (a page load, a refused save) reads no secret and says how to list them.
+ */
 export async function repoOffer(
   dependencies: Dependencies,
   request: OfferRequest,
@@ -229,6 +238,9 @@ export async function repoOffer(
   const tokenField = chosenTokenField(values);
   if (tokenField === null) {
     return { state: 'no-token' };
+  }
+  if (!request.isChecking) {
+    return { state: 'on-check' };
   }
   const source = { item: item.summary, tokenField };
   const listed = await askGitHub(dependencies, source, (access) => scrubbedList(access));

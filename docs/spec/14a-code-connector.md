@@ -240,15 +240,19 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
   branch when empty), the content types, `include` and `exclude`, whether `code_read` is
   allowed, and the caps. The token field defaults to `password` and lists the item's fields,
   hidden custom fields included, with a choice of no token for a public repository. The
-  repository field lists every repository the chosen token can read (`GET /user/repos`, 100 per
-  page and at most 10 pages, through the pinned transport of ACT-55 to ACT-57 with the token
-  injected server-side), and takes a typed `owner/name` instead. This page and ACT-120 are the
-  only places a page uses a secret: the token is fetched inside the ID-15 window, sent to
-  `api.github.com` only and never drawn, and a failure shows its code, scrubbed.
-- **ACT-120** **Check without saving** (ACT-118) of a code target also asks GitHub for the
-  repository (`GET /repos/{repository}`) with the chosen token, and shows whether the token can
-  read it, its default branch and its visibility, never the token. A public repository answers
-  without one.
+  repository field takes a typed `owner/name`; once the operator has chosen the token field and
+  pressed **Check without saving**, it also lists every repository that token can read
+  (`GET /user/repos`, 100 per page and at most 10 pages, through the pinned transport of ACT-55 to
+  ACT-57 with the token injected server-side). Until then it says to do so. This check and
+  ACT-120's are the only places a page uses a secret, and only on a `POST` behind the operator's
+  session and synchroniser token (ID-18): no page load reads a secret, so a link from another
+  site cannot make vaultgate send a vault field to GitHub. The token is fetched inside the ID-15
+  window, sent to `api.github.com` only and never drawn, and a failure shows its code, scrubbed.
+  Like the rest of ACT-118's check, these reads record no audit event.
+- **ACT-120** **Check without saving** (ACT-118) of a code target, and **Check now** on its page,
+  also ask GitHub for the repository (`GET /repos/{repository}`) with the chosen token, and show
+  whether the token can read it, its default branch and its visibility, never the token. A public
+  repository answers without one. Outside the ID-15 window Check now reads no token and says so.
 
 ### 14.8.6 Parity with `semble`'s MCP server
 

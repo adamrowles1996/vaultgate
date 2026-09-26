@@ -2,8 +2,10 @@
  * The repository a Semble connection takes from its token's own list
  * (ACT-119), offered beside the repository field the way ACT-2 offers the
  * vault item's addresses: every `owner/name` the chosen token can read,
- * listed on the server inside the ID-15 window (`code-github.ts`), or the
- * code of the reason it could not be listed. The choice is copied into the
+ * listed on the server inside the ID-15 window when the operator presses
+ * Check without saving (`code-github.ts`), or the code of the reason it
+ * could not be listed. A form drawn any other way reads no secret and says
+ * how to have the list. The choice is copied into the
  * field when the connection is saved; a typed `owner/name` works as well,
  * and a typed one that differs from the chosen one is refused rather than
  * resolved silently.
@@ -25,9 +27,16 @@ export type RepoOffer =
   | { readonly state: 'listed'; readonly repositories: readonly ListedRepo[] }
   | { readonly state: 'failed'; readonly failure: GitHubFailure }
   | { readonly state: 'no-token' }
+  | { readonly state: 'on-check' }
   | { readonly state: 'none' };
 
 export const NO_OFFER: RepoOffer = { state: 'none' };
+
+/**
+ACT-119: what a code form says beside the repository field until the operator checks it.
+*/
+const ON_CHECK =
+  'Choose the token field and press Check without saving to list the repositories it can read.';
 
 /**
 Why GitHub was not asked or did not answer: an error code, and GitHub's status when it gave one.
@@ -124,6 +133,9 @@ export function repoSource(field: FieldDescriptor, offer: RepoOffer, values: For
     }
     case 'no-token': {
       return html`<small>No token: type the public repository as owner/name.</small>`;
+    }
+    case 'on-check': {
+      return html`<small>${ON_CHECK}</small>`;
     }
     case 'none': {
       return EMPTY;

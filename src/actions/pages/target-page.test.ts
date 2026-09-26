@@ -203,7 +203,10 @@ describe('GET /account/actions/:id', () => {
     const { browser } = await signedInOperator(harness, false);
     const markup = compact(await pageText(browser, `/account/actions/${target.id}`));
     expect(markup).toContain('href="/account/unlock?next=%2Faccount%2Factions%2Fid-1"');
-    expect(markup).not.toContain('action="/account/actions/');
+    // Check now is the one form, and it changes nothing (ACT-118).
+    expect(markup.match(/action="\/account\/actions\/[^"]*"/gu)).toStrictEqual([
+      'action="/account/actions/id-1/check"',
+    ]);
     expect(markup).not.toContain('id="manage"');
     expect(markup).toContain('<span>Agent One</span>');
     const edit = compact(await pageText(browser, `/account/actions/${target.id}/edit`));

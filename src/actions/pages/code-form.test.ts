@@ -148,7 +148,17 @@ describe('Add connection: Semble · GitHub code search', () => {
     expect(markup).toContain(
       '<option value="custom.Gone" selected>custom.Gone · not on this item</option>',
     );
-    expect(markup).toContain('the vault item has no such field (field_not_on_item)');
+    // A refused save is not a check: it lists nothing and reads no secret.
+    expect(markup).toContain('press Check without saving to list the repositories it can read.');
+    const checked = await browser.submit('/account/actions', {
+      csrf,
+      ...CODE_FORM,
+      'credential.token_field': 'custom.Gone',
+      intent: 'check',
+    });
+    expect(compact(await checked.text())).toContain(
+      'the vault item has no such field (field_not_on_item)',
+    );
   });
 
   it('ACT-6 ACT-103 refuses an internal box a hand-made request sends, an invalid repository and a wait the timeout cannot hold', async () => {

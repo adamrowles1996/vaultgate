@@ -9,7 +9,7 @@ import {
   PUBLIC_REPO,
 } from '../../test-support/code-pages.ts';
 import { FAKE_TOKEN } from '../../test-support/fake-github.ts';
-import { compact, pageText } from '../../test-support/identity-app.ts';
+import { compact } from '../../test-support/identity-app.ts';
 
 import { checkCard } from './check-report.ts';
 import { githubCheck, pageAccess } from './code-github.ts';
@@ -123,10 +123,14 @@ describe('Check without saving a Semble connection (ACT-120)', () => {
     });
     const edit = compact(await editCheck.text());
     expect(edit).toContain('The token can read <span class="mono">acme/docs</span>');
-    const now = compact(await pageText(browser, '/account/actions/id-1?check=now'));
-    expect(now).toContain(`The token can read <span class="mono">${PRIVATE_REPO.fullName}</span>`);
+    const now = await browser.submit('/account/actions/id-1/check', { csrf });
+    expect(now.status).toBe(200);
+    expect(compact(await now.text())).toContain(
+      `The token can read <span class="mono">${PRIVATE_REPO.fullName}</span>`,
+    );
     pages.harness.identity.advance(6 * 60_000);
-    const later = compact(await pageText(browser, '/account/actions/id-1?check=now'));
+    const again = await browser.submit('/account/actions/id-1/check', { csrf });
+    const later = compact(await again.text());
     expect(later).toContain('GitHub was not asked: unlock editing to let vaultgate use the token.');
     expect(later).toContain('Nothing was saved and nothing connected.');
   });

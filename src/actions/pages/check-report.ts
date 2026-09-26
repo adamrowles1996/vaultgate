@@ -34,12 +34,10 @@ export interface PageCheck {
 }
 
 /**
-The submit button a form checks with, and the query that checks a saved computer.
+The submit button a form checks with.
 */
 export const INTENT_FIELD = 'intent';
 export const CHECK_INTENT = 'check';
-export const CHECK_PARAM = 'check';
-export const CHECK_NOW = 'now';
 
 /**
 A problem without the path that files it against a form control; the line already says what it is about.

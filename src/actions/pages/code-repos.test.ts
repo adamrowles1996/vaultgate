@@ -52,10 +52,27 @@ describe('the repositories the token can read (ACT-119)', () => {
     ).toBe(true);
   });
 
-  it('ACT-119 shows why a token could not list them, by its code, and asks for a typed name', async () => {
-    const { harness } = createCodePages();
+  it('ACT-119 lists nothing when the form is loaded, and says to choose the token field and check', async () => {
+    const { harness, github } = createCodePages();
     const { browser } = await signedInOperator(harness);
     const markup = compact(await pageText(browser, NEW_CODE));
+    expect(markup).toContain(
+      '<small>Choose the token field and press Check without saving to list the repositories it can read.</small>',
+    );
+    expect(markup).not.toContain('name="repository_from"');
+    expect(github.requests).toStrictEqual([]);
+  });
+
+  it('ACT-119 shows why a token could not list them, by its code, and asks for a typed name', async () => {
+    const { harness } = createCodePages();
+    const { browser, csrf } = await signedInOperator(harness);
+    const response = await browser.submit('/account/actions', {
+      ...WITH_ACCESS_TOKEN,
+      csrf,
+      'credential.token_field': 'password',
+      'destination.repository': '',
+    });
+    const markup = compact(await response.text());
     expect(markup).toContain(
       'The token’s repositories could not be listed: GitHub refused the token (authentication_failed).',
     );
@@ -160,6 +177,7 @@ describe('the repositories the token can read (ACT-119)', () => {
         values: new Map(),
         item: { state: 'found', summary, changeHref: '/x' },
         isReauthenticated: true,
+        isChecking: true,
       },
     );
     expect(offer).toStrictEqual({ state: 'failed', failure: { code: 'authentication_failed' } });
@@ -173,6 +191,7 @@ describe('the repositories the token can read (ACT-119)', () => {
         values: new Map(),
         item: { state: 'found', summary, changeHref: '/x' },
         isReauthenticated: false,
+        isChecking: true,
       },
     );
     expect(locked).toStrictEqual({ state: 'none' });

@@ -55,7 +55,7 @@ GitHub code search**, pick the vault item that holds the token, then fill in the
 | Name                 | How agents name the repository: `claude-setup`, `application-main`. Lower-case letters, digits and hyphens.                                                |
 | Description          | Shown to agents in `actions_list_targets`: say what is in the repository.                                                                                  |
 | Token field          | The item field that holds the token: `password` by default, any other field (hidden custom fields included), or **No token**.                              |
-| Repository           | `owner/name`. The list beside it holds every repository the token can read; or type one.                                                                   |
+| Repository           | `owner/name`. Type it, or press **Check without saving** and choose from every repository the token can read.                                              |
 | Ref                  | Empty for the repository's default branch, or a branch, tag or full commit SHA.                                                                            |
 | Content types        | `code`, `docs` and `config`; all three by default. A repository of Markdown needs `docs`.                                                                  |
 | Include / Exclude    | gitignore patterns, one per line. The exclude list starts with secrets-shaped files (`.env`, `*.pem`, `id_rsa*`…); replacing it replaces them.             |
@@ -63,9 +63,11 @@ GitHub code search**, pick the vault item that holds the token, then fill in the
 | Allow a per-call ref | Whether agents may search another branch, tag, commit or `pr:<n>` (on by default).                                                                         |
 | Limits               | `max_top_k`, how long a call waits for a first build (`build_wait_s`), how often the ref is checked (`refresh_interval_s`), and the archive and read caps. |
 
-**Check without saving** asks GitHub for the repository with that token and shows whether it can
-read it, its default branch and its visibility, never the token. **Create** saves the connection
-and starts the first build in the background.
+**Check without saving** reads the chosen token field, lists the repositories that token can read
+beside the repository field, and asks GitHub for the repository with it: whether it can read it,
+its default branch and its visibility, never the token. Loading the form reads no secret, so
+choose the token field first and then check. **Create** saves the connection and starts the first
+build in the background; **Check now** on its page asks GitHub again.
 
 A repository that holds credentials in files the exclude list does not name is still a
 repository of credentials: the agent can read what the index holds. Extend the list, or leave
