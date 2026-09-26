@@ -53,16 +53,17 @@ defaults to ACT-106's list.
     the base repository, which keeps `refs/pull/{n}/head`.
 
   A `404` or `422` from a resolution is `ref_not_found`; any other failure, or a body that is not
-  what the step expects, is `upstream_error`. The archive is `GET /repos/{repository}/tarball/{sha}`,
-  so the snapshot is exactly the commit it is labelled with; a `404` or `422` for it (a SHA the
-  repository does not have) is `ref_not_found` too, which the call answers as it is. vaultgate follows **one** redirect,
-  and only to an `https://codeload.github.com/` URL whose path begins with `/{repository}/`,
-  compared case-insensitively because GitHub redirects to the repository's canonical name; any
-  other redirect, or a second one, is `upstream_error`. `Authorization` is never sent to
+  what the step expects, is `upstream_error`. The archive is
+  `GET /repos/{repository}/tarball/{sha}`, so the snapshot is exactly the commit it is labelled
+  with; a `404` or `422` for it (a SHA the repository does not have) is `ref_not_found` too, which
+  the call answers as it is. vaultgate follows **one** redirect, and only to an
+  `https://codeload.github.com/` URL whose path begins with `/{repository}/`, compared
+  case-insensitively because GitHub redirects to the repository's canonical name; any other
+  redirect, or a second one, is `upstream_error`. `Authorization` is never sent to
   `codeload.github.com`. The redirect URL carries a short-lived token of its own, so it joins the
-  call's injected values (ACT-50) and is scrubbed, never logged and never audited. A ref name is
-  1 to 255 characters of `[A-Za-z0-9._/-]` with no `..` segment and no leading or trailing `/`,
-  and is percent-encoded into the path.
+  call's injected values (ACT-50) and is scrubbed, never logged and never audited. A ref name is 1
+  to 255 characters of `[A-Za-z0-9._/-]` with no `..` segment and no leading or trailing `/`, and is
+  percent-encoded into the path.
 
 - **ACT-105** The archive is streamed from the forge to the sidecar's build request as it
   arrives. vaultgate neither decompresses it nor writes it to disk, and it cuts the stream at
@@ -153,14 +154,14 @@ defaults to ACT-106's list.
   - `code_read`: `repo` (one name); `file_path`; optional `ref`, `start_line` and `end_line`
     (inclusive, 1-based).
 
-  `ref` is a branch, a tag, a 40-hex SHA or `pr:<n>`; it may be given with one `repo` only, and
-  it is `policy_denied` (`reason: ref`) when the target's `allow_ref` is `false`. `content`
-  defaults to every type the policy's `content` allows; `all` means the same; a single type the
-  policy does not allow is `policy_denied` (`reason: content`). With several repositories the
-  selection is the types every one of their policies allows, and a selection none of them
-  shares is `policy_denied` (`reason: content`). A `top_k` the call gives above a target's
-  `max_top_k` is `policy_denied` (`reason: top_k`); one it leaves out is never refused. `code_read` is `policy_denied` (`reason: read`) when
-  `allow_read` is `false`.
+  `ref` is a branch, a tag, a 40-hex SHA or `pr:<n>`; it may be given with one `repo` only, and it
+  is `policy_denied` (`reason: ref`) when the target's `allow_ref` is `false`. `content` defaults to
+  every type the policy's `content` allows; `all` means the same; a single type the policy does not
+  allow is `policy_denied` (`reason: content`). With several repositories the selection is the types
+  every one of their policies allows, and a selection none of them shares is `policy_denied`
+  (`reason: content`). A `top_k` the call gives above a target's `max_top_k` is `policy_denied`
+  (`reason: top_k`); one it leaves out is never refused. `code_read` is `policy_denied`
+  (`reason: read`) when `allow_read` is `false`.
 
   Both search tools return `{ query, results, repos }`. Each result is
   `{ repo, file_path, start_line, end_line, score, language, content? }`, ranked as `semble`
@@ -303,8 +304,8 @@ straight to the returned file and line, use `code_find_related` after a search, 
 - **ACT-116** Calls are audited per ACT-60, one row per repository, with operation `read` and
   classification `search`, `related` or `read`; a call that fails before it runs (a name that
   does not resolve, a rate limit, a credential or destination refused) leaves a row for every
-  repository it named, with the first failure's code; `arguments` records the query, the path and the
-  line numbers. A build is an audit event (`actions.code_index_built` or
+  repository it named, with the first failure's code; `arguments` records the query, the path
+  and the line numbers. A build is an audit event (`actions.code_index_built` or
   `actions.code_index_failed`) carrying the target, the commit, the content selection, the
   trigger (`save`, `operator` or `call`), the counts, the duration and, on failure, the reason
   code. No file name beyond the arguments, and no content, is ever recorded.
