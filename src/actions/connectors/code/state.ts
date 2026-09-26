@@ -8,7 +8,7 @@
  * next call resolves and looks up afresh. Every build, and every build that
  * could not start, ends in one audit event (ACT-116).
  */
-import { isBuildFailure } from './refusals.ts';
+import { isRemembered } from './refusals.ts';
 
 import type { BuildEnd, BuildOutcome, BuildRequest, Trigger } from './builds.ts';
 import type { ResolvedReference } from './github.ts';
@@ -102,6 +102,26 @@ function emptyTarget(): TargetState {
     notes: new Map(),
     failed: new Map(),
   };
+}
+
+const MS_PER_SECOND = 1000;
+
+/**
+ * A failure kept for the refresh interval (ACT-112); older ones, which no
+ * call reads any more, go as it is written, so failed builds of refs that
+ * calls named cannot pile up.
+ */
+function remember(
+  found: TargetState,
+  failure: { readonly key: string; readonly reason: string; readonly at: number },
+  intervalMs: number,
+): void {
+  for (const [key, kept] of found.failed) {
+    if (failure.at - kept.at >= intervalMs) {
+      found.failed.delete(key);
+    }
+  }
+  found.failed.set(failure.key, { reason: failure.reason, at: failure.at });
 }
 
 function counts(outcome: BuildOutcome): Readonly<Record<string, number | string>> {
@@ -210,8 +230,9 @@ export function createCodeState(dependencies: StateDependencies): CodeState {
       found.current = currentAfter(dependencies, found, request, outcome.meta);
     } else {
       found.lastFailure = found.lastBuild;
-      if (isBuildFailure(outcome.reason)) {
-        found.failed.set(key, { reason: outcome.reason, at });
+      if (isRemembered(outcome.reason)) {
+        const intervalMs = request.documents.policy.refresh_interval_s * MS_PER_SECOND;
+        remember(found, { key, reason: outcome.reason, at }, intervalMs);
       }
     }
   }

@@ -29,13 +29,15 @@ const BUILD_FAILURES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * ACT-112: whether a build's reason is the build's own, so a call answers
- * `index_not_ready` with it and the archive is not fetched again within the
- * refresh interval. An unreachable sidecar, a transport failure or a
- * credential that could not be lent is none of these.
+ * ACT-104, ACT-112: whether a build's end is remembered for the refresh
+ * interval, so the archive is not fetched again (nor the credential lent,
+ * nor another build event written) on every call: the build's own failures,
+ * which a call answers as `index_not_ready`, and a commit GitHub has no
+ * archive of, which it answers as `ref_not_found`. An unreachable sidecar, a
+ * transport failure or a credential that could not be lent is none of these.
  */
-export function isBuildFailure(reason: string): boolean {
-  return BUILD_FAILURES.has(reason);
+export function isRemembered(reason: string): boolean {
+  return BUILD_FAILURES.has(reason) || reason === 'ref_not_found';
 }
 
 function fromRefusal(code: string, repo: string): ActionError {

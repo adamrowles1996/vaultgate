@@ -81,8 +81,11 @@ async function follow(
   );
 }
 
+/**
+ACT-104: a commit the API or codeload has no archive of (`404` or `422`) is `ref_not_found`.
+*/
 function archiveError(status: number): ActionError {
-  if (status === 404) {
+  if (status === 404 || status === 422) {
     return new ActionError('ref_not_found');
   }
   return REDIRECT_STATUSES.has(status)

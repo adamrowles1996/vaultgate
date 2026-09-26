@@ -54,7 +54,8 @@ defaults to ACT-106's list.
 
   A `404` or `422` from a resolution is `ref_not_found`; any other failure, or a body that is not
   what the step expects, is `upstream_error`. The archive is `GET /repos/{repository}/tarball/{sha}`,
-  so the snapshot is exactly the commit it is labelled with. vaultgate follows **one** redirect,
+  so the snapshot is exactly the commit it is labelled with; a `404` or `422` for it (a SHA the
+  repository does not have) is `ref_not_found` too, which the call answers as it is. vaultgate follows **one** redirect,
   and only to an `https://codeload.github.com/` URL whose path begins with `/{repository}/`,
   compared case-insensitively because GitHub redirects to the repository's canonical name; any
   other redirect, or a second one, is `upstream_error`. `Authorization` is never sent to
@@ -181,8 +182,11 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
   repository on its first call. After that it answers `index_not_ready` with `detail.state`
   `building` and `detail.repo`; the build carries on and a later call finds it. A build that
   failed answers `index_not_ready` with `detail.state` `failed` and the reason code in
-  `detail.reason` (never a message); the operator's page shows the rest. A build of a ref the call
-  named that ACT-108's caps refuse answers `rate_limited` at once, without waiting. `actions_list_targets`
+  `detail.reason` (never a message); the operator's page shows the rest. Such a failure, and a
+  commit with no archive (`ref_not_found`, ACT-104), is remembered for `refresh_interval_s`: a call
+  within it answers the same at once, without fetching the archive or the credential again or
+  recording another build. A build of a ref the call named that ACT-108's caps refuse answers
+  `rate_limited` at once, without waiting. `actions_list_targets`
   reports a code target's `repository`, its configured `ref` (absent for the default branch),
   the `content` it allows, whether `code_read` is allowed (`read`) and `read` as its only
   operation (ACT-19).

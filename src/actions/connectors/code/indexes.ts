@@ -84,6 +84,15 @@ function notReady(repo: string, state: 'building' | 'failed', reason?: string): 
   });
 }
 
+/**
+ACT-104, ACT-112: what a call answers for a build that ended without a snapshot.
+*/
+function failedBuild(label: string, reason: string): ActionError {
+  return reason === 'index_unavailable' || reason === 'ref_not_found'
+    ? new ActionError(reason)
+    : notReady(label, 'failed', reason);
+}
+
 function isFresh(services: ConnectorServices, at: number, context: Context): boolean {
   return services.now() - at < documentsOf(context).policy.refresh_interval_s * MS_PER_SECOND;
 }
@@ -169,7 +178,7 @@ async function ensureSnapshot(
   const label = context.support.target.name;
   const failure = recentFailure(dependencies, context, key);
   if (failure !== undefined) {
-    return fail(notReady(label, 'failed', failure));
+    return fail(failedBuild(label, failure));
   }
   const status = await dependencies.sidecar.status(key, context.signal);
   if (!status.ok) {
@@ -191,14 +200,7 @@ async function ensureSnapshot(
   if (outcome === 'timeout') {
     return fail(notReady(label, 'building'));
   }
-  if (outcome.ok) {
-    return ok(outcome.meta.created_at);
-  }
-  return fail(
-    outcome.reason === 'index_unavailable'
-      ? new ActionError('index_unavailable')
-      : notReady(label, 'failed', outcome.reason),
-  );
+  return outcome.ok ? ok(outcome.meta.created_at) : fail(failedBuild(label, outcome.reason));
 }
 
 function prepared(
