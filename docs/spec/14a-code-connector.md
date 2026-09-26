@@ -26,8 +26,12 @@ only when it does not, including every file the policy does not exclude.
 | `policy`      | The common fields, `timeout_ms` defaulting to 150 000 here; `refresh_interval_s` (300 default, 60 to 86 400); `content` (a non-empty subset of `code`, `docs` and `config`, all three by default); `allow_ref` (`true` default); `max_top_k` (50 default, ceiling 200); `build_wait_s` (90 default, ceiling 290, and at most `timeout_ms` less 10 s); `include` and `exclude` (below).           |
 |               | The caps: `max_archive_bytes` (256 MiB default, ceiling 1 GiB); `max_files` (50 000 default, ceiling 200 000); `max_total_bytes` (uncompressed, 1 GiB default, ceiling 4 GiB); `max_file_bytes` (1 MiB default, ceiling 16 MiB); `build_timeout_s` (600 default, ceiling 3 600). Reading: `allow_read` (`true` default) and `max_read_lines` (400 default, ceiling 2 000).                       |
 
-`include` and `exclude` are gitignore-syntax pattern lists of at most 100 entries each;
-`exclude` defaults to ACT-106's list.
+`include` and `exclude` are gitignore-syntax pattern lists of at most 100 entries each, every
+pattern a single line of 1 to 1 024 characters that the sidecar can compile (no `!` alone, no
+backwards range such as `[z-a]`, no trailing backslash), and the two together at most 32 KiB as
+JSON: the build spec travels base64url-encoded in one header line, which the sidecar caps at
+64 KiB (`sidecars/code/PROTOCOL.md`). A policy that saves is one the sidecar accepts. `exclude`
+defaults to ACT-106's list.
 
 ### 14.8.1 Fetching
 

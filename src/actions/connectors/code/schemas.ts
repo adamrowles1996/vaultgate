@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { commonPolicySchema } from '../../policy.ts';
 
+import { MAX_PATTERN_BYTES, patternBytes, patternListSchema } from './patterns.ts';
 import {
   configuredReferenceProblem as configuredReferenceProblem,
   repoProblem as repoProblem,
@@ -43,8 +44,6 @@ export const GITHUB_ARCHIVE_HOST = 'codeload.github.com';
 
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
-const MAX_PATTERNS = 100;
-const MAX_PATTERN_LENGTH = 1024;
 /**
 ACT-112: the wait must end with room left for the answer inside the call's own timeout.
 */
@@ -76,8 +75,6 @@ export const codeCredentialSchema = z.strictObject({
   token_field: z.string().min(1).nullable().default('password'),
 });
 
-const patternListSchema = z.array(z.string().min(1).max(MAX_PATTERN_LENGTH)).max(MAX_PATTERNS);
-
 const contentSchema = z
   .array(z.enum(CONTENT_TYPES))
   .min(1)
@@ -87,23 +84,34 @@ function bounded(min: number, max: number, fallback: number): z.ZodDefault<z.Zod
   return z.number().int().min(min).max(max).default(fallback);
 }
 
-export const codePolicySchema = commonPolicySchema.extend({
-  timeout_ms: bounded(MS_PER_SECOND, 300_000, 150_000),
-  refresh_interval_s: bounded(60, 86_400, 300),
-  content: contentSchema.default([...CONTENT_TYPES]),
-  allow_ref: z.boolean().default(true),
-  max_top_k: bounded(1, 200, 50),
-  build_wait_s: bounded(0, 290, 90),
-  include: patternListSchema.default([]),
-  exclude: patternListSchema.default([...DEFAULT_EXCLUDE]),
-  max_archive_bytes: bounded(MIB, GIB, 256 * MIB),
-  max_files: bounded(1, 200_000, 50_000),
-  max_total_bytes: bounded(MIB, 4 * GIB, GIB),
-  max_file_bytes: bounded(1024, 16 * MIB, MIB),
-  build_timeout_s: bounded(10, 3600, 600),
-  allow_read: z.boolean().default(true),
-  max_read_lines: bounded(1, 2000, 400),
-});
+export const codePolicySchema = commonPolicySchema
+  .extend({
+    timeout_ms: bounded(MS_PER_SECOND, 300_000, 150_000),
+    refresh_interval_s: bounded(60, 86_400, 300),
+    content: contentSchema.default([...CONTENT_TYPES]),
+    allow_ref: z.boolean().default(true),
+    max_top_k: bounded(1, 200, 50),
+    build_wait_s: bounded(0, 290, 90),
+    include: patternListSchema.default([]),
+    exclude: patternListSchema.default([...DEFAULT_EXCLUDE]),
+    max_archive_bytes: bounded(MIB, GIB, 256 * MIB),
+    max_files: bounded(1, 200_000, 50_000),
+    max_total_bytes: bounded(MIB, 4 * GIB, GIB),
+    max_file_bytes: bounded(1024, 16 * MIB, MIB),
+    build_timeout_s: bounded(10, 3600, 600),
+    allow_read: z.boolean().default(true),
+    max_read_lines: bounded(1, 2000, 400),
+  })
+  .superRefine((policy, context) => {
+    // The build spec travels in one header line the sidecar caps at 64 KiB.
+    if (patternBytes(policy.include, policy.exclude) > MAX_PATTERN_BYTES) {
+      context.addIssue({
+        code: 'custom',
+        path: ['include'],
+        message: 'include and exclude together must be at most 32 KiB, as JSON',
+      });
+    }
+  });
 
 export type CodeDestination = z.output<typeof codeDestinationSchema>;
 export type CodeCredential = z.output<typeof codeCredentialSchema>;
