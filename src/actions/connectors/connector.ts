@@ -28,6 +28,8 @@ export type { ConnectorOutput, OperationDescription } from './output.ts';
 export type {
   ConnectorControl,
   ConnectorServices,
+  KeptSnapshot,
+  KeptSnapshots,
   SavedTarget,
   StoredTarget,
   TargetAccess,

@@ -67,15 +67,17 @@ export const BUSY = 'busy';
 
 export interface Builds {
   /**
-  Builds with a credential the caller holds for the whole build, once a slot is free.
-  */
-  run(access: TargetAccess, request: BuildRequest): Promise<BuildOutcome>;
-  /**
-   * Builds with a credential of its own, fetched when the build starts; a
-   * running build of the same key is joined. A call's build of a ref it
-   * named is `BUSY` past the caps; every other build waits for a slot.
+   * Builds once a slot is free, and is never refused: a save, Rebuild index,
+   * the configured ref a call needs or found moved. The credential is the
+   * build's own, fetched when its slot comes, so a build that waits holds
+   * none, and one whose target was disabled meanwhile lends nothing. A
+   * running or waiting build of the same key is joined.
    */
-  start(request: BuildRequest): Promise<BuildOutcome> | typeof BUSY;
+  start(request: BuildRequest): Promise<BuildOutcome>;
+  /**
+  T46: a call's build of a ref it named, joined, started in a free slot, or `BUSY` past the caps.
+  */
+  tryStart(request: BuildRequest): Promise<BuildOutcome> | typeof BUSY;
   /**
   Whether a build of the target is running in this process (ACT-115).
   */
@@ -175,7 +177,7 @@ function buildSpec(request: BuildRequest): BuildSpec {
  * download's): the archive opened, streamed to the sidecar and cut at the
  * cap, which aborts the upload so the sidecar never builds a partial archive.
  */
-export async function download(
+async function download(
   dependencies: BuildsDependencies,
   access: TargetAccess,
   request: BuildRequest,

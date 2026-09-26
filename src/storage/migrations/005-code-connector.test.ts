@@ -125,4 +125,34 @@ describe('migration 005: the code connector (13.13, ADR 0008)', () => {
       all(store, 'SELECT target_id, client_id, granted_by FROM action_grants', grantSchema),
     ).toStrictEqual([]);
   });
+
+  it('13.13 ACT-108 adds action_code_snapshots: one row per target, gone with its target', () => {
+    const store = populatedAtVersion4();
+    unwrapOk(migrate(store, MIGRATIONS, NOW));
+    insertTarget(store, 'target-2', 'code');
+    const keep = (targetId: string, commit: string): void => {
+      run(
+        store,
+        'INSERT INTO action_code_snapshots (target_id, snapshot_key, fingerprint, commit_sha, ref, indexed_at) VALUES (?, ?, ?, ?, ?, 1)',
+        targetId,
+        `${targetId}.0123456789abcdef.${commit}`,
+        '0123456789abcdef',
+        commit,
+        'main',
+      );
+    };
+    keep('target-2', 'a'.repeat(40));
+    expect(() => {
+      keep('target-2', 'b'.repeat(40));
+    }).toThrow(/UNIQUE constraint failed/u);
+    expect(() => {
+      keep('missing', 'a'.repeat(40));
+    }).toThrow(/FOREIGN KEY constraint failed/u);
+    const kept = z.object({ target_id: z.string() });
+    expect(all(store, 'SELECT target_id FROM action_code_snapshots', kept)).toStrictEqual([
+      { target_id: 'target-2' },
+    ]);
+    run(store, "DELETE FROM action_targets WHERE id = 'target-2'");
+    expect(all(store, 'SELECT target_id FROM action_code_snapshots', kept)).toStrictEqual([]);
+  });
 });

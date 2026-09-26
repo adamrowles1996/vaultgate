@@ -152,4 +152,6 @@ vaultgate adds `ref`, `code_read`, the `paths` and `languages` filters, and each
   build as `actions.code_index_built` or `actions.code_index_failed` with its commit, trigger,
   counts and duration. No file content is ever recorded.
 - **Where the code lives**: each snapshot is a plaintext copy of the repository in the
-  sidecar's storage, never in vaultgate's data directory or its backups.
+  sidecar's storage, never in vaultgate's data directory or its backups. vaultgate's database
+  keeps only which snapshot each connection answers from (its commit and ref), so a restart
+  still answers a moved ref from it, marked `stale`, while the new commit builds.

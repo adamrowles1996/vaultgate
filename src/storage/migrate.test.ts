@@ -128,6 +128,7 @@ describe('migrate', () => {
     });
     expect(tables(database)).toStrictEqual([
       'action_calls',
+      'action_code_snapshots',
       'action_grants',
       'action_sessions',
       'action_targets',

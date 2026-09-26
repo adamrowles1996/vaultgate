@@ -1,16 +1,15 @@
 /**
  * One build per key at a time (ACT-108), within the caps of T46: a second
  * trigger of a key that is building or waiting joins it; a call's build of
- * a ref it named takes a slot at once or is `BUSY`; every other build waits
- * for one and is never refused. A build waiting for its slot holds no
- * credential of its own (`start` fetches one when the slot comes), and one
+ * a ref it named takes a slot at once or is `BUSY` (`tryStart`); every other
+ * build waits for one and is never refused (`start`). A build fetches its
+ * credential when its slot comes, so one that waits holds none, and one
  * whose target was forgotten meanwhile never downloads. Every build ends in
  * `finished`, once.
  */
 import { createBuildSlots, type BuildLimits, type Release } from './build-slots.ts';
 import {
   BUSY,
-  download,
   keyOf,
   withOwnCredential,
   type BuildOutcome,
@@ -43,13 +42,6 @@ async function attempt(build: () => Promise<BuildOutcome>): Promise<BuildOutcome
   } catch {
     return { ok: false, reason: 'connector_fault' };
   }
-}
-
-/**
-T46: a build a call started for a ref it named, which the caps may refuse.
-*/
-function isNamedByCall(request: BuildRequest): boolean {
-  return request.trigger === 'call' && !request.configured;
 }
 
 /**
@@ -104,26 +96,24 @@ function forget(running: Flights, targetId: string): void {
 export function createBuilds(dependencies: FlightDependencies): Builds {
   const running: Flights = new Map();
   const slots = createBuildSlots(dependencies.limits);
+  const build = (request: BuildRequest) => (): Promise<BuildOutcome> =>
+    withOwnCredential(dependencies, request);
   return {
-    run: (access, request) =>
+    start: (request) =>
       running.get(keyOf(request))?.promise ??
-      launch(dependencies, running, request, {
-        build: () => download(dependencies, access, request),
-        slot: slots.take(),
-      }),
-    start(request) {
+      launch(dependencies, running, request, { build: build(request), slot: slots.take() }),
+    tryStart(request) {
       const joined = running.get(keyOf(request))?.promise;
       if (joined !== undefined) {
         return joined;
       }
-      const build = (): Promise<BuildOutcome> => withOwnCredential(dependencies, request);
-      if (!isNamedByCall(request)) {
-        return launch(dependencies, running, request, { build, slot: slots.take() });
-      }
       const slot = slots.tryTake(request.targetId);
       return slot === undefined
         ? BUSY
-        : launch(dependencies, running, request, { build, slot: Promise.resolve(slot) });
+        : launch(dependencies, running, request, {
+            build: build(request),
+            slot: Promise.resolve(slot),
+          });
     },
     isBuilding: (targetId) => isBuilding(running, targetId),
     forget: (targetId) => {

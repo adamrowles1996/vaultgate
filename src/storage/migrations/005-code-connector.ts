@@ -4,8 +4,11 @@
  * columns. Dropping it with foreign keys on would cascade to `action_grants`
  * (and migrations run in a transaction, where `PRAGMA foreign_keys` cannot
  * change), so the grants are copied aside, their table rebuilt after the
- * targets', and copied back. Nothing about a repository, snapshot or index is
- * stored: that lives in the code sidecar.
+ * targets', and copied back. `action_code_snapshots` keeps, per code target,
+ * the snapshot its calls without a ref answer from (ACT-108), so a restart
+ * still answers a moved ref from it; it goes with its target. Nothing of a
+ * repository's content, and no other snapshot or index, is stored: that
+ * lives in the code sidecar.
  */
 import type { Migration } from './types.ts';
 
@@ -44,6 +47,15 @@ CREATE TABLE action_grants (
 CREATE INDEX idx_action_grants_client_id ON action_grants (client_id);
 INSERT INTO action_grants SELECT * FROM action_grants_005;
 DROP TABLE action_grants_005;
+
+CREATE TABLE action_code_snapshots (
+  target_id TEXT PRIMARY KEY REFERENCES action_targets (id) ON DELETE CASCADE,
+  snapshot_key TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  commit_sha TEXT NOT NULL,
+  ref TEXT NOT NULL,
+  indexed_at INTEGER NOT NULL
+);
 `;
 
 export const codeConnector: Migration = { version: 5, name: 'code-connector', sql: SQL };

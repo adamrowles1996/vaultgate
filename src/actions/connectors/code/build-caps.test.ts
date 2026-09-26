@@ -155,4 +155,28 @@ describe('the caps on the builds calls start (ACT-108, ACT-112, T46)', () => {
       'save',
     ]);
   });
+
+  it('ACT-108 a build that waited for its slot while its target was disabled lends nothing and builds nothing', async () => {
+    const code = harness();
+    await createCodeTarget(code, NOW);
+    await createCodeTarget(code, {
+      ...NOW,
+      name: 'gadgets',
+      destination: { repository: OTHER_REPO },
+    });
+    const release = code.sidecar.hold();
+    await named(code, 'widgets', ['v1.0', 'feature/x']);
+    await named(code, 'gadgets', [SHA.tag, SHA.moved]);
+    const late = await createCodeTarget(code, { ...NOW, name: 'late' });
+    unwrapOk(code.harness.engine.targets.setEnabled(late.id, false, OPERATOR_ID));
+    await code.settle();
+    release();
+    await code.settle();
+    expect(code.sidecar.builds.map((build) => build.spec.owner)).not.toContain(late.id);
+    const status = await code.harness.engine.code?.status(late.id);
+    expect([status?.lastFailure?.reason, status?.lastFailure?.trigger]).toStrictEqual([
+      'target_disabled',
+      'save',
+    ]);
+  });
 });

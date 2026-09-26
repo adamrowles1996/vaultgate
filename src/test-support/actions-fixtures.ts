@@ -72,12 +72,12 @@ export interface HarnessOptions {
 }
 
 /**
-The `oauth_clients` row a grant references (ACT-9).
+The `oauth_clients` row a grant references (ACT-9); one already there (a database shared across a restart) is kept.
 */
 export function insertClient(database: DatabaseSync, clientId: string): void {
   run(
     database,
-    "INSERT INTO oauth_clients (id, client_id, mode, client_name, redirect_uris, metadata, created_at) VALUES (?, ?, 'dcr', ?, '[]', '{}', 0)",
+    "INSERT OR IGNORE INTO oauth_clients (id, client_id, mode, client_name, redirect_uris, metadata, created_at) VALUES (?, ?, 'dcr', ?, '[]', '{}', 0)",
     `row-${clientId}`,
     clientId,
     `Client ${clientId}`,

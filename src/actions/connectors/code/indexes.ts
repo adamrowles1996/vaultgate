@@ -155,9 +155,11 @@ async function ensureSnapshot(
   if (status.value.state === 'ready') {
     return ok(status.value.meta.created_at);
   }
-  const building = dependencies.builds.start(
-    buildRequestFor(request, resolved, request.ref === undefined),
-  );
+  const isConfigured = request.ref === undefined;
+  const build = buildRequestFor(request, resolved, isConfigured);
+  const building = isConfigured
+    ? dependencies.builds.start(build)
+    : dependencies.builds.tryStart(build);
   if (building === BUSY) {
     // T46: the target or the process builds as many refs as calls may start.
     return fail(
@@ -201,7 +203,7 @@ function buildMoved(
     return;
   }
   const moved = buildRequestFor(request, resolved, true);
-  background(dependencies.services, 'a build of a moved ref', async () =>
+  background(dependencies.services, 'a build of a moved ref', () =>
     dependencies.builds.start(moved),
   );
 }
@@ -236,7 +238,7 @@ async function prepare(
   }
   const snapshot = { key, commit, ref, indexedAt: built.value };
   if (request.ref === undefined) {
-    target.current = { ...snapshot, fingerprint };
+    dependencies.state.setCurrent(targetId, { ...snapshot, fingerprint });
   }
   return ok(prepared(request, snapshot, false));
 }
@@ -245,9 +247,8 @@ export function createIndexes(dependencies: IndexesDependencies): Indexes {
   return {
     prepare: (request) => prepare(dependencies, request),
     forget(targetId, key) {
-      const target = dependencies.state.target(targetId);
-      if (target.current?.key === key) {
-        target.current = undefined;
+      if (dependencies.state.peek(targetId)?.current?.key === key) {
+        dependencies.state.setCurrent(targetId, undefined);
       }
     },
   };

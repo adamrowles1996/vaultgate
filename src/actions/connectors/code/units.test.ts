@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { ok } from '../../../result.ts';
+import { memorySnapshots } from '../../../test-support/kept-snapshots.ts';
 import { captureLogger } from '../../../test-support/logging.ts';
 import { ManualClock } from '../../../test-support/manual-clock.ts';
 import { recordedSupport } from '../../../test-support/run-support.ts';
@@ -27,7 +29,7 @@ function access(pinned: TargetAccess['pinned']): TargetAccess {
   };
 }
 
-function services(clock: ManualClock): ConnectorServices {
+function services(clock: ManualClock, lent: TargetAccess = access([])): ConnectorServices {
   const { logger } = captureLogger();
   const events: unknown[] = [];
   return {
@@ -39,8 +41,9 @@ function services(clock: ManualClock): ConnectorServices {
         events.push(event);
       },
     },
-    withTarget: () => Promise.reject(new Error('not in this test')),
+    withTarget: async (_targetId, work) => ok(await work(lent)),
     targets: () => [],
+    snapshots: memorySnapshots(),
   };
 }
 
@@ -51,20 +54,20 @@ describe('the build runner (ACT-108)', () => {
     const throwing = {
       build: () => Promise.reject(new Error('a client bug')),
     } as unknown as SidecarClient;
-    const builds = createBuilds({
-      sidecar: throwing,
-      fetch: () => Promise.resolve(new Response('archive', { status: 200 })),
-      services: services(clock),
-      userAgent: 'vaultgate/9.9.9',
-      finished: (_request, outcome) => {
-        ended.push(outcome.ok ? 'ok' : outcome.reason);
-      },
-    });
     const pinned = [
       { host: 'api.github.com', tls: true, address: '140.82.121.6' },
       { host: 'codeload.github.com', tls: true, address: '140.82.121.9' },
     ];
     const target = access(pinned);
+    const builds = createBuilds({
+      sidecar: throwing,
+      fetch: () => Promise.resolve(new Response('archive', { status: 200 })),
+      services: services(clock, target),
+      userAgent: 'vaultgate/9.9.9',
+      finished: (_request, outcome) => {
+        ended.push(outcome.ok ? 'ok' : outcome.reason);
+      },
+    });
     const request: BuildRequest = {
       targetId: 'id-1',
       targetName: 'widgets',
@@ -79,7 +82,7 @@ describe('the build runner (ACT-108)', () => {
       variants: [['code']],
       configured: true,
     };
-    expect(await builds.run(target, request)).toStrictEqual({
+    expect(await builds.start(request)).toStrictEqual({
       ok: false,
       reason: 'connector_fault',
     });

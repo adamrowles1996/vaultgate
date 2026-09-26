@@ -115,11 +115,13 @@ defaults to ACT-106's list.
     not apply. A disabled target lends no credential to build with, so its page offers no
     Rebuild index, and one posted for it is refused with a notice before anything is deleted.
   - When a call needs a snapshot or an index that does not exist (trigger `call`); the call waits
-    for it (ACT-112). A call's build of the configured ref, moved or not, makes the index of the
-    policy's whole `content` beside the call's own selection, as a save does, so the next call
-    without a `content` finds it built; a build of a ref the call names makes the call's selection
-    only. The configured ref is resolved again when its last resolution is older than
-    `refresh_interval_s`. If it moved and the previous commit's snapshot exists, the call is
+    for it (ACT-112). The snapshot calls without a `ref` answer from is kept in the database
+    (13.13), so after a restart too a moved ref is answered from it with `stale: true`, and the
+    start-up reconciliation of ACT-109 keeps it. A call's build of the configured ref, moved or not,
+    makes the index of the policy's whole `content` beside the call's own selection, as a save does,
+    so the next call without a `content` finds it built; a build of a ref the call names makes the
+    call's selection only. The configured ref is resolved again when its last resolution is older
+    than `refresh_interval_s`. If it moved and the previous commit's snapshot exists, the call is
     answered from that snapshot with `stale: true` while the new one builds in the background. A
     failed resolution with a snapshot to answer from never fails the call; it is recorded on the
     target page and in the audit trail. A ref a call names is resolved on every call, except a
@@ -131,8 +133,10 @@ defaults to ACT-106's list.
   for a ref they named. Such a build past either cap is not started: the call answers
   `rate_limited` with `detail.retry_after_s` (30) and `detail.repo`, fetches nothing and records
   no build. Every other build (a save, Rebuild index, and the configured ref a call needs or found
-  moved) waits for a slot, in order, and is never refused; one whose target's snapshots are deleted
-  while it waits never downloads, and ends as `target_changed`.
+  moved) waits for a slot, in order, and is never refused. A build takes the target's credential
+  when its slot comes and holds none while it waits: one whose target is disabled meanwhile builds
+  nothing (`target_disabled`), and one whose target's snapshots are deleted meanwhile never
+  downloads (`target_changed`).
 
 - **ACT-109** Deleting a target tells the sidecar to delete every snapshot of it before the row is
   removed; an unreachable sidecar does not block the deletion. Whenever vaultgate starts or finds

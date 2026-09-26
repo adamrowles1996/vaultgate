@@ -12,6 +12,7 @@ import {
   sidecarResult,
 } from '../../../test-support/code-connector.ts';
 import { createFakeGitHub } from '../../../test-support/fake-github.ts';
+import { memorySnapshots } from '../../../test-support/kept-snapshots.ts';
 import { unwrapFail } from '../../../test-support/result.ts';
 import { CANARY } from '../../../test-support/vault-fixture.ts';
 
@@ -96,6 +97,7 @@ describe('a commit GitHub has no archive of (ACT-104, ACT-112)', () => {
           },
         },
         now: () => now,
+        snapshots: memorySnapshots(),
       },
       fingerprintOf: () => '0123456789abcdef',
       keyOf: (request) => `id-1.0123456789abcdef.${request.commit}`,

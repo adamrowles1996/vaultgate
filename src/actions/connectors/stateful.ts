@@ -40,6 +40,33 @@ export interface ConnectorServices {
   ACT-109: the ids and revisions of every stored target of the connector.
   */
   targets(): readonly StoredTarget[];
+  /**
+  ACT-108: the snapshot each target's calls without a ref answer from, kept across a restart.
+  */
+  readonly snapshots: KeptSnapshots;
+}
+
+/**
+ * One target's current snapshot as the database keeps it (13.13): its key and
+ * extraction fingerprint, the commit and the ref it was resolved from, and
+ * when it was indexed. Nothing of the repository's content.
+ */
+export interface KeptSnapshot {
+  readonly targetId: string;
+  readonly key: string;
+  readonly fingerprint: string;
+  readonly commit: string;
+  readonly ref: string;
+  readonly indexedAt: number;
+}
+
+/**
+The kept snapshots; a write never throws, and one for a target that no longer exists is dropped.
+*/
+export interface KeptSnapshots {
+  load(): readonly KeptSnapshot[];
+  keep(snapshot: KeptSnapshot): void;
+  forget(targetId: string): void;
 }
 
 export interface StoredTarget {

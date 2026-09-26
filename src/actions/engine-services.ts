@@ -2,15 +2,17 @@
  * What the engine lends a stateful connector (ACT-108, ACT-109): a target's
  * credential and pinned endpoints for work no call started (a build on save
  * or on Rebuild index), fetched and pinned exactly as a call's are (ACT-50,
- * ACT-54 to ACT-56) and zeroed when the work ends; and the stored targets of
- * the connector, for reconciliation. The connector never reaches the vault,
- * the resolver or the store itself. A disabled target lends nothing: its
+ * ACT-54 to ACT-56) and zeroed when the work ends; the stored targets of the
+ * connector, for reconciliation; and the snapshot each target's calls answer
+ * from, kept across a restart. The connector never reaches the vault, the
+ * resolver or the store itself. A disabled target lends nothing: its
  * credential is never used by a build nobody could call.
  */
 import { fail, ok } from '../result.ts';
 
 import { fetchCredential, pinDestination } from './engine-run.ts';
 import { ActionError } from './errors.ts';
+import { keptSnapshots } from './kept-snapshots.ts';
 import { createRunSupport } from './run-support.ts';
 import { validateTarget } from './targets-schemas.ts';
 
@@ -59,6 +61,7 @@ export function connectorServices(context: EngineContext, kind: ConnectorKind): 
         credential.value.injected.dispose();
       }
     },
+    snapshots: keptSnapshots(context.database, context.logger),
     targets(): readonly StoredTarget[] {
       return context.repo
         .list()

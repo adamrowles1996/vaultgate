@@ -7,7 +7,14 @@
  * engine for as long as it runs, and a build that could not start is
  * recorded on the page and in the audit trail like one that failed.
  */
-import { documentsOf, githubAccess, keyOf, type Builds, type BuildRequest } from './builds.ts';
+import {
+  documentsOf,
+  githubAccess,
+  keyOf,
+  type BuildOutcome,
+  type Builds,
+  type BuildRequest,
+} from './builds.ts';
 import { resolveReference } from './github.ts';
 import { type CodeDocuments, extractionFingerprint, parseSnapshotKey } from './keys.ts';
 import { normaliseContent } from './schemas.ts';
@@ -83,13 +90,15 @@ async function forgetTarget(dependencies: ControlDependencies, targetId: string)
 }
 
 /**
-The configured ref resolved and built, with the credential the engine lent for it.
-*/
+ * The configured ref resolved with the credential the engine lent for it,
+ * and its build started; the build takes a credential of its own when its
+ * slot comes, so the one lent here is given back before the build waits.
+ */
 async function buildConfigured(
   dependencies: ControlDependencies,
   access: TargetAccess,
   trigger: 'save' | 'operator',
-): Promise<void> {
+): Promise<{ readonly build: Promise<BuildOutcome> } | undefined> {
   const documents: CodeDocuments = documentsOf(access);
   const { id: targetId, name: targetName } = access.support.target;
   const content = normaliseContent(documents.policy.content);
@@ -104,7 +113,7 @@ async function buildConfigured(
   if (!resolved.ok) {
     const reason = resolved.error.code;
     dependencies.state.refused({ targetId, targetName, trigger, content, reason });
-    return;
+    return undefined;
   }
   dependencies.state.target(targetId).failed.clear();
   const key = keyOf({ targetId, documents, commit: resolved.value.commit });
@@ -113,7 +122,7 @@ async function buildConfigured(
   );
   if (status.ok && status.value.state === 'ready') {
     // The snapshot this save would build exists already; the next call adopts it.
-    return;
+    return undefined;
   }
   const request: BuildRequest = {
     targetId,
@@ -125,7 +134,7 @@ async function buildConfigured(
     variants: [content],
     configured: true,
   };
-  await dependencies.builds.run(access, request);
+  return { build: dependencies.builds.start(request) };
 }
 
 function storedTarget(dependencies: ControlDependencies, targetId: string) {
@@ -167,9 +176,12 @@ async function refresh(
   if (isReset) {
     await forgetTarget(dependencies, targetId);
   }
-  const outcome = await dependencies.services.withTarget(targetId, async (access) => {
-    await buildConfigured(dependencies, access, trigger);
-  });
+  const outcome = await dependencies.services.withTarget(targetId, (access) =>
+    buildConfigured(dependencies, access, trigger),
+  );
+  if (outcome.ok) {
+    await outcome.value?.build;
+  }
   const stored = storedTarget(dependencies, targetId);
   if (stored !== undefined && !outcome.ok) {
     refusedRefresh(dependencies, stored, trigger, outcome.error.code);
