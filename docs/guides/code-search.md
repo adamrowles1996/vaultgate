@@ -92,7 +92,8 @@ code_read          repo, file_path, [ref], [start_line], [end_line]
 
 - `repo` is a connection name, or for the two search tools a list of up to ten, searched
   together. With several, every `file_path` begins with the connection name and a `/`, as
-  `semble` prefixes merged repositories, and `code_find_related` takes such a path.
+  `semble` prefixes merged repositories; `code_find_related` takes such a path, and `code_read`
+  of that connection does too.
 - `content` is `code`, `docs`, `config` or `all`; the default is every type the connection
   allows.
 - `top_k` defaults to 5, or to the connection's `max_top_k` when you set that lower.

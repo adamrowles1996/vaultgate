@@ -168,7 +168,10 @@ const relatedArguments = z.strictObject({
 
 const readArguments = z
   .strictObject({
-    file_path: filePathSchema.describe('Repository-relative path of the file, as results give it.'),
+    file_path: filePathSchema.describe(
+      'Repository-relative path of the file, as results give it; one from a search over several ' +
+        'repositories, which starts with the connection name and a /, is read too.',
+    ),
     ref: referenceSchema.optional(),
     start_line: z.number().int().min(1).optional().describe('First line to return (1-based).'),
     end_line: z.number().int().min(1).optional().describe('Last line to return (inclusive).'),
@@ -283,7 +286,9 @@ export const CODE_TOOLS: readonly ConnectorTool<CodeOperation>[] = [
       'Read lines of one file from a repository the operator configured, for the context a ' +
       'search snippet leaves out. Returns the text, the line range and the file length; long ' +
       'files are cut at the connection limit (truncated: true), so ask for a range with ' +
-      `start_line and end_line. ${NO_SECRETS}`,
+      'start_line and end_line. A file_path from a search over several repositories begins ' +
+      'with the connection name: pass it as it is, with that connection as repo, and the ' +
+      `prefix is dropped when the file is not found with it. ${NO_SECRETS}`,
     annotations: annotations('Read a file'),
     inputSchema: readArguments,
     outputSchema: readOutput,

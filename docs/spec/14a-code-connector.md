@@ -179,7 +179,10 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
   including every excluded or skipped file, is `path_not_found`, whether or not the repository
   contains it; a line that no indexed chunk holds is `chunk_not_found`. The sidecar resolves the
   path inside the snapshot and refuses anything whose resolved path leaves it. A file with a NUL
-  byte in its first 8 KiB is `not_text` for `code_read`.
+  byte in its first 8 KiB is `not_text` for `code_read`. So that `code_read` can follow a result of
+  a search over several repositories, a path the snapshot does not hold as given that begins with
+  the read repository's own connection name and a `/` is tried once more without that prefix;
+  the tool's description says so.
 - **ACT-112** A call whose snapshot or index does not exist yet waits for its build for up to
   `build_wait_s` (the smallest of its repositories'), as `semble`'s MCP server indexes a
   repository on its first call. After that it answers `index_not_ready` with `detail.state`

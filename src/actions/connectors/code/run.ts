@@ -11,6 +11,7 @@ import { ActionError } from '../../errors.ts';
 
 import { contentOf, isRead, isRelated, isSearch, sharedContent, topKFor } from './authorize.ts';
 import { documentsOf } from './builds.ts';
+import { readFile } from './read.ts';
 import { refusalError } from './refusals.ts';
 import { SidecarRefusal } from './sidecar.ts';
 import { type Clock, withDeadline } from './timing.ts';
@@ -20,7 +21,7 @@ import type { Indexes, Prepared } from './indexes.ts';
 import type { ContentType } from './schemas.ts';
 import type { SidecarResult } from './sidecar-schemas.ts';
 import type { SidecarClient, SidecarOutcome } from './sidecar.ts';
-import type { CodeOperation, ReadOperation } from './tools.ts';
+import type { CodeOperation } from './tools.ts';
 
 type Context = RunContext<unknown, unknown, unknown>;
 
@@ -102,40 +103,6 @@ function fitted(
   };
 }
 
-async function read(
-  dependencies: RunDependencies,
-  query: Query,
-  operation: ReadOperation,
-): Promise<SidecarOutcome<ConnectorOutput>> {
-  const [prepared] = query.prepared as readonly [Prepared];
-  const found = await dependencies.sidecar.read(
-    {
-      key: prepared.key,
-      file_path: operation.file_path,
-      start_line: operation.start_line,
-      end_line: operation.end_line,
-      max_lines: documentsOf(query.contexts[0]).policy.max_read_lines,
-    },
-    query.signal,
-  );
-  if (!found.ok) {
-    return found;
-  }
-  const { file_path, start_line, end_line, total_lines, truncated, text } = found.value;
-  return ok({
-    result: {
-      repo: prepared.label,
-      commit: prepared.commit,
-      file_path,
-      start_line,
-      end_line,
-      total_lines,
-      truncated,
-    },
-    captured: { text: Buffer.from(text, 'utf8') },
-  });
-}
-
 async function answer(
   dependencies: RunDependencies,
   query: Query,
@@ -163,7 +130,9 @@ async function answer(
     const label = `Chunks related to ${file_path}:${String(line)}`;
     return found.ok ? ok(fitted(label, found.value, prepared, maxBytes)) : found;
   }
-  return read(dependencies, query, operation);
+  const [only] = prepared as readonly [Prepared];
+  const maxLines = documentsOf(contexts[0]).policy.max_read_lines;
+  return readFile(dependencies.sidecar, { prepared: only, operation, maxLines, signal });
 }
 
 /**
