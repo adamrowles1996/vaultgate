@@ -167,21 +167,22 @@ async function answer(
 }
 
 /**
-Every repository prepared at once, so each build starts at the start of the wait.
-*/
+ * Every repository prepared at once, so each build starts at the start of the
+ * wait; the first that cannot be prepared ends the call, and with several it
+ * is named (ACT-110).
+ */
 async function prepareAll(
   dependencies: RunDependencies,
   call: Call,
 ): Promise<Result<readonly Prepared[], ActionError>> {
+  const isSeveral = call.contexts.length > 1;
   const settled = await Promise.all(
-    call.contexts.map((context) =>
-      dependencies.indexes.prepare({
-        context,
-        ref: call.operation.ref,
-        content: call.content,
-        deadline: call.deadline,
-      }),
-    ),
+    call.contexts.map(async (context) => {
+      const { ref } = call.operation;
+      const request = { context, ref, content: call.content, deadline: call.deadline };
+      const one = await dependencies.indexes.prepare(request);
+      return !isSeveral || one.ok ? one : fail(withRepo(one.error, context.support.target.name));
+    }),
   );
   const prepared: Prepared[] = [];
   for (const one of settled) {
@@ -191,6 +192,10 @@ async function prepareAll(
     prepared.push(one.value);
   }
   return ok(prepared);
+}
+
+function withRepo(error: ActionError, repo: string): ActionError {
+  return new ActionError(error.code, { ...error.detail, repo });
 }
 
 type Attempt =
@@ -211,9 +216,15 @@ function afterFailure(
   query: Query,
   error: ActionError | SidecarRefusal,
 ): Attempt {
-  const repos = query.prepared.map((entry) => entry.label).join(',');
+  // A refusal that names a snapshot is about that repository alone.
+  const named =
+    error instanceof SidecarRefusal
+      ? query.prepared.find((entry) => entry.key === error.key)
+      : undefined;
+  const repos = named?.label ?? query.prepared.map((entry) => entry.label).join(',');
   if (error instanceof SidecarRefusal && error.code === 'snapshot_missing') {
-    for (const entry of query.prepared) {
+    const missing = named === undefined ? query.prepared : [named];
+    for (const entry of missing) {
       dependencies.indexes.forget(entry.targetId, entry.key);
     }
     return { kind: 'evicted' };

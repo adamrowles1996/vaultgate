@@ -16,6 +16,7 @@ import {
   deletedSchema,
   errorSchema,
   healthSchema,
+  refusalKeySchema,
   type IndexReference,
   readSchema,
   resultsSchema,
@@ -32,15 +33,19 @@ import type { LocalHttp, LocalMethod, LocalResponse } from '../../../net/local-h
 import type { z } from 'zod';
 
 /**
-A protocol error the sidecar answered with, by its code.
-*/
+ * A protocol error the sidecar answered with, by its code, and the snapshot
+ * key it names in `detail.key` when it names one well formed: the caller maps
+ * it back to the repository it asked about, and never passes it on.
+ */
 export class SidecarRefusal extends Error {
   readonly code: string;
+  readonly key: string | undefined;
 
-  constructor(code: string) {
+  constructor(code: string, key?: string) {
     super(`the code sidecar refused the request: ${code}`);
     this.name = 'SidecarRefusal';
     this.code = code;
+    this.key = key;
   }
 }
 
@@ -168,9 +173,10 @@ function interpret<T>(
   const body = parseJson(response.body);
   if (response.status !== 200) {
     const refusal = errorSchema.safeParse(body);
+    const named = refusalKeySchema.safeParse(body);
     return fail(
       refusal.success
-        ? new SidecarRefusal(refusal.data.error)
+        ? new SidecarRefusal(refusal.data.error, named.success ? named.data.detail.key : undefined)
         : fault(`unexpected status ${String(response.status)}`),
     );
   }

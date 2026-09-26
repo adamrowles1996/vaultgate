@@ -105,6 +105,13 @@ export const errorSchema = z.looseObject({
 });
 
 /**
+The snapshot a protocol error names (`detail.key`, as `snapshot_missing` does), by the key rule.
+*/
+export const refusalKeySchema = z.looseObject({
+  detail: z.looseObject({ key: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/u) }),
+});
+
+/**
 The build spec vaultgate sends with an archive (`X-Vaultgate-Build`).
 */
 export interface BuildSpec {

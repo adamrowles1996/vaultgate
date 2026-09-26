@@ -158,7 +158,7 @@ describe('one code call over its repositories (ACT-110, ACT-112)', () => {
     ]);
   });
 
-  it('ACT-112 the first repository that cannot be prepared ends the call with its error', async () => {
+  it('ACT-110 ACT-112 the first repository that cannot be prepared ends the call with its error, naming it', async () => {
     const refused = new ActionError('ref_not_found');
     const { indexes, sidecar } = stubs([], { b: refused });
     const error = unwrapFail(
@@ -168,8 +168,14 @@ describe('one code call over its repositories (ACT-110, ACT-112)', () => {
         SEARCH,
       ),
     );
-    expect(error).toBe(refused);
+    expect([error.code, error.detail]).toStrictEqual(['ref_not_found', { repo: 'b' }]);
     expect(indexes.prepares).toStrictEqual(['a', 'b', 'c']);
+    const alone = await runCode(
+      { sidecar, indexes, clock: new ManualClock() },
+      [context('b')],
+      SEARCH,
+    );
+    expect(unwrapFail(alone)).toBe(refused);
   });
 
   it('ACT-110 without the engine too, a selection no repository shares is refused before anything is prepared', async () => {

@@ -189,7 +189,10 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
   commit with no archive (`ref_not_found`, ACT-104), is remembered for `refresh_interval_s`: a call
   within it answers the same at once, without fetching the archive or the credential again or
   recording another build. A build of a ref the call named that ACT-108's caps refuse answers
-  `rate_limited` at once, without waiting. `actions_list_targets`
+  `rate_limited` at once, without waiting. With several repositories, an error of one of them (a
+  ref that does not resolve, a credential or build that fails, a sidecar refusal that names its
+  snapshot in `detail.key`) carries that connection's name in `detail.repo`, and a
+  `snapshot_missing` that names one snapshot prepares only that one again. `actions_list_targets`
   reports a code target's `repository`, its configured `ref` (absent for the default branch),
   the `content` it allows, whether `code_read` is allowed (`read`) and `read` as its only
   operation (ACT-19).
