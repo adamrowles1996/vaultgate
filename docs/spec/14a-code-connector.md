@@ -139,7 +139,8 @@ defaults to ACT-106's list.
 - **ACT-110** The three tools take `repo` in place of `target` (ACT-16): the name of a code
   target, or for the two search tools a list of 1 to 10 distinct names, searched together.
   - `code_search`: `query` (1–1 000 characters); `repo`; optional `ref`; optional `content`
-    (`code`, `docs`, `config` or `all`); `top_k` (1–200, default 5); `max_snippet_lines` (an
+    (`code`, `docs`, `config` or `all`); `top_k` (1–200; default 5, lowered to the smallest
+    `max_top_k` of the call's repositories when that is below 5); `max_snippet_lines` (an
     integer 0–1 000 or `null`, default 10); optional `paths` and `languages` (at most 20 each,
     passed to `semble` as its path and language filters).
   - `code_find_related`: `file_path` and `line` (a location from a search result); `repo`;
@@ -152,8 +153,8 @@ defaults to ACT-106's list.
   defaults to every type the policy's `content` allows; `all` means the same; a single type the
   policy does not allow is `policy_denied` (`reason: content`). With several repositories the
   selection is the types every one of their policies allows, and a selection none of them
-  shares is `policy_denied` (`reason: content`). A `top_k` above a target's `max_top_k` is
-  `policy_denied` (`reason: top_k`). `code_read` is `policy_denied` (`reason: read`) when
+  shares is `policy_denied` (`reason: content`). A `top_k` the call gives above a target's
+  `max_top_k` is `policy_denied` (`reason: top_k`); one it leaves out is never refused. `code_read` is `policy_denied` (`reason: read`) when
   `allow_read` is `false`.
 
   Both search tools return `{ query, results, repos }`. Each result is

@@ -9,7 +9,7 @@
 import { fail, ok, type Result } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
 
-import { contentOf, isRead, isRelated, isSearch, sharedContent } from './authorize.ts';
+import { contentOf, isRead, isRelated, isSearch, sharedContent, topKFor } from './authorize.ts';
 import { documentsOf } from './builds.ts';
 import { refusalError } from './refusals.ts';
 import { SidecarRefusal } from './sidecar.ts';
@@ -143,8 +143,10 @@ async function answer(
   const { operation, prepared, content, signal, contexts } = query;
   const maxBytes = Math.min(...contexts.map((context) => context.outputLimit.maxBytes));
   const indexes = prepared.map((entry) => ({ key: entry.key, label: entry.label }));
+  const policies = contexts.map((context) => documentsOf(context).policy);
   if (isSearch(operation)) {
-    const { query: text, top_k, max_snippet_lines, paths, languages } = operation;
+    const { query: text, max_snippet_lines, paths, languages } = operation;
+    const top_k = topKFor(policies, operation.top_k);
     const found = await dependencies.sidecar.search(
       { indexes, content, query: text, top_k, max_snippet_lines, paths, languages },
       signal,
@@ -152,7 +154,8 @@ async function answer(
     return found.ok ? ok(fitted(text, found.value, prepared, maxBytes)) : found;
   }
   if (isRelated(contexts[0].tool, operation)) {
-    const { file_path, line, top_k, max_snippet_lines } = operation;
+    const { file_path, line, max_snippet_lines } = operation;
+    const top_k = topKFor(policies, operation.top_k);
     const found = await dependencies.sidecar.related(
       { indexes, content, file_path, line, top_k, max_snippet_lines },
       signal,

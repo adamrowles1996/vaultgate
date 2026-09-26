@@ -21,7 +21,10 @@ export const CODE_READ = 'code_read';
 const MAX_REPOS = 10;
 const MAX_QUERY = 1000;
 const MAX_TOP_K = 200;
-const DEFAULT_TOP_K = 5;
+/**
+`semble`'s own default; a connection whose `max_top_k` is lower lowers it (ACT-110).
+*/
+export const DEFAULT_TOP_K = 5;
 const MAX_SNIPPET_LINES = 1000;
 const DEFAULT_SNIPPET_LINES = 10;
 const MAX_FILTERS = 20;
@@ -74,13 +77,20 @@ const contentSchema = z
       'the connection allows.',
   );
 
+/**
+ * Optional rather than defaulted, so a call that leaves it out can be given
+ * the lower of `semble`'s 5 and the connections' `max_top_k` after the policy
+ * has judged it (ACT-110); the schema still advertises 5 as the default.
+ */
 const topKSchema = z
   .number()
   .int()
   .min(1)
   .max(MAX_TOP_K)
-  .default(DEFAULT_TOP_K)
-  .describe('Number of results to return.');
+  .optional()
+  .meta({ default: DEFAULT_TOP_K });
+
+const TOP_K_DEFAULT_HELP = 'Default 5, or the connection’s own maximum when that is lower.';
 
 const snippetSchema = z
   .number()
@@ -99,7 +109,7 @@ export interface SearchOperation {
   readonly query: string;
   readonly ref?: string | undefined;
   readonly content?: ContentSelection | undefined;
-  readonly top_k: number;
+  readonly top_k?: number | undefined;
   readonly max_snippet_lines: number | null;
   readonly paths?: readonly string[] | undefined;
   readonly languages?: readonly string[] | undefined;
@@ -110,7 +120,7 @@ export interface RelatedOperation {
   readonly line: number;
   readonly ref?: string | undefined;
   readonly content?: ContentSelection | undefined;
-  readonly top_k: number;
+  readonly top_k?: number | undefined;
   readonly max_snippet_lines: number | null;
 }
 
@@ -131,7 +141,7 @@ const searchArguments = z.strictObject({
     .describe('Natural language or code query: what the code does, or its name.'),
   ref: referenceSchema.optional(),
   content: contentSchema.optional(),
-  top_k: topKSchema,
+  top_k: topKSchema.describe(`Number of results to return. ${TOP_K_DEFAULT_HELP}`),
   max_snippet_lines: snippetSchema,
   paths: z
     .array(filePathSchema)
@@ -152,7 +162,7 @@ const relatedArguments = z.strictObject({
   line: z.number().int().min(1).describe('Line number (1-indexed), from a search result.'),
   ref: referenceSchema.optional(),
   content: contentSchema.optional(),
-  top_k: topKSchema.describe('Number of similar chunks to return.'),
+  top_k: topKSchema.describe(`Number of similar chunks to return. ${TOP_K_DEFAULT_HELP}`),
   max_snippet_lines: snippetSchema,
 }) satisfies OperationSchema<RelatedOperation>;
 

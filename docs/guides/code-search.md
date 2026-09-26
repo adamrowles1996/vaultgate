@@ -95,6 +95,7 @@ code_read          repo, file_path, [ref], [start_line], [end_line]
   `semble` prefixes merged repositories, and `code_find_related` takes such a path.
 - `content` is `code`, `docs`, `config` or `all`; the default is every type the connection
   allows.
+- `top_k` defaults to 5, or to the connection's `max_top_k` when you set that lower.
 - `max_snippet_lines`: `0` for the location only, `N` for the first `N` lines of each chunk,
   `null` for the whole chunk.
 - `ref`, with one `repo` only: a branch, a tag, a 40-character SHA or `pr:<n>`.

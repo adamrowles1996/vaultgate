@@ -1,7 +1,7 @@
 /**
  * The `code` connector's policy decisions (ACT-110): pure, no I/O (ACT-78).
  * Every call is a read. A per-call `ref` needs `allow_ref`, a single content
- * type must be one the policy allows, `top_k` may not pass `max_top_k`, and
+ * type must be one the policy allows, a `top_k` given may not pass `max_top_k`, and
  * `code_read` needs `allow_read`. The description names the query, the path
  * and the line for the audit trail (ACT-116).
  */
@@ -16,6 +16,7 @@ import {
 import {
   CODE_FIND_RELATED,
   CODE_READ,
+  DEFAULT_TOP_K,
   type CodeOperation,
   type ContentSelection,
   type ReadOperation,
@@ -70,6 +71,19 @@ export function sharedContent(
 
 function topKOf(operation: CodeOperation): number | undefined {
   return 'top_k' in operation ? operation.top_k : undefined;
+}
+
+/**
+ * ACT-110: the `top_k` a search runs with. One the call gave has passed every
+ * policy already; one it left out is `semble`'s 5, lowered to the smallest
+ * `max_top_k` among the repositories, so a connection that caps it lower still
+ * answers a call that asks for nothing.
+ */
+export function topKFor(
+  policies: readonly Pick<CodePolicy, 'max_top_k'>[],
+  requested: number | undefined,
+): number {
+  return requested ?? Math.min(DEFAULT_TOP_K, ...policies.map((policy) => policy.max_top_k));
 }
 
 export function authorizeCode(request: CodeRequest, operation: CodeOperation): PolicyDecision {

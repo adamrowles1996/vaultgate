@@ -346,7 +346,8 @@ detail or the audit row leaves the engine.
 The three take `repo` in place of `target`: a Semble connection's name, or for the two search
 tools a list of up to ten names searched together. `code_search` takes `query`, and
 `code_find_related` a `file_path` and `line` from an earlier result; both take `semble`'s own
-`content` (`code`, `docs`, `config` or `all`), `top_k` (5 by default) and `max_snippet_lines`
+`content` (`code`, `docs`, `config` or `all`), `top_k` (5 by default, or the connection's
+`max_top_k` when that is lower) and `max_snippet_lines`
 (`0`, `N` or `null`, 10 by default), and `code_search` also `paths` and `languages`. `code_read`
 takes one `repo`, a `file_path` and an optional `start_line` and `end_line`. Each may name a
 `ref` (a branch, a tag, a 40-character SHA or `pr:<n>`) with one repository, where the connection
