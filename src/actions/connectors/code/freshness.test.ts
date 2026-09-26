@@ -156,4 +156,28 @@ describe('the freshness of the configured ref (ACT-108)', () => {
     const configured = reposOf(await code.harness.engine.call(codeCaller(), search('widgets')));
     expect(configured).toStrictEqual([expect.objectContaining({ ref: 'main', commit: SHA.main })]);
   });
+
+  it('ACT-107 ACT-108 a call’s build of the configured ref makes the whole content too, moved or not; a named ref’s only the call’s', async () => {
+    const references = { main: SHA.main, 'v1.0': SHA.tag };
+    const code = movable(references);
+    await createCodeTarget(code);
+    code.sidecar.snapshots.clear();
+    await code.harness.engine.call(codeCaller(), search('widgets', { content: 'docs' }));
+    references.main = SHA.moved;
+    await code.harness.clock.advance(300_000);
+    await code.harness.engine.call(codeCaller(), search('widgets', { content: 'code' }));
+    await code.settle();
+    await code.harness.engine.call(
+      codeCaller(),
+      search('widgets', { ref: 'v1.0', content: 'config' }),
+    );
+    expect(
+      code.sidecar.builds.map((build) => [build.spec.commit, build.spec.variants]),
+    ).toStrictEqual([
+      [SHA.main, [['code', 'docs', 'config']]],
+      [SHA.main, [['docs'], ['code', 'docs', 'config']]],
+      [SHA.moved, [['code'], ['code', 'docs', 'config']]],
+      [SHA.tag, [['config']]],
+    ]);
+  });
 });

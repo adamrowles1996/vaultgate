@@ -12,21 +12,16 @@ import { fail, ok, type Result } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
 
 import { BUILD_RETRY_AFTER_S } from './build-slots.ts';
-import {
-  BUSY,
-  documentsOf,
-  githubAccess,
-  keyOf,
-  type Builds,
-  type BuildRequest,
-} from './builds.ts';
-import { resolveReference, type ResolvedReference } from './github.ts';
+import { BUSY, documentsOf, keyOf, type Builds, type BuildRequest } from './builds.ts';
 import { extractionFingerprint } from './keys.ts';
 import { refusalError } from './refusals.ts';
+import { isFresh, resolveFor } from './resolution.ts';
+import { normaliseContent } from './schemas.ts';
 import { background, until } from './timing.ts';
 
 import type { PinnedFetch } from '../../../net/pinned-https.ts';
 import type { ConnectorServices, RunContext } from '../connector.ts';
+import type { ResolvedReference } from './github.ts';
 import type { ContentType } from './schemas.ts';
 import type { SidecarClient } from './sidecar.ts';
 import type { CodeState, CurrentSnapshot } from './state.ts';
@@ -74,8 +69,6 @@ export interface Indexes {
   forget(targetId: string, key: string): void;
 }
 
-const MS_PER_SECOND = 1000;
-
 function notReady(repo: string, state: 'building' | 'failed', reason?: string): ActionError {
   return new ActionError('index_not_ready', {
     state,
@@ -93,45 +86,20 @@ function failedBuild(label: string, reason: string): ActionError {
     : notReady(label, 'failed', reason);
 }
 
-function isFresh(services: ConnectorServices, at: number, context: Context): boolean {
-  return services.now() - at < documentsOf(context).policy.refresh_interval_s * MS_PER_SECOND;
-}
-
 /**
- * ACT-104, ACT-108: the commit a ref names. A ref the call names is resolved
- * every time (a SHA needs no request); the configured one comes from the
- * last resolution while it is fresh, and so does its failure while there is
- * a snapshot to answer from instead, which is recorded once per resolution.
+ * ACT-107, ACT-108: the indexes a call's build makes. A build of the
+ * configured ref makes the policy's whole `content` beside the call's own
+ * selection, as a save does, so the next call without a `content` finds its
+ * index built rather than building it on demand; a ref the call named makes
+ * the call's selection only.
  */
-async function resolveFor(
-  dependencies: IndexesDependencies,
+function variantsFor(
   request: PrepareRequest,
-  hasSnapshot: boolean,
-): Promise<Result<ResolvedReference, ActionError>> {
-  const { context } = request;
-  const { destination } = documentsOf(context);
-  const github = githubAccess(context, dependencies, context.signal);
-  if (request.ref !== undefined) {
-    return resolveReference(github, destination.repository, request.ref);
-  }
-  const { id: targetId, name: targetName } = context.support.target;
-  const cached = dependencies.state.target(targetId).resolution;
-  if (cached !== undefined && isFresh(dependencies.services, cached.at, context)) {
-    if ('commit' in cached) {
-      return ok({ commit: cached.commit, ref: cached.ref });
-    }
-    if (hasSnapshot) {
-      return fail(new ActionError(cached.failure));
-    }
-  }
-  const resolved = await resolveReference(github, destination.repository, destination.ref);
-  dependencies.state.resolved(targetId, resolved);
-  if (hasSnapshot && !resolved.ok) {
-    const { content } = request;
-    const reason = resolved.error.code;
-    dependencies.state.refused({ targetId, targetName, trigger: 'call', content, reason });
-  }
-  return resolved;
+  isConfigured: boolean,
+): readonly (readonly ContentType[])[] {
+  const whole = normaliseContent(documentsOf(request.context).policy.content);
+  const isWhole = whole.join('+') === request.content.join('+');
+  return isConfigured && !isWhole ? [request.content, whole] : [request.content];
 }
 
 function buildRequestFor(
@@ -146,7 +114,7 @@ function buildRequestFor(
     commit: resolved.commit,
     ref: resolved.ref,
     trigger: 'call',
-    variants: [request.content],
+    variants: variantsFor(request, isConfigured),
     configured: isConfigured,
   };
 }

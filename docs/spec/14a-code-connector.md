@@ -113,7 +113,10 @@ defaults to ACT-106's list.
     operator session and CSRF token; it is not a target write, so ID-15's re-authentication does
     not apply.
   - When a call needs a snapshot or an index that does not exist (trigger `call`); the call waits
-    for it (ACT-112). The configured ref is resolved again when its last resolution is older than
+    for it (ACT-112). A call's build of the configured ref, moved or not, makes the index of the
+    policy's whole `content` beside the call's own selection, as a save does, so the next call
+    without a `content` finds it built; a build of a ref the call names makes the call's selection
+    only. The configured ref is resolved again when its last resolution is older than
     `refresh_interval_s`. If it moved and the previous commit's snapshot exists, the call is
     answered from that snapshot with `stale: true` while the new one builds in the background. A
     failed resolution with a snapshot to answer from never fails the call; it is recorded on the
