@@ -26,15 +26,21 @@ function tarballs(code: Code): readonly string[] {
     .map((path) => path.slice(path.lastIndexOf('/') + 1));
 }
 
-function errorOf(outcome: CallOutcome): readonly unknown[] {
-  return outcome.kind === 'error' ? [outcome.error.code, outcome.error.detail] : [outcome.kind];
+function errorOf(outcome: CallOutcome | undefined): readonly unknown[] {
+  return outcome?.kind === 'error' ? [outcome.error.code, outcome.error.detail] : [outcome?.kind];
 }
 
 /**
 Calls that name these refs on `repo`, answered at once (`build_wait_s` 0) while their builds carry on.
 */
-async function named(code: Code, repo: string, refs: readonly string[]): Promise<CallOutcome[]> {
-  const pending = refs.map((ref) => code.harness.engine.call(codeCaller(), search(repo, { ref })));
+async function named(
+  code: Code,
+  repo: string,
+  references: readonly string[],
+): Promise<CallOutcome[]> {
+  const pending = references.map((reference) =>
+    code.harness.engine.call(codeCaller(), search(repo, { ref: reference })),
+  );
   await code.harness.clock.advance(0);
   return Promise.all(pending);
 }
@@ -67,11 +73,13 @@ describe('the caps on the builds calls start (ACT-108, ACT-112, T46)', () => {
     // A refused build is not a build: no event, and nothing on the page.
     expect(code.harness.audit.map((event) => event.action)).not.toContain('code_index_failed');
     // A ref already building is joined, and the configured ref needs no new slot.
-    expect(errorOf((await named(code, 'widgets', ['v1.0']))[0] as CallOutcome)).toStrictEqual([
+    const [joined] = await named(code, 'widgets', ['v1.0']);
+    expect(errorOf(joined)).toStrictEqual([
       'index_not_ready',
       { state: 'building', repo: 'widgets' },
     ]);
-    expect((await code.harness.engine.call(codeCaller(), search('widgets'))).kind).toBe('ok');
+    const configured = await code.harness.engine.call(codeCaller(), search('widgets'));
+    expect(configured.kind).toBe('ok');
     release();
     await code.settle();
     const later = await code.harness.engine.call(codeCaller(), search('widgets', { ref: 'pr:7' }));
@@ -110,16 +118,14 @@ describe('the caps on the builds calls start (ACT-108, ACT-112, T46)', () => {
     await code.settle();
     // The save resolved its ref and waits for a slot: no archive yet, and no refusal.
     expect(code.sidecar.builds).toHaveLength(6);
-    const refused = await named(code, 'third', ['feature/x']);
-    expect(errorOf(refused[0] as CallOutcome)).toStrictEqual([
-      'rate_limited',
-      { retry_after_s: 30, repo: 'third' },
-    ]);
+    const [refused] = await named(code, 'third', ['feature/x']);
+    expect(errorOf(refused)).toStrictEqual(['rate_limited', { retry_after_s: 30, repo: 'third' }]);
     release();
     await code.settle();
     const saved = code.sidecar.builds.at(-1);
     expect([saved?.spec.owner, saved?.spec.commit]).toStrictEqual([third.id, SHA.tag]);
-    expect((await code.harness.engine.call(codeCaller(), search('third'))).kind).toBe('ok');
+    const answered = await code.harness.engine.call(codeCaller(), search('third'));
+    expect(answered.kind).toBe('ok');
   });
 
   it('ACT-109 T46 a build whose target is deleted while it waits for its slot never downloads', async () => {

@@ -23,14 +23,13 @@ describe('the build slots (ACT-108, T46)', () => {
     const slots = createBuildSlots({ total: 1, perTarget: 1 });
     const named = slots.tryTake('a');
     const order: string[] = [];
-    const save = slots.take().then((release) => {
-      order.push('save');
+    const queued = async (name: string): Promise<() => void> => {
+      const release = await slots.take();
+      order.push(name);
       return release;
-    });
-    const operator = slots.take().then((release) => {
-      order.push('operator');
-      return release;
-    });
+    };
+    const save = queued('save');
+    const operator = queued('operator');
     await Promise.resolve();
     expect(order).toStrictEqual([]);
     // A named ref waits for nothing: the total is taken.
