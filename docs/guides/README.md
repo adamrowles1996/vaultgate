@@ -25,6 +25,7 @@ relies on.
 | [Connect MCP Inspector](connect-mcp-inspector.md) | The Inspector's OAuth flow, its loopback callback, CLI mode.                |
 | [Tools and scopes](tools-and-scopes.md)           | Every tool, its scope, inputs, outputs, and the secret-handling rules.      |
 | [Actions](actions.md)                             | Targets, grants and policy for the actions layer; calling an `http` target. |
+| [Code search](code-search.md)                     | Semble connections to GitHub repositories: token, sidecar, tools, parity.   |
 
 ## Operate
 

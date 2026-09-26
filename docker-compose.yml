@@ -5,6 +5,13 @@
 # VAULTGATE_PUBLIC_URL and VAULTGATE_BW_CLIENT_ID). Secrets are files under
 # ./secrets/, mounted at /run/secrets/<name> and referenced through the *_FILE
 # variables, so no secret value appears in an environment listing.
+#
+# The code connector's sidecar (ACT-114) is the optional `code` profile:
+#   docker compose --profile code up -d
+# with VAULTGATE_ENABLE_ACTIONS, VAULTGATE_ACTIONS_ENABLE_CODE=true and
+# VAULTGATE_ACTIONS_CODE_URL=http://code:8000 in .env (docs/guides/code-search.md).
+# It shares only the internal `code` network with vaultgate, so it has no route
+# to the internet, the host or Caddy.
 
 services:
   vaultgate:
@@ -26,6 +33,9 @@ services:
       - bw_client_secret
     volumes:
       - vaultgate-data:/data
+    networks:
+      - default
+      - code
     expose:
       - '8080'
     read_only: true
@@ -45,6 +55,27 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
+
+  code:
+    image: ghcr.io/adamrowles1996/vaultgate-code:${VAULTGATE_VERSION:-latest}
+    profiles:
+      - code
+    restart: unless-stopped
+    networks:
+      - code
+    volumes:
+      - vaultgate-code:/var/lib/vaultgate-code
+    expose:
+      - '8000'
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${VAULTGATE_CODE_MEMORY_LIMIT:-2g}
+    pids_limit: 128
 
   caddy:
     image: caddy:2.11.4-alpine@sha256:de23def33b17fb5d1290b0f6c2add1d70780e52341896c00a4c8a2a2fe9d355e
@@ -76,7 +107,14 @@ secrets:
   bw_client_secret:
     file: ./secrets/bw_client_secret
 
+networks:
+  default:
+  # vaultgate and the code sidecar only; `internal` gives it no route out.
+  code:
+    internal: true
+
 volumes:
   vaultgate-data:
+  vaultgate-code:
   caddy-data:
   caddy-config:

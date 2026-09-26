@@ -1,0 +1,85 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "The code connector's sidecar (docs/spec/14a-code-connector.md, ACT-114): a Container App of its own in vaultgate's environment, with internal-only ingress on 8000 and ephemeral storage for its snapshots and indexes. It is never a second container of vaultgate's app, whose containers share a network namespace with bw serve's unauthenticated loopback. Linked from ../mainTemplate.json when deployCodeSidecar is true."
+  },
+  "parameters": {
+    "appName": {
+      "type": "string",
+      "metadata": { "description": "Container App name of the sidecar." }
+    },
+    "location": {
+      "type": "string",
+      "metadata": { "description": "Azure region." }
+    },
+    "environmentId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource id of the Container Apps managed environment vaultgate runs in."
+      }
+    },
+    "image": {
+      "type": "string",
+      "metadata": { "description": "Fully qualified sidecar image reference." }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2026-01-01",
+      "name": "[parameters('appName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "managedEnvironmentId": "[parameters('environmentId')]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": false,
+            "targetPort": 8000,
+            "transport": "http",
+            "allowInsecure": true,
+            "traffic": [{ "weight": 100, "latestRevision": true }]
+          }
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "vaultgate-code",
+              "image": "[parameters('image')]",
+              "resources": { "cpu": 1, "memory": "2Gi" },
+              "env": [{ "name": "VAULTGATE_CODE_MAX_MEMORY_BYTES", "value": "1073741824" }],
+              "volumeMounts": [{ "volumeName": "state", "mountPath": "/var/lib/vaultgate-code" }],
+              "probes": [
+                {
+                  "type": "Startup",
+                  "httpGet": { "path": "/v1/health", "port": 8000, "scheme": "HTTP" },
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 24
+                },
+                {
+                  "type": "Liveness",
+                  "httpGet": { "path": "/v1/health", "port": 8000, "scheme": "HTTP" },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 30,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 3
+                }
+              ]
+            }
+          ],
+          "scale": { "minReplicas": 1, "maxReplicas": 1 },
+          "volumes": [{ "name": "state", "storageType": "EmptyDir" }]
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "fqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('appName'))).configuration.ingress.fqdn]"
+    }
+  }
+}

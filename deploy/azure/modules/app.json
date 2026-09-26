@@ -61,6 +61,12 @@
       "type": "string",
       "metadata": { "description": "VAULTGATE_LOG_LEVEL." }
     },
+    "codeSidecarHost": {
+      "type": "string",
+      "metadata": {
+        "description": "The code sidecar's Container App name, reached as http://<it> inside the environment (VAULTGATE_ACTIONS_CODE_URL), or empty when it is not deployed (vaultgate drops empty values)."
+      }
+    },
     "hasBitwardenCredentials": {
       "type": "bool",
       "metadata": {
@@ -109,6 +115,10 @@
         "value": "[if(parameters('enableWriteScope'), 'true', 'false')]"
       },
       { "name": "VAULTGATE_LOG_LEVEL", "value": "[parameters('logLevel')]" },
+      {
+        "name": "VAULTGATE_ACTIONS_CODE_URL",
+        "value": "[if(empty(parameters('codeSidecarHost')), '', format('http://{0}', parameters('codeSidecarHost')))]"
+      },
       { "name": "VAULTGATE_SECRET_KEY", "secretRef": "[variables('secretNames')[3]]" }
     ],
     "bitwardenEnvironment": [

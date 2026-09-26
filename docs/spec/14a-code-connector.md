@@ -206,9 +206,9 @@ text, truncated }`, at most `max_read_lines` lines. Every result passes the engi
     host. It has no published port, `cap_drop: [ALL]`, `no-new-privileges`, a read-only root
     filesystem with `tmpfs` for `/tmp`, a named volume for its state, a memory limit (2 GiB
     default) and a `pids` limit.
-  - **systemd** (`install.sh --with-code-sidecar`): its own unit and its own system user, a state
-    directory outside vaultgate's data directory, and a Unix socket that only vaultgate's group
-    may open. The unit runs with `PrivateNetwork=yes`, `IPAddressDeny=any` and
+  - **systemd** (`install.sh --with-code-sidecar`): its own unit and its own system user and
+    group, a state directory outside vaultgate's data directory, and a Unix socket that only that
+    group may open, whose one other member is vaultgate's user. The unit runs with `PrivateNetwork=yes`, `IPAddressDeny=any` and
     `RestrictAddressFamilies=AF_UNIX`, so it has no network interface but a loopback of its own,
     together with the rest of systemd's sandboxing (`ProtectSystem=strict`, `ProtectHome`,
     `PrivateTmp`, `PrivateDevices`, `NoNewPrivileges`, an empty capability bounding set, a

@@ -1,0 +1,84 @@
+# systemd unit for the code connector's sidecar on a bare Linux install
+# (docs/spec/14a-code-connector.md, ACT-113 and ACT-114; sidecars/code/).
+# `install.sh --with-code-sidecar` copies this file to
+# /etc/systemd/system/vaultgate-code.service.
+#
+# The sidecar holds no credential and needs no network: vaultgate fetches each
+# repository archive itself and streams it in over a Unix socket that only the
+# vaultgate-code group may open (vaultgate's user is a member). The unit has
+# no network interface but a loopback of its own, and no address family but
+# AF_UNIX, so it can reach neither the internet nor bw serve's loopback.
+[Unit]
+Description=vaultgate code search sidecar (semble)
+Documentation=https://github.com/adamrowles1996/vaultgate/blob/main/sidecars/code/README.md
+Before=vaultgate.service
+
+[Service]
+Type=simple
+User=vaultgate-code
+Group=vaultgate-code
+DynamicUser=no
+# Optional limits (VAULTGATE_CODE_MAX_SNAPSHOTS, _MAX_STORAGE_BYTES,
+# _MAX_MEMORY_BYTES, _BUILD_CONCURRENCY): sidecars/code/README.md.
+EnvironmentFile=-/etc/vaultgate/vaultgate-code.env
+Environment=HF_HUB_OFFLINE=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/opt/vaultgate-code/current/app
+WorkingDirectory=/var/lib/vaultgate-code
+ExecStart=/opt/vaultgate-code/current/venv/bin/python -m vaultgate_code serve \
+  --state /var/lib/vaultgate-code \
+  --model /opt/vaultgate-code/current/model \
+  --socket /run/vaultgate-code/code.sock
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+UMask=0027
+
+# The socket lives here: owner vaultgate-code, traversable by its group only.
+RuntimeDirectory=vaultgate-code
+RuntimeDirectoryMode=0750
+# Snapshots and indexes, outside vaultgate's own data directory. Nothing in it
+# is irreplaceable: a lost state directory costs only the time to rebuild.
+StateDirectory=vaultgate-code
+StateDirectoryMode=0700
+
+# No network at all.
+PrivateNetwork=yes
+IPAddressDeny=any
+RestrictAddressFamilies=AF_UNIX
+
+# Hardening.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=yes
+SystemCallFilter=@system-service
+# Not @resources: the linear algebra library under the model calls mbind(2) when it loads.
+SystemCallFilter=~@privileged
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+
+# The model, a build child and the loaded indexes (VAULTGATE_CODE_MAX_MEMORY_BYTES,
+# 1 GiB by default) must fit; a build that runs out of memory fails alone.
+MemoryMax=2G
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

@@ -16,6 +16,7 @@ linked templates under `modules/` and the portal form is
 | User-assigned identity `<name>-identity` | **Key Vault Secrets User** on the vault; the app resolves its secret references with it.                                  |
 | Storage account `<name><hash>` + share   | Standard LRS, TLS 1.2, no public blob access. The Azure Files share `vaultgate-data` is mounted at `/data` over SMB.      |
 | Container App `<name>`                   | External HTTPS ingress → port 8080, one replica, health probes on `/healthz` and `/readyz`.                               |
+| Container App `<name>-code` (optional)   | Only with `deployCodeSidecar`: the code connector's sidecar, internal-only ingress → port 8000, ephemeral storage.        |
 
 Secrets never appear as plain environment values: the Container App holds Key
 Vault references and Azure injects the values at start-up. Redeploying the
@@ -131,6 +132,18 @@ issuer.
 - **Logs.** `az containerapp logs show --follow`, or query
   `ContainerAppConsoleLogs_CL` in the workspace. Log lines are JSON with
   secrets redacted.
+- **Code search sidecar.** `deployCodeSidecar=true` deploys the
+  [code connector](../../docs/guides/code-search.md)'s sidecar as its own
+  Container App with internal-only ingress and sets vaultgate's
+  `VAULTGATE_ACTIONS_CODE_URL` to `http://<name>-code`. It is never a second
+  container of vaultgate's app, whose containers share a network namespace
+  with `bw serve`'s loopback (spec ACT-114). Turn the connector on with
+  `VAULTGATE_ENABLE_ACTIONS=true` and `VAULTGATE_ACTIONS_ENABLE_CODE=true`
+  (`az containerapp update --set-env-vars …`). Its storage is ephemeral, so a
+  restart costs only the time to rebuild the indexes. A Container Apps
+  environment without VNet integration cannot deny the sidecar egress; the
+  sidecar never makes an outbound connection, and
+  [the threat model](../../docs/THREAT_MODEL.md) records the gap.
 - **Redeploying an existing installation** with the same name is safe: every
   resource name is derived from `name` and the resource group id, so
   `az deployment group create` re-applies the same resources. Supply the same
