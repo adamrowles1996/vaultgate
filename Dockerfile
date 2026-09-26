@@ -20,13 +20,13 @@ ARG BW_VERSION=2026.9.0
 ARG BW_SHA256_AMD64=580c1deec8345b19dbac7f8b02babb6cc4fe250c69c567e29061f727f1e40768
 ARG BW_SHA256_ARM64=3f474cc34b701a1cebdd486009870038b034343afb83095607422cdad4c3653a
 
-FROM node:26-bookworm-slim@sha256:582460f614631b59b824ac6020533b9bf339c7fdf3a6d7db31abb6b4065f0212 AS bw-amd64
+FROM node:26-bookworm-slim@sha256:662933cf47f013bc8e4beb31a6116448427a82057ba7c42c97e4c5ba766504c2 AS bw-amd64
 ARG BW_VERSION
 ARG BW_SHA256_AMD64
 ENV BW_SHA256=${BW_SHA256_AMD64}
 ADD https://github.com/bitwarden/clients/releases/download/cli-v${BW_VERSION}/bw-linux-${BW_VERSION}.zip /tmp/bw.zip
 
-FROM node:26-bookworm-slim@sha256:582460f614631b59b824ac6020533b9bf339c7fdf3a6d7db31abb6b4065f0212 AS bw-arm64
+FROM node:26-bookworm-slim@sha256:662933cf47f013bc8e4beb31a6116448427a82057ba7c42c97e4c5ba766504c2 AS bw-arm64
 ARG BW_VERSION
 ARG BW_SHA256_ARM64
 ENV BW_SHA256=${BW_SHA256_ARM64}
@@ -50,7 +50,7 @@ RUN echo "${BW_SHA256}  /tmp/bw.zip" | sha256sum --check --strict \
   && chmod 0755 /opt/bw/bw \
   && [ "$(/opt/bw/bw --version)" = "${BW_VERSION}" ]
 
-FROM node:26-bookworm-slim@sha256:582460f614631b59b824ac6020533b9bf339c7fdf3a6d7db31abb6b4065f0212 AS build
+FROM node:26-bookworm-slim@sha256:662933cf47f013bc8e4beb31a6116448427a82057ba7c42c97e4c5ba766504c2 AS build
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 # --ignore-scripts: the lockfile pins every package; no install script is needed
@@ -60,7 +60,7 @@ COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN npm run build && npm prune --omit=dev --ignore-scripts
 
-FROM node:26-bookworm-slim@sha256:582460f614631b59b824ac6020533b9bf339c7fdf3a6d7db31abb6b4065f0212 AS runtime
+FROM node:26-bookworm-slim@sha256:662933cf47f013bc8e4beb31a6116448427a82057ba7c42c97e4c5ba766504c2 AS runtime
 ARG BW_VERSION
 LABEL org.opencontainers.image.title="vaultgate" \
   org.opencontainers.image.description="Remote MCP server for Bitwarden with OAuth 2.1" \
