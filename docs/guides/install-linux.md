@@ -107,8 +107,11 @@ The sidecar's unit has no network interface but a loopback of its own
 (`PrivateNetwork=yes`, `IPAddressDeny=any`, `RestrictAddressFamilies=AF_UNIX`) and systemd's other
 sandboxing, so it can reach neither the internet nor `bw serve`; vaultgate fetches each
 repository itself and streams it in (spec [ACT-114](../spec/14a-code-connector.md)). Its limits
-are commented out in `/etc/vaultgate/vaultgate-code.env`. Once installed, every re-run of the
-installer upgrades the sidecar with the core, since the two speak one protocol version.
+are commented out in `/etc/vaultgate/vaultgate-code.env`. The unit caps the service at 2 GB
+(`MemoryMax`); for large repositories, raise it in a drop-in that upgrades keep
+(`sudo systemctl edit vaultgate-code`, then `[Service]` and `MemoryMax=4G`) together with
+`VAULTGATE_CODE_MAX_MEMORY_BYTES`. Once installed, every re-run of the installer upgrades the
+sidecar with the core, since the two speak one protocol version.
 
 ```bash
 sudo systemctl status vaultgate-code

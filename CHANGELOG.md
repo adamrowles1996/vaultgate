@@ -15,6 +15,42 @@ All notable changes to this project are documented here. The format follows
   [`sidecars/code/PROTOCOL.md`](sidecars/code/PROTOCOL.md) over a Unix socket or TCP, with no
   credential and no network. Its own suite holds 100% coverage; CI also builds and boots its image.
 
+- M16, spec 14.8, ADR 0008: **the `code` connector: Semble code search over GitHub
+  repositories**, with the arguments, defaults, ranking, snippet rule and multi-repository
+  prefixes of `semble`'s own MCP server. A _Semble connection_ is one repository, a ref (the
+  default branch when empty) and the vault field holding a read-only token, or none for a public
+  repository. `code_search`, `code_find_related` and `code_read` (scope `actions:code`) take
+  `repo`, a connection name or a list of up to ten, and an optional `ref`: a branch, a tag, a
+  commit or `pr:<n>`, which resolves through `refs/pull/<n>/head` and so needs only
+  `Contents: read`. vaultgate resolves the ref, downloads that commit's archive from GitHub
+  through its pinned transport (the token to `api.github.com` only, one redirect to
+  `codeload.github.com` without it) and streams it to the sidecar, which never sees a token; the
+  first call on a commit waits for its index (ACT-103 to ACT-117). Every call is audited per
+  repository, every build as `actions.code_index_built` or `actions.code_index_failed`, and the
+  canary suite covers every tool result, audit row and log line.
+- ACT-115, ACT-119, ACT-120: **the console's Semble · GitHub code search kind**. Add connection
+  offers it as its own card and the Connections list groups it. Its form takes the repository from
+  a list of every repository the chosen token can read (or a typed `owner/name`), a token field
+  that defaults to `password`, lists hidden custom fields and offers **No token**, the content
+  types, include and exclude patterns, whether `code_read` and a per-call ref are allowed, and the
+  caps. **Check without saving** also asks GitHub whether the token can read the repository and
+  shows its default branch and visibility. A connection's page gains an **Index** card (its
+  snapshots, indexes, skip counts, the last ref resolution, build and failure) and **Rebuild
+  index**, which needs the operator session but not re-authentication.
+- ACT-114: **the sidecar in every placement.** `install.sh --with-code-sidecar` installs it as
+  `vaultgate-code.service` under its own user, from a release bundle verified like the core
+  tarball, with a virtual environment built from the hash-locked requirements and the model checked
+  file by file; the unit has no network (`PrivateNetwork`, `IPAddressDeny=any`,
+  `RestrictAddressFamilies=AF_UNIX`), full systemd sandboxing (`systemd-analyze security` scores
+  it 0.3) and a socket only its group, which vaultgate's user joins, may open. Once installed, the
+  installer upgrades it with the core. Compose has the optional `code` profile on an `internal`
+  network, and the Azure template a `deployCodeSidecar` option that deploys a separate
+  internal-ingress Container App. Each release publishes the signed `vaultgate-code` image and
+  `vaultgate-code-<version>.tgz`, and attests the build provenance of both tarballs.
+- [Code search](docs/guides/code-search.md), a new guide: the token, the sidecar, adding and
+  granting a Semble connection, the tools, parity with `semble`'s MCP server and its two gaps
+  (local paths and forges other than GitHub), and operating the index.
+
 ### Changed
 
 - ACT-5: **the console calls a target a _connection_ rather than a _computer_**, since most

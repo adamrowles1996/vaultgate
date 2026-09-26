@@ -55,7 +55,7 @@ PrivateTmp=yes
 PrivateDevices=yes
 PrivateUsers=yes
 SystemCallFilter=@system-service
-# Not @resources: numpy's BLAS calls mbind(2) when it loads.
+# Not @resources: the linear algebra library under the model calls mbind(2) when it loads.
 SystemCallFilter=~@privileged
 SystemCallArchitectures=native
 CapabilityBoundingSet=
