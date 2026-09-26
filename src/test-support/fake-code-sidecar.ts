@@ -221,14 +221,14 @@ export function createFakeSidecar(options: FakeSidecarOptions = {}): FakeSidecar
 
   const http: LocalHttp = async (request) => {
     requests.push({ method: request.method, path: request.path });
-    if (isUnreachable) {
+    const routed = routeOf(request);
+    const scripted = 'route' in routed ? scripts.get(routed.route)?.shift() : undefined;
+    if (isUnreachable || scripted === 'unreachable') {
       throw Object.assign(new Error('connect ENOENT'), { code: 'ENOENT' });
     }
-    const routed = routeOf(request);
     if ('refused' in routed) {
       return routed.refused;
     }
-    const scripted = scripts.get(routed.route)?.shift();
     return scripted === 'hang'
       ? untilAborted(request.signal)
       : (scripted ?? answerOf(request, routed.route, routed.argument));

@@ -112,6 +112,19 @@ describe('the archive download (ACT-104, ACT-105)', () => {
     );
   });
 
+  it('ACT-104 a redirect without a Location is refused, and nothing is followed', async () => {
+    const fake = github({
+      answer: (url) =>
+        url.hostname === 'api.github.com' ? new Response(null, { status: 302 }) : undefined,
+    });
+    const error = unwrapFail(await openOver(fake));
+    expect([error.code, error.detail, fake.requests.length]).toStrictEqual([
+      'upstream_error',
+      { message: 'the redirect is not a URL' },
+      1,
+    ]);
+  });
+
   it('ACT-104 compares the repository prefix case-insensitively, as GitHub redirects to the canonical name', () => {
     expect(
       archiveRedirectProblem('https://codeload.github.com/ACME/Widgets/legacy.tar.gz/x', REPO),

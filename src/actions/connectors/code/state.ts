@@ -49,6 +49,10 @@ export interface SnapshotNote {
 
 export interface TargetState {
   resolution: Resolution | undefined;
+  /**
+  The commit the configured ref last resolved to; a failed resolution since leaves it as it was.
+  */
+  resolvedCommit: string | undefined;
   current: CurrentSnapshot | undefined;
   lastBuild: BuildRecord | undefined;
   lastFailure: BuildRecord | undefined;
@@ -91,6 +95,7 @@ export interface StateDependencies {
 function emptyTarget(): TargetState {
   return {
     resolution: undefined,
+    resolvedCommit: undefined,
     current: undefined,
     lastBuild: undefined,
     lastFailure: undefined,
@@ -142,11 +147,10 @@ function currentAfter(
   request: BuildRequest,
   meta: { readonly created_at: number },
 ): CurrentSnapshot | undefined {
-  const resolution = target.resolution;
-  const resolved =
-    resolution !== undefined && 'commit' in resolution ? resolution.commit : undefined;
-  const isCurrentReference =
-    request.configured && (resolved === undefined || resolved === request.commit);
+  // A configured build becomes current only while the configured ref still
+  // points at its commit: an older commit's build that finishes after the ref
+  // moved on is kept on the page but never answered from.
+  const isCurrentReference = request.configured && target.resolvedCommit === request.commit;
   return isCurrentReference
     ? {
         key: dependencies.keyOf(request),
@@ -219,9 +223,14 @@ export function createCodeState(dependencies: StateDependencies): CodeState {
       targets.delete(id);
     },
     resolved(targetId, resolved) {
-      target(targetId).resolution = resolved.ok
-        ? { at: services.now(), commit: resolved.value.commit, ref: resolved.value.ref }
-        : { at: services.now(), failure: resolved.error.code };
+      const found = target(targetId);
+      if (!resolved.ok) {
+        found.resolution = { at: services.now(), failure: resolved.error.code };
+        return;
+      }
+      const { commit, ref } = resolved.value;
+      found.resolution = { at: services.now(), commit, ref };
+      found.resolvedCommit = commit;
     },
     finished,
     refused(refusal) {

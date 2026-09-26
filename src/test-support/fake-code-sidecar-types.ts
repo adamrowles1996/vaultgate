@@ -13,7 +13,10 @@ export interface FakeQuery {
 /**
 What the next request of a route gets instead of its answer.
 */
-export type Script = LocalResponse | 'hang';
+/**
+`hang` waits for the abort; `unreachable` fails as if nothing listened on the socket.
+*/
+export type Script = LocalResponse | 'hang' | 'unreachable';
 
 export interface FakeSidecarOptions {
   readonly protocol?: number;

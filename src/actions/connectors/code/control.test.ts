@@ -5,6 +5,7 @@ import {
   codeCaller,
   createCodeHarness,
   createCodeTarget,
+  OTHER_REPO,
   search,
   SHA,
   sidecarResult,
@@ -67,6 +68,21 @@ describe('the target page status (ACT-115)', () => {
       status?.snapshots.at(-1)?.ref,
       status?.snapshots.at(-1)?.trigger,
     ]).toStrictEqual([false, undefined, undefined]);
+  });
+
+  it("ACT-115 another target's build in progress does not show as this one's", async () => {
+    const code = createCodeHarness();
+    const widgets = await createCodeTarget(code);
+    const release = code.sidecar.hold();
+    const gadgets = await createCodeTarget(code, {
+      name: 'gadgets',
+      destination: { repository: OTHER_REPO },
+    });
+    const mine = await code.harness.engine.code?.status(widgets.id);
+    const theirs = await code.harness.engine.code?.status(gadgets.id);
+    expect([mine?.building, theirs?.building]).toStrictEqual([false, true]);
+    release();
+    await code.settle();
   });
 
   it('ACT-115 a sidecar that does not answer within 10 seconds shows as unreachable, with what vaultgate remembers', async () => {

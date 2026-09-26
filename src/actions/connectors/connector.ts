@@ -7,34 +7,32 @@
  * it for the duration of `run` only (ACT-50). Output is raw: the engine
  * scrubs it (ACT-51) and cuts it at the cap (ACT-52).
  */
+import type { Endpoint, RunContext, TargetDocuments } from './context.ts';
 import type { ConnectorOutput, OperationDescription } from './output.ts';
+import type { ConnectorControl, ConnectorServices } from './stateful.ts';
 import type { ConnectorTool, TargetCapabilities } from './tool.ts';
 import type { ConnectorKind } from '../../config/actions.ts';
-import type { Logger } from '../../logger.ts';
 import type { Result } from '../../result.ts';
-import type { ActionsAuditSink } from '../audit.ts';
 import type { ActionError } from '../errors.ts';
-import type { CommonPolicy, PolicyDecision } from '../policy.ts';
-import type { InjectedValues } from '../scrub.ts';
+import type { PolicyDecision } from '../policy.ts';
 import type { z } from 'zod';
 
+export type {
+  Endpoint,
+  PinnedEndpoint,
+  RunContext,
+  RunSupport,
+  TargetDocuments,
+} from './context.ts';
 export type { ConnectorOutput, OperationDescription } from './output.ts';
+export type {
+  ConnectorControl,
+  ConnectorServices,
+  SavedTarget,
+  StoredTarget,
+  TargetAccess,
+} from './stateful.ts';
 export type { ConnectorTool, OperationSchema, RepoArgument, TargetCapabilities } from './tool.ts';
-
-/**
-One host a destination names and whether the transport to it is encrypted (ACT-57).
-*/
-export interface Endpoint {
-  readonly host: string;
-  readonly tls: boolean;
-}
-
-/**
-An endpoint with the address the engine resolved and validated once for this call (ACT-55).
-*/
-export interface PinnedEndpoint extends Endpoint {
-  readonly address: string;
-}
 
 /**
  * A vault field a credential mapping needs: the marker name, the selector
@@ -46,12 +44,6 @@ export interface CredentialField {
   readonly name: string;
   readonly selector: string;
   readonly role: 'secret' | 'username';
-}
-
-export interface TargetDocuments<Destination, Credential, Policy> {
-  readonly destination: Destination;
-  readonly credential: Credential;
-  readonly policy: Policy;
 }
 
 /**
@@ -109,133 +101,6 @@ export interface ConnectorSchemas<Destination, Credential, Policy> {
   ACT-103: the problem a save reports for `internal: true`, for a connector whose destinations never are.
   */
   readonly internalRefused?: string;
-}
-
-export interface OutputLimit {
-  readonly maxBytes: number;
-  /**
-  ACT-52: capture this many bytes beyond `maxBytes` so a value straddling the cut is still scrubbed.
-  */
-  readonly guardBytes: number;
-}
-
-/**
-The target a call runs against, as a connector may name it: the cache key of an adapter token (ACT-82) and the audit subject (ACT-83). Never the vault item id.
-*/
-export interface CallTarget {
-  readonly id: string;
-  readonly name: string;
-  readonly revision: number;
-}
-
-/**
- * What a connector may ask of the engine during a run, so it never reaches
- * the vault, the resolver or the audit trail itself: a second host resolved
- * under the ACT-55 rules, a secret obtained mid-call added to the scrub table
- * (ACT-51) and zeroed with the rest, and the credential rotation of ACT-83.
- */
-export interface RunSupport {
-  readonly target: CallTarget;
-  /**
-  ACT-55: resolves and validates a host beyond the destination, such as the `graph` token endpoint.
-  */
-  resolve(endpoint: Endpoint): Promise<Result<PinnedEndpoint, ActionError>>;
-  /**
-  ACT-51: a value obtained during the call joins the scrub table at once; its buffer is zeroed at the end.
-  */
-  capture(field: string, value: Buffer): void;
-  /**
-  ACT-83: writes a rotated credential back to the credential's vault item and records the event.
-  */
-  rotate(field: string, value: string): Promise<Result<void, ActionError>>;
-  /**
-   * ACT-51, ACT-53: upstream text the connector is about to log rather than
-   * return. The engine scrubs everything that leaves it, but a log line the
-   * connector writes itself never passes through that, and OPS-1's pino
-   * backstop redacts by field name, not by content: this is the one way a
-   * driver message reaches the log without the call's scrub table seeing it.
-   */
-  scrub(text: string): string;
-}
-
-export interface RunContext<Destination, Credential, Policy> extends TargetDocuments<
-  Destination,
-  Credential,
-  Policy
-> {
-  readonly common: CommonPolicy;
-  /**
-  The tool the agent called; `sql` serves two and runs them differently (ACT-24, ACT-25).
-  */
-  readonly tool: string;
-  readonly injected: InjectedValues;
-  readonly support: RunSupport;
-  /**
-  ACT-55: connect to `address`; `host` is for TLS (SNI, verification), `Host` and host-key lookup only.
-  */
-  readonly pinned: readonly PinnedEndpoint[];
-  /**
-  ACT-59: aborted when the policy timeout elapses; the connector cancels its work.
-  */
-  readonly signal: AbortSignal;
-  readonly outputLimit: OutputLimit;
-  readonly logger: Logger;
-}
-
-/**
- * A target's documents, injected values and pinned endpoints lent to a
- * connector outside any call, for the work of ACT-108 that a save or the
- * operator starts; disposed as soon as the work ends.
- */
-export type TargetAccess = Omit<
-  RunContext<unknown, unknown, unknown>,
-  'tool' | 'signal' | 'outputLimit'
->;
-
-/**
-What the engine lends a stateful connector (`code`) once, when it is constructed.
-*/
-export interface ConnectorServices {
-  readonly logger: Logger;
-  readonly now: () => number;
-  readonly schedule: (callback: () => void, delayMs: number) => () => void;
-  readonly audit: ActionsAuditSink;
-  /**
-  ACT-108: runs `work` with the target's credential and pinned endpoints; a failure to get them is the error.
-  */
-  withTarget<T>(
-    targetId: string,
-    work: (access: TargetAccess) => Promise<T>,
-  ): Promise<Result<T, ActionError>>;
-  /**
-  ACT-109: the ids and revisions of every stored target of the connector.
-  */
-  targets(): readonly StoredTarget[];
-}
-
-export interface StoredTarget {
-  readonly id: string;
-  readonly name: string;
-  readonly enabled: boolean;
-  readonly documents: TargetDocuments<unknown, unknown, unknown> | undefined;
-}
-
-/**
-What a stateful connector answers to the engine, the targets service and the pages.
-*/
-export interface ConnectorControl {
-  /**
-  ACT-108: a target was created, enabled, disabled or changed; `previous` holds its documents before a change.
-  */
-  saved(targetId: string, previous: TargetDocuments<unknown, unknown, unknown> | undefined): void;
-  /**
-  ACT-109: a target is about to be deleted.
-  */
-  removed(targetId: string): void;
-  /**
-  ACT-115: false once the connector found itself unable to serve (an incompatible sidecar); its tools go.
-  */
-  available(): boolean;
 }
 
 export interface Connector<Destination, Credential, Policy, Operation> extends ConnectorSchemas<

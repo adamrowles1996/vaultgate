@@ -68,6 +68,7 @@ describe('the include and exclude patterns (ACT-106, PROTOCOL.md)', () => {
     const accepted = [
       '!keep.env',
       '[a-z]*.log',
+      '[abc].txt',
       '[a-c-a]',
       '[]-a]',
       '[^a-z]',

@@ -182,6 +182,11 @@ describe('one code call over its repositories (ACT-110, ACT-112)', () => {
       await runCode({ sidecar, indexes, clock: new ManualClock() }, contexts, SEARCH),
     );
     expect([error.code, error.detail]).toStrictEqual(['policy_denied', { reason: 'content' }]);
+    const documentation = { ...SEARCH, content: 'docs' } as const;
+    const single = unwrapFail(
+      await runCode({ sidecar, indexes, clock: new ManualClock() }, contexts, documentation),
+    );
+    expect(single.detail).toStrictEqual({ reason: 'content' });
     expect(indexes.prepares).toStrictEqual([]);
   });
 

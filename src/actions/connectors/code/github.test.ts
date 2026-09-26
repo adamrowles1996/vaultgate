@@ -168,6 +168,16 @@ describe('resolution failures (ACT-104)', () => {
     expect(unwrapFail(await resolveReference(wrongToken, REPO, 'main')).code).toBe('ref_not_found');
   });
 
+  it('ACT-104 a default branch GitHub names but cannot resolve is ref_not_found', async () => {
+    const fake = github({ repos: [fakeRepo({ defaultBranch: 'trunk' })] });
+    const error = unwrapFail(await resolveOver(fake, undefined));
+    expect(error.code).toBe('ref_not_found');
+    expect(pathsOf(fake)).toStrictEqual([
+      '/repos/acme/widgets',
+      '/repos/acme/widgets/commits/trunk',
+    ]);
+  });
+
   it('ACT-104 a 401 is authentication_failed; any other status is upstream_error with the status only', async () => {
     const statuses = [401, 403, 500, 301];
     const codes = [];

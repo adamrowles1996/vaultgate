@@ -13,7 +13,7 @@ import type {
   Endpoint,
   PinnedEndpoint,
   RunSupport,
-} from '../actions/connectors/connector.ts';
+} from '../actions/connectors/context.ts';
 import type { ActionError } from '../actions/errors.ts';
 import type { InjectedEntry } from '../actions/scrub.ts';
 

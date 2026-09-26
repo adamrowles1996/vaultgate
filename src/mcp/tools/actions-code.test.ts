@@ -12,7 +12,9 @@ import {
   request,
 } from '../../test-support/mcp-client.ts';
 
-import type { App } from '../../http/app.ts';
+import type { CodeApp } from '../../test-support/code-app.ts';
+
+type App = CodeApp['app'];
 
 const MODERN = { protocolVersion: MODERN_PROTOCOL_VERSION } as const;
 
@@ -94,6 +96,24 @@ describe('the code tools on the wire (ACT-15, ACT-110)', () => {
     expect(storedCalls(code.harness.database).map((row) => row.targetName)).toStrictEqual([
       'widgets',
       'gadgets',
+    ]);
+  });
+
+  it('ACT-110 a single repo is one name, answered without a prefix', async () => {
+    const { app, issue, code } = createCodeApp({
+      sidecar: { answer: () => [sidecarResult('widgets')] },
+    });
+    await createCodeTarget(code);
+    const outcome = await callTool(
+      app,
+      'code_search',
+      { repo: 'widgets', query: 'widgets', max_snippet_lines: 0 },
+      { token: issue(['actions:code']), ...MODERN },
+    );
+    const result = outcome.structuredContent as { results: { file_path: string }[] };
+    expect([outcome.isError, result.results.map((entry) => entry.file_path)]).toStrictEqual([
+      false,
+      ['src/widget.ts'],
     ]);
   });
 

@@ -17,6 +17,7 @@ import { connectorServices } from './engine-services.ts';
 import { ActionError } from './errors.ts';
 import { createActionLimits } from './limits.ts';
 import { createRunSupport } from './run-support.ts';
+import { documentsOf } from './targets-context.ts';
 import { createTargetsService, type TargetsObserver, type TargetsService } from './targets.ts';
 
 import type { Caller } from './caller.ts';
@@ -157,7 +158,8 @@ async function call(
 function targetsObserver(controls: ReadonlyMap<ConnectorKind, ConnectorControl>): TargetsObserver {
   return {
     saved(row, previous) {
-      controls.get(row.connector)?.saved(row.id, previous);
+      const change = { enabled: row.enabled, current: documentsOf(row), previous };
+      controls.get(row.connector)?.saved(row.id, change);
     },
     removed(row) {
       controls.get(row.connector)?.removed(row.id);

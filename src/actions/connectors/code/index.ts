@@ -26,7 +26,13 @@ import { type CodeState, createCodeState } from './state.ts';
 import { background, withDeadline } from './timing.ts';
 import { CODE_TOOLS, type CodeOperation } from './tools.ts';
 
-import type { Connector, ConnectorControl, ConnectorServices, RunContext } from '../connector.ts';
+import type {
+  Connector,
+  ConnectorControl,
+  ConnectorServices,
+  RunContext,
+  SavedTarget,
+} from '../connector.ts';
 import type { CodeCredential, CodeDestination, CodePolicy } from './schemas.ts';
 
 export interface CodeConnectorOptions {
@@ -101,24 +107,21 @@ async function checkSidecar(parts: Parts, control: CodeControl): Promise<boolean
   return true;
 }
 
-function resetOf(documents: unknown): string | undefined {
-  return documents === undefined ? undefined : resetFingerprint(documents as CodeDocuments);
-}
-
 /**
  * ACT-108: a save builds an enabled target; a revision that changed the
- * snapshots' inputs deletes them first, and a disabled target's too. It runs
- * after the save has answered: nothing here can fail the operator's save.
+ * snapshots' inputs deletes them first, and a disabled target's too. A row
+ * that no longer validates builds nothing. It runs after the save has
+ * answered: nothing here can fail the operator's save.
  */
-async function saved(
-  services: ConnectorServices,
-  control: CodeControl,
-  targetId: string,
-  previous: unknown,
-): Promise<void> {
-  const stored = services.targets().find((target) => target.id === targetId);
-  const isReset = previous !== undefined && resetOf(previous) !== resetOf(stored?.documents);
-  if (stored?.enabled === true) {
+async function saved(control: CodeControl, targetId: string, change: SavedTarget): Promise<void> {
+  const { current, previous } = change;
+  if (current === undefined) {
+    return;
+  }
+  const isReset =
+    previous !== undefined &&
+    resetFingerprint(previous as CodeDocuments) !== resetFingerprint(current as CodeDocuments);
+  if (change.enabled) {
     await control.refresh(targetId, 'save', isReset);
   } else if (isReset) {
     await control.forgetTarget(targetId);
@@ -191,10 +194,8 @@ function attach(
       isAvailable: health.isAvailable,
     },
     control: {
-      saved(targetId, previous) {
-        background(services, 'the work of a save', () =>
-          saved(services, control, targetId, previous),
-        );
+      saved(targetId, change) {
+        background(services, 'the work of a save', () => saved(control, targetId, change));
       },
       removed(targetId) {
         background(services, 'deleting the snapshots of a deleted target', () =>
