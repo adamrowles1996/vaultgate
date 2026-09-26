@@ -207,10 +207,10 @@ describe('the ssh form', () => {
       policy: { allowed_commands: [], any_command: true },
     });
     expect(await markup(harness, `/account/actions/${unrestricted.id}`)).toContain(
-      'This target allows any command',
+      'This connection allows any command',
     );
     expect(await markup(harness, `/account/actions/${restricted.id}`)).not.toContain(
-      'This target allows any command',
+      'This connection allows any command',
     );
   });
 });

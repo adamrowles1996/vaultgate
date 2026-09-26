@@ -8,9 +8,16 @@
  * and reads nothing from the vault; inside it, every vault read here is
  * metadata only.
  */
-import { applyAddress } from './address-source.ts';
 import { CHECK_INTENT, INTENT_FIELD, withRefusals } from './check-report.ts';
-import { editableForm, targetInputFromForm, text, withParameters } from './form-input.ts';
+import { repoOffer as repoOffer } from './code-github.ts';
+import { formCheck } from './form-check.ts';
+import {
+  editableForm,
+  submitted,
+  targetInputFromForm,
+  text,
+  withParameters,
+} from './form-input.ts';
 import {
   createFrame,
   createPage,
@@ -19,7 +26,7 @@ import {
   kindChooserPage,
   lockedPage,
 } from './form-pages.ts';
-import { deploymentProblems, formFor } from './forms.ts';
+import { formFor } from './forms.ts';
 import { ITEM_PARAM, QUERY_PARAM } from './item-picker.ts';
 import { chosenItem, renderPicker } from './item-step.ts';
 import { kindOf } from './kinds.ts';
@@ -75,12 +82,15 @@ async function renderCreate(
     ...createParameters(form, kind),
     [ITEM_PARAM]: itemId,
   });
+  const item = await chosenItem(dependencies, itemId, restart);
+  const { isReauthenticated } = viewer;
   const page = createPage(createFrame(kind, returnTo), {
     csrfToken: viewer.csrfToken,
     problems: fieldProblems(form, request.problems),
     form,
     values,
-    item: await chosenItem(dependencies, itemId, restart),
+    item,
+    repositories: await repoOffer(dependencies, { form, values, item, isReauthenticated }),
     ...(request.check !== undefined && { check: request.check }),
   });
   return dependencies.renderConsole(viewer.session, page);
@@ -135,12 +145,11 @@ async function create(
     return context.notFound();
   }
   const viewer = viewerOf(gate.session);
-  const { values, problems } = applyAddress(form, gate.form);
-  const refused = [...deploymentProblems(gate.form, dependencies.switches), ...problems];
+  const { values, refused } = submitted(dependencies, form, gate.form);
   if (isCheck(gate.form)) {
     const found = await dependencies.targets.checkNew(targetInputFromForm(form, values, true));
     const report = withRefusals(found, refused);
-    const check = { report, at: dependencies.now() };
+    const check = await formCheck(dependencies, viewer, { form, values }, report);
     const request = { form, values, problems: report.problems, check };
     return context.html(await renderCreate(dependencies, viewer, request));
   }
@@ -189,12 +198,16 @@ async function renderEdit(
   const itemId = text(request.values, ITEM_ID_FIELD);
   const changeHref = withParameters(editPath(target.id), { [CHANGE_PARAM]: ITEM_PARAM });
   const frame = editFrame(target, editPath(target.id));
+  const item = await chosenItem(dependencies, itemId, changeHref);
+  const { values } = request;
+  const { isReauthenticated } = viewer;
   const page = editPage(frame, {
     csrfToken: viewer.csrfToken,
     problems: fieldProblems(form, request.problems),
     form,
-    values: request.values,
-    item: await chosenItem(dependencies, itemId, changeHref),
+    values,
+    item,
+    repositories: await repoOffer(dependencies, { form, values, item, isReauthenticated }),
     targetId: target.id,
     kind: kindOf(target),
     ...(request.check !== undefined && { check: request.check }),
@@ -253,13 +266,13 @@ async function update(
     return context.notFound();
   }
   const viewer = viewerOf(gate.session);
-  const { values, problems } = applyAddress(current.form, gate.form);
-  const refused = [...deploymentProblems(gate.form, dependencies.switches), ...problems];
+  const { form } = current;
+  const { values, refused } = submitted(dependencies, form, gate.form);
   if (isCheck(gate.form)) {
-    const input = targetInputFromForm(current.form, values, false);
+    const input = targetInputFromForm(form, values, false);
     const found = await dependencies.targets.checkChanges(current.target.connector, input);
     const report = withRefusals(found, refused);
-    const check = { report, at: dependencies.now() };
+    const check = await formCheck(dependencies, viewer, { form, values }, report);
     const request = { values, problems: report.problems, check };
     return context.html(await renderEdit(dependencies, viewer, current, request));
   }
@@ -269,7 +282,7 @@ async function update(
   }
   const updated = await dependencies.targets.update(
     current.target.id,
-    targetInputFromForm(current.form, values, false),
+    targetInputFromForm(form, values, false),
     gate.operatorId,
   );
   if (updated.ok) {

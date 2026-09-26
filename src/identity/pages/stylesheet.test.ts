@@ -42,7 +42,7 @@ describe('stylesheet', () => {
 
   it('ID-19 follows the system’s dark setting and colours every kind of computer', () => {
     expect(rulesOf('@media (prefers-color-scheme: dark) {')).toContain('--bg: #0f1114;');
-    for (const kind of ['mssql', 'postgres', 'winrm', 'ssh', 'http', 'graph']) {
+    for (const kind of ['mssql', 'postgres', 'winrm', 'ssh', 'http', 'graph', 'code']) {
       expect(STYLESHEET).toContain(`.kind-tile.kind-${kind} {`);
       expect(STYLESHEET).toContain(`.kind-dot.kind-${kind},`);
     }

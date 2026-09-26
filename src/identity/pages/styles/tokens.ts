@@ -73,6 +73,9 @@ export const TOKENS = `:root {
   --kind-graph: #7b3f8c;
   --kind-graph-soft: #f2e8f4;
   --kind-graph-dot: #c98fd8;
+  --kind-code: #9a2f4f;
+  --kind-code-soft: #f6e4ea;
+  --kind-code-dot: #e08aa5;
   --tone-0: #1f4e8c;
   --tone-0-soft: #dce6f8;
   --tone-1: #1e6b45;
@@ -131,6 +134,8 @@ export const TOKENS = `:root {
     --kind-http-soft: #2d2312;
     --kind-graph: #d3a5df;
     --kind-graph-soft: #2a1c2e;
+    --kind-code: #eba3ba;
+    --kind-code-soft: #301920;
     --tone-0: #a9c3f0;
     --tone-0-soft: #1b2638;
     --tone-1: #8fd3ad;

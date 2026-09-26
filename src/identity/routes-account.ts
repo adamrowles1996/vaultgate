@@ -105,13 +105,29 @@ export type SensitiveAction = (
   context: IdentityContext,
 ) => Promise<SensitiveActionContext | Response>;
 
-export function sensitiveAction(services: IdentityServices): SensitiveAction {
+function gate(services: IdentityServices, check: typeof requireAuthenticated): SensitiveAction {
   return async (context) => {
     const form = await readForm(context);
-    const authenticated = requireReauthenticated(context, services, form);
+    const authenticated = check(context, services, form);
     return authenticated instanceof Response
       ? authenticated
       : { session: authenticated.session, operatorId: authenticated.operator.id, form };
+  };
+}
+
+/**
+ * The two gates another layer's `POST /account/*` passes through: ID-18 and
+ * ID-15 for a sensitive change (`sensitiveAction`), and ID-18 alone for a
+ * write that changes no setting (`operatorAction`, ACT-108's Rebuild index):
+ * the session and the synchroniser token without the password confirmation.
+ */
+export function actionGates(services: IdentityServices): {
+  readonly sensitiveAction: SensitiveAction;
+  readonly operatorAction: SensitiveAction;
+} {
+  return {
+    sensitiveAction: gate(services, requireReauthenticated),
+    operatorAction: gate(services, requireAuthenticated),
   };
 }
 

@@ -79,6 +79,9 @@ small.warn {
 .check-bad > .icon {
   color: var(--bad);
 }
+.check-skip > .icon {
+  color: var(--text-2);
+}
 .check-problem {
   color: var(--bad);
 }

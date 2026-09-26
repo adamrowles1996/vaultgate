@@ -27,6 +27,7 @@ import { itemChips, itemLine } from './item-view.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
 import type { FieldProblems } from './messages.ts';
+import type { RepoOffer } from './repo-source.ts';
 import type { ItemSummary } from '../../vault/client.ts';
 
 export const CONNECTOR_FIELD = 'connector';
@@ -34,6 +35,13 @@ export const NAME_FIELD = 'name';
 export const DESCRIPTION_FIELD = 'description';
 export const INTERNAL_FIELD = 'internal';
 export const ITEM_ID_FIELD = 'credential.item_id';
+
+/**
+ * ACT-1's name rule for the browser. A browser compiles `pattern` with the
+ * `v` flag, under which an unescaped `-` in a class is a syntax error and the
+ * whole check is silently skipped, so the hyphen is escaped.
+ */
+const NAME_PATTERN = String.raw`[a-z0-9][a-z0-9\-]{0,62}`;
 
 /**
 ACT-6: the controls a problem may name, so one that names none is listed instead of hidden.
@@ -68,6 +76,10 @@ export interface TargetFormView {
   readonly isNew: boolean;
   readonly submitLabel: string;
   readonly item: ChosenItem;
+  /**
+  ACT-119: the repositories the chosen token can read, for a code form.
+  */
+  readonly repositories: RepoOffer;
 }
 
 function nameField(view: TargetFormView): Html {
@@ -79,21 +91,40 @@ function nameField(view: TargetFormView): Html {
         value="${values.get(NAME_FIELD) ?? ''}"
         required
         maxlength="63"
-        pattern="[a-z0-9][a-z0-9-]{0,62}"
+        pattern="${NAME_PATTERN}"
         autocomplete="off"
       />
       <small
-        >Lower-case letters, digits and hyphens; how agents name the target. Renaming is a new
-        target.</small
+        >Lower-case letters, digits and hyphens; how agents name the connection. Renaming is a new
+        connection.</small
       >
     </label>`;
 }
 
-function commonFields(view: TargetFormView): Html {
+/**
+ACT-103: a connection whose destination is always on the internet offers no internal box.
+*/
+function internalField(view: TargetFormView): Html {
+  if (view.form.network === 'public') {
+    return fieldErrors(view.problems, INTERNAL_FIELD);
+  }
   const isInternal = view.values.get(INTERNAL_FIELD) === 'on';
+  return html`${fieldErrors(view.problems, INTERNAL_FIELD)}
+    <label
+      ><input name="${INTERNAL_FIELD}" type="checkbox" ${when(isInternal, () => html`checked`)} />
+      Internal destination (may resolve to a private address; loopback and link-local are refused
+      whatever this says)</label
+    >`;
+}
+
+function commonFields(view: TargetFormView): Html {
+  const note =
+    view.form.network === 'public'
+      ? 'How agents know it.'
+      : 'How agents know it, and whether it lives on your own network.';
   return html`<section class="card">
-    ${cardHead('The connection', 'How agents know it, and whether it lives on your own network.')}
-    ${when(view.isNew, () => nameField(view))} ${fieldErrors(view.problems, DESCRIPTION_FIELD)}
+    ${cardHead('The connection', note)} ${when(view.isNew, () => nameField(view))}
+    ${fieldErrors(view.problems, DESCRIPTION_FIELD)}
     <label
       >Description
       <textarea name="${DESCRIPTION_FIELD}" rows="2" maxlength="200">
@@ -103,12 +134,7 @@ ${view.values.get(DESCRIPTION_FIELD) ?? ''}</textarea>
         for.</small
       >
     </label>
-    ${fieldErrors(view.problems, INTERNAL_FIELD)}
-    <label
-      ><input name="${INTERNAL_FIELD}" type="checkbox" ${when(isInternal, () => html`checked`)} />
-      Internal destination (may resolve to a private address; loopback and link-local are refused
-      whatever this says)</label
-    >
+    ${internalField(view)}
   </section>`;
 }
 
@@ -200,6 +226,7 @@ export function renderTargetForm(view: TargetFormView): Html {
     itemFields: item.state === 'found' ? itemFields(item.summary) : undefined,
     addressCandidates: item.state === 'found' ? addressCandidates(item.summary) : [],
     isNew: view.isNew,
+    repositories: view.repositories,
   };
   return html`<form method="post" action="${view.action}" class="target-form">
     ${hidden('csrf', view.csrfToken)} ${connectorField(view)} ${commonFields(view)}

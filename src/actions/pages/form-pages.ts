@@ -11,15 +11,15 @@ import { icon } from '../../identity/pages/icons.ts';
 import { type Html, html } from '../../identity/pages/template.ts';
 import { pageHead } from '../../identity/pages/ui.ts';
 
-import { checkCard } from './check-report.ts';
+import { checkCard, type PageCheck } from './check-report.ts';
 import { type ComputerKind, KINDS } from './kinds.ts';
 import { CREATE_PATH, NEW_PATH, targetPath } from './paths.ts';
 import { type ChosenItem, lockedForm, renderProblems, renderTargetForm } from './target-form.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
-import type { CheckReport } from '../targets-checks.ts';
 import type { FormValues } from './form-values.ts';
 import type { FieldProblems } from './messages.ts';
+import type { RepoOffer } from './repo-source.ts';
 import type { ConsolePage } from '../../identity/index.ts';
 
 export interface FormPageView {
@@ -29,18 +29,20 @@ export interface FormPageView {
   readonly values: FormValues;
   readonly item: ChosenItem;
   /**
-  What "Check without saving" found (ACT-118), shown in place of a rejected save's banner.
+  What "Check without saving" found (ACT-118, ACT-120), shown in place of a rejected save's banner.
   */
-  readonly check?: { readonly report: CheckReport; readonly at: number };
+  readonly check?: PageCheck;
+  /**
+  ACT-119: the repositories the chosen token can read, for a code form.
+  */
+  readonly repositories: RepoOffer;
 }
 
 /**
 Above the form: what a check found, or why the last save was refused.
 */
 function outcome(view: FormPageView): Html {
-  return view.check === undefined
-    ? renderProblems(view.problems)
-    : checkCard(view.check.report, view.check.at);
+  return view.check === undefined ? renderProblems(view.problems) : checkCard(view.check);
 }
 
 /**
@@ -161,6 +163,7 @@ export function createPage(frame: StepFrame, view: FormPageView): ConsolePage {
       isNew: true,
       submitLabel: 'Create connection',
       item: view.item,
+      repositories: view.repositories,
     })}`,
   );
 }
@@ -184,6 +187,7 @@ export function editPage(frame: StepFrame, view: EditPageView): ConsolePage {
       isNew: false,
       submitLabel: 'Save changes',
       item: view.item,
+      repositories: view.repositories,
     })}`,
   );
 }

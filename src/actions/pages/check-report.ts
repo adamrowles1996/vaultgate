@@ -3,13 +3,35 @@
  * with the address a call would be pinned to or why it is refused, the vault
  * item and each field mapped from it (a secret one sealed), and every other
  * problem. Nothing here is secret: addresses, the item's name and field
- * names. A check saves nothing and connects to nothing.
+ * names. A check saves nothing and connects to nothing, except that a code
+ * target's asks GitHub whether its token can read the repository (ACT-120).
  */
 import { icon } from '../../identity/pages/icons.ts';
-import { type Html, html } from '../../identity/pages/template.ts';
+import { EMPTY, type Html, html } from '../../identity/pages/template.ts';
 import { cardHead, fieldChip, formatInstant, pill, sealed } from '../../identity/pages/ui.ts';
 
+import { describeFailure, type GitHubFailure } from './repo-source.ts';
+
+import type { RepoInfo } from '../connectors/code/github.ts';
 import type { CheckReport, EndpointReport, FieldReport, ItemReport } from '../targets-checks.ts';
+
+/**
+ACT-120: what GitHub said about the repository, asked with the chosen token or with none.
+*/
+export type GitHubCheck =
+  | { readonly state: 'read'; readonly repository: RepoInfo; readonly hasToken: boolean }
+  | { readonly state: 'failed'; readonly failure: GitHubFailure; readonly hasToken: boolean }
+  | { readonly state: 'locked' }
+  | { readonly state: 'invalid' };
+
+/**
+What a check found and when, with GitHub's answer for a code target (ACT-120).
+*/
+export interface PageCheck {
+  readonly report: CheckReport;
+  readonly at: number;
+  readonly github?: GitHubCheck | undefined;
+}
 
 /**
 The submit button a form checks with, and the query that checks a saved computer.
@@ -63,8 +85,42 @@ function fieldLine(field: FieldReport): Html {
     : line(false, html`${chip} ${problems([field.problem])}`);
 }
 
-export function checkCard(report: CheckReport, at: number): Html {
-  const count = report.problems.length;
+function skipped(body: Html): Html {
+  return html`<li class="check-skip">${icon('info')}<span>${body}</span></li>`;
+}
+
+/**
+ACT-120: GitHub's answer about the repository, never the token.
+*/
+function githubLine(github: GitHubCheck): Html {
+  switch (github.state) {
+    case 'read': {
+      const { repository, hasToken } = github;
+      const who = hasToken ? 'The token can read' : 'GitHub answers without a token for';
+      const name = html`<span class="mono">${repository.fullName}</span>`;
+      const branch = html`<span class="mono">${repository.defaultBranch}</span>`;
+      return line(true, html`${who} ${name} · default branch ${branch} · ${repository.visibility}`);
+    }
+    case 'failed': {
+      const asked = github.hasToken ? 'with the token' : 'without a token';
+      return line(false, html`GitHub, asked ${asked}: ${describeFailure(github.failure)}`);
+    }
+    case 'locked': {
+      return skipped(html`GitHub was not asked: unlock editing to let vaultgate use the token.`);
+    }
+    case 'invalid': {
+      return skipped(html`GitHub was not asked: the repository or the token field is not valid.`);
+    }
+  }
+}
+
+function hasAsked(github: GitHubCheck | undefined): boolean {
+  return github?.state === 'read' || github?.state === 'failed';
+}
+
+export function checkCard(check: PageCheck): Html {
+  const { report, at, github } = check;
+  const count = report.problems.length + (github?.state === 'failed' ? 1 : 0);
   const status =
     count === 0
       ? pill('ok', 'Everything checks out')
@@ -76,10 +132,14 @@ export function checkCard(report: CheckReport, at: number): Html {
           itemLine(report.credential.item),
           ...report.credential.fields.map((field) => fieldLine(field)),
         ];
+  const note = hasAsked(github)
+    ? `Run ${formatInstant(at)}. Nothing was saved; vaultgate asked GitHub about the repository and connected to nothing else.`
+    : `Run ${formatInstant(at)}. Nothing was saved and nothing connected.`;
   return html`<section class="card" id="check">
-    ${cardHead('Check', `Run ${formatInstant(at)}. Nothing was saved and nothing connected.`, status)}
+    ${cardHead('Check', note, status)}
     <ul class="checks">
       ${report.endpoints.map((endpoint) => endpointLine(endpoint))} ${credential}
+      ${github === undefined ? EMPTY : githubLine(github)}
       ${report.rules.map((rule) => line(false, html`${rule}`))}
     </ul>
   </section>`;

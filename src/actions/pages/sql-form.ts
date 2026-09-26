@@ -65,7 +65,7 @@ const destination: readonly FieldDescriptor[] = [
     help:
       'require verifies the certificate against the system store; verify-full verifies it ' +
       'against the certificate authority below. There is no way to skip verification. disable ' +
-      'is plain transport and needs an internal target.',
+      'is plain transport and needs an internal connection.',
   },
   {
     document: 'destination',
@@ -106,7 +106,7 @@ const policy: readonly FieldDescriptor[] = [
     options: ['read', 'write'],
     fallback: ['read'],
     help:
-      'read runs sql_query; write also runs sql_execute, and a target that allows write must ' +
+      'read runs sql_query; write also runs sql_execute, and a connection that allows write must ' +
       'allow read as well.',
   },
   {

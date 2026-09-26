@@ -108,7 +108,7 @@ const policy: readonly FieldDescriptor[] = [
   {
     document: 'policy',
     name: 'any_command',
-    label: 'Allow any command (this target becomes a shell)',
+    label: 'Allow any command (this connection becomes a shell)',
     kind: 'boolean',
     fallback: false,
     allowedBy: 'allowAnyCommand',
