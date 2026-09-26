@@ -55,6 +55,11 @@ updates:
       timezone: Europe/London
     commit-message:
       prefix: 'build(docker)'
+    # The sidecar is locked to Python 3.12 (pyproject.toml's requires-python and uv.lock), so a
+    # new Python minor is a change to both, made by hand, not an image bump.
+    ignore:
+      - dependency-name: python
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
   - package-ecosystem: docker-compose
     directory: /
     schedule:
