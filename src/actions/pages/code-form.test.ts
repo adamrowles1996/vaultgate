@@ -64,6 +64,9 @@ describe('Add connection: Semble · GitHub code search', () => {
     expect(markup).toContain('<textarea name="policy.include" rows="4"></textarea>');
     expect(markup).toContain('<textarea name="policy.exclude" rows="4">.env\n.env.*\n*.pem');
     expect(markup).toContain('replacing the list replaces the defaults too');
+    expect(markup).toContain(
+      'This limits what is searched, not what is read: code_read still reads any file the include and exclude patterns keep, whatever its type.',
+    );
     const numbers = {
       max_top_k: ['1', '200', '50'],
       max_read_lines: ['1', '2000', '400'],

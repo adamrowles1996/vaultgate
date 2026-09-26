@@ -74,7 +74,9 @@ const reading: readonly FieldDescriptor[] = [
     fallback: CONTENT_TYPES,
     help:
       'Default all three, as semble sorts files: source code, documentation and configuration. ' +
-      'A call may narrow the selection, never widen it; none ticked means all three.',
+      'A call may narrow the selection, never widen it; none ticked means all three. This limits ' +
+      'what is searched, not what is read: code_read still reads any file the include and ' +
+      'exclude patterns keep, whatever its type.',
   },
   {
     document: 'policy',
