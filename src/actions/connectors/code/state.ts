@@ -171,7 +171,7 @@ function recordRefusal(services: StateDependencies['services'], refusal: Refusal
       target: refusal.targetName,
       connector: 'code',
       trigger: refusal.trigger,
-      content: [refusal.content.join('+')],
+      content: refusal.content.length > 0 ? [refusal.content.join('+')] : [],
       reason: refusal.reason,
     },
   });
