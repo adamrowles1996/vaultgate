@@ -3,8 +3,9 @@
     PYTHONPATH=sidecars/code/tests python3 sidecars/code/tests/smoke.py HOST PORT
 
 CI runs it against the image started with a read-only root filesystem and no capabilities, so
-it proves the image verifies its model, serves, spawns its build child and answers from the
-index. It uses the standard library and the test suite's archive helpers only.
+it proves the image verifies its model and grammars, serves, spawns its build child, chunks
+along syntax trees and answers from the index. It uses the standard library and the test
+suite's archive helpers only.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import sys
 from collections.abc import Sequence
 
 import archives
+import chunked
 import repo
 from client import Client
 
@@ -37,11 +39,13 @@ def main(argv: Sequence[str]) -> int:
     client = Client((host, int(port)))
     status, health, _ = client.call("GET", "/v1/health")
     check(status == 200 and health["protocol"] == 1, f"health answered {status}")
+    check(health.get("grammars", 0) > 0, "no tree-sitter grammars are loaded")
     variants = [QUERY["content"]]
+    members = repo.members() + [archives.file(n, data) for n, data in chunked.FILES.items()]
     status, meta, _ = client.call(
         "PUT",
         "/v1/snapshots/smoke",
-        archives.archive(repo.members()),
+        archives.archive(members),
         {
             "X-Vaultgate-Build": archives.header(
                 max_file_bytes=repo.MAX_FILE_BYTES, variants=variants
@@ -53,6 +57,10 @@ def main(argv: Sequence[str]) -> int:
     status, found = client.post("/v1/search", QUERY)
     check(status == 200 and bool(found["results"]), f"search answered {status}")
     check(found["results"][0]["file_path"] == "src/billing/invoice.py", "search ranked oddly")
+    plan = "src/deploy/plan.py"
+    status, found = client.post("/v1/search", QUERY | {"paths": [plan], "top_k": 10})
+    spans = sorted((r["start_line"], r["end_line"]) for r in found["results"])
+    check(spans == chunked.TREE_SITTER[plan], f"{plan} is not chunked by syntax tree: {spans}")
     related = {k: v for k, v in QUERY.items() if k != "query"} | {
         "file_path": "src/billing/invoice.py",
         "line": 7,
@@ -67,7 +75,8 @@ def main(argv: Sequence[str]) -> int:
     check(status == 200, f"delete answered {status}")
     client.close()
     sys.stdout.write(
-        f"smoke: ok ({health['semble']}, {health['model']}@{health['model_revision']})\n"
+        f"smoke: ok ({health['semble']}, {health['model']}@{health['model_revision']}, "
+        f"{health['grammars']} grammars)\n"
     )
     return 0
 

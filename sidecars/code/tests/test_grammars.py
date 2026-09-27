@@ -63,6 +63,16 @@ def test_the_extraction_holds_every_grammar_0755(grammars_dir: Path, bundle: Bun
     assert grammars.verify_dir(grammars_dir) == bundle
 
 
+def test_extracting_over_an_intact_directory_writes_nothing(
+    grammars_dir: Path, bundle: Bundle, tmp_path: Path
+) -> None:
+    """ACT-113: run again over an intact directory, extraction only verifies it."""
+    directory = copy_of(grammars_dir, tmp_path)
+    before = listing(directory)
+    assert grammars.extract(directory) == bundle
+    assert listing(directory) == before
+
+
 Damage = Callable[[Path, Bundle], None]
 
 
@@ -145,8 +155,8 @@ def test_a_language_that_does_not_load_is_refused(
     """ACT-113: a library that matches its digest but does not load as a grammar is refused."""
     real = loader._platform_manifest()
     python = real["languages"]["python"] | {"symbol": "tree_sitter_not_python"}
-    unloadable = real | {"languages": real["languages"] | {"python": python}}
-    monkeypatch.setattr(loader, "_platform_manifest", lambda: unloadable)
+    broken = real | {"languages": real["languages"] | {"python": python}}
+    monkeypatch.setattr(loader, "_platform_manifest", lambda: broken)
     with pytest.raises(GrammarsError, match="grammar python does not load: GrammarLoadError"):
         grammars.verify_dir(grammars_dir)
 

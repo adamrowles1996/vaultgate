@@ -67,7 +67,7 @@ def test_a_build_whose_grammars_cannot_load_fails(
 
 
 def test_semble_uses_the_strict_parser_lookup() -> None:
-    """ACT-107: semble's chunker calls the sidecar's lookup, which finds bundled parsers."""
+    """ACT-107: semble's chunking calls the sidecar's lookup, which finds bundled parsers."""
     assert semble_chunking._cached_get_parser is engine.strict_parser
     for language in engine.CHECKED_LANGUAGES:
         assert engine.strict_parser(language) is not None

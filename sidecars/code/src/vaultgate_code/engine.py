@@ -18,7 +18,7 @@ import functools
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import orjson
 import semble
@@ -29,9 +29,11 @@ from model2vec import StaticModel
 from semble import ContentType, SearchResult, SembleIndex
 from semble.index.types import CACHE_FORMAT_VERSION
 from semble.utils import format_results
-from tree_sitter import Parser
 
 from vaultgate_code import grammars
+
+if TYPE_CHECKING:
+    from tree_sitter import Parser
 
 SEMBLE_VERSION = "0.6.1"
 NOTHING_TO_INDEX = "No supported files found"
