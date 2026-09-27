@@ -84,9 +84,9 @@ create_code_user() {
   fi
 }
 
-# The application, a virtual environment built from the locked requirements, and the
-# verified model, built in a staging directory beside the installed releases; every file is
-# root's and read-only to the service.
+# The application, a virtual environment built from the locked requirements, the verified
+# model and semble's tree-sitter grammars, built in a staging directory beside the installed
+# releases; every file is root's and read-only to the service.
 build_code_tree() {
   CODE_STAGING="${CODE_ROOT}/.staging-${VERSION}"
   step "Building the code sidecar ${VERSION} in ${CODE_STAGING}"
@@ -102,6 +102,9 @@ build_code_tree() {
   info "downloading the embedding model at its pinned revision and checking its digests"
   PYTHONPATH="${CODE_STAGING}/app" "${CODE_STAGING}/venv/bin/python" -m vaultgate_code.fetch_model \
     --dest "${CODE_STAGING}/model"
+  info "extracting semble's tree-sitter grammars and checking their digests"
+  PYTHONPATH="${CODE_STAGING}/app" "${CODE_STAGING}/venv/bin/python" -m vaultgate_code.grammars \
+    --dest "${CODE_STAGING}/grammars"
   "${CODE_STAGING}/venv/bin/python" -m compileall -q "${CODE_STAGING}/app"
   chown -R root:root "$CODE_STAGING"
   chmod -R u=rwX,go=rX "$CODE_STAGING"

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { fieldName } from './form-values.ts';
 import { editableConnectors, formFor } from './forms.ts';
-import { groupProblems, messageFor } from './messages.ts';
+import { describeProblem, groupProblems, messageFor } from './messages.ts';
 
 const SWITCHES = { allowAnyCommand: true };
 
@@ -25,6 +25,34 @@ describe('the validation-message table', () => {
     expect(bare).toStrictEqual([]);
     expect(messageFor('policy.timeout_ms', 'Too big')).toBe(
       'How long one call may run, in milliseconds: 1000 to 300000. (Too big)',
+    );
+  });
+
+  it('ACT-6 says "required" for a value that is not there, never zod\'s wording', () => {
+    expect(
+      messageFor('destination.repository', 'Invalid input: expected string, received undefined'),
+    ).toBe(
+      'The repository as owner/name, as GitHub shows it: type it, or choose one the token can read. (required)',
+    );
+    expect(
+      messageFor('destination.base_url', 'Invalid input: expected string, received undefined'),
+    ).toBe('required');
+  });
+
+  it("ACT-118 describes a check line in the operator's words, keeping lines it cannot place", () => {
+    expect(
+      describeProblem('destination.repository: Invalid input: expected string, received undefined'),
+    ).toBe(
+      'The repository as owner/name, as GitHub shows it: type it, or choose one the token can read. (required)',
+    );
+    expect(
+      describeProblem('destination.host: Invalid input: expected string, received undefined'),
+    ).toBe('destination.host: required');
+    expect(describeProblem('destination.host: must be a host name')).toBe(
+      'destination.host: must be a host name',
+    );
+    expect(describeProblem('keep one of the typed and the chosen repository')).toBe(
+      'keep one of the typed and the chosen repository',
     );
   });
 

@@ -90,6 +90,18 @@ const FIELD_MESSAGES: Readonly<Record<string, string>> = {
 const SEPARATOR = ': ';
 
 /**
+zod's wording for a value that is not there at all ("Invalid input: expected string, received undefined").
+*/
+const MISSING = /^Invalid input: expected [\w ]+, received undefined$/u;
+
+/**
+A check's detail as an operator reads it: an absent value is "required", anything else as it is.
+*/
+function detailFor(detail: string): string {
+  return MISSING.test(detail) ? 'required' : detail;
+}
+
+/**
 The problems of a rejected save, each attached to the control it names (ACT-6).
 */
 export interface FieldProblems {
@@ -111,7 +123,8 @@ The operator-facing message of one problem: the table's sentence with the check'
 */
 export function messageFor(path: string, detail: string): string {
   const guidance = FIELD_MESSAGES[path];
-  return guidance === undefined ? detail : `${guidance} (${detail})`;
+  const shown = detailFor(detail);
+  return guidance === undefined ? shown : `${guidance} (${shown})`;
 }
 
 function split(problem: string): { readonly path: string; readonly detail: string } {
@@ -127,6 +140,17 @@ function split(problem: string): { readonly path: string; readonly detail: strin
  * problem about something the form has no control for — the vault item's
  * fields, the destination as a whole, an unknown target — is never hidden.
  */
+/**
+One problem line of a check (ACT-118) in the operator's words: the field's sentence when the
+table names its path, and never zod's raw wording for a missing value.
+*/
+export function describeProblem(problem: string): string {
+  const { path, detail } = split(problem);
+  return path in FIELD_MESSAGES || path === ''
+    ? messageFor(path, detail)
+    : `${path}: ${detailFor(detail)}`;
+}
+
 export function groupProblems(problems: readonly string[], drawn: Iterable<string>): FieldProblems {
   const controls = new Set(drawn);
   const byPath = new Map<string, string[]>();
