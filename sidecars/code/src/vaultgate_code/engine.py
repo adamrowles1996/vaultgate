@@ -1,15 +1,20 @@
 """`semble`, used as a library: the pinned model, variant builds and loads, result rendering.
 
 `semble` 0.6.1 has no switch for its per-user index cache or its token-savings statistics file,
-and it reloads the model from the path an index was saved with. Four of its module globals are
-therefore replaced, here and nowhere else: its cache lookup and incremental reuse find nothing,
-its statistics writer does nothing, and every model load returns the one model this process
-verified at start-up. `semble`'s MCP server module and `SembleIndex.from_git` are never used.
-The package's `__init__` has already fixed the environment `semble` reads when it is imported.
+it reloads the model from the path an index was saved with, and it chunks by lines, silently,
+whenever a bundled tree-sitter grammar fails to load. Five of its module globals are therefore
+replaced, here and nowhere else: its cache lookup and incremental reuse find nothing, its
+statistics writer does nothing, every model load returns the one model this process verified at
+start-up, and its parser lookup raises when a bundled grammar cannot be loaded (a language with
+no bundled grammar is still chunked by lines, as `semble` does). `semble`'s MCP server module
+and `SembleIndex.from_git` are never used. The package's `__init__` has already fixed the
+environment `semble` reads when it is imported; `vaultgate_code.grammars` points
+`semble-grammars` at the verified grammars directory.
 """
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,14 +22,29 @@ from typing import Any
 
 import orjson
 import semble
+import semble.chunking.core as semble_chunking
 import semble.index.index as semble_index
+import semble_grammars
 from model2vec import StaticModel
 from semble import ContentType, SearchResult, SembleIndex
 from semble.index.types import CACHE_FORMAT_VERSION
 from semble.utils import format_results
+from tree_sitter import Parser
+
+from vaultgate_code import grammars
 
 SEMBLE_VERSION = "0.6.1"
 NOTHING_TO_INDEX = "No supported files found"
+# The sidecar's own version of how it builds a variant, recorded with each one: bump it whenever
+# that changes. 2: chunked by tree-sitter with the verified grammars. Variants of earlier
+# releases record none: they were chunked by lines, so they count as absent and are rebuilt.
+INDEX_FORMAT = 2
+# Start-up refuses to serve unless semble's parser lookup finds a parser for each of these.
+CHECKED_LANGUAGES = ("python", "typescript", "markdown")
+
+
+class GrammarUnavailable(RuntimeError):  # noqa: N818 - the class name is what a failed build reports
+    """A grammar `semble-grammars` bundles could not be loaded: the chunks would be lines."""
 
 
 @dataclass
@@ -71,10 +91,35 @@ def no_statistics(
     del results, call_type, file_sizes, max_snippet_lines
 
 
+@functools.cache
+def strict_parser(language: str) -> Parser | None:
+    """Stand in for `semble`'s `_cached_get_parser`, which turns every failure into line chunking.
+
+    A language `semble-grammars` bundles no grammar for gives None, and `semble` chunks it by
+    lines, as it does itself. Any other failure raises: a build fails rather than index a
+    repository by lines because its grammars directory is missing or unusable. The error is not
+    an `OSError`, which `semble` would swallow while it reads a file.
+    """
+    try:
+        return semble_grammars.get_parser(language)
+    except semble_grammars.LanguageNotFoundError:
+        return None
+    except Exception as error:
+        raise GrammarUnavailable(type(error).__name__) from error
+
+
+def check_chunking(languages: Sequence[str] = CHECKED_LANGUAGES) -> None:
+    """Refuse to serve unless `semble`'s own parser lookup finds a parser for each language."""
+    for language in languages:
+        if semble_chunking._cached_get_parser(language) is None:  # noqa: SLF001 - semble's lookup
+            raise GrammarUnavailable(f"semble finds no tree-sitter parser for {language}")
+
+
 semble_index.load_model = pinned_model  # type: ignore[attr-defined]
 semble_index.get_validated_cache = no_cached_index  # type: ignore[attr-defined]
 semble_index.load_previous_for_incremental = no_cached_index  # type: ignore[attr-defined]
 semble_index.save_search_stats = no_statistics  # type: ignore[attr-defined]
+semble_chunking._cached_get_parser = strict_parser  # noqa: SLF001
 
 
 def content_types(content: Sequence[str]) -> list[ContentType]:
@@ -138,4 +183,9 @@ def render(results: list[SearchResult], max_snippet_lines: int | None) -> list[d
     return formatted
 
 
-VERSIONS = {"semble": SEMBLE_VERSION, "cache_format": CACHE_FORMAT_VERSION}
+VERSIONS = {
+    "semble": SEMBLE_VERSION,
+    "cache_format": CACHE_FORMAT_VERSION,
+    "semble_grammars": grammars.VERSION,
+    "index_format": INDEX_FORMAT,
+}

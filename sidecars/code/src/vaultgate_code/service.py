@@ -18,6 +18,7 @@ from vaultgate_code.config import Config
 from vaultgate_code.errors import ApiError
 from vaultgate_code.extract import Abandoned, Counts, Extractor, Readable
 from vaultgate_code.fetch_model import Manifest
+from vaultgate_code.grammars import Bundle
 from vaultgate_code.memory import Loaded, load_trim
 from vaultgate_code.snapshot import Snapshot, disk_usage
 from vaultgate_code.store import Store
@@ -49,12 +50,17 @@ class Service:
         self,
         config: Config,
         manifest: Manifest,
+        grammars: Bundle,
         clock: Callable[[], int] = now_ms,
         trim: Callable[[], None] | None = None,
     ) -> None:
-        """Wire the store, the loaded-index cache and the build runner."""
+        """Wire the store, the loaded-index cache and the build runner.
+
+        `manifest` is the verified model's and `grammars` the verified grammars directory's.
+        """
         self.config = config
         self.manifest = manifest
+        self.grammars = grammars
         self.clock = clock
         self.versions = {
             **engine.VERSIONS,
@@ -89,6 +95,7 @@ class Service:
             "model": self.manifest.model,
             "model_revision": self.manifest.revision,
             "python": platform.python_version(),
+            "grammars": len(self.grammars.grammars),
             "limits": {
                 "max_snapshots": config.max_snapshots,
                 "max_storage_bytes": config.max_storage_bytes,

@@ -79,3 +79,8 @@ mypy_path = ["src", "tests"]
 files = ["src", "tests"]
 explicit_package_bases = true
 warn_unreachable = true
+
+[[tool.mypy.overrides]]
+# semble-grammars ships no py.typed marker; its functions are annotated, so mypy reads them.
+module = ["semble_grammars", "semble_grammars.*"]
+follow_untyped_imports = true

@@ -9,7 +9,8 @@ import pytest
 from vaultgate_code import __main__ as entry
 from vaultgate_code.config import GIB, Config, ConfigError, parse
 
-BASE = ["serve", "--state", "/srv/state", "--model", "/opt/model"]
+REQUIRED = "state, model and grammars are required"
+BASE = ["serve", "--state", "/srv/state", "--model", "/opt/model", "--grammars", "/opt/grammars"]
 
 
 def test_flags_set_every_setting() -> None:
@@ -33,6 +34,7 @@ def test_flags_set_every_setting() -> None:
     assert config == Config(
         state=Path("/srv/state"),
         model=Path("/opt/model"),
+        grammars=Path("/opt/grammars"),
         socket=Path("/run/code/code.sock"),
         max_snapshots=3,
         max_storage_bytes=1000,
@@ -55,12 +57,14 @@ def test_the_environment_is_the_fallback() -> None:
     environ = {
         "VAULTGATE_CODE_STATE": "/env/state",
         "VAULTGATE_CODE_MODEL": "/env/model",
+        "VAULTGATE_CODE_GRAMMARS": "/env/grammars",
         "VAULTGATE_CODE_LISTEN": "[::1]:9000",
         "VAULTGATE_CODE_MAX_SNAPSHOTS": "7",
         "VAULTGATE_CODE_BUILD_CONCURRENCY": "4",
     }
     config = parse(["serve", "--max-snapshots", "9"], environ)
     assert (config.state, config.model) == (Path("/env/state"), Path("/env/model"))
+    assert config.grammars == Path("/env/grammars")
     assert config.listen == ("::1", 9000)
     assert (config.max_snapshots, config.build_concurrency) == (9, 4)
 
@@ -77,8 +81,9 @@ def test_the_transport_comes_from_one_source() -> None:
 @pytest.mark.parametrize(
     ("argv", "environ", "problem"),
     [
-        (["serve", "--model", "/m", "--socket", "/s"], {}, "state and model are required"),
-        (["serve", "--state", "/s", "--socket", "/s"], {}, "state and model are required"),
+        (["serve", "--model", "/m", "--grammars", "/g", "--socket", "/s"], {}, REQUIRED),
+        (["serve", "--state", "/s", "--grammars", "/g", "--socket", "/s"], {}, REQUIRED),
+        (["serve", "--state", "/s", "--model", "/m", "--socket", "/s"], {}, REQUIRED),
         (BASE, {}, "exactly one of socket and listen"),
         ([*BASE, "--socket", "/s", "--listen", "h:1"], {}, "exactly one of socket and listen"),
         (BASE, {"VAULTGATE_CODE_SOCKET": "/s", "VAULTGATE_CODE_LISTEN": "h:1"}, "exactly one"),
@@ -96,7 +101,7 @@ def test_the_transport_comes_from_one_source() -> None:
 def test_unusable_settings_are_refused(
     argv: list[str], environ: dict[str, str], problem: str
 ) -> None:
-    """ACT-114: a missing, conflicting or malformed setting names itself and nothing else."""
+    """ACT-113, ACT-114: a missing, conflicting or malformed setting names itself, nothing else."""
     with pytest.raises(ConfigError, match=problem):
         parse(argv, environ)
 

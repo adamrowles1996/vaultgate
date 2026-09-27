@@ -8,7 +8,14 @@ import pytest
 
 from vaultgate_code.snapshot import Snapshot
 
-VERSIONS = {"semble": "0.6.1", "cache_format": 1, "model": "m", "model_revision": "r"}
+VERSIONS = {
+    "semble": "0.6.1",
+    "cache_format": 1,
+    "semble_grammars": "0.1.2",
+    "index_format": 2,
+    "model": "m",
+    "model_revision": "r",
+}
 VARIANT = {"files": 1, "chunks": 2, "built_at": 3, "duration_ms": 4, "storage_bytes": 5}
 
 
@@ -31,9 +38,15 @@ def record(**changes: Any) -> dict[str, Any]:
 
 def test_a_record_round_trips() -> None:
     """ACT-107: what meta.json holds reads back to the same snapshot."""
-    snapshot = Snapshot.from_record(record(), VERSIONS)
+    snapshot = Snapshot.from_record(record())
     assert snapshot.record() == record()
     assert snapshot.public()["variants"] == {"code": VARIANT}
+
+
+def test_a_variant_without_versions_still_reads() -> None:
+    """ACT-107: a variant recording no versions reads; start-up then drops it as stale."""
+    snapshot = Snapshot.from_record(record(variants={"code": VARIANT}))
+    assert snapshot.variants == {"code": VARIANT}
 
 
 @pytest.mark.parametrize(
@@ -47,11 +60,10 @@ def test_a_record_round_trips() -> None:
         (record(skipped={"links": 0}), KeyError),
         (record(variants={"code": []}), TypeError),
         (record(variants={"code": VARIANT | VERSIONS | {"chunks": "2"}}), TypeError),
-        (record(variants={"code": VARIANT}), KeyError),
         ({k: v for k, v in record().items() if k != "owner"}, KeyError),
     ],
 )
 def test_anything_else_is_refused(data: object, error: type[Exception]) -> None:
     """ACT-107: a wrong type or a missing field makes the metadata unreadable."""
     with pytest.raises(error):
-        Snapshot.from_record(data, VERSIONS)
+        Snapshot.from_record(data)

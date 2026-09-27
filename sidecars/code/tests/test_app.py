@@ -11,8 +11,9 @@ from pathlib import Path
 import pytest
 
 from client import Client
-from vaultgate_code import app, fetch_model
-from vaultgate_code.config import Config, ConfigError
+from conftest import config_for
+from vaultgate_code import app, fetch_model, grammars
+from vaultgate_code.config import ConfigError
 
 
 def short_socket(tmp_path: Path) -> Path:
@@ -53,16 +54,20 @@ def test_a_live_socket_or_another_file_is_refused(tmp_path: Path) -> None:
 
 
 def test_the_socket_is_0660_and_removed_only_if_still_ours(
-    tmp_path: Path, model_dir: Path, manifest: fetch_model.Manifest
+    tmp_path: Path,
+    model_dir: Path,
+    manifest: fetch_model.Manifest,
+    grammars_dir: Path,
+    bundle: grammars.Bundle,
 ) -> None:
     """ACT-114: the socket is created 0660; shutdown leaves a file that replaced it alone."""
     path = short_socket(tmp_path)
-    config = Config(state=tmp_path / "state", model=model_dir, socket=path)
-    first = app.App(config, manifest)
+    config = config_for(tmp_path / "state", model_dir, grammars_dir, socket=path)
+    first = app.App(config, manifest, bundle)
     assert stat.S_IMODE(os.lstat(path).st_mode) == 0o660
     first.close()
     assert not path.exists()
-    second = app.App(config, manifest)
+    second = app.App(config, manifest, bundle)
     path.unlink()
     path.write_text("someone else's")
     second.close()
@@ -70,10 +75,16 @@ def test_the_socket_is_0660_and_removed_only_if_still_ours(
     path.unlink()
 
 
-def test_tcp_over_ipv6(tmp_path: Path, model_dir: Path, manifest: fetch_model.Manifest) -> None:
+def test_tcp_over_ipv6(
+    tmp_path: Path,
+    model_dir: Path,
+    manifest: fetch_model.Manifest,
+    grammars_dir: Path,
+    bundle: grammars.Bundle,
+) -> None:
     """ACT-114: an IPv6 listen address binds an IPv6 socket."""
-    config = Config(state=tmp_path / "state", model=model_dir, listen=("::1", 0))
-    served = app.App(config, manifest)
+    config = config_for(tmp_path / "state", model_dir, grammars_dir, listen=("::1", 0))
+    served = app.App(config, manifest, bundle)
     assert isinstance(served.server, app.Tcp6Server)
     thread = threading.Thread(target=served.serve_forever, daemon=True)
     thread.start()
@@ -88,13 +99,19 @@ def test_tcp_over_ipv6(tmp_path: Path, model_dir: Path, manifest: fetch_model.Ma
         served.close()
 
 
-def test_start_verifies_the_model_first(tmp_path: Path, model_dir: Path) -> None:
-    """ACT-113: start-up verifies the model and semble, then loads the model and binds."""
-    good = Config(state=tmp_path / "state", model=model_dir, listen=("127.0.0.1", 0))
+def test_start_verifies_the_model_and_the_grammars_first(
+    tmp_path: Path, model_dir: Path, grammars_dir: Path
+) -> None:
+    """ACT-113: start-up verifies the model, semble and the grammars, then loads and binds."""
+    good = config_for(tmp_path / "state", model_dir, grammars_dir)
     started = app.start(good)
     assert started.transport == "tcp"
+    assert started.service.grammars.grammars
     started.close()
-    empty = tmp_path / "empty-model"
+    empty = tmp_path / "empty"
     empty.mkdir()
     with pytest.raises(fetch_model.ModelError, match="other files"):
-        app.start(Config(state=tmp_path / "state", model=empty, listen=("127.0.0.1", 0)))
+        app.start(config_for(tmp_path / "state", empty, grammars_dir))
+    with pytest.raises(grammars.GrammarsError, match="cannot be read"):
+        app.start(config_for(tmp_path / "state", model_dir, empty))
+    assert os.environ[grammars.ENV] == str(grammars_dir)  # a refused directory is never in use

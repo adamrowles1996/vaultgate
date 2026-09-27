@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import semble_grammars
 
 import archives
 import childtargets
@@ -249,7 +250,7 @@ def test_an_on_demand_variant_that_times_out(make_service: ServiceFactory) -> No
 
 
 def test_health_reports_limits_and_usage(make_service: ServiceFactory, tmp_path: Path) -> None:
-    """ACT-113, ACT-115: health reports the protocol, versions, limits and usage."""
+    """ACT-113, ACT-115: health reports the protocol, versions, grammars, limits and usage."""
     service = make_service(
         max_snapshots=3, max_storage_bytes=10 << 20, max_memory_bytes=5 << 20, build_concurrency=2
     )
@@ -259,6 +260,7 @@ def test_health_reports_limits_and_usage(make_service: ServiceFactory, tmp_path:
     assert health["model"] == "minishlab/potion-code-16M-v2"
     assert health["model_revision"] == "e9d2a44ca6a05ac6685f3b23709ea57eb7352d5b"
     assert health["python"].startswith("3.12.")
+    assert health["grammars"] == len(semble_grammars.available_languages()) > 0
     assert health["limits"] == {
         "max_snapshots": 3,
         "max_storage_bytes": 10 << 20,

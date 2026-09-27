@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from types import FrameType
 
-from vaultgate_code import engine, fetch_model, guard, logs
+from vaultgate_code import engine, fetch_model, grammars, guard, logs
 from vaultgate_code.config import Config, ConfigError
 from vaultgate_code.server import Handler
 from vaultgate_code.service import Service, now_ms
@@ -86,11 +86,12 @@ class App:
         self,
         config: Config,
         manifest: fetch_model.Manifest,
+        bundle: grammars.Bundle,
         clock: Callable[[], int] = now_ms,
         trim: Callable[[], None] | None = None,
     ) -> None:
-        """Reconcile the state directory and bind the transport; the model must be loaded."""
-        self.service = Service(config, manifest, clock, trim)
+        """Reconcile the state directory and bind; the model and the grammars must be in use."""
+        self.service = Service(config, manifest, bundle, clock, trim)
         self.service.store.reconcile()
         handler = type("BoundHandler", (Handler,), {"service": self.service})
         self.server: socketserver.BaseServer
@@ -120,18 +121,31 @@ class App:
 
 
 def start(config: Config) -> App:
-    """Verify the model and `semble`, load the model and bind; raises on any mismatch."""
+    """Verify the model, `semble` and the grammars, load the model and bind; raises if one fails.
+
+    The grammars directory is verified and put in use (`SEMBLE_GRAMMARS_CACHE_DIR`, which every
+    build child inherits) before anything is chunked, and `semble`'s own parser lookup must then
+    find a tree-sitter parser: an index is never chunked by lines because a grammar is missing.
+    """
     manifest = fetch_model.verify_dir(config.model)
     engine.check_semble()
+    bundle = grammars.use(config.grammars)
+    engine.check_chunking()
     engine.use_model(str(config.model))
-    return App(config, manifest)
+    return App(config, manifest, bundle)
 
 
 def run(config: Config) -> int:
     """The `serve` command: 0 after a clean shutdown on SIGTERM or SIGINT, 1 if it cannot start."""
     try:
         app = start(config)
-    except (fetch_model.ModelError, ConfigError, RuntimeError, OSError) as error:
+    except (
+        fetch_model.ModelError,
+        grammars.GrammarsError,
+        ConfigError,
+        RuntimeError,
+        OSError,
+    ) as error:
         logs.event("start_failed", reason=str(error))
         return 1
     guard.install()
@@ -142,7 +156,8 @@ def run(config: Config) -> int:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     snapshots, _ = app.service.store.usage()
-    logs.event("started", transport=app.transport, snapshots=snapshots)
+    loaded = len(app.service.grammars.grammars)
+    logs.event("started", transport=app.transport, snapshots=snapshots, grammars=loaded)
     try:
         app.serve_forever()
     finally:
