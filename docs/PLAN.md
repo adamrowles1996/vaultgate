@@ -281,6 +281,16 @@ private repositories through the systemd sidecar, and a real MCP client's search
 search, related-code query, read, `pr:<n>` search and snippet sizes agree with `semble`'s own
 MCP server over a clone of the same commit, recorded in the pull request.
 
+Landed in 0.1.0-rc.21 (#94, #95, #97, #101) and 0.1.0-rc.22 (#106, #107), and the exit is met.
+The first live comparison found the rc.21 sidecar chunking every file by lines, because
+`semble`'s grammars could not be extracted inside the sidecar's sandbox, which the parity suite
+missed by computing its reference in the same process; rc.22 fixed both. On 2026-09-27 a
+systemd deployment indexing sixteen of the maintainer's repositories answered Claude Code's
+search, two-repository search, related-code queries (one and two repositories), read, `pr:<n>`
+search and `max_snippet_lines` 0 and `null` with the same results, in the same order, with the
+same scores and snippets, as `semble` 0.6.1's own MCP server over checkouts of the same commits
+with the same locked dependencies (#101).
+
 ### Post-1.0 candidates
 
 - Passkey (WebAuthn) operator login.
