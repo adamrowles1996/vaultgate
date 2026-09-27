@@ -25,6 +25,13 @@ All notable changes to this project are documented here. The format follows
   snapshot the next time a query needs it, without downloading the repository again. `GET
   /v1/health` reports the number of grammars loaded as `grammars`. The parity test now runs
   `semble` in a separate process with an ordinary environment, over files longer than one chunk.
+- ACT-114: **`install.sh --with-code-sidecar` installs the grammars with the sidecar.** It
+  extracts and verifies them into `/opt/vaultgate-code/<version>/grammars`, read-only to the
+  service, and the unit passes `--grammars`. Re-run the installer to upgrade; nothing else changes.
+- ACT-6, ACT-118: **Check without saving no longer shows zod's wording.** Choosing the token field
+  and pressing Check before a repository is chosen, the step that lists the repositories, showed
+  "destination.repository: Invalid input: expected string, received undefined"; a missing value
+  now reads as the field's own sentence followed by "required", on the Check card as on the form.
 
 ## [0.1.0-rc.21] - 2026-09-26
 

@@ -146,9 +146,8 @@ table names its path, and never zod's raw wording for a missing value.
 */
 export function describeProblem(problem: string): string {
   const { path, detail } = split(problem);
-  return path in FIELD_MESSAGES || path === ''
-    ? messageFor(path, detail)
-    : `${path}: ${detailFor(detail)}`;
+  const isPlaced = path === '' || FIELD_MESSAGES[path] !== undefined;
+  return isPlaced ? messageFor(path, detail) : `${path}: ${detailFor(detail)}`;
 }
 
 export function groupProblems(problems: readonly string[], drawn: Iterable<string>): FieldProblems {
