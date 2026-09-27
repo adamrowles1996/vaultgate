@@ -28,6 +28,7 @@ WorkingDirectory=/var/lib/vaultgate-code
 ExecStart=/opt/vaultgate-code/current/venv/bin/python -m vaultgate_code serve \
   --state /var/lib/vaultgate-code \
   --model /opt/vaultgate-code/current/model \
+  --grammars /opt/vaultgate-code/current/grammars \
   --socket /run/vaultgate-code/code.sock
 Restart=on-failure
 RestartSec=5s

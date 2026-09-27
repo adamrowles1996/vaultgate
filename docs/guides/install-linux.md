@@ -94,7 +94,9 @@ It downloads `vaultgate-code-<version>.tgz` from the same release and verifies i
 `.sha256`, creates the system user `vaultgate-code`, installs the Python dependencies from the
 release's hash-locked `requirements.txt` (wheels only) into a virtual environment, downloads the
 embedding model at its pinned revision and checks every file against the SHA-256 in `model.json`,
-and runs the sidecar as `vaultgate-code.service` on the Unix socket
+extracts `semble`'s tree-sitter grammars from their wheel into a read-only directory and checks
+their digests (the sidecar refuses to start without them, since `semble` would otherwise fall back
+to cutting files into lines), and runs the sidecar as `vaultgate-code.service` on the Unix socket
 `/run/vaultgate-code/code.sock`, which only the `vaultgate-code` group may open. The `vaultgate`
 user is added to that group, and `/etc/vaultgate/vaultgate.env` gains
 `VAULTGATE_ACTIONS_ENABLE_CODE=true` and `VAULTGATE_ACTIONS_CODE_URL=unix:/run/vaultgate-code/code.sock`
@@ -136,7 +138,7 @@ With `--with-code-sidecar`:
 
 | Path                                         | Purpose                                                           |
 | -------------------------------------------- | ----------------------------------------------------------------- |
-| `/opt/vaultgate-code/<version>`              | The sidecar: `app`, its `venv` and the verified `model`           |
+| `/opt/vaultgate-code/<version>`              | The sidecar: `app`, `venv`, the verified `model` and `grammars`   |
 | `/opt/vaultgate-code/current`                | Symlink to the active sidecar release                             |
 | `/etc/vaultgate/vaultgate-code.env`          | The sidecar's limits (optional), never overwritten                |
 | `/var/lib/vaultgate-code`                    | Snapshots and indexes; losing it costs only the time to rebuild   |

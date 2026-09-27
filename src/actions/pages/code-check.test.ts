@@ -46,6 +46,15 @@ describe('Check without saving a Semble connection (ACT-120)', () => {
     expect(harness.actions.engine.targets.list()).toStrictEqual([]);
   });
 
+  it("ACT-118 ACT-119 lists the repositories on a Check with none chosen, in words and without zod's", async () => {
+    const { markup } = await checked({ 'destination.repository': '' });
+    expect(markup).toContain(
+      'The repository as owner/name, as GitHub shows it: type it, or choose one the token can read. (required)',
+    );
+    expect(markup).not.toContain('received undefined');
+    expect(markup).toContain('acme/private-app · private');
+  });
+
   it('ACT-120 reads a public repository without a token', async () => {
     const { markup, github } = await checked({
       'credential.token_field': 'none',

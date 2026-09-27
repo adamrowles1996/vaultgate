@@ -10,6 +10,7 @@ import { icon } from '../../identity/pages/icons.ts';
 import { EMPTY, type Html, html } from '../../identity/pages/template.ts';
 import { cardHead, fieldChip, formatInstant, pill, sealed } from '../../identity/pages/ui.ts';
 
+import { describeProblem } from './messages.ts';
 import { describeFailure, type GitHubFailure } from './repo-source.ts';
 
 import type { RepoInfo } from '../connectors/code/github.ts';
@@ -138,7 +139,7 @@ export function checkCard(check: PageCheck): Html {
     <ul class="checks">
       ${report.endpoints.map((endpoint) => endpointLine(endpoint))} ${credential}
       ${github === undefined ? EMPTY : githubLine(github)}
-      ${report.rules.map((rule) => line(false, html`${rule}`))}
+      ${report.rules.map((rule) => line(false, html`${describeProblem(rule)}`))}
     </ul>
   </section>`;
 }
