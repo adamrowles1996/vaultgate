@@ -130,19 +130,19 @@ damaged. `--verify-only` checks the directory and writes nothing. Extracting tak
 seconds, because the package reads its archive afresh for each library; verifying takes under
 a second.
 
-`serve --grammars DIR` verifies the directory the same way at start-up. It checks that
-`semble`'s own parser lookup finds a parser for Python, TypeScript and Markdown, logs the count
-as `grammars` in its `started` line, and reports it in `GET /v1/health`. Only then does it
-point `semble-grammars` at the directory, through `SEMBLE_GRAMMARS_CACHE_DIR`, which every build
-child inherits. If any of this fails, it logs `start_failed` with the reason and exits 1, so a
+`serve --grammars DIR` verifies the directory the same way at start-up. Once it verifies, the
+server points `semble-grammars` at it through `SEMBLE_GRAMMARS_CACHE_DIR`, which every build
+child inherits. It then checks that `semble`'s own parser lookup finds a parser for Python,
+TypeScript and Markdown. It logs the count as `grammars` in its `started` line and reports it in
+`GET /v1/health`. If any of this fails, it logs `start_failed` with the reason and exits 1, so a
 sidecar never serves line-chunked indexes because its grammars are missing. Every library is
 already in place, so `semble-grammars` never writes to the directory. It should be owned by
 root and read-only to the sidecar's user, like the model directory: the libraries are native
 code loaded into the sidecar. The flag is required rather than defaulting to a directory beside
-the model. It names native code the sidecar loads, as `--model` names the model, and the image
-and the systemd unit both pass it. At build time, a bundled grammar that fails to load fails the
-build (`build_failed`, `GrammarUnavailable`). A language `semble-grammars` bundles no grammar for
-is chunked by lines, exactly as `semble` does.
+the model, because it names native code the sidecar loads, as `--model` names the model. The
+image's default command passes it, and so must a systemd unit. At build time, a bundled grammar
+that fails to load fails the build (`build_failed`, `GrammarUnavailable`). A language
+`semble-grammars` bundles no grammar for is chunked by lines, exactly as `semble` does.
 
 Each index records the `semble-grammars` version and the sidecar's index format. An index built
 by an earlier release records neither, so at start-up it counts as absent. It is rebuilt from
