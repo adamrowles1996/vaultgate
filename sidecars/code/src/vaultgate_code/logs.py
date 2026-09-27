@@ -25,6 +25,7 @@ ALLOWED = frozenset(
         "transport",
         "reason",
         "snapshots",
+        "grammars",
         "count",
     }
 )

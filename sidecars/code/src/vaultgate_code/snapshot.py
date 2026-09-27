@@ -72,8 +72,8 @@ class Snapshot:
     def record(self) -> dict[str, Any]:
         """What `meta.json` holds.
 
-        That is the public metadata, the build timeout and each variant's `semble`, model and
-        cache-format versions.
+        That is the public metadata, the build timeout and the versions each variant was built
+        with (`Service.versions`).
         """
         record = self.public()
         record["build_timeout_s"] = self.build_timeout_s
@@ -81,8 +81,12 @@ class Snapshot:
         return record
 
     @classmethod
-    def from_record(cls, data: object, versions: dict[str, Any]) -> Snapshot:
-        """Rebuild from `meta.json`, strictly; raises TypeError, KeyError or ValueError."""
+    def from_record(cls, data: object) -> Snapshot:
+        """Rebuild from `meta.json`, strictly; raises TypeError, KeyError or ValueError.
+
+        A variant's versions are not checked here: one recorded with other versions, or without
+        one of them, is stale and dropped at start-up (`Store.reconcile`), its tree kept.
+        """
         if type(data) is not dict:
             raise TypeError("meta")
         skipped = _mapping(data, "skipped")
@@ -92,9 +96,6 @@ class Snapshot:
                 raise TypeError("variant")
             for name in VARIANT_PUBLIC:
                 _int(info, name)
-            missing = [name for name in versions if name not in info]
-            if missing:
-                raise KeyError(missing[0])
         return cls(
             key=_str(data, "key"),
             owner=_str(data, "owner"),

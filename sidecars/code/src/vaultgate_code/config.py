@@ -22,6 +22,7 @@ class Config:
 
     state: Path
     model: Path
+    grammars: Path
     socket: Path | None = None
     listen: tuple[str, int] | None = None
     max_snapshots: int = 64
@@ -45,6 +46,7 @@ def _parser() -> argparse.ArgumentParser:
     serve = commands.add_parser("serve", help="serve the sidecar protocol")
     serve.add_argument("--state", help="the state directory (snapshots and indexes)")
     serve.add_argument("--model", help="the verified model directory (fetch_model)")
+    serve.add_argument("--grammars", help="the verified tree-sitter grammars directory (grammars)")
     serve.add_argument("--socket", help="serve on this Unix domain socket (mode 0660)")
     serve.add_argument("--listen", help="serve on HOST:PORT over TCP (an internal network only)")
     for name in INTEGERS:
@@ -79,9 +81,9 @@ def parse(argv: Sequence[str] | None, environ: Mapping[str, str]) -> Config:
         value = args[name]
         return value if value is not None else environ.get(PREFIX + name.upper())
 
-    state, model = setting("state"), setting("model")
-    if state is None or model is None:
-        raise ConfigError("state and model are required")
+    state, model, grammars = setting("state"), setting("model"), setting("grammars")
+    if state is None or model is None or grammars is None:
+        raise ConfigError("state, model and grammars are required")
     if args["socket"] is not None or args["listen"] is not None:
         socket, listen = args["socket"], args["listen"]
     else:
@@ -94,6 +96,7 @@ def parse(argv: Sequence[str] | None, environ: Mapping[str, str]) -> Config:
     return Config(
         state=Path(state),
         model=Path(model),
+        grammars=Path(grammars),
         socket=None if socket is None else Path(socket),
         listen=None if listen is None else _listen(listen),
         **integers,

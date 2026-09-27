@@ -3,16 +3,19 @@
 # Built from this directory: docker build -t vaultgate-code sidecars/code
 #
 # Every input is pinned: the base images by digest, the Python packages by the
-# SHA-256 of each wheel in uv.lock, and the embedding model by its Hugging Face
-# revision and the size and SHA-256 of each file in src/vaultgate_code/model.json.
+# SHA-256 of each wheel in uv.lock, the embedding model by its Hugging Face
+# revision and the size and SHA-256 of each file in src/vaultgate_code/model.json,
+# and the tree-sitter grammars by the SHA-256 of each library in the manifest of
+# the locked semble-grammars wheel.
 #
-# Stages: `uv` supplies the pinned uv binary, `requirements` exports the lock to
-# a hash-pinned requirements file, `deps` installs it into a virtual environment
+# Stages: `uv` supplies the pinned uv binary, `deps` exports the lock to a
+# hash-pinned requirements file and installs it into a virtual environment
 # (wheels only, no dependency resolution), `model` downloads and verifies the
-# model, `runtime` is what ships. The image runs with a read-only root: it
-# writes only to its state volume.
+# model, `grammars` extracts and verifies the grammars from the installed wheel,
+# `runtime` is what ships. The image runs with a read-only root: it writes only
+# to its state volume, and reads the model and the grammars.
 
-# The three python FROM lines share one reference so Dependabot (docker
+# The four python FROM lines share one reference so Dependabot (docker
 # ecosystem) can bump the digest; keep them identical.
 FROM ghcr.io/astral-sh/uv:0.11.8@sha256:3b7b60a81d3c57ef471703e5c83fd4aaa33abcd403596fb22ab07db85ae91347 AS uv
 
@@ -35,6 +38,16 @@ COPY src ./src
 RUN PYTHONPATH=/build/src python3 -m vaultgate_code.fetch_model --dest /opt/vaultgate-code/model \
   && chmod 0755 /opt/vaultgate-code/model
 
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS grammars
+WORKDIR /build
+COPY --from=deps /opt/venv /opt/venv
+COPY src ./src
+# The grammars ship inside the semble-grammars wheel: nothing is downloaded. Each
+# library is extracted, checked against the wheel's SHA-256 and loaded once here,
+# so the server only ever reads the directory (`serve` verifies it again).
+RUN PYTHONPATH=/build/src /opt/venv/bin/python -m vaultgate_code.grammars \
+  --dest /opt/vaultgate-code/grammars
+
 FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS runtime
 LABEL org.opencontainers.image.title="vaultgate-code" \
   org.opencontainers.image.description="The code-search sidecar of vaultgate's code connector (semble)" \
@@ -48,6 +61,7 @@ RUN groupadd --gid 10002 vaultgate-code \
   && chmod 0700 /var/lib/vaultgate-code
 COPY --from=deps /opt/venv /opt/venv
 COPY --from=model /opt/vaultgate-code/model /opt/vaultgate-code/model
+COPY --from=grammars /opt/vaultgate-code/grammars /opt/vaultgate-code/grammars
 COPY src /opt/vaultgate-code/src
 RUN python3 -m compileall -q /opt/vaultgate-code/src
 ENV PATH=/opt/venv/bin:$PATH \
@@ -63,4 +77,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["python3", "-c", "import sys, urllib.request; sys.exit(urllib.request.urlopen('http://127.0.0.1:8000/v1/health', timeout=4).status != 200)"]
 ENTRYPOINT ["python3", "-m", "vaultgate_code"]
-CMD ["serve", "--listen", "0.0.0.0:8000", "--state", "/var/lib/vaultgate-code", "--model", "/opt/vaultgate-code/model"]
+CMD ["serve", "--listen", "0.0.0.0:8000", "--state", "/var/lib/vaultgate-code", "--model", "/opt/vaultgate-code/model", "--grammars", "/opt/vaultgate-code/grammars"]

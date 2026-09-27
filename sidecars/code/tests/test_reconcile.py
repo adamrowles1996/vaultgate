@@ -12,6 +12,10 @@ import pytest
 import archives
 from conftest import ServiceFactory, put
 from vaultgate_code import query
+from vaultgate_code.snapshot import VARIANT_PUBLIC
+
+# What a variant of 0.1.0-rc.21 and before recorded beside its public metadata.
+EARLIER_VERSIONS = ("semble", "cache_format", "model", "model_revision")
 
 SMALL = [
     archives.file("a.py", "def invoice_total():\n    return 1\n"),
@@ -75,12 +79,14 @@ def test_start_up_removes_what_it_cannot_trust(
         ("model_revision", "0" * 40),
         ("model", "someone/else"),
         ("cache_format", 2),
+        ("semble_grammars", "0.1.1"),
+        ("index_format", 1),
     ],
 )
 def test_a_variant_from_another_semble_or_model_is_rebuilt(
     make_service: ServiceFactory, tmp_path: Path, field: str, value: object
 ) -> None:
-    """ACT-113: a variant built with another semble, model, revision or format is rebuilt."""
+    """ACT-113: a variant built with another semble, model, grammars or format is rebuilt."""
     state = tmp_path / "state"
     put(make_service(state=state), "acme", SMALL)
     meta = meta_of(state, "acme")
@@ -92,6 +98,33 @@ def test_a_variant_from_another_semble_or_model_is_rebuilt(
     assert search(restarted, "acme")["results"]
     rebuilt = meta_of(state, "acme")["variants"]["code"]
     assert rebuilt[field] == restarted.versions[field]
+
+
+def test_a_variant_of_an_earlier_release_is_rebuilt_from_its_tree(
+    make_service: ServiceFactory, tmp_path: Path
+) -> None:
+    """ACT-107, ACT-113: variants recorded before index_format (chunked by lines) are rebuilt.
+
+    Their metadata records only the semble, model and cache-format versions. The snapshot and
+    its tree stay; each variant counts as absent and the next query builds it again.
+    """
+    state = tmp_path / "state"
+    put(make_service(state=state), "acme", SMALL, variants=[["code"], ["docs"]])
+    meta = meta_of(state, "acme")
+    for info in meta["variants"].values():
+        del info["index_format"], info["semble_grammars"]
+    assert set(meta["variants"]["code"]) == {*VARIANT_PUBLIC, *EARLIER_VERSIONS}
+    (state / "snapshots" / "acme" / "meta.json").write_text(json.dumps(meta))
+    restarted = make_service(state=state)
+    kept = restarted.store.get("acme")
+    assert kept is not None
+    assert (kept.variants, kept.commit, kept.files) == ({}, meta["commit"], meta["files"])
+    assert list((state / "snapshots" / "acme" / "variants").iterdir()) == []
+    assert (state / "snapshots" / "acme" / "tree" / "a.py").exists()
+    assert search(restarted, "acme")["results"]
+    rebuilt = meta_of(state, "acme")["variants"]
+    assert set(rebuilt) == {"code"}
+    assert (rebuilt["code"]["index_format"], rebuilt["code"]["semble_grammars"]) == (2, "0.1.2")
 
 
 def test_variants_missing_or_unrecorded_on_disk_are_dropped(

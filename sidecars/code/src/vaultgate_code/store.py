@@ -80,7 +80,7 @@ class Store:
             return None
         try:
             data = json.loads((entry / "meta.json").read_text(encoding="utf-8"))
-            snapshot = Snapshot.from_record(data, self.versions)
+            snapshot = Snapshot.from_record(data)
         except (OSError, ValueError, KeyError, TypeError):
             return None
         tree = entry / "tree"
@@ -89,11 +89,16 @@ class Store:
         return snapshot
 
     def _prune_variants(self, entry: Path, snapshot: Snapshot) -> None:
-        """Drop variants built by another semble, model or cache format, or missing on disk."""
+        """Drop variants missing on disk or not built with every current version.
+
+        A variant that records another `semble`, model, cache format, `semble-grammars` or
+        index format, or none (an earlier release's), counts as absent: the next query that
+        needs it builds it again from the snapshot's tree.
+        """
         variants = entry / "variants"
         variants.mkdir(mode=0o755, exist_ok=True)
         for name, info in list(snapshot.variants.items()):
-            current = all(info[item] == value for item, value in self.versions.items())
+            current = all(info.get(item) == value for item, value in self.versions.items())
             if not current or not (variants / name).is_dir():
                 del snapshot.variants[name]
         for found in variants.iterdir():

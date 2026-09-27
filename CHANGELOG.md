@@ -6,6 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- ACT-107, ACT-113, ACT-117: **the code sidecar chunked every file by lines, not along its
+  syntax tree.** `semble` extracts each tree-sitter grammar from its `semble-grammars` wheel into
+  a cache directory the first time it needs one, and the sidecar points every cache below
+  `/dev/null`, so the extraction failed and `semble` quietly fell back to cutting files into runs
+  of lines for every language. Every index the sidecar built was chunked that way, and so its
+  results differed from `semble`'s own MCP server over the same commit. Its parity test missed
+  it because it computed `semble`'s answers inside the sidecar's own process, where they were
+  chunked by lines too. The grammars are now extracted ahead of time, and checked against the
+  wheel's SHA-256 digests, by `python3 -m vaultgate_code.grammars --dest DIR`: in the image
+  build, into `/opt/vaultgate-code/grammars`. `serve` takes the directory as `--grammars DIR` (or
+  `VAULTGATE_CODE_GRAMMARS`), which is now required. It only reads the directory, and it refuses
+  to start unless every grammar is intact and loads. A build that cannot load a grammar now fails
+  instead of chunking by lines. Each index records its `semble-grammars` version and an index
+  format, so every index built before this release counts as absent. Each one is rebuilt from its
+  snapshot the next time a query needs it, without downloading the repository again. `GET
+  /v1/health` reports the number of grammars loaded as `grammars`. The parity test now runs
+  `semble` in a separate process with an ordinary environment, over files longer than one chunk.
+
 ## [0.1.0-rc.21] - 2026-09-26
 
 ### Added

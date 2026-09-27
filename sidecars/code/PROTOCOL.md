@@ -59,6 +59,7 @@ A variant is named by its normalised content joined with `+` (`code`, `docs`, `c
   "model": "minishlab/potion-code-16M-v2",
   "model_revision": "<40-hex Hugging Face commit>",
   "python": "3.12.x",
+  "grammars": 77,
   "limits": {
     "max_snapshots": 64,
     "max_storage_bytes": 0,
@@ -74,6 +75,12 @@ A variant is named by its normalised content joined with `+` (`code`, `docs`, `c
   }
 }
 ```
+
+`grammars` is the number of tree-sitter grammars the sidecar verified and loaded at start-up:
+every grammar `semble-grammars` bundles for its platform (77 on Linux x86-64 with
+`semble-grammars` 0.1.2). It is never 0, because a sidecar that cannot load them does not start.
+The field was added after 0.1.0-rc.21 without a new protocol version; a client that does not know
+it ignores it.
 
 ### `PUT /v1/snapshots/{key}`: build
 
@@ -285,10 +292,19 @@ excluded, whether or not the repository has it.
 - State directory layout: `snapshots/<key>/meta.json`, `snapshots/<key>/tree/…`,
   `snapshots/<key>/variants/<variant>/` (a `semble` `save()`), `tmp/` for builds in progress
   (emptied at start-up). Nothing else is written; `semble`'s own cache folder and statistics file
-  are pointed at a location where they can neither be read nor written.
-- A variant records the `semble` version, the model id and revision and `semble`'s cache format
-  version; one built with any other is treated as absent and rebuilt. A variant loads correctly
-  after the install moves (the model path stored in `semble`'s metadata is not trusted).
+  are pointed at a location where they can neither be read nor written, and the grammars
+  directory is only read.
+- A variant records the `semble` version, the model id and revision, `semble`'s cache format
+  version, the `semble-grammars` version and the sidecar's index format (`2`: chunked along
+  tree-sitter syntax trees). A variant built with any other, or recording none of the last two (a
+  variant of 0.1.0-rc.21 or earlier, chunked by lines), is treated as absent: start-up drops it,
+  keeps its snapshot and tree, and the next search or related query that needs it builds it again.
+  A variant loads correctly after the install moves (the model path stored in `semble`'s metadata
+  is not trusted).
+- Chunking uses the grammars directory given as `--grammars`, which the sidecar verifies at
+  start-up and only reads. A file in a language `semble-grammars` bundles no grammar for is chunked
+  by lines, as `semble` does. A bundled grammar that fails to load fails the build with
+  `422 build_failed` (`GrammarUnavailable`), so it can never produce a line-chunked index.
 - **Disk:** at most `max_snapshots` snapshots and `max_storage_bytes` bytes (the sum of every
   snapshot's `storage_bytes`), least recently used first out. `last_used_at` is updated by every
   search, related and read.
