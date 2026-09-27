@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- M16: **the plan and the specification record the `code` connector as landed**, with the live
+  exit of `docs/PLAN.md` met on 0.1.0-rc.22: a real MCP client's searches, related-code queries,
+  read, `pr:<n>` search and snippet sizes matched `semble`'s own MCP server over the same commits.
+
 ## [0.1.0-rc.22] - 2026-09-27
 
 ### Fixed

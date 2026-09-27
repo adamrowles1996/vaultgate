@@ -1,7 +1,7 @@
 # 14a The `code` connector
 
-> **Status: planned for M16.** Section 14.8 of [14 Action connectors](14-actions-connectors.md),
-> kept in a file of its own. Decided in [ADR 0008](../adr/0008-code-search-connector.md) and
+> **Status: landed in M16 (0.1.0-rc.21; 0.1.0-rc.22 fixed the sidecar's chunking).** Section 14.8
+> of [14 Action connectors](14-actions-connectors.md), kept in a file of its own. Decided in [ADR 0008](../adr/0008-code-search-connector.md) and
 > amended on 2026-09-25 for parity with `semble`'s own MCP server (14.8.6). Requirement
 > identifiers continue the `ACT-n` sequence of section 13.
 

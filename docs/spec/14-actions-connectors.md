@@ -1,8 +1,9 @@
 # 14 Action connectors
 
 > **Status: the interface (14.1), the `http` connector (14.2), the `graph` credential adapter
-> (14.3), the `sql` connector (14.4), the `ssh` connector (14.5) and the `winrm` connector (14.6)
-> have landed (M9, M10, M11, M12, M13); `browser` is M15.** The
+> (14.3), the `sql` connector (14.4), the `ssh` connector (14.5), the `winrm` connector (14.6)
+> and the `code` connector (14.8, in [14a](14a-code-connector.md)) have landed (M9, M10, M11,
+> M12, M13, M16); `browser` is M15.** The
 > connector contracts of the actions layer ([13 Actions](13-actions.md),
 > [13a Actions in operation](13a-actions-operations.md),
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). A document whose runtime has

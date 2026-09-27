@@ -1,6 +1,6 @@
 # 13 Actions: typed, policy-gated use of vault credentials
 
-> **Status: M9 to M14 landed.** This section specifies the actions
+> **Status: M9 to M14 and M16 landed.** This section specifies the actions
 > layer decided in [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md) and sequenced as
 > milestones M9 to M15 in [`PLAN.md`](../PLAN.md). Everything it specifies has landed except what
 > "not yet" names below: M9 brought the engine with the resolution order of ACT-16, the tool
@@ -8,14 +8,15 @@
 > (14.2) with `http_request`; M10 the `graph` credential adapter (14.3; ACT-81…83); M11 the `sql`
 > connector (14.4) with `sql_query` and `sql_execute` (13.6.4) and the classification of 13.7.2
 > (ACT-36…38); M12 the `ssh` connector (14.5) with `ssh_run` (13.6.5; ACT-27, ACT-28, ACT-87,
-> ACT-88); and M13 the `winrm` connector (14.6) with `winrm_run` (13.6.5; ACT-89, ACT-90). M14
+> ACT-88); M13 the `winrm` connector (14.6) with `winrm_run` (13.6.5; ACT-89, ACT-90); and M16
+> the `code` connector (14.8) with `code_search`, `code_find_related` and `code_read` (13.6.7;
+> ACT-103…120). M14
 > brought the per-target call history and ACT-63's "unexpected write" view, grant management from
 > the connected-clients list (since moved to the Agents page's matrix, ACT-9), the per-field validation messages of ACT-6, the `confirm_writes`
 > default of ACT-49 and the proof behind ACT-48's rewritten second half: the in-band fallback for
 > the 2025 wire is unimplementable under MCP-1, so a client on that wire is refused a confirmed
 > target with `confirmation_unavailable` and the clause now says why. Not yet: the `browser`
-> connector of M15 and the `code` connector of M16 (ADR 0008; no tool is listed until a
-> connector's runtime lands). The per-connector
+> connector of M15 (no tool is listed until a connector's runtime lands). The per-connector
 > contracts are in [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence
 > continues there.
 
