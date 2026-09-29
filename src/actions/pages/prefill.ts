@@ -16,11 +16,12 @@ import type { FormValues } from './form-values.ts';
 import type { ConnectorKind } from '../../config/actions.ts';
 
 const DESCRIPTIONS: Readonly<Record<ComputerKind, string>> = {
-  mssql: 'Query a SQL Server database. Writes only if you allow them, each confirmed by a person.',
+  mssql:
+    'Query a SQL Server database. Writes only if you allow them, and only the kinds you allow.',
   postgres: 'Query PostgreSQL inside a read-only transaction, with the same write rules.',
   winrm: 'Run allow-listed PowerShell or cmd commands on a Windows host over WS-Management.',
   ssh: 'Run allow-listed commands, with the host key pinned and no shell in between.',
-  http: 'Call a REST API. vaultgate adds the bearer, basic, header or query credential.',
+  http: 'Call a REST API. vaultgate adds the credential, or an OAuth 2.0 token it obtains itself.',
   graph: 'Call Microsoft Graph with a token vaultgate obtains from Entra ID itself.',
   browser: 'Drive a signed-in browser confined to the origins you allow.',
   code: 'Search a GitHub repository with Semble, as your agents search a checkout: code, docs and config.',

@@ -3,8 +3,7 @@
  * item's login addresses and text fields, none of them secret, offered next
  * to the destination's address field and copied into it when the target is
  * saved. Copied, not linked: the saved destination is what ACT-3 resolves
- * and checks and what every confirmation binds to, and a later change to the
- * item does not move the computer. A host field takes a host (and its port,
+ * and checks, and a later change to the item does not move the computer. A host field takes a host (and its port,
  * when the address carries one); a URL field takes an http:// or https://
  * URL as it stands.
  */

@@ -28,7 +28,7 @@ const DOCUMENT_LABELS: Readonly<Record<DocumentName, { title: string; note: stri
   },
   policy: {
     title: 'Rules',
-    note: 'What agents may do here, how much, and whether a person confirms each change.',
+    note: 'What agents may do here, and how much. Approval of each change, if any, happens in the agent’s own client.',
   },
 };
 
