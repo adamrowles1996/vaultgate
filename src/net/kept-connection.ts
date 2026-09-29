@@ -8,12 +8,12 @@
  * `winrm` session therefore pins itself to one socket for its six exchanges
  * and releases it when the shell is deleted.
  *
- * The agent is also where a certificate pin has to live. Node ignores a
- * `createConnection` passed in request options once a request has an agent —
- * and `agent: false` gives it one anyway, a fresh default agent whose sockets
- * the system store verifies — so a pin expressed that way silently does
- * nothing. Expressing it as an agent of our own is what makes ACT-57 take
- * effect on the wire.
+ * The agent is also where a certificate pin, or a private authority, has to
+ * live. Node ignores a `createConnection` passed in request options once a
+ * request has an agent — and `agent: false` gives it one anyway, a fresh
+ * default agent whose sockets the system store verifies — so a pin expressed
+ * that way silently does nothing. Expressing it as an agent of our own is
+ * what makes ACT-57 (and ACT-121, ACT-122) take effect on the wire.
  */
 import { Agent as HttpAgent } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';

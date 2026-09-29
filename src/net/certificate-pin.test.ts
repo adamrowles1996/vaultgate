@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { fakeTlsSocket, fakeTlsSocketWithoutCertificate } from '../test-support/fake-tls-socket.ts';
+import {
+  fakeTlsSocket,
+  fakeTlsSocketWithoutCertificate,
+  type FakeTlsSocket,
+} from '../test-support/fake-tls-socket.ts';
+import { certificateNaming, TEST_CERTIFICATE_PEM } from '../test-support/test-certificate.ts';
 
 import {
   certificateDigest,
@@ -10,6 +15,7 @@ import {
   type CertificateGuard,
   type TlsConnect,
 } from './certificate-pin.ts';
+import { isTlsErrorCode } from './tls-error.ts';
 
 import type { ConnectionOptions } from 'node:tls';
 
@@ -140,16 +146,29 @@ describe('pinnedCertificateCheck', () => {
   });
 });
 
-function connecting(): { readonly options: ConnectionOptions[]; readonly connect: TlsConnect } {
+interface Connecting {
+  readonly options: ConnectionOptions[];
+  readonly sockets: FakeTlsSocket[];
+  readonly connect: TlsConnect;
+}
+
+function connecting(): Connecting {
   const options: ConnectionOptions[] = [];
+  const sockets: FakeTlsSocket[] = [];
   return {
     options,
+    sockets,
     connect: (given) => {
       options.push(given);
-      return fakeTlsSocket(LEAF);
+      const socket = fakeTlsSocket(LEAF);
+      sockets.push(socket);
+      return socket;
     },
   };
 }
+
+const PEM = TEST_CERTIFICATE_PEM;
+const NODE_ADDRESS = '192.0.2.10';
 
 describe('tlsConnection', () => {
   it('ACT-55 ACT-57 connects to the pinned address with the host name as the server name', () => {
@@ -190,5 +209,80 @@ describe('tlsConnection', () => {
         rejectUnauthorized: true,
       },
     ]);
+  });
+
+  it('ACT-122 hands a private authority to Node, which verifies the chain and the host name itself', () => {
+    const { options, sockets, connect } = connecting();
+    tlsConnection(connect, {
+      address: NODE_ADDRESS,
+      port: 8006,
+      servername: 'pve.example.internal',
+      guard: guard(undefined),
+      ca: PEM,
+    })();
+    expect(options).toStrictEqual([
+      {
+        host: NODE_ADDRESS,
+        port: 8006,
+        servername: 'pve.example.internal',
+        rejectUnauthorized: true,
+        ca: PEM,
+      },
+    ]);
+    // Node refuses the chain before the request is written; nothing is held back here.
+    expect(sockets[0]?.events).toStrictEqual([]);
+  });
+
+  it('ACT-55 ACT-122 never sends an address as SNI and checks the certificate against that address instead', () => {
+    const { options, connect } = connecting();
+    const plan = { port: 8006, guard: guard(undefined), ca: PEM };
+    tlsConnection(connect, { ...plan, address: NODE_ADDRESS, servername: NODE_ADDRESS })();
+    tlsConnection(connect, { ...plan, address: '2001:db8::10', servername: '2001:db8::10' })();
+    const [v4, v6] = options;
+    expect(v4).not.toHaveProperty('servername');
+    expect(v4).toMatchObject({ host: NODE_ADDRESS, rejectUnauthorized: true, ca: PEM });
+    expect(v6).not.toHaveProperty('servername');
+    // Node hands the check whatever the socket connected to; the verdict is about the URL's address.
+    expect(
+      v4?.checkServerIdentity?.('198.51.100.7', certificateNaming(`IP Address:${NODE_ADDRESS}`)),
+    ).toBeUndefined();
+    expect(
+      v6?.checkServerIdentity?.('x', certificateNaming('IP Address:2001:DB8:0:0:0:0:0:10')),
+    ).toBeUndefined();
+    const refusals = [
+      v4?.checkServerIdentity?.(NODE_ADDRESS, certificateNaming('IP Address:192.0.2.11')),
+      v4?.checkServerIdentity?.(NODE_ADDRESS, certificateNaming('DNS:pve.example.internal')),
+    ];
+    expect(refusals).toMatchObject([
+      { code: 'ERR_TLS_CERT_ALTNAME_INVALID' },
+      { code: 'ERR_TLS_CERT_ALTNAME_INVALID' },
+    ]);
+    expect(isTlsErrorCode('ERR_TLS_CERT_ALTNAME_INVALID')).toBe(true);
+  });
+
+  it('ACT-57 ACT-89 sends no address as SNI on a pinned connection either, which Node would refuse outright', () => {
+    const { options, connect } = connecting();
+    tlsConnection(connect, {
+      address: NODE_ADDRESS,
+      port: 5986,
+      servername: NODE_ADDRESS,
+      guard: guard(accepts),
+    })();
+    expect(options[0]).not.toHaveProperty('servername');
+    expect(options[0]).toMatchObject({ host: NODE_ADDRESS, port: 5986, rejectUnauthorized: false });
+    expect(options[0]).not.toHaveProperty('ca');
+  });
+
+  it('ACT-121 ACT-122 holds a plan that names both a pin and an authority to both, never to the looser', () => {
+    const { options, sockets, connect } = connecting();
+    tlsConnection(connect, {
+      address: NODE_ADDRESS,
+      port: 8006,
+      servername: 'pve.example.internal',
+      guard: guard(accepts),
+      ca: PEM,
+    })();
+    expect(options[0]).toMatchObject({ rejectUnauthorized: true, ca: PEM });
+    expect(sockets[0]?.events).toStrictEqual(['cork']);
   });
 });
