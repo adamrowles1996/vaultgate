@@ -208,8 +208,7 @@ any of …"`); calling a connector tool without its scope names that one scope.
 No input. Returns `targets`: for each target this client has been granted, its `name` (the
 `target` argument of every connector tool), the operator's `description` of what the destination
 is and what to use it for, its `connector`, the `operations` the target policy and the token's
-scopes allow (`read`, `write`, `shell`, `act`), `confirm_writes` (whether every non-read call
-will ask a human for confirmation first), `engine` (`mssql` or `postgres`, `sql` targets only)
+scopes allow (`read`, `write`, `shell`, `act`), `engine` (`mssql` or `postgres`, `sql` targets only)
 and `unrestricted: true` for a shell target that accepts any command. Disabled targets, targets
 of a switched-off connector and targets the client is not granted do not appear. There is no
 place in the result for a destination address, a credential field name or a policy pattern.
@@ -241,7 +240,8 @@ naming the error code only. A `graph` target adds two of its own before the requ
 `credential_rotation_failed` when a rotated refresh token could not be written back to the
 vault. Every injected value, in every encoding, is replaced by
 `[redacted:<field>]` before the result leaves the engine. Every method but `GET`, `HEAD` and
-`OPTIONS` is a write: the operator may require a human confirmation for it (see below).
+`OPTIONS` is a write, which your client may ask a person to approve (see
+[Who approves a call](#who-approves-a-call)).
 
 ### `sql_query` (`actions:sql.read`)
 
@@ -282,9 +282,9 @@ policy's write classes include it, `ddl` (`CREATE`, `ALTER`, `DROP`, `TRUNCATE`,
 refuses with `detail.reason: "operation"`, and a target carrying a statement allowlist refuses a
 statement outside it with `detail.reason: "statement_pattern"`.
 
-Every call is a write, so a target with `confirm_writes` asks a human first (see Confirmation
-below) and the call runs only once that human ticks the box. The statement runs in its own
-transaction, committed when it succeeds and rolled back on any error or timeout.
+Every call is a write, and whether a person approves it first is up to your client (see
+[Who approves a call](#who-approves-a-call)). The statement runs in its own transaction, committed
+when it succeeds and rolled back on any error or timeout.
 
 Out: `rows_affected`; `columns` and `rows` for the rows the statement returned through
 `RETURNING` or `OUTPUT`, both empty when it returned none; `truncated`; `duration_ms`.
@@ -312,8 +312,8 @@ Out: `exit_code` (an integer, or `null` when the channel closed without one, as 
 and `duration_ms`. A non-zero exit code is a result, not an error; errors are reserved for the
 connection: `host_key_mismatch`, `authentication_failed`, `connection_failed`, `timeout` (which
 also signals `KILL` to the remote command) and `upstream_error` for a channel the server refused
-or broke. Every `ssh_run` is a shell operation, so the operator may require a human confirmation
-for every call (see below), and every injected value in every encoding is replaced by
+or broke. Every `ssh_run` is a shell operation, which your client may ask a person to approve
+(see [Who approves a call](#who-approves-a-call)), and every injected value in every encoding is replaced by
 `[redacted:<field>]` before the result, the error detail or the audit row leaves the engine.
 
 ### `winrm_run` (`actions:winrm`)
@@ -337,8 +337,8 @@ non-zero exit code is a result, not an error; errors are reserved for the connec
 `tls_error`, `authentication_failed` (a 401 from the listener), `connection_failed`, `timeout`
 (which signals `terminate` to the command and then deletes the shell) and `upstream_error` for a
 fault the service reported, with its reason scrubbed and capped. Every `winrm_run` is a shell
-operation, so the operator may require a human confirmation for every call (see below), and every
-injected value in every encoding is replaced by `[redacted:<field>]` before the result, the error
+operation, which your client may ask a person to approve (see
+[Who approves a call](#who-approves-a-call)), and every injected value in every encoding is replaced by `[redacted:<field>]` before the result, the error
 detail or the audit row leaves the engine.
 
 ### `code_search`, `code_find_related`, `code_read` (`actions:code`)
@@ -366,64 +366,47 @@ commit with no index waits for the build up to the connection's `build_wait_s`; 
 
 Every connector tool takes `target` first and resolves it in a fixed order, stopping at the first
 failure: layer enabled, target exists, client granted, connector enabled, target enabled, stored
-target valid, scope held, arguments valid, policy, rate limits, confirmation, credential, pinned
-destination, run. An ungranted client learns nothing about a target beyond `not_granted`. The
-result never contains the credential: every injected value, in every encoding, is replaced by
-`[redacted:<field>]` in results, error details, audit rows and confirmation prompts. Write, shell
-and browser tools carry `destructiveHint: true` and `openWorldHint: true`, so a client may prompt
-its user before every call; the server never relies on that prompt.
+target valid, scope held, arguments valid, policy, rate limits, credential, pinned destination,
+run. An ungranted client learns nothing about a target beyond `not_granted`. The result never
+contains the credential: every injected value, in every encoding, is replaced by
+`[redacted:<field>]` in results, error details and audit rows. Write, shell and browser tools
+carry `readOnlyHint: false`, `destructiveHint: true` and `openWorldHint: true`, so a client can
+prompt its user before every such call; the server's own controls never rely on that prompt.
 
-### Confirmation
+### Who approves a call
 
-When a target's policy sets `confirm_writes` — which the create form turns on for every new
-target, whatever the connector — every non-read call needs a human's approval
-through MCP form-mode elicitation. On protocol `2026-07-28` the call answers with an
-`input_required` result carrying one `elicitation/create` request (a single boolean, "Allow this
-call") and an opaque `requestState`; the client shows the prompt, then retries the same call with
-`inputResponses.confirm` and the state echoed verbatim, and vaultgate runs it. The state is
-signed, expires after two minutes, is single-use and is bound to the client, the token, the
-target's revision and the exact arguments; anything else is refused. A client that declares no
-form-mode elicitation is refused before anything else happens with the fixed message of
-`confirmation_unavailable`. A retry that echoes the state without a well-formed answer is treated
-as a fresh call: nothing runs and the prompt is issued again.
+vaultgate asks no one to approve a call: an operation the target's policy allows, from a granted
+client whose token holds the scope, runs at once. A person approving each write is the client's
+job, before the call is sent, and every client you would point at vaultgate has one: Claude Code
+asks before it calls a tool unless its permission settings (or a hook) allow that tool, and
+Claude and other MCP clients offer the same kind of per-tool approval. The actions tools say which
+calls can change something in their annotations (`readOnlyHint: false`, `destructiveHint: true`),
+which is what such a prompt is keyed on, so a client can ask for `sql_execute`, `ssh_run` or a
+non-`GET` `http_request` and let reads through.
 
-**What the prompt shows, and what it admits it does not.** The operation is shown with every one
-of its lines prefixed `>`, and the message says so, so a statement or command that reproduces the
-prompt's own closing question cannot make the message appear to end before its operative clause:
-anything the agent wrote is a quoted line, and the closing question is the only unquoted one. An
-operation longer than 1 KiB is shown as its first 768 characters and its last 192 — the tail
-matters, because a payload appended to a long prelude is what a head-only cut hides — and the
-message then carries an unquoted `NOT SHOWN:` line giving the number of characters missing and
-the SHA-256 of the whole operation. Do not approve an operation you have not read: the digest is
-there so you can identify what you were asked about.
-
-**A confirmed target needs a client on `2026-07-28`.** A client on an older protocol revision is
-always refused `confirmation_unavailable`, whatever it supports and whatever it declared when it
-connected, and there is no fallback that could change that. The older wire declares elicitation
-once, during `initialize`; vaultgate serves every request with a fresh stateless handler, which
-never sees that message and has no open channel on which a server-to-client prompt could be
-delivered or answered. Reads on the same target and the same wire are unaffected. If your client
-is on the older revision, either use one on `2026-07-28` or set `confirm_writes: false` and
-review the target's writes under **Unexpected writes** on the console's Activity page. Spec
-[ACT-48](../spec/13-actions.md) records the whole finding.
+The operator's controls stay where they were: the grant, the scopes, the target's policy — the
+place to make a target unable to delete at all — and the **Writes** review on the console's
+Activity page, which lists every call that changed something. An earlier release asked for a
+confirmation itself, through MCP elicitation (`confirm_writes`); it was withdrawn because the
+clients in use could not answer it, so a target that required it refused writes that the client
+had already approved. A policy saved with `confirm_writes` still loads; the key is ignored.
 
 ### Actions error codes
 
 Failures are `{ "error": "<code>", "message": "…", "detail"?: { … } }` with `isError: true`;
 every code has one fixed message and `detail` is the only variable part.
 
-| Code                                                                                                                                                 | Meaning                                                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `unknown_target`, `not_granted`, `target_disabled`, `target_invalid`, `connector_disabled`, `actions_disabled`                                       | The target cannot be used by this client on this deployment; `actions_list_targets` shows what can.                                                                                                                           |
-| `invalid_arguments`                                                                                                                                  | The arguments do not match the tool schema; `detail.problems` says where.                                                                                                                                                     |
-| `policy_denied`                                                                                                                                      | The target policy refused the operation; `detail.reason` is `method`, `path`, `header`, `body_size`, `command`, `command_metacharacter` (a shell operator in a command on a target that is not an any-command one) and so on. |
-| `rate_limited`                                                                                                                                       | Per-target or per-client limit, or for code search too many builds of refs that calls named; `detail.retry_after_s`.                                                                                                          |
-| `confirmation_unavailable`, `confirmation_declined`, `confirmation_cancelled`, `confirmation_expired`, `confirmation_invalid`, `confirmation_reused` | The confirmation of the section above did not happen, was refused, or the retried state was stale, altered or replayed.                                                                                                       |
-| `credential_unavailable`                                                                                                                             | The vault is locked or the item or field is missing; the operator sees why on the target's page.                                                                                                                              |
-| `destination_refused`, `connection_failed`, `tls_error`, `host_key_mismatch`, `authentication_failed`, `timeout`, `upstream_error`                   | The destination could not be reached, presented an SSH host key or a TLS certificate other than the pinned one, or answered with an error; `detail` carries a scrubbed, capped message where one exists.                      |
-| `index_not_ready`, `index_unavailable`                                                                                                               | Code search: the commit is still being indexed (`detail.state` `building`, retry shortly) or its build failed (`state` `failed` and `detail.reason`), or the sidecar did not answer.                                          |
-| `ref_not_found`, `path_not_found`, `chunk_not_found`, `not_text`                                                                                     | Code search: no such branch, tag, commit or pull request; no indexed file of that path; no indexed chunk at that line; a file that is not text for `code_read`.                                                               |
-| `connector_fault`                                                                                                                                    | The call failed inside vaultgate rather than at the destination, which may never have been contacted; `detail.reason` says which.                                                                                             |
+| Code                                                                                                                               | Meaning                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unknown_target`, `not_granted`, `target_disabled`, `target_invalid`, `connector_disabled`, `actions_disabled`                     | The target cannot be used by this client on this deployment; `actions_list_targets` shows what can.                                                                                                                           |
+| `invalid_arguments`                                                                                                                | The arguments do not match the tool schema; `detail.problems` says where.                                                                                                                                                     |
+| `policy_denied`                                                                                                                    | The target policy refused the operation; `detail.reason` is `method`, `path`, `header`, `body_size`, `command`, `command_metacharacter` (a shell operator in a command on a target that is not an any-command one) and so on. |
+| `rate_limited`                                                                                                                     | Per-target or per-client limit, or for code search too many builds of refs that calls named; `detail.retry_after_s`.                                                                                                          |
+| `credential_unavailable`                                                                                                           | The vault is locked or the item or field is missing; the operator sees why on the target's page.                                                                                                                              |
+| `destination_refused`, `connection_failed`, `tls_error`, `host_key_mismatch`, `authentication_failed`, `timeout`, `upstream_error` | The destination could not be reached, presented an SSH host key or a TLS certificate other than the pinned one, or answered with an error; `detail` carries a scrubbed, capped message where one exists.                      |
+| `index_not_ready`, `index_unavailable`                                                                                             | Code search: the commit is still being indexed (`detail.state` `building`, retry shortly) or its build failed (`state` `failed` and `detail.reason`), or the sidecar did not answer.                                          |
+| `ref_not_found`, `path_not_found`, `chunk_not_found`, `not_text`                                                                   | Code search: no such branch, tag, commit or pull request; no indexed file of that path; no indexed chunk at that line; a file that is not text for `code_read`.                                                               |
+| `connector_fault`                                                                                                                  | The call failed inside vaultgate rather than at the destination, which may never have been contacted; `detail.reason` says which.                                                                                             |
 
 ## Secret-handling rules, in plain words
 
