@@ -61,8 +61,8 @@
   },
   "dependencies": {
     "@hono/node-server": "2.1.1",
-    "@modelcontextprotocol/server": "2.0.0",
-    "hono": "4.13.8",
+    "@modelcontextprotocol/server": "2.1.0",
+    "hono": "4.13.9",
     "mssql": "12.7.2",
     "pg": "8.23.0",
     "pino": "10.3.1",
