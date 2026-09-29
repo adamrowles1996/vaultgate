@@ -18,8 +18,9 @@ import {
 } from '../../../test-support/run-support.ts';
 import { ActionError } from '../../errors.ts';
 
-import { ACCESS_TOKEN_FIELD, createGraphTokens, type GraphContext } from './adapter.ts';
+import { createTokenService, type TokenContext } from './adapter.ts';
 import { TOKEN_MARGIN_MS } from './cache.ts';
+import { GRAPH_ACCESS_TOKEN_FIELD as ACCESS_TOKEN_FIELD } from './exchange.ts';
 
 import type { GraphCredential } from './document.ts';
 import type { Answer, FakeTransport } from '../../../test-support/http-connector.ts';
@@ -34,7 +35,7 @@ const REFRESH_CREDENTIAL = graphCredential({
 });
 
 interface Built {
-  readonly context: GraphContext;
+  readonly context: TokenContext;
   readonly support: RecordedSupport;
 }
 
@@ -64,8 +65,8 @@ interface Clock {
   now: number;
 }
 
-function tokensOver(fake: FakeTransport, clock: Clock): ReturnType<typeof createGraphTokens> {
-  return createGraphTokens({ transport: fake.transport, now: () => clock.now, version: '9.9.9' });
+function tokensOver(fake: FakeTransport, clock: Clock): ReturnType<typeof createTokenService> {
+  return createTokenService({ transport: fake.transport, now: () => clock.now, version: '9.9.9' });
 }
 
 function answers(...script: readonly Answer[]): FakeTransport {
@@ -149,19 +150,24 @@ describe('the graph credential adapter', () => {
     expect(support.rotations).toHaveLength(1);
   });
 
-  it('ACT-83 nothing is written back when the token endpoint kept the refresh token', async () => {
-    const fake = answers(tokenResponse());
+  it('ACT-83 ACT-127 nothing is written back when the token endpoint kept the refresh token or echoed the one the call holds', async () => {
+    const fake = answers(tokenResponse(), tokenResponse({ refreshToken: REFRESH }));
+    const tokens = tokensOver(fake, { now: 0 });
     const { context, support } = contextFor(REFRESH_CREDENTIAL);
-    expect(unwrapOk(await tokensOver(fake, { now: 0 }).accessToken(context, false))).toBe(
-      GRAPH_CANARY.accessToken,
-    );
+    expect(unwrapOk(await tokens.accessToken(context, false))).toBe(GRAPH_CANARY.accessToken);
+    expect(unwrapOk(await tokens.accessToken(context, true))).toBe(GRAPH_CANARY.accessToken);
+    expect(fake.requests).toHaveLength(2);
     expect(support.rotations).toStrictEqual([]);
+    expect(support.captured.map((entry) => entry.field)).toStrictEqual([
+      ACCESS_TOKEN_FIELD,
+      ACCESS_TOKEN_FIELD,
+    ]);
   });
 
   it('ACT-54 answers credential_unavailable when the vault held no client secret or no refresh token', async () => {
     const fake = answers(tokenResponse());
     const missingSecret = recordedSupport({ entries: [] });
-    const withoutSecret: GraphContext = {
+    const withoutSecret: TokenContext = {
       credential: graphCredential(),
       injected: missingSecret.secrets.injected,
       support: missingSecret.support,
@@ -173,7 +179,7 @@ describe('the graph credential adapter', () => {
     const onlySecret = recordedSupport({
       entries: [{ field: 'password', value: Buffer.from(SECRET, 'utf8') }],
     });
-    const withoutRefresh: GraphContext = {
+    const withoutRefresh: TokenContext = {
       credential: REFRESH_CREDENTIAL,
       injected: onlySecret.secrets.injected,
       support: onlySecret.support,

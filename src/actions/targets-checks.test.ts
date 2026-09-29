@@ -6,6 +6,7 @@ import {
   createActionsHarness,
   createHttpTarget,
   OPERATOR_ID,
+  PUBLIC_ADDRESS,
   targetInput,
 } from '../test-support/actions-fixtures.ts';
 import { problemPaths } from '../test-support/actions-store-fixtures.ts';
@@ -26,6 +27,19 @@ async function problemsOf(
 ): Promise<readonly string[]> {
   const result = await create(overrides);
   return unwrapFail(result).problems;
+}
+
+/**
+A client-credentials `oauth2` mapping on the fixture item, its token endpoint at `tokenUrl`.
+*/
+function oauth2(tokenUrl: string): Record<string, unknown> {
+  return {
+    mode: 'oauth2',
+    token_url: tokenUrl,
+    grant: 'client_credentials',
+    client_id: '1000.EXAMPLE-CLIENT',
+    secret_field: 'password',
+  };
 }
 
 describe('save-time checks', () => {
@@ -116,6 +130,81 @@ describe('save-time checks', () => {
       'gone.example.com',
     ]);
     expect(harness.connector.contexts).toStrictEqual([]);
+  });
+
+  it('ACT-3 ACT-124 checks an oauth2 token endpoint at save like a destination host, filed under the credential mapping', async () => {
+    const harness = createActionsHarness({
+      addresses: { 'sso.example.internal': ['10.0.0.7'], 'gone.example.com': [] },
+    });
+    const create = creator(harness);
+    expect(
+      await problemsOf(create, { mapping: oauth2('https://sso.example.internal/token') }),
+    ).toStrictEqual([
+      'credential.mapping: host "sso.example.internal" is a private-range address; set internal: true to allow it',
+    ]);
+    expect(
+      await problemsOf(create, { mapping: oauth2('https://gone.example.com/token') }),
+    ).toStrictEqual([
+      'credential.mapping: host "gone.example.com" does not resolve to any address',
+    ]);
+    const internal = await create({
+      mapping: oauth2('https://sso.example.internal/token'),
+      internal: true,
+    });
+    expect(unwrapOk(internal).state).toBe('valid');
+    expect(harness.lookups).toStrictEqual([
+      'api.example.com',
+      'sso.example.internal',
+      'api.example.com',
+      'gone.example.com',
+      'api.example.com',
+      'sso.example.internal',
+    ]);
+    expect(harness.connector.contexts).toStrictEqual([]);
+  });
+
+  it('ACT-118 ACT-124 a check lists the oauth2 token endpoint after the destination, with the address a save would find', async () => {
+    const harness = createActionsHarness();
+    const input = targetInput({ mapping: oauth2('https://auth.example.com/token') });
+    const report = await harness.engine.targets.checkChanges('http', {
+      destination: input['destination'],
+      credential: input['credential'],
+      policy: input['policy'],
+    });
+    expect(report.endpoints).toStrictEqual([
+      { host: 'api.example.com', tls: true, address: PUBLIC_ADDRESS, problems: [] },
+      { host: 'auth.example.com', tls: true, address: PUBLIC_ADDRESS, problems: [] },
+    ]);
+    expect(report.problems).toStrictEqual([]);
+  });
+
+  it('ACT-4 ACT-124 an oauth2 mapping needs the client secret and the refresh token on the item, and an https token URL', async () => {
+    const harness = createActionsHarness();
+    const create = creator(harness);
+    const mapping = {
+      mode: 'oauth2',
+      token_url: 'https://auth.example.com/token',
+      grant: 'refresh_token',
+      client_id: '1000.EXAMPLE-CLIENT',
+      secret_field: 'custom.client secret',
+      refresh_token_field: 'custom.refresh token',
+    };
+    expect(await problemsOf(create, { mapping })).toStrictEqual([
+      'credential.mapping: the item has no "custom.client secret" field',
+      'credential.mapping: the item has no "custom.refresh token" field',
+    ]);
+    expect(
+      await problemsOf(create, {
+        mapping: { ...mapping, token_url: 'http://auth.example.com/token' },
+        internal: true,
+      }),
+    ).toStrictEqual([
+      'credential.mapping.token_url: must be an https:// URL, even on an internal target: the client secret is sent to it',
+    ]);
+    const saved = await create({
+      mapping: { ...mapping, secret_field: 'password', refresh_token_field: 'custom.API key' },
+    });
+    expect(unwrapOk(saved).state).toBe('valid');
   });
 
   it('ACT-57 refuses plain http unless the target is internal', async () => {

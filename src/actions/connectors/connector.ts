@@ -74,6 +74,13 @@ export interface ConnectorSchemas<Destination, Credential, Policy> {
   readonly credentialSchema: z.ZodType<Credential>;
   readonly policySchema: z.ZodType<Policy>;
   endpoints(destination: Destination): readonly Endpoint[];
+  /**
+   * ACT-3, ACT-124: hosts the credential mapping names beyond the destination
+   * (an `oauth2` token endpoint). A save checks each like a destination host;
+   * a call never pins one, because the run resolves it itself, when it uses
+   * it (ACT-55).
+   */
+  credentialEndpoints?(credential: Credential): readonly Endpoint[];
   credentialFields(credential: Credential): readonly CredentialField[];
   /**
   Save-time checks beyond the schemas (ACT-79, ACT-81); each problem is shown to the operator.

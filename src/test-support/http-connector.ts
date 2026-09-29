@@ -120,7 +120,7 @@ export interface ContextOptions extends SupportOptions {
   readonly policy?: Readonly<Record<string, unknown>>;
   readonly secret?: string;
   /**
-  The refresh token the vault holds, for a `graph` mapping that names a refresh-token field.
+  The refresh token the vault holds, for a `graph` or `oauth2` mapping that names a refresh-token field.
   */
   readonly refreshToken?: string;
   readonly username?: string | undefined;
@@ -135,11 +135,11 @@ export interface BuiltContext {
 }
 
 /**
-The vault values a mapping names: the secret it injects, plus a `graph` refresh token.
+The vault values a mapping names: the secret it injects, plus an adapter mapping's refresh token.
 */
 function credentialEntries(options: ContextOptions, credential: HttpCredential): InjectedEntry[] {
   const value = Buffer.from(options.secret ?? CANARY.password, 'utf8');
-  if (credential.mode !== 'graph') {
+  if (!('secret_field' in credential)) {
     return [{ field: credential.field, value }];
   }
   const entries: InjectedEntry[] = [{ field: credential.secret_field, value }];

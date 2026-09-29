@@ -23,6 +23,18 @@ const GRAPH: HttpCredential = {
   secret_field: 'custom.client-secret',
 };
 
+const OAUTH2: HttpCredential = {
+  mode: 'oauth2',
+  token_url: 'https://auth.example.com/oauth/token',
+  grant: 'refresh_token',
+  client_id: '1000.EXAMPLE-CLIENT',
+  secret_field: 'custom.client-secret',
+  refresh_token_field: 'custom.refresh-token',
+  client_auth: 'post',
+  name: 'authorization',
+  prefix: 'Bearer ',
+};
+
 function documents(overrides: Partial<Documents> = {}): Documents {
   return {
     destination: { base_url: 'https://api.example.com/v1' },
@@ -71,7 +83,7 @@ describe('http destination', () => {
 });
 
 describe('http credential', () => {
-  it('14.2 ACT-79 ACT-81 accepts the five modes with their fields and defaults', () => {
+  it('14.2 ACT-79 ACT-81 ACT-124 accepts the six modes with their fields and defaults', () => {
     expect(httpCredentialSchema.parse({ mode: 'bearer', field: 'password' })).toStrictEqual({
       mode: 'bearer',
       field: 'password',
@@ -121,6 +133,16 @@ describe('http credential', () => {
         refresh_token_field: 'custom.refresh-token',
       }).success,
     ).toBe(true);
+    expect(
+      httpCredentialSchema.parse({
+        mode: 'oauth2',
+        token_url: 'https://auth.example.com/oauth/token',
+        grant: 'refresh_token',
+        client_id: '1000.EXAMPLE-CLIENT',
+        secret_field: 'custom.client-secret',
+        refresh_token_field: 'custom.refresh-token',
+      }),
+    ).toStrictEqual(OAUTH2);
     expect(
       httpCredentialSchema.safeParse({ mode: 'header', field: 'password', name: 'bad header' })
         .success,
@@ -206,6 +228,20 @@ describe('httpSchemas', () => {
       { name: 'custom.client-secret', selector: 'custom.client-secret', role: 'secret' },
       { name: 'custom.refresh-token', selector: 'custom.refresh-token', role: 'secret' },
     ]);
+    expect(httpSchemas.credentialFields(OAUTH2)).toStrictEqual(
+      httpSchemas.credentialFields({ ...GRAPH, refresh_token_field: 'custom.refresh-token' }),
+    );
+  });
+
+  it('ACT-124 names the oauth2 token endpoint as a host a save checks, and no other mode names one', () => {
+    expect(httpSchemas.credentialEndpoints?.(OAUTH2)).toStrictEqual([
+      { host: 'auth.example.com', tls: true },
+    ]);
+    expect(httpSchemas.credentialEndpoints?.(GRAPH)).toStrictEqual([]);
+    expect(httpSchemas.credentialEndpoints?.({ mode: 'bearer', field: 'password' })).toStrictEqual(
+      [],
+    );
+    expect(httpSchemas.saveProblems(documents({ credential: OAUTH2 }))).toStrictEqual([]);
   });
 
   it('ACT-81 ACT-79 ACT-35 reports save-time problems: a graph mapping off graph.microsoft.com, query mode without allow_query_credentials, and a path pattern that is not a normalised path', () => {

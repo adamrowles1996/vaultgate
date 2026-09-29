@@ -28,6 +28,7 @@ import {
 import type {
   AnyConnectorSchemas,
   CredentialField,
+  Endpoint,
   TargetDocuments,
 } from './connectors/connector.ts';
 import type { Lookup } from '../net/ip-ranges.ts';
@@ -169,12 +170,27 @@ function commandProblems(policy: unknown, isAnyCommandAllowed: boolean): readonl
   ];
 }
 
+/**
+ * ACT-3 over every host a save names, each filed under the document naming
+ * it: the destination's, which a call pins (ACT-55), and any the credential
+ * mapping names (an `oauth2` token endpoint, ACT-124), which a run resolves
+ * itself when it uses it.
+ */
+function namedHosts(prepared: Prepared): readonly (readonly [string, Endpoint])[] {
+  const { schemas, documents } = prepared;
+  const credential = schemas.credentialEndpoints?.(documents.credential) ?? [];
+  return [
+    ...schemas.endpoints(documents.destination).map((host) => ['destination', host] as const),
+    ...credential.map((host) => ['credential.mapping', host] as const),
+  ];
+}
+
 async function endpointReports(
   prepared: Prepared,
   lookup: Lookup,
 ): Promise<readonly EndpointReport[]> {
   const reports: EndpointReport[] = [];
-  for (const endpoint of prepared.schemas.endpoints(prepared.documents.destination)) {
+  for (const [path, endpoint] of namedHosts(prepared)) {
     const pinned = await pinEndpoint(endpoint, prepared.changes.internal, lookup);
     const isPlainRefused = !endpoint.tls && !prepared.changes.internal;
     reports.push({
@@ -183,9 +199,9 @@ async function endpointReports(
       ...(pinned.ok && { address: pinned.value.address }),
       problems: [
         ...(isPlainRefused
-          ? [`destination: plain transport to "${endpoint.host}" needs internal: true`]
+          ? [`${path}: plain transport to "${endpoint.host}" needs internal: true`]
           : []),
-        ...(pinned.ok ? [] : [`destination: ${pinned.error.message}`]),
+        ...(pinned.ok ? [] : [`${path}: ${pinned.error.message}`]),
       ],
     });
   }

@@ -1,14 +1,15 @@
 /**
  * The `http` connector runtime (spec §14.2): the document schemas, the
- * `http_request` tool, the pure policy half, the `graph` credential adapter
- * of §14.3 and `run` over an injected pinned transport (ACT-78).
+ * `http_request` tool, the pure policy half, the token service of the
+ * `graph` and `oauth2` credential adapters (§14.3, §14.3a) and `run` over
+ * an injected pinned transport (ACT-78).
  * `httpConnector` is what the registry loads on a deployment with
  * `VAULTGATE_ACTIONS_ENABLE_HTTP=true`; contract tests build one with
  * `createHttpConnector` over a fake transport and a manual clock.
  */
 import { createPinnedHttpsFetch, type PinnedFetch } from '../../../net/pinned-https.ts';
 import { VERSION } from '../../../version.ts';
-import { createGraphTokens } from '../graph/adapter.ts';
+import { createTokenService } from '../graph/adapter.ts';
 
 import { authorize, capabilities, describeOperation } from './authorize.ts';
 import { type HttpOperation, httpRequestTool } from './operation.ts';
@@ -31,13 +32,13 @@ export interface HttpConnectorDependencies {
   */
   readonly version: string;
   /**
-  Reads the access-token cache of ACT-82; injected so its expiry is tested without waiting.
+  Reads the access-token cache of ACT-82 and ACT-129; injected so its expiry is tested without waiting.
   */
   readonly now: () => number;
 }
 
 export function createHttpConnector(dependencies: HttpConnectorDependencies): HttpConnector {
-  const tokens = createGraphTokens(dependencies);
+  const tokens = createTokenService(dependencies);
   return {
     ...httpSchemas,
     tools: [httpRequestTool],
