@@ -120,18 +120,22 @@ this says: `bw serve` listens on loopback.
 **Destination.** The `base_url`: an `https://` origin with an optional path prefix, no query
 string or fragment (`http://` only on an internal target). Every request path the agent gives is
 appended to it and must stay under it after normalisation. Saving resolves the host and checks
-every address against the private-range rule; it does not connect.
+every address against the private-range rule; it does not connect. An internal API whose
+certificate no public authority signed can name its own trust instead of the system store — a
+certificate fingerprint or a private certificate authority: see
+[A destination with its own certificate](http-targets.md#a-destination-with-its-own-certificate).
 
 **Credential mapping.** The vault item, chosen before the form (see [The Connections pages](#the-connections-pages)), and
 how the secret is injected:
 
-| Mode     | What is sent                                                                              | Fields                                                                                                                                                                         |
-| -------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bearer` | `Authorization: Bearer <value>`                                                           | the secret field                                                                                                                                                               |
-| `basic`  | `Authorization: Basic base64(username:value)`                                             | the secret field; the username field (`login.username` unless said otherwise)                                                                                                  |
-| `header` | `<name>: <prefix><value>`                                                                 | the secret field, the header name, an optional prefix                                                                                                                          |
-| `query`  | `<name>=<url-encoded value>` appended to the query string, after the agent's own query    | the secret field, the parameter name, an optional prefix; the policy must allow query credentials                                                                              |
-| `graph`  | A Microsoft Graph access token obtained server-side (client credentials or refresh token) | tenant id, application id, grant, scope, the client secret field and, for the refresh grant, the refresh token field (see [Microsoft Graph targets](#microsoft-graph-targets)) |
+| Mode     | What is sent                                                                                                                           | Fields                                                                                                                                                                                                                  |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bearer` | `Authorization: Bearer <value>`                                                                                                        | the secret field                                                                                                                                                                                                        |
+| `basic`  | `Authorization: Basic base64(username:value)`                                                                                          | the secret field; the username field (`login.username` unless said otherwise)                                                                                                                                           |
+| `header` | `<name>: <prefix><value>`                                                                                                              | the secret field, the header name, an optional prefix                                                                                                                                                                   |
+| `query`  | `<name>=<url-encoded value>` appended to the query string, after the agent's own query                                                 | the secret field, the parameter name, an optional prefix; the policy must allow query credentials                                                                                                                       |
+| `graph`  | A Microsoft Graph access token obtained server-side (client credentials or refresh token)                                              | tenant id, application id, grant, scope, the client secret field and, for the refresh grant, the refresh token field (see [Microsoft Graph targets](http-targets.md#microsoft-graph-targets))                           |
+| `oauth2` | `<name>: <prefix><token>`, a token obtained server-side from any OAuth 2.0 token endpoint (`Authorization: Bearer <token>` by default) | the token endpoint, client id and client authentication, grant, optional scope, the client secret field and, for the refresh grant, the refresh token field (see [OAuth 2.0 targets](http-targets.md#oauth-20-targets)) |
 
 Each field is picked from the chosen item's own fields, a secret one
 by its name with "secret" beside it and never its value. If the item cannot be read, the form falls back to typing a `get_secret` selector: `password`, `totp`, `notes`, `custom.<name>` for a hidden custom field, `card.number`, `card.code`, `identity.<field>` or `sshKey.privateKey`. Saving checks that the item exists and carries every mapped field (through the vault's metadata; no secret is read), and the target's page then shows the item's name beside its id.
@@ -161,52 +165,13 @@ stays the only secret store.
 
 A rejected save comes back with every problem listed and the values you typed.
 
-## Microsoft Graph targets
+## Tokens, private certificates and worked examples
 
-The `graph` credential mode makes vaultgate obtain the Microsoft Graph access token itself, so
-the agent never sees the client secret, the refresh token or the access token — it only ever
-calls `http_request` on a target whose `base_url` is `https://graph.microsoft.com` (a path
-prefix such as `/v1.0` is allowed, and then every `path` the agent gives is relative to it).
-
-**In Entra ID.** Register an application, note its **Directory (tenant) ID** and **Application
-(client) ID**, and create a client secret. Then choose the grant:
-
-- **Client credentials** — the application acts as itself. Give it _application_ permissions
-  (for example `User.Read.All`) and grant admin consent. The scope stays
-  `https://graph.microsoft.com/.default`, which means "every application permission this app has
-  consented to"; Microsoft rejects any other scope for this grant.
-- **Refresh token** — the application acts as one signed-in user. Give it the _delegated_
-  permissions you need, add `offline_access`, and obtain a refresh token once through an
-  interactive sign-in of that user (the authorization-code flow, outside vaultgate). The scope is
-  then the delegated scopes you want on each token, space separated, for example
-  `https://graph.microsoft.com/User.Read offline_access`.
-
-**In the vault.** Put the client secret in a field of one item — a hidden custom field is the
-natural home — and, for the refresh-token grant, put the refresh token in a second hidden custom
-field of the same item. Map them as **Graph client secret field** (`custom.<name>`) and **Graph
-refresh token field**.
-
-**What happens on a call.** Before the request, vaultgate posts the grant to
-`https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token` through the same pinned transport
-the request uses: the host is resolved and checked against the private-range rule like any other
-destination. The access token is held in process memory only, keyed by the target and its
-revision, until sixty seconds before it expires; it is never stored and never logged, and it is
-redacted from every result as `[redacted:graph.access_token]`. Editing the target retires the
-cached token. A `401` from Graph discards it and the request is retried once with a fresh one; a
-second `401` is returned as the result, like any other status.
-
-**Rotation.** Microsoft rotates refresh tokens: when the token endpoint returns a new one,
-vaultgate writes it back into the mapped vault field **before** it makes the Graph request and
-records an `actions.credential_rotated` event naming the target, the item and the field (never
-the value). If that write-back fails the call fails with `credential_rotation_failed` rather
-than proceeding, so you learn while the old token still works — check that the vault is unlocked
-and that the mapped field is one vaultgate can write (a custom field, the login password or the
-notes).
-
-**Errors.** `authentication_failed` means the token endpoint rejected the credential
-(`invalid_client`: the secret is wrong or expired; `invalid_grant`: the refresh token is spent,
-revoked or for another tenant); the OAuth error code is in `detail.error` and the call history
-carries it too. Any other answer from the token endpoint is `upstream_error` with its status.
+Two things some APIs need have a guide of their own, [HTTP targets](http-targets.md): a
+destination whose certificate no public authority signed, with Proxmox VE worked through, and a
+token vaultgate obtains itself from an identity provider — Microsoft Graph with the `graph` mode,
+any other OAuth 2.0 token endpoint with `oauth2` — with Power BI, Microsoft Fabric, Azure Resource
+Manager, Zoho Books, HubSpot and Xero worked through.
 
 A target's vault item must be one vaultgate has already synced. The vault is synced on the
 interval `VAULTGATE_BW_SYNC_INTERVAL` sets (15 minutes by default), so an item created in the

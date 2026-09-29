@@ -3,7 +3,8 @@
 > **Status: the interface (14.1), the `http` connector (14.2), the `graph` credential adapter
 > (14.3), the `sql` connector (14.4), the `ssh` connector (14.5), the `winrm` connector (14.6)
 > and the `code` connector (14.8, in [14a](14a-code-connector.md)) have landed (M9, M10, M11,
-> M12, M13, M16); `browser` is M15.** The
+> M12, M13, M16), and so have the `http` destination's private trust (ACT-121 to ACT-123) and
+> the `oauth2` credential adapter (14.3a); `browser` is M15.** The
 > connector contracts of the actions layer ([13 Actions](13-actions.md),
 > [13a Actions in operation](13a-actions-operations.md),
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). A document whose runtime has
@@ -26,6 +27,8 @@ interface ConnectorSchemas<Destination, Credential, Policy> {
   readonly policySchema: z.ZodType<Policy>;
   /** The hosts a destination names and whether each is reached over TLS (ACT-3, ACT-55, ACT-57). */
   endpoints(destination: Destination): readonly Endpoint[];
+  /** Hosts the credential mapping names beyond the destination (an `oauth2` token endpoint): checked at save like a destination host (ACT-3, ACT-124), never pinned by a call, which resolves each itself when it uses it (ACT-55). */
+  credentialEndpoints?(credential: Credential): readonly Endpoint[];
   /** The vault fields a mapping needs, as `get_secret` selectors (ACT-4). */
   credentialFields(credential: Credential): readonly CredentialField[];
   /** ACT-51: the login name of the `base64(username:secret)` variant, when this connector builds one and the destination holds the name rather than the vault (`winrm`). */

@@ -164,6 +164,7 @@ src/actions/
   targets.ts           the targets service: create, edit, enable, disable, delete, grant, revoke, consent revocation (ACT-10)
   targets-lifecycle.ts create, update, enable, disable, delete with the revision bump and the ACT-7 events
   targets-checks.ts    the save-time checks: ACT-3, ACT-4, ACT-35, ACT-57, ACT-88 and the connector's own
+  canonical-json.ts    the canonical JSON that decides which fields a save changed (ACT-7)
   targets-schemas.ts   the common row schema (ACT-1) and the connector documents through the schema registry
   targets-repo.ts      the repository over action_targets and action_grants
   targets-context.ts   what the target operations share: the summary the pages render, the ACT-7 record
@@ -180,8 +181,9 @@ src/actions/
   connectors/
     connector.ts       the connector interface (14.1)
     registry.ts        schemas of every connector; runtimes loaded for enabled connectors only (ACT-73)
-    http/              the runtime (M9): schemas (14.2), the tool (ACT-20, 21), authorize (pure), request, response, run, index
-    graph/             the 14.3 adapter: document, token exchange, cache, write-back
+    certificates.ts    the certificate pin and PEM checks the http, sql and winrm documents share
+    http/              the runtime (M9): schemas (14.2), header names, the tool (ACT-20, 21), authorize (pure), request, response, the destination's trust (ACT-121 to 123), run, index
+    graph/             the 14.3 and 14.3a adapters: the graph and oauth2 documents, the exchange plan, token exchange and response rule, cache, write-back
     sql/               tokeniser and classifier; mssql/ and postgres/ drivers
     ssh/               the runtime (M12): schemas (14.5), the host-key parser and matcher, the tool, authorize (pure), the ssh2 driver shape, client, channel, run
     winrm/             the runtime (M13): schemas (14.6), the tool, authorize (pure), the SOAP envelopes, the strict response reader, client (shell lifecycle), run, index

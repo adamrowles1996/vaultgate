@@ -13,7 +13,7 @@ instead of your credentials ([ADR 0002](../adr/0002-own-authorization-server.md)
 
 Yes, at targets you define. That is what the actions layer is for: a credential an agent reads in
 order to use it ends up in the model's context, the chat transcript and the client's logs. With
-the layer enabled, you add a connection (a target) on the console's Connections page (an HTTP API, Microsoft Graph, a SQL
+the layer enabled, you add a connection (a target) on the console's Connections page (an HTTP API, Microsoft Graph or another OAuth 2.0 API, a SQL
 Server or PostgreSQL database, an SSH or WinRM host), the vault item that signs in there and what
 is allowed; the agent names the target and describes the operation, and vaultgate performs it and
 returns the result with every injected value scrubbed out
@@ -68,7 +68,7 @@ exactly one secret field per audited call, and, with the actions layer enabled, 
 results of actions. There is no telemetry and no update check. vaultgate makes two kinds of
 outbound request on an agent's behalf: fetching a client's metadata document when a client
 identifies itself with a URL, and, only when you have enabled actions, connecting to the targets
-you defined (plus the Microsoft sign-in endpoint for a Graph target).
+you defined (plus the token endpoint of a Microsoft Graph or OAuth 2.0 target).
 
 ## Does vaultgate see my master password?
 

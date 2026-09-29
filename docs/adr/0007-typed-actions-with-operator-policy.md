@@ -1,6 +1,6 @@
 # ADR 0007: Typed actions under operator policy, amending ADR 0004
 
-Date: 2026-09-23. Status: accepted (planned for M9 to M15). Amends [ADR 0004](0004-no-remote-command-execution.md).
+Date: 2026-09-23, amended 2026-09-29 (below). Status: accepted (planned for M9 to M15). Amends [ADR 0004](0004-no-remote-command-execution.md).
 
 ## Context
 
@@ -45,7 +45,8 @@ credential the agent never receives.
   another); the client must be granted the target; the target's policy must allow the
   operation; and, per target, non-read calls may require a human confirmation obtained through
   MCP form-mode elicitation. Tools carry the MCP annotations so clients can add their own
-  prompt, and the server never relies on that prompt.
+  prompt, and the server never relies on that prompt. (The per-target confirmation is withdrawn:
+  see the amendment below.)
 - **Secrets never come back.** Every injected value and its encoded variants are scrubbed
   from every result, error, snapshot, audit row and elicitation message; outputs are capped;
   nothing is logged.
@@ -77,3 +78,23 @@ credential the agent never receives.
 - Milestones M9 to M15 in `PLAN.md` deliver it after v1.0.0; each ships behind
   `VAULTGATE_ENABLE_ACTIONS` with contract tests against fakes and a live test against the
   maintainer's own systems.
+
+## Amendment, 2026-09-29: approval belongs to the client
+
+The fifth layer of consent, a per-target human confirmation of non-read calls obtained through
+MCP form-mode elicitation (`policy.confirm_writes`), is withdrawn. The clients in use could not
+answer it — a client on the 2025 wire can never be asked under the stateless handler of MCP-1 —
+so a target that required it refused every write to them, and the approval that actually worked
+was always the client's own: Claude Code and the other clients ask their user before a tool runs,
+from their permission settings and the tool annotations. A second prompt from the server
+duplicated a question the user had already answered, when it could be asked at all.
+
+Approval is therefore the agent's client's job alone. vaultgate enforces the four layers it owns —
+the connector switch, the scope, the grant and the policy — and keeps publishing accurate
+annotations (`readOnlyHint: false` on every tool that can change something, `destructiveHint`
+where it can destroy), which is what a client's prompt is keyed on. The server still never relies
+on that prompt: a target the operator would not let run unattended needs a narrower policy, not a
+confirmation. The console's review of unconfirmed writes becomes the review of every call that
+changed something (ACT-63), and the `action_calls` columns that recorded confirmations keep their
+history. Spec 13 §13.8 records the change; ACT-41 to ACT-49 and ACT-76 are withdrawn and their
+numbers are not reused.

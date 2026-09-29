@@ -19,10 +19,13 @@ short-lived, scoped, revocable token and nothing else.
 > compatibility evidence) is in progress. The actions layer, opt-in and off by default, has landed
 > through M14: M9 the engine, the operator pages and the `http` connector, M10 the Microsoft Graph
 > credential adapter, M11 `sql`, M12 `ssh`, M13 `winrm`, and M14 the policy-form validation
-> messages, the call-history and unexpected-write views, grant management from the
-> connected-clients list and the elicitation hardening. M16 adds the `code` connector: Semble code
-> search over private GitHub repositories, with its sidecar ([guide](docs/guides/code-search.md)).
-> `browser` is M15; see [`docs/PLAN.md`](docs/PLAN.md).
+> messages, the call-history and writes views and grant management from the connected-clients
+> list. M16 adds the `code` connector: Semble code search over private GitHub repositories, with
+> its sidecar ([guide](docs/guides/code-search.md)). An `http` destination may pin its certificate
+> or trust a private certificate authority, and the `oauth2` credential mode obtains tokens from
+> any OAuth 2.0 token endpoint ([guide](docs/guides/http-targets.md)). vaultgate's own per-call
+> write confirmation is withdrawn: approval belongs to the agent's client. `browser` is M15; see
+> [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Why
 
@@ -40,9 +43,10 @@ vaultgate is built so that the agent never needs the value:
   vault, connects to the pinned destination, runs the operation inside your policy, scrubs every
   injected value from the result and returns what is left. An agent never supplies a host, a URL
   base, a database name or a credential; its arguments change what runs, never where or as whom.
-- **Writes are opt-in three times.** A write needs its own scope at consent, a target policy that
-  allows it and, when you ask for it, a human confirmation on every call; the console lists
-  every write that ran without one.
+- **Writes are opt-in twice, and approved where you work.** A write needs its own scope at
+  consent and a target policy that allows it. Approving each call is the agent's client's job —
+  Claude Code, for one, asks before it runs a tool its permissions do not allow — and the console
+  lists every call that changed something.
 - **One audited door for the rare value that must be read.** The vault tools return metadata. A
   single tool returns a secret value, one field of one item per call, behind its own scope, with
   every call audited.

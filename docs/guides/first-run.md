@@ -118,8 +118,8 @@ of inactivity. Every page of the console has the same sidebar:
 - **Agents**: the connected OAuth clients, each with a **Disconnect** button (once the
   authorization server is deployed, see [Connect Claude](connect-claude.md)) and, with the
   actions layer on, which agent may use which connection.
-- **Activity**: the audit log export and, with the actions layer on, the latest calls and the
-  unexpected writes.
+- **Activity**: the audit log export and, with the actions layer on, the latest calls and every
+  call that changed something.
 - **Vault**: the vault connection (next section). The foot of the sidebar shows the vault's state
   on every page.
 - **Account & security**, under your address at the foot of the sidebar: your browser sessions

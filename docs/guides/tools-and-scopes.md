@@ -224,8 +224,8 @@ the path and query, every header name and the body size are checked against the 
 before anything is sent (`policy_denied` with `detail.reason`), and `Authorization`, `Cookie`,
 `Host`, `Content-Length`, `User-Agent`, `Transfer-Encoding`, `Proxy-*` and the header the
 credential occupies can never be set. vaultgate adds the credential where the operator mapped
-it (bearer, basic, a named header, a query parameter, or a Microsoft Graph access token it
-obtains itself) and `User-Agent: vaultgate/<version>`,
+it (bearer, basic, a named header, a query parameter, or an access token it obtains itself from
+Microsoft Graph's or another OAuth 2.0 token endpoint) and `User-Agent: vaultgate/<version>`,
 connects once to the address it resolved and validated, and follows at most two redirects, only
 under the base URL and only when the policy allows it; any other redirect is returned as it is.
 
@@ -235,8 +235,9 @@ UTF-8), `bytes` received, `truncated` (cut at the target's output limit) and `du
 non-2xx status is a normal result: a `401` or `403` is reported as the status it is, never as
 `authentication_failed`. Errors are reserved for a destination that could not be reached:
 `connection_failed`, `tls_error`, `timeout` and `destination_refused`, with `detail.reason`
-naming the error code only. A `graph` target adds two of its own before the request is made:
-`authentication_failed` when Microsoft rejects the client secret or the refresh token, and
+naming the error code only. A `graph` or `oauth2` target adds two of its own before the request
+is made: `authentication_failed` when the token endpoint rejects the client secret or the refresh
+token, and
 `credential_rotation_failed` when a rotated refresh token could not be written back to the
 vault. Every injected value, in every encoding, is replaced by
 `[redacted:<field>]` before the result leaves the engine. Every method but `GET`, `HEAD` and

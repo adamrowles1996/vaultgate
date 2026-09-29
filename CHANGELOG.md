@@ -6,6 +6,51 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking**, spec 13 §13.8, ADR 0007 (amended): **vaultgate no longer asks anyone to approve a
+  call.** The per-target `policy.confirm_writes` and the MCP form-mode elicitation behind it are
+  withdrawn (ACT-41 to ACT-49 and ACT-76, numbers not reused). The clients in use could not answer
+  it — a client on the 2025 wire can never be asked under the stateless handler of MCP-1 — so a
+  target that required it refused every write to them, while their own approval, which does work,
+  had already been given. Approval is now the agent's client's alone: Claude Code, for one, asks
+  before it runs a tool its permission settings do not allow, keyed on the annotations every
+  actions tool carries (`readOnlyHint: false` on anything that can change something). A call the
+  grant, the scope and the policy allow now runs at once, on every target: **before upgrading,
+  narrow the policy of any target that relied on the confirmation to hold writes back.** A policy
+  stored with `confirm_writes` still loads, the key dropped; the `confirmation_*` error codes are
+  gone; `action_calls` keeps its `elicitation` and `confirmation_nonce` columns for the history,
+  written `not_required` and `NULL` from now on, and the audit export still carries both.
+- The console: the **Confirm writes** checkbox leaves every connection form, and **Unexpected
+  writes** becomes **Writes** (`/account/actions/writes`; the old `/account/actions/unexpected`
+  address is gone), listing every call that changed something. The weekly counts and the sidebar
+  badge of unconfirmed writes go with it, and a connection's badge reads "Can change things" or
+  "Reads only".
+
+### Added
+
+- ACT-121 to ACT-123: **an `http` destination may bring its own certificate trust**, for an
+  internal API whose certificate no public authority signed — the Proxmox VE API, whose nodes'
+  certificates the cluster's own authority signs, for one. `certificate_sha256` pins the leaf
+  certificate (the connection is held until it matches, so nothing is written to a host that
+  fails it); `ca_pem` trusts one or more PEM certificates of a private authority, with the host
+  name still checked. Either replaces the system store for `base_url`'s origin only — each
+  redirect hop included, a token exchange never — on `https://` only, one or the other. The form
+  gains **Certificate fingerprint (SHA-256)** and **Certificate authority (PEM)**, and the
+  target's page says which trust is in use.
+- Spec 14.3a, ACT-124 to ACT-130: **the `oauth2` credential mode of the `http` connector**:
+  vaultgate obtains the access token itself from any OAuth 2.0 token endpoint, by the
+  client-credentials or the refresh-token grant, with the client authenticating in the form or by
+  HTTP Basic, and sends it as `<name>: <prefix><token>` (`Authorization: Bearer` by default). It
+  shares `graph`'s response rule, cache and write-back of a rotated refresh token; `graph` stays
+  as its Microsoft Graph preset. The token endpoint is `https://` only, checked at save like a
+  destination host and resolved under the private-range rule on every exchange; the access token
+  is redacted as `[redacted:oauth2.access_token]`. Power BI, Microsoft Fabric, Azure Resource
+  Manager, Graph in a national cloud, Zoho Books (whose `Zoho-oauthtoken` prefix and `200`
+  refusal it handles), HubSpot and Xero are worked through in the new guide,
+  [HTTP targets](docs/guides/http-targets.md), which also takes in the Microsoft Graph section of
+  the actions guide.
+
 ### Changed
 
 - M16: **the plan and the specification record the `code` connector as landed**, with the live
