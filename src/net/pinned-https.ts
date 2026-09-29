@@ -18,9 +18,10 @@ export type PinnedMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' 
  * header; only the socket address is fixed, so no second DNS resolution can
  * redirect the connection to a different address. The scheme picks the
  * transport: `https:` verifies the certificate against the system store, or
- * against the caller's `certificate` pin where the destination has one, with
- * no insecure option either way (ACT-57); `http:` is plain `node:http` to the
- * pinned address, which only an `internal` action target may name.
+ * in its place against the caller's `certificate` pin or `ca` authority where
+ * the destination names one, with no insecure option either way (ACT-57,
+ * ACT-121, ACT-122); `http:` is plain `node:http` to the pinned address,
+ * which only an `internal` action target may name.
  */
 export interface PinnedRequest {
   readonly url: string;
@@ -36,6 +37,10 @@ export interface PinnedRequest {
   ACT-57: judges the leaf certificate in place of the system store; nothing is sent until it passes.
   */
   readonly certificate?: CertificateCheck | undefined;
+  /**
+  ACT-122: PEM certificates Node verifies the chain against in place of the system store, identity included.
+  */
+  readonly ca?: string | undefined;
   /**
    * The socket every request of one authenticated session travels, for a
    * protocol that authenticates the connection rather than the message
@@ -106,6 +111,14 @@ One socket, reused for every request of the session that holds it.
 */
 const KEPT: AgentOptions = { keepAlive: true, maxSockets: 1 };
 
+/**
+The URL's host as TLS names it: an IPv6 literal loses the brackets a URL writes it in.
+*/
+function tlsHost(url: URL): string {
+  const { hostname } = url;
+  return hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
+}
+
 function connectionPlan(
   pinned: PinnedRequest,
   url: URL,
@@ -115,17 +128,18 @@ function connectionPlan(
   return {
     address: pinned.address,
     port: url.port === '' ? (isTls ? HTTPS_PORT : HTTP_PORT) : Number(url.port),
-    servername: url.hostname,
+    servername: tlsHost(url),
     isTls,
     guard: { check: pinned.certificate, record },
+    ca: pinned.ca,
   };
 }
 
 /**
  * The agent the request runs on: the session's own socket where it holds one,
- * an agent carrying the certificate pin where the destination has one
- * (ACT-57), and otherwise nothing, which leaves Node's default agent and the
- * system trust store in charge.
+ * an agent carrying the certificate pin or the private authority where the
+ * destination names one (ACT-57, ACT-122), and otherwise nothing, which
+ * leaves Node's default agent and the system trust store in charge.
  */
 function agentOptions(connect: TlsConnect, pinned: PinnedRequest, url: URL): RequestOptions {
   const kept = pinned.connection;
@@ -137,7 +151,7 @@ function agentOptions(connect: TlsConnect, pinned: PinnedRequest, url: URL): Req
   }
   // A request that keeps no connection has nowhere to put the peer's
   // certificate, and nothing in a one-request protocol wants it.
-  return pinned.certificate === undefined
+  return pinned.certificate === undefined && pinned.ca === undefined
     ? {}
     : { agent: agentFor(connect, connectionPlan(pinned, url, undefined), {}) };
 }

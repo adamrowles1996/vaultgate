@@ -21,6 +21,7 @@ import {
   toPinned,
 } from './request.ts';
 import { toOutput, transportFailure } from './response.ts';
+import { destinationTrust } from './trust.ts';
 
 import type { HttpOperation } from './operation.ts';
 import type { HttpCredential, HttpDestination, HttpPolicy } from './schemas.ts';
@@ -105,8 +106,13 @@ async function exchange(
   context: HttpRunContext,
   plan: Exchange,
 ): Promise<Response> {
+  // ACT-121, ACT-122, ACT-123: the destination's own trust goes on every request to base_url,
+  // the first and each hop, and on nothing else; a token exchange never passes through here.
+  const trust = destinationTrust(context.destination);
+  const send = (outgoing: OutgoingRequest): Promise<Response> =>
+    transport({ ...toPinned(outgoing, plan.address, context.signal), ...trust });
   let request = plan.first;
-  let response = await transport(toPinned(request, plan.address, context.signal));
+  let response = await send(request);
   for (let hops = 0; hops < MAX_HOPS && context.policy.follow_redirects; hops += 1) {
     const hop = nextHop(response, request, context.destination.base_url, plan.injection);
     if (hop === undefined) {
@@ -114,7 +120,7 @@ async function exchange(
     }
     await response.body?.cancel();
     request = hop;
-    response = await transport(toPinned(request, plan.address, context.signal));
+    response = await send(request);
   }
   return response;
 }
