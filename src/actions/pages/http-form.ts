@@ -1,7 +1,10 @@
 /**
- * The `http` connector's form (spec §14.2, §14.3): one descriptor per field
- * of its three documents, in the order the operator reads them, including
- * the `graph` adapter's (ACT-81), whose exchange vaultgate performs itself.
+ * The `http` connector's form (spec §14.2, §14.3, §14.3a): one descriptor per
+ * field of its three documents, in the order the operator reads them,
+ * including the `graph` (ACT-81) and `oauth2` (ACT-124) adapters', whose
+ * token exchange vaultgate performs itself. The adapters share a control
+ * wherever their documents share a field's name and meaning, and so do
+ * `header` and `oauth2` for the header name and the prefix.
  */
 import { HTTP_METHODS } from '../connectors/http/schemas.ts';
 
@@ -10,10 +13,12 @@ import type { FieldDescriptor } from './descriptors.ts';
 const KIB = 1024;
 const MIB = KIB * KIB;
 
-const MODES = ['bearer', 'basic', 'header', 'query', 'graph'] as const;
+const MODES = ['bearer', 'basic', 'header', 'query', 'graph', 'oauth2'] as const;
 const FIELD_MODES = ['bearer', 'basic', 'header', 'query'] as const;
-const NAMED_MODES = ['header', 'query'] as const;
+const NAMED_MODES = ['header', 'query', 'oauth2'] as const;
 const GRAPH = ['graph'] as const;
+const OAUTH2 = ['oauth2'] as const;
+const ADAPTERS = ['graph', 'oauth2'] as const;
 
 const SELECTOR_HELP =
   'A vault field: password, totp, notes, custom.<name> for a hidden custom field, ' +
@@ -44,7 +49,8 @@ const credential: readonly FieldDescriptor[] = [
     help:
       'bearer: Authorization: Bearer <value>; basic: Authorization: Basic base64(username:value); ' +
       'header: <name>: <prefix><value>; query: <name>=<value> in the query string; graph: a ' +
-      'Microsoft Graph token obtained server-side.',
+      'Microsoft Graph token obtained server-side; oauth2: a token vaultgate obtains from any ' +
+      'OAuth 2.0 token endpoint, sent as <name>: <prefix><token>.',
   },
   {
     document: 'credential',
@@ -70,15 +76,19 @@ const credential: readonly FieldDescriptor[] = [
     label: 'Header or query parameter name',
     kind: 'text',
     when: { field: 'mode', values: NAMED_MODES },
-    help: 'Used by the header and query modes.',
+    help: 'Used by the header and query modes, and by oauth2 for its token (default authorization).',
   },
   {
     document: 'credential',
     name: 'prefix',
     label: 'Value prefix',
     kind: 'text',
+    verbatim: true,
     when: { field: 'mode', values: NAMED_MODES },
-    help: 'Optional, written before the value (for example "Token " with its space).',
+    help:
+      'Optional, written before the value exactly as typed, spaces included (for example "Token " ' +
+      'with its space). oauth2 writes it before the token: default "Bearer ", ' +
+      '"Zoho-oauthtoken " for Zoho.',
   },
   {
     document: 'credential',
@@ -92,48 +102,77 @@ const credential: readonly FieldDescriptor[] = [
   },
   {
     document: 'credential',
-    name: 'client_id',
-    label: 'Graph application (client) id',
+    name: 'token_url',
+    label: 'Token endpoint URL (oauth2)',
     kind: 'text',
-    when: { field: 'mode', values: GRAPH },
+    when: { field: 'mode', values: OAUTH2 },
+    help:
+      'The OAuth 2.0 token endpoint, https:// only (the client secret is sent to it), no query ' +
+      'or fragment: for Entra ID, https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token.',
+  },
+  {
+    document: 'credential',
+    name: 'client_id',
+    label: 'Application (client) id',
+    kind: 'text',
+    when: { field: 'mode', values: ADAPTERS },
+    help: 'graph: the application id, a GUID. oauth2: the client id the provider issued.',
+  },
+  {
+    document: 'credential',
+    name: 'client_auth',
+    label: 'Client authentication (oauth2)',
+    kind: 'select',
+    options: [
+      { value: 'post', label: 'post: client id and secret in the form' },
+      { value: 'basic', label: 'basic: HTTP Basic' },
+    ],
+    fallback: 'post',
+    when: { field: 'mode', values: OAUTH2 },
+    help: 'How the client authenticates to the token endpoint; Xero wants basic.',
   },
   {
     document: 'credential',
     name: 'grant',
-    label: 'Graph grant',
+    label: 'Grant',
     kind: 'select',
     options: [
       { value: 'client_credentials', label: 'client_credentials' },
       { value: 'refresh_token', label: 'refresh_token' },
     ],
     fallback: 'client_credentials',
-    when: { field: 'mode', values: GRAPH },
+    when: { field: 'mode', values: ADAPTERS },
+    help: 'Used by the graph and oauth2 modes.',
   },
   {
     document: 'credential',
     name: 'scope',
-    label: 'Graph scope',
+    label: 'Scope',
     kind: 'text',
-    when: { field: 'mode', values: GRAPH },
-    help: 'Default https://graph.microsoft.com/.default.',
+    when: { field: 'mode', values: ADAPTERS },
+    help:
+      'graph: default https://graph.microsoft.com/.default. oauth2: sent only when set, for ' +
+      'example https://analysis.windows.net/powerbi/api/.default.',
   },
   {
     document: 'credential',
     name: 'secret_field',
-    label: 'Graph client secret field',
+    label: 'Client secret field',
     kind: 'text',
     picker: { role: 'secret', fallback: 'password' },
-    when: { field: 'mode', values: GRAPH },
-    help: SELECTOR_HELP,
+    when: { field: 'mode', values: ADAPTERS },
+    help: `${SELECTOR_HELP} Used by the graph and oauth2 modes.`,
   },
   {
     document: 'credential',
     name: 'refresh_token_field',
-    label: 'Graph refresh token field',
+    label: 'Refresh token field',
     kind: 'text',
     picker: { role: 'secret', optional: true },
-    when: { field: 'mode', values: GRAPH },
-    help: 'Required for the refresh_token grant; a hidden custom field is the expected home.',
+    when: { field: 'mode', values: ADAPTERS },
+    help:
+      'Required for the refresh_token grant, and on oauth2 used by it only; a hidden custom ' +
+      'field is the expected home.',
   },
 ];
 

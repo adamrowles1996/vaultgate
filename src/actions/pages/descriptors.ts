@@ -57,6 +57,10 @@ export type FieldDescriptor = FieldBase &
         Drawn as a text area, so a value with line breaks (a PEM) survives the browser.
         */
         readonly multiline?: boolean;
+        /**
+        Read as typed, spaces kept (a prefix such as "Token " needs its space); a blank field is still left out.
+        */
+        readonly verbatim?: boolean;
         readonly picker?: FieldPicker;
         /**
         The destination's address, which the vault item may supply (ACT-2): a host, or a URL.
