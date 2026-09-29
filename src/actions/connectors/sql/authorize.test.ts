@@ -183,27 +183,13 @@ describe('the sql policy decision for sql_execute', () => {
 });
 
 describe('describing a sql operation', () => {
-  it('ACT-43 ACT-60 summarises the statement and classifies it for the audit trail', () => {
+  it('ACT-26 ACT-60 classifies the statement for the audit trail', () => {
     expect(
       describeOperation(
         request(SQL_EXECUTE_TOOL),
         sqlOperationSchema.parse({ statement: 'DELETE FROM t' }),
       ),
-    ).toStrictEqual({ summary: 'DELETE FROM t', classification: 'dml' });
-  });
-
-  it('ACT-43 excerpts a long statement head and tail rather than hiding its end', () => {
-    const statement = `SELECT '${'a'.repeat(4000)}' FROM audit_log`;
-    const described = describeOperation(
-      request(SQL_QUERY_TOOL),
-      sqlOperationSchema.parse({ statement }),
-    );
-    expect(described.summary).toHaveLength(768 + 3 + 192);
-    expect(described.summary.endsWith('FROM audit_log')).toBe(true);
-    expect(described.omitted).toMatchObject({
-      characters: statement.length - 960,
-      total: statement.length,
-    });
+    ).toStrictEqual({ classification: 'dml' });
   });
 
   it('ACT-60 a statement with no single class is audited as other', () => {

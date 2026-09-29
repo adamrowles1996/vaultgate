@@ -7,7 +7,7 @@
  * the per-agent computers row the OAuth layer's cards show. Identity and the
  * OAuth layer never import this module (ACT-70); they receive renderers.
  */
-import { recentCalls, countUnexpectedSince } from './calls-view.ts';
+import { recentCalls } from './calls-view.ts';
 import { activitySection } from './calls.ts';
 import { type ClientTargets, createClientTargets } from './client-grants.ts';
 import { navigation } from './computers-view.ts';
@@ -24,8 +24,6 @@ import type {
 import type { Hono } from 'hono';
 
 export type { ActionsPagesDependencies } from './view.ts';
-
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface ActionsPages {
   readonly routes: Hono<IdentityEnvironment>;
@@ -72,9 +70,7 @@ function activity(dependencies: ActionsPagesDependencies): ConsoleSectionRendere
   return (session) => {
     const live = new Set(dependencies.targets.list().map((target) => target.id));
     const names = clientNames(dependencies.listClients(session.operatorId));
-    const calls = recentCalls(dependencies.database, live, names).calls;
-    const since = dependencies.now() - WEEK_MS;
-    return activitySection(calls, countUnexpectedSince(dependencies.database, since));
+    return activitySection(recentCalls(dependencies.database, live, names).calls);
   };
 }
 

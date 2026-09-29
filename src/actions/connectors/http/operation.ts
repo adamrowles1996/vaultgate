@@ -148,8 +148,7 @@ export const HTTP_REQUEST_DESCRIPTION =
   'request and is reported as such, never as authentication_failed. Errors are reserved for a ' +
   'destination that could not be reached (connection_failed, tls_error, timeout, ' +
   'destination_refused). Redirects are returned as they are unless the target policy follows ' +
-  'them. Every method other than GET, HEAD and OPTIONS is a write: the operator may require a ' +
-  'human confirmation for it, which you cannot supply yourself.';
+  'them. Every method other than GET, HEAD and OPTIONS is a write.';
 
 export const httpRequestTool: ConnectorTool<HttpOperation> = {
   name: 'http_request',

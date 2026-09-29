@@ -32,7 +32,7 @@ interface ConnectorSchemas<Destination, Credential, Policy> {
   basicUsername?(destination: Destination): string | undefined;
   /** Save-time rules beyond the schemas (ACT-79, ACT-81); each problem is shown to the operator. */
   saveProblems(documents: TargetDocuments<Destination, Credential, Policy>): readonly string[];
-  /** The host (and database, base path or origin) for ACT-43 and the operator pages. */
+  /** The host (and database, base path or origin) for the operator pages (ACT-5). */
   summariseDestination(destination: Destination): string;
 }
 
@@ -52,7 +52,7 @@ interface Connector<Destination, Credential, Policy, Operation> extends Connecto
     credential: Credential,
     destination: Destination,
   ): PolicyDecision;
-  /** The ACT-43 operation summary and the ACT-60 classification, for the same reason. */
+  /** The ACT-60 classification the audit trail records, for the same reason. */
   describe(operation: Operation, destination: Destination): OperationDescription;
   /** Runs one operation with the injected values; output is raw, the engine scrubs it. */
   run(
@@ -367,7 +367,7 @@ allowed origins. The design therefore treats every session as a shell session wi
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `destination` | `origins` (one or more exact origins, `https://` unless `internal: true`; navigation is confined to them); `login_url` (under one of `origins`); optional `login_form` (`username_selector`, `password_selector`, `totp_selector`, `submit_selector`; CSS selectors that override the heuristics of ACT-93); optional `logged_in_check` (a CSS selector that must be present after login, or a URL prefix). |
 | `credential`  | `username_from` (`login.username` default); `password_field` (`password` default); `totp` (`auto` default: type the item's TOTP code when the item has one and the page asks; `never`).                                                                                                                                                                                                                     |
-| `policy`      | Common fields; `operations` (`["read"]` default: open, navigate, snapshot, screenshot, close; or `["read","act"]` adding click and type); `screenshots` (default `false`); `session_ttl_s` (idle, default 900, max 3 600); `max_sessions` (per client, default 1, max 4); `confirm_writes` applies to `act` calls.                                                                                          |
+| `policy`      | Common fields; `operations` (`["read"]` default: open, navigate, snapshot, screenshot, close; or `["read","act"]` adding click and type); `screenshots` (default `false`); `session_ttl_s` (idle, default 900, max 3 600); `max_sessions` (per client, default 1, max 4); `act` calls are non-read calls (ACT-40).                                                                                          |
 
 ### 14.7.1 Sidecar architecture
 

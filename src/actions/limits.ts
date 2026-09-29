@@ -1,8 +1,8 @@
 /**
  * Rate limits and caps (spec §13.11, ACT-59): per-target and per-client
  * token buckets on the shared limiter of OPS-6, plus in-flight counters. A
- * call acquires all four before confirmation and releases the counters when
- * it ends.
+ * call acquires all four before its credential is fetched and releases the
+ * counters when it ends.
  */
 import { type Clock, createRateLimiter } from '../net/rate-limit.ts';
 

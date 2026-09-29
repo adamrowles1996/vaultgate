@@ -22,7 +22,7 @@ export type OperationSchema<Operation> = z.ZodObject<z.ZodRawShape, z.core.$stri
  * may name up to `max` of them at once; the engine resolves each in the
  * ACT-16 order and records a row for each. `singleOnly` lists the arguments
  * that may be given with one target only. Only a read-only tool may take more
- * than one target, so no confirmation is ever needed for such a call.
+ * than one target.
  */
 export interface RepoArgument {
   readonly max: number;

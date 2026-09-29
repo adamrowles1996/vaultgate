@@ -4,7 +4,6 @@ import { defaultValues, documentsFromForm, valuesFromDocuments } from './form-va
 import { editableConnectors, formFor } from './forms.ts';
 
 import type { ConnectorForm } from './descriptors.ts';
-import type { ConnectorKind } from '../../config/actions.ts';
 
 const HTTP: ConnectorForm = formFor('http', { allowAnyCommand: false }) ?? {
   kind: 'http',
@@ -40,7 +39,6 @@ describe('documentsFromForm', () => {
         follow_redirects: true,
         allow_query_credentials: false,
         rate_limit_per_minute: NaN,
-        confirm_writes: false,
       },
     });
   });
@@ -76,7 +74,6 @@ describe('valuesFromDocuments', () => {
         allowed_paths: 'not a list',
         response_headers: ['location'],
         timeout_ms: 5000,
-        confirm_writes: true,
         follow_redirects: 'yes',
       },
     });
@@ -104,7 +101,6 @@ describe('valuesFromDocuments', () => {
       'policy.timeout_ms': '5000',
       'policy.max_output_bytes': '',
       'policy.rate_limit_per_minute': '',
-      'policy.confirm_writes': 'on',
     });
     const missing = valuesFromDocuments(HTTP, {
       destination: 'nope',
@@ -114,9 +110,8 @@ describe('valuesFromDocuments', () => {
     expect(missing.size).toBe(0);
   });
 
-  it('ACT-49 starts a new target from every fallback, with confirmation of non-read calls on', () => {
+  it('ACT-5 starts a new target from every fallback', () => {
     const values = defaultValues(HTTP);
-    expect(values.get('policy.confirm_writes')).toBe('on');
     expect(values.get('policy.allowed_methods.GET')).toBe('on');
     expect(values.get('policy.allowed_methods.HEAD')).toBe('on');
     expect(values.has('policy.allowed_methods.POST')).toBe(false);
@@ -128,27 +123,14 @@ describe('valuesFromDocuments', () => {
   });
 });
 
-function isConfirming(kind: ConnectorKind): boolean {
-  const fields = formFor(kind, { allowAnyCommand: true })?.fields ?? [];
-  return fields.some((field) => field.name === 'confirm_writes');
-}
-
 describe('a new target’s defaults', () => {
-  it('ACT-49 starts every form of a connector that can write with the confirmation on, and reads it back off only when the operator clears it', () => {
-    // ACT-49: nothing a code target does is a write, so its form asks nothing.
-    expect(editableConnectors().filter((kind) => !isConfirming(kind))).toStrictEqual(['code']);
-    const confirming = editableConnectors().filter((kind) => isConfirming(kind));
-    for (const kind of confirming) {
+  it('ACT-40 draws no write confirmation on any connector’s form: approval belongs to the agent’s client', () => {
+    for (const kind of editableConnectors()) {
       const form = formFor(kind, { allowAnyCommand: true });
       expect(form).toBeDefined();
-      if (form === undefined) {
-        continue;
-      }
-      expect(defaultValues(form).get('policy.confirm_writes')).toBe('on');
-      expect(documentsFromForm(form, defaultValues(form)).policy['confirm_writes']).toBe(true);
-      const cleared = new Map(defaultValues(form));
-      cleared.delete('policy.confirm_writes');
-      expect(documentsFromForm(form, cleared).policy['confirm_writes']).toBe(false);
+      const names = (form?.fields ?? []).map((field) => `${field.document}.${field.name}`);
+      expect(names).not.toContain('policy.confirm_writes');
+      expect(defaultValues(form ?? HTTP).has('policy.confirm_writes')).toBe(false);
     }
   });
 });

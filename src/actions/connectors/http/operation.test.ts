@@ -142,7 +142,7 @@ describe('http_request result and declaration', () => {
       'non-2xx status is a normal result',
       '401',
       'never as authentication_failed',
-      'human confirmation',
+      'is a write',
       'body_encoding',
       'truncated',
       'stay under it',

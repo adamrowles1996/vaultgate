@@ -178,17 +178,11 @@ describe('authorize', () => {
     expect(authorize(small, post(undefined), BEARER).allowed).toBe(true);
   });
 
-  it('ACT-43 ACT-60 describes the operation as method and path, capped at 1 KiB, classified by method', () => {
+  it('ACT-60 describes the operation by its method for the audit trail', () => {
     const described = request(DEFAULT, BEARER);
     expect(
       describeOperation(described, { method: 'DELETE', path: '/v1/items/7?force=1' }),
-    ).toStrictEqual({ summary: 'DELETE /v1/items/7?force=1', classification: 'DELETE' });
-    const path = `/${'a'.repeat(2000)}?token=x`;
-    const long = describeOperation(described, { method: 'GET', path });
-    expect(long.summary).toHaveLength(768 + 3 + 192);
-    expect(long.summary.startsWith('GET /aaa')).toBe(true);
-    expect(long.summary.endsWith('?token=x')).toBe(true);
-    expect(long.omitted?.total).toBe(`GET ${path}`.length);
+    ).toStrictEqual({ classification: 'DELETE' });
   });
 
   it('ACT-19 reports one operation per allowed method with the actions:http scope', () => {

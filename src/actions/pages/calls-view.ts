@@ -1,7 +1,7 @@
 /**
  * What the call pages read (ACT-63): a target's last call for the account
  * section, one page of a target's calls for its history page, and one page
- * of the unexpected writes across every target. Reads only, through the
+ * of the writes across every target. Reads only, through the
  * `action_calls` reader in `src/audit/`, so the pages never touch SQL.
  */
 import {
@@ -76,7 +76,6 @@ function toItem(call: StoredActionCall, live: ReadonlySet<string>, names: Client
     operation: call.operation ?? '',
     classification: call.classification ?? '',
     outcome: call.outcome,
-    elicitation: call.elicitation,
     outputBytes: call.outputBytes,
     clientId: call.clientId,
     clientName: names.get(call.clientId) ?? call.clientId,
@@ -115,22 +114,22 @@ export function targetCalls(
 }
 
 /**
- * ACT-63: every non-read call whose elicitation is not `accepted`, across
- * targets, newest first. `live` is the targets that still exist, so a row
- * left behind by a deleted one (ACT-8) names it without a broken link.
+ * ACT-63: every non-read call across targets, newest first. `live` is the
+ * targets that still exist, so a row left behind by a deleted one (ACT-8)
+ * names it without a broken link.
  */
-export function unexpectedCalls(
+export function writeCalls(
   database: DatabaseSync,
   live: ReadonlySet<string>,
   cursor?: CallCursor,
   names: ClientNames = NO_NAMES,
 ): CallPage {
-  return page(database, { filter: { unexpectedOnly: true }, cursor, live, names });
+  return page(database, { filter: { writesOnly: true }, cursor, live, names });
 }
 
 /**
  * ACT-63: every call across targets, newest first, for the Activity page.
- * `live` is the targets that still exist, as for the unexpected writes.
+ * `live` is the targets that still exist, as for the writes.
  */
 export function recentCalls(
   database: DatabaseSync,
@@ -138,17 +137,4 @@ export function recentCalls(
   names: ClientNames = NO_NAMES,
 ): CallPage {
   return page(database, { filter: {}, cursor: undefined, live, names });
-}
-
-/**
-The most unexpected writes the console counts; beyond it the badge says the cap and a plus.
-*/
-export const UNEXPECTED_COUNT_CAP = 100;
-
-/**
-ACT-63: how many unexpected writes there were since `since`, counted up to the cap.
-*/
-export function countUnexpectedSince(database: DatabaseSync, since: number): number {
-  const window = { from: since, to: ALL_TIME.to, limit: UNEXPECTED_COUNT_CAP };
-  return listActionCalls(database, window, { unexpectedOnly: true }).records.length;
 }

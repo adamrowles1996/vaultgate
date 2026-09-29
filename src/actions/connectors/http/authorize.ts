@@ -2,11 +2,10 @@
  * The pure half of the `http` connector (ACT-78): the policy decision of
  * ACT-39 over an `http_request` (method, path, headers, body size; ACT-20,
  * ACT-22, ACT-34, ACT-35), the read/write classification of ACT-40, the
- * ACT-43 summary and the ACT-19 capabilities. No I/O, nothing from the
+ * ACT-60 description and the ACT-19 capabilities. No I/O, nothing from the
  * vault.
  */
 import { isPatternMatch, type PolicyDecision } from '../../policy.ts';
-import { excerptOf } from '../operation-summary.ts';
 
 import { encodeBody, requestSubject } from './request.ts';
 import { READ_METHODS } from './schemas.ts';
@@ -98,16 +97,13 @@ export function authorize(request: HttpRequest, operation: HttpOperation): Polic
 }
 
 /**
-ACT-43: the method and the path as the agent gave them, excerpted and never silently; ACT-60: the method.
+ACT-60: the call is audited by its method.
 */
 export function describeOperation(
   _request: HttpRequest,
   operation: HttpOperation,
 ): OperationDescription {
-  return {
-    ...excerptOf(`${operation.method} ${operation.path}`),
-    classification: operation.method,
-  };
+  return { classification: operation.method };
 }
 
 export function capabilities(

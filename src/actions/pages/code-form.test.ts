@@ -43,7 +43,7 @@ describe('Add connection: Semble · GitHub code search', () => {
     expect(picker).toContain('Use this item');
   });
 
-  it('ACT-6 ACT-119 draws the form after the item with the schema’s defaults and ceilings, and no internal box or write confirmation', async () => {
+  it('ACT-6 ACT-119 draws the form after the item with the schema’s defaults and ceilings, and no internal box', async () => {
     const { harness } = createCodePages();
     const { browser } = await signedInOperator(harness);
     const markup = compact(await pageText(browser, NEW_CODE));

@@ -137,7 +137,6 @@ describe('http policy', () => {
       timeout_ms: 30_000,
       max_output_bytes: 262_144,
       rate_limit_per_minute: 60,
-      confirm_writes: false,
       allowed_methods: ['GET', 'HEAD'],
       allowed_paths: ['/**'],
       allowed_request_headers: ['accept', 'content-type', 'if-none-match'],
@@ -247,7 +246,7 @@ describe('httpSchemas', () => {
     ]);
   });
 
-  it('ACT-43 summarises the destination as host and base path only', () => {
+  it('ACT-5 summarises the destination as host and base path only', () => {
     expect(httpSchemas.summariseDestination({ base_url: 'https://api.example.com:8443/v1/' })).toBe(
       'api.example.com:8443/v1/',
     );

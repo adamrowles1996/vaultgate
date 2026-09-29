@@ -94,9 +94,9 @@ export function sqlWriteInvocation(
 }
 
 /**
-The policy of a target that allows both operations and, by default, asks a human to confirm writes.
+The policy of a target that allows both operations.
 */
-export const WRITE_POLICY = { operations: ['read', 'write'], confirm_writes: true } as const;
+export const WRITE_POLICY = { operations: ['read', 'write'] } as const;
 
 export function sqlConnectorOver(fake: FakeSessions): SqlConnector {
   return createSqlConnector(fake.sessions);

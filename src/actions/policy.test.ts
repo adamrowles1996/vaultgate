@@ -123,21 +123,18 @@ describe('commonPolicySchema', () => {
       timeout_ms: 30_000,
       max_output_bytes: 262_144,
       rate_limit_per_minute: 60,
-      confirm_writes: false,
     });
     expect(
       commonPolicySchema.parse({
         timeout_ms: 300_000,
         max_output_bytes: 1_048_576,
         rate_limit_per_minute: 600,
-        confirm_writes: true,
         allowed_paths: ['/**'],
       }),
     ).toStrictEqual({
       timeout_ms: 300_000,
       max_output_bytes: 1_048_576,
       rate_limit_per_minute: 600,
-      confirm_writes: true,
     });
     const invalid = [
       { timeout_ms: 300_001 },
@@ -146,10 +143,17 @@ describe('commonPolicySchema', () => {
       { max_output_bytes: 1023 },
       { rate_limit_per_minute: 0 },
       { rate_limit_per_minute: 601 },
-      { confirm_writes: 'yes' },
     ];
     expect(invalid.map((policy) => commonPolicySchema.safeParse(policy).success)).toStrictEqual(
       invalid.map(() => false),
     );
+  });
+
+  it('ACT-1 reads a policy stored with the withdrawn confirm_writes back without it, so an upgraded target stays valid', () => {
+    expect(commonPolicySchema.parse({ confirm_writes: true, timeout_ms: 5000 })).toStrictEqual({
+      timeout_ms: 5000,
+      max_output_bytes: 262_144,
+      rate_limit_per_minute: 60,
+    });
   });
 });

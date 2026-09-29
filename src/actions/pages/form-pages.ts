@@ -176,7 +176,7 @@ export interface EditPageView extends FormPageView {
 export function editPage(frame: StepFrame, view: EditPageView): ConsolePage {
   return stepPage(
     frame,
-    `Saving this ${KINDS[view.kind].label} connection moves its revision on, so any confirmation still open for it is void.`,
+    `Saving this ${KINDS[view.kind].label} connection moves its revision on.`,
     html`${outcome(view)}
     ${renderTargetForm({
       action: targetPath(view.targetId),

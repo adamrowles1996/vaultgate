@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { fail, ok, type Result } from '../result.ts';
 import { isFieldPresent, parseFieldSelector } from '../vault/fields.ts';
 
-import { canonicalJson } from './confirm.ts';
+import { canonicalJson } from './canonical-json.ts';
 import { pinEndpoint } from './destination.ts';
 import { commandPatternProblem } from './policy.ts';
 import {

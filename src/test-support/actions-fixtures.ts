@@ -18,7 +18,6 @@ import { ManualClock } from './manual-clock.ts';
 import { unwrapOk } from './result.ts';
 
 import type { Caller } from '../actions/caller.ts';
-import type { ConfirmationRequest } from '../actions/confirm.ts';
 import type { AnyConnector } from '../actions/connectors/connector.ts';
 import type { Invocation } from '../actions/engine-resolve.ts';
 import type { ActionError } from '../actions/errors.ts';
@@ -32,7 +31,6 @@ export const CLIENT_ID = 'vg_c_agent';
 export const OTHER_CLIENT_ID = 'vg_c_other';
 export const OPERATOR_ID = 'operator-1';
 export const PUBLIC_ADDRESS = '93.184.216.34';
-export const SECRET_KEY = Buffer.alloc(32, 5);
 
 export interface ActionsHarness {
   readonly engine: ActionsEngine;
@@ -99,7 +97,6 @@ export function createActionsHarness(options: HarnessOptions = {}): ActionsHarne
     return Promise.resolve(options.addresses?.[hostname] ?? [PUBLIC_ADDRESS]);
   };
   let ids = 0;
-  let randomCalls = 0;
   const engine = createActionsEngine({
     config: options.config ?? actionsEnabled(['http']),
     database,
@@ -114,13 +111,8 @@ export function createActionsHarness(options: HarnessOptions = {}): ActionsHarne
       },
     },
     logger,
-    secretKey: SECRET_KEY,
     now: () => clock.now(),
     schedule: (callback, delayMs) => clock.schedule(callback, delayMs),
-    random: (bytes) => {
-      randomCalls += 1;
-      return Buffer.alloc(bytes, randomCalls);
-    },
     newId: () => {
       ids += 1;
       return `id-${ids}`;
@@ -197,7 +189,6 @@ export function caller(overrides: Partial<Caller> = {}): Caller {
     scopes: ['vault:read', 'actions:http'],
     requestId: 'req-1',
     ip: '203.0.113.9',
-    elicitation: 'form',
     ...overrides,
   };
 }
@@ -233,16 +224,4 @@ export function resultOf(outcome: CallOutcome): Readonly<Record<string, unknown>
     throw new Error(`expected a result but the call ended ${outcome.kind}`);
   }
   return outcome.result;
-}
-
-export interface PendingConfirmation {
-  readonly request: ConfirmationRequest;
-  readonly requestState: string;
-}
-
-export function confirmationOf(outcome: CallOutcome): PendingConfirmation {
-  if (outcome.kind !== 'confirmation_required') {
-    throw new Error(`expected a confirmation request but the call ended ${outcome.kind}`);
-  }
-  return { request: outcome.request, requestState: outcome.requestState };
 }

@@ -85,12 +85,10 @@ export type FieldDescriptor = FieldBase &
 
 /**
  * How a connector's form departs from the common policy fields: the ones it
- * leaves out (a read-only connector has no writes to confirm) and the ones it
  * draws with a default, ceiling or help of its own (the code connector's
  * longer timeout). The renderer never knows which connector asked.
  */
 export interface CommonPolicyChanges {
-  readonly omit?: readonly string[];
   readonly replace?: readonly FieldDescriptor[];
 }
 
@@ -151,13 +149,5 @@ export const COMMON_POLICY_FIELDS: readonly FieldDescriptor[] = [
     max: 600,
     fallback: 60,
     help: 'Default 60, at most 600.',
-  },
-  {
-    document: 'policy',
-    name: 'confirm_writes',
-    label: 'Ask a human to confirm every non-read call (MCP elicitation)',
-    kind: 'boolean',
-    fallback: true,
-    help: 'On for a new connection; a client without elicitation is then refused non-read calls.',
   },
 ];

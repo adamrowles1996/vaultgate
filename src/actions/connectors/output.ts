@@ -1,20 +1,9 @@
 /**
  * What a connector hands the engine: the description of an operation for the
- * audit trail and the confirmation (ACT-43, ACT-60) and the raw output of a
- * run, which the engine scrubs and cuts (ACT-51, ACT-52). Re-exported by
- * `./connector.ts`.
+ * audit trail (ACT-60) and the raw output of a run, which the engine scrubs
+ * and cuts (ACT-51, ACT-52). Re-exported by `./connector.ts`.
  */
-import type { OmittedText } from './operation-summary.ts';
-
 export interface OperationDescription {
-  /**
-  ACT-43: the method and path, the statement or command, or the page URL and element; an excerpt when it is long.
-  */
-  readonly summary: string;
-  /**
-  ACT-43: what the excerpt leaves out, when it is one; the confirmation message says so where the agent cannot forge it.
-  */
-  readonly omitted?: OmittedText;
   /**
   ACT-60: the SQL class, the HTTP method, `command`, or the browser page URL.
   */

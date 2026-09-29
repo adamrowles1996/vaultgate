@@ -131,8 +131,7 @@ export const SQL_EXECUTE_DESCRIPTION =
   `it is refused with reason statement_pattern. ${SHARED_DESCRIPTION} It runs in its own ` +
   'transaction, committed when it succeeds and rolled back on any error or timeout, and ' +
   'returns the number of rows affected, any rows the statement returned through RETURNING or ' +
-  'OUTPUT, and the duration. Every call is a write: the operator may require a human ' +
-  'confirmation for it, which you cannot supply yourself.';
+  'OUTPUT, and the duration. Every call is a write.';
 
 export const sqlQueryTool: ConnectorTool<SqlOperation> = {
   name: SQL_QUERY_TOOL,

@@ -160,7 +160,7 @@ export const codeSchemas: ConnectorSchemas<CodeDestination, CodeCredential, Code
       : `${destination.repository}@${destination.ref}`;
   },
   /**
-  ACT-49: every code tool reads; nothing a code target does is a write.
+  ACT-40: every code tool reads; nothing a code target does is a write.
   */
   allowsNonRead() {
     return false;

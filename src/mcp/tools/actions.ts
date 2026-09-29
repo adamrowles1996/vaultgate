@@ -53,9 +53,6 @@ const targetListingSchema = z.strictObject({
     .describe('Operator prose: what the destination is and what to use it for.'),
   connector: z.enum(CONNECTOR_KINDS),
   operations: operationsSchema,
-  confirm_writes: z
-    .boolean()
-    .describe('True when every non-read call asks a human for confirmation first.'),
   engine: z.enum(['mssql', 'postgres']).optional(),
   unrestricted: unrestrictedSchema.optional(),
   repository: z.string().describe('A code target: the GitHub repository, owner/name.').optional(),
@@ -81,9 +78,8 @@ export const LIST_TARGETS_DESCRIPTION =
   'Lists the action targets this client may use. Each entry gives the target name (the `target` ' +
   'argument of every other actions tool), an operator-written description of what the ' +
   'destination is and what to use it for, its connector, the operations the target policy and ' +
-  'your scopes allow (read, write, shell, act), whether non-read calls will ask a human for ' +
-  'confirmation (confirm_writes), the database engine of a sql target and whether a shell ' +
-  'target accepts any command (unrestricted), and for a code target its repository, ref, content ' +
+  'your scopes allow (read, write, shell, act), the database engine of a sql target and whether ' +
+  'a shell target accepts any command (unrestricted), and for a code target its repository, ref, content ' +
   'types and whether code_read is allowed. Returns no destination address, no credential and no ' +
   'policy pattern; never a secret. Call it before any other actions tool and pass a name it ' +
   'returned as target (or as repo for the code tools).';
@@ -163,9 +159,9 @@ function registerRepoTool(
       outputSchema: tool.outputSchema,
       annotations: tool.annotations,
     },
-    async (input, serverContext) => {
+    async (input) => {
       const targets = typeof input.repo === 'string' ? [input.repo] : input.repo;
-      const outcome = await dependencies.engine.call(callerFor(context, serverContext), {
+      const outcome = await dependencies.engine.call(callerFor(context), {
         tool: tool.name,
         target: targets.join(','),
         targets,
@@ -196,8 +192,8 @@ function registerConnectorTool(
       outputSchema: tool.outputSchema,
       annotations: tool.annotations,
     },
-    async (input, serverContext) => {
-      const outcome = await dependencies.engine.call(callerFor(context, serverContext), {
+    async (input) => {
+      const outcome = await dependencies.engine.call(callerFor(context), {
         tool: tool.name,
         target: input.target,
         arguments: input,

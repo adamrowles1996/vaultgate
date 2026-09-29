@@ -1,8 +1,7 @@
-import { CLIENT_CAPABILITIES_META_KEY } from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
 
 import { ACTION_ERROR_MESSAGES } from '../../actions/errors.ts';
-import { createActionsApp, rawCall, requestStateOf } from '../../test-support/actions-app.ts';
+import { createActionsApp, rawCall } from '../../test-support/actions-app.ts';
 import {
   CLIENT_ID,
   createHttpTarget,
@@ -17,8 +16,6 @@ import {
 } from '../../test-support/mcp-client.ts';
 import { TEST_METADATA_URL } from '../../test-support/test-app.ts';
 import { insufficientScopeChallenge } from '../challenges.ts';
-
-import { elicitationCapability } from './actions-call.ts';
 
 const MODERN = { protocolVersion: MODERN_PROTOCOL_VERSION } as const;
 const POST = { target: 'api', method: 'POST', path: '/v1/items', body: '{"name":"x"}' };
@@ -116,7 +113,7 @@ describe('connector tool dispatch', () => {
     ]);
     expect(audit.events[2]).toMatchObject({
       clientId: CLIENT_ID,
-      details: { clientName: 'Agent One', target: 'api', elicitation: 'not_required' },
+      details: { clientName: 'Agent One', target: 'api', outcome: 'ok' },
     });
     expect(audit.events[2]?.requestId).toMatch(/^[0-9a-f-]{36}$/);
   });
@@ -136,125 +133,33 @@ describe('connector tool dispatch', () => {
   });
 });
 
-const declared = (elicitation: unknown): unknown => ({
-  params: { _meta: { [CLIENT_CAPABILITIES_META_KEY]: { elicitation } } },
-});
-
-async function confirmed() {
+async function writable() {
   const fixture = createActionsApp();
-  await createHttpTarget(fixture.harness, {
-    policy: { allowed_methods: ['GET', 'POST'], confirm_writes: true },
-  });
+  await createHttpTarget(fixture.harness, { policy: { allowed_methods: ['GET', 'POST'] } });
   return { ...fixture, token: fixture.issue(['actions:http']) };
 }
 
-describe('elicitation capability and retry on the wire', () => {
-  it('ACT-42 ACT-48 answers a form-capable 2026-07-28 client with exactly the elicitation document and the requestState', async () => {
-    const { app, token, harness } = await confirmed();
+describe('writes on the wire', () => {
+  it('ACT-40 runs a write at once on the 2026-07-28 wire: the answer is the result, never an input request', async () => {
+    const { app, token, harness } = await writable();
     const result = await rawCall(app, { token }, { name: 'http_request', arguments: POST });
-    expect(result['resultType']).toBe('input_required');
-    expect(result['inputRequests']).toStrictEqual({
-      confirm: {
-        method: 'elicitation/create',
-        params: {
-          mode: 'form',
-          message:
-            'vaultgate: Agent One asks to run http_request on target "api" (http, api.example.com/v1).\n\n' +
-            'The operation, every line of it quoted with "> ":\n> POST /v1/items\n\n' +
-            'Allow this one call? It expires in 2 minutes and cannot be reused.',
-          requestedSchema: {
-            type: 'object',
-            properties: {
-              confirm: {
-                type: 'boolean',
-                title: 'Allow this call',
-                description: 'Tick to let vaultgate run the operation shown above, once.',
-                default: false,
-              },
-            },
-            required: ['confirm'],
-          },
-        },
-      },
-    });
-    expect(requestStateOf(result)).toMatch(/^[\w-]+\.[\w-]{43}$/);
-    expect(storedCalls(harness.database)).toStrictEqual([]);
+    expect(result['resultType']).toBe('complete');
+    expect(result['isError']).toBeFalsy();
+    expect(result['structuredContent']).toMatchObject({ status: 200 });
+    expect(harness.connector.contexts).toHaveLength(1);
+    expect(storedCalls(harness.database)).toMatchObject([
+      { operation: 'write', outcome: 'ok', elicitation: 'not_required' },
+    ]);
   });
 
-  it('ACT-48 treats an empty elicitation object as form mode and a url-only one, or none, as no elicitation', async () => {
-    const { app, token } = await confirmed();
-    const empty = await rawCall(
-      app,
-      { token, clientCapabilities: { elicitation: {} } },
-      { name: 'http_request', arguments: POST },
-    );
-    expect(empty['resultType']).toBe('input_required');
-    const urlOnly = await rawCall(
-      app,
-      { token, clientCapabilities: { elicitation: { url: {} } } },
-      { name: 'http_request', arguments: POST },
-    );
-    expect(urlOnly['structuredContent']).toStrictEqual({
-      error: 'confirmation_unavailable',
-      message: ACTION_ERROR_MESSAGES.confirmation_unavailable,
-    });
-    const undeclared = await rawCall(
-      app,
-      { token, clientCapabilities: {} },
-      { name: 'http_request', arguments: POST },
-    );
-    expect(undeclared['isError']).toBe(true);
-  });
-
-  it('ACT-48 reads only a plain elicitation object from the envelope; the legacy wire declares nothing per request', () => {
-    expect(elicitationCapability(declared({ form: { applyDefaults: true } }))).toBe('form');
-    expect(elicitationCapability(declared({}))).toBe('form');
-    expect(elicitationCapability(declared([]))).toBe('none');
-    expect(elicitationCapability(declared('form'))).toBe('none');
-    expect(elicitationCapability(declared(null))).toBe('none');
-    expect(elicitationCapability({ params: { name: 'http_request' } })).toBe('none');
-    expect(elicitationCapability(undefined)).toBe('none');
-  });
-
-  it('ACT-48 refuses a 2025-wire client, whose capabilities the stateless handler never sees, with the fixed message', async () => {
-    const { app, token, harness } = await confirmed();
+  it('ACT-40 runs the same write for a client on the 2025 wire, which declares nothing per request', async () => {
+    const { app, token, harness } = await writable();
     const outcome = await callTool(app, 'http_request', POST, {
       token,
       protocolVersion: LEGACY_PROTOCOL_VERSION,
     });
-    expect(outcome.structuredContent).toStrictEqual({
-      error: 'confirmation_unavailable',
-      message: ACTION_ERROR_MESSAGES.confirmation_unavailable,
-    });
-    expect(harness.lookups).toStrictEqual(['api.example.com']);
-    expect(storedCalls(harness.database)).toMatchObject([
-      { outcome: 'denied:confirmation_unavailable' },
-    ]);
-  });
-
-  it('ACT-45 asks again when a retry echoes the state without a well-formed answer, running nothing', async () => {
-    const { app, token, harness } = await confirmed();
-    const first = await rawCall(app, { token }, { name: 'http_request', arguments: POST });
-    const requestState = requestStateOf(first);
-    const noAnswer = await rawCall(
-      app,
-      { token },
-      { name: 'http_request', arguments: POST, requestState },
-    );
-    expect(noAnswer['resultType']).toBe('input_required');
-    expect(requestStateOf(noAnswer)).not.toBe(requestState);
-    const malformed = await rawCall(
-      app,
-      { token },
-      {
-        name: 'http_request',
-        arguments: POST,
-        requestState,
-        inputResponses: { confirm: { action: 'approve' } },
-      },
-    );
-    expect(malformed['resultType']).toBe('input_required');
-    expect(storedCalls(harness.database)).toStrictEqual([]);
-    expect(harness.connector.contexts).toStrictEqual([]);
+    expect(outcome.isError).toBe(false);
+    expect(outcome.structuredContent).toMatchObject({ status: 200 });
+    expect(storedCalls(harness.database)).toMatchObject([{ operation: 'write', outcome: 'ok' }]);
   });
 });

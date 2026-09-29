@@ -167,7 +167,7 @@ export const winrmSchemas: ConnectorSchemas<WinrmDestination, WinrmCredential, W
     return `${destination.username}@${new URL(destination.url).host} (${destination.shell})`;
   },
   /**
-  ACT-49: running a command is never a read, whatever the command is.
+  ACT-40: running a command is never a read, whatever the command is.
   */
   allowsNonRead() {
     return true;

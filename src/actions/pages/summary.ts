@@ -2,7 +2,7 @@
  * One target as the console summarises it (ACT-5): its kind, its address in
  * two lines, the vault fields it signs in with (names only; every field but
  * `login.username` is secret and drawn sealed), what its policy allows and
- * whether a person confirms the rest (ACT-49), and its state. Read from the
+ * whether that includes changing anything (ACT-40), and its state. Read from the
  * validated documents (ACT-1); an invalid row shows what can still be said.
  */
 import { z } from 'zod';
@@ -19,11 +19,10 @@ export interface MappedField {
 }
 
 /**
- * ACT-49: `confirmed` when a person confirms every non-read call,
- * `unconfirmed` when non-read calls run without asking, `reads` when the
- * policy allows reads only and there is nothing to confirm.
+ * ACT-40: `changes` when the policy allows a non-read call (a write, a shell
+ * command or a browser action), `reads` when it allows reads only.
  */
-export type Confirmation = 'confirmed' | 'unconfirmed' | 'reads';
+export type Reach = 'changes' | 'reads';
 
 export type ComputerState = 'enabled' | 'disabled' | 'invalid';
 
@@ -37,7 +36,7 @@ export interface ComputerSummary {
   */
   readonly credentialNote?: string;
   readonly allows: string;
-  readonly confirmation: Confirmation;
+  readonly reach: Reach;
   readonly state: ComputerState;
 }
 
@@ -138,7 +137,7 @@ export function summarise(target: TargetSummary): ComputerSummary {
       addressDetail: 'not readable',
       allows: '',
       fields: [],
-      confirmation: 'reads',
+      reach: 'reads',
     };
   }
   const { documents, schemas } = validated;
@@ -147,16 +146,12 @@ export function summarise(target: TargetSummary): ComputerSummary {
     selector: field.selector,
     isSecret: field.selector !== USERNAME_SELECTOR,
   }));
-  let confirmation: Confirmation = 'reads';
-  if (schemas.allowsNonRead(documents.policy)) {
-    confirmation = documents.common.confirm_writes ? 'confirmed' : 'unconfirmed';
-  }
   return {
     ...base,
     addressDetail: addressDetailOf(target, isEncrypted),
     allows: allowsOf(target.connector, documents.policy),
     fields,
     ...(fields.length === 0 && target.connector === 'code' && { credentialNote: NO_TOKEN }),
-    confirmation,
+    reach: schemas.allowsNonRead(documents.policy) ? 'changes' : 'reads',
   };
 }

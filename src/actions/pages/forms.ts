@@ -70,14 +70,11 @@ export function deploymentProblems(
 }
 
 /**
-The common policy fields as one connector's form draws them: some left out, some its own.
+The common policy fields as one connector's form draws them, some with its own default or ceiling.
 */
 function commonFields(form: ConnectorForm): readonly FieldDescriptor[] {
-  const omitted = new Set(form.common?.omit);
   const replaced = new Map((form.common?.replace ?? []).map((field) => [field.name, field]));
-  return COMMON_POLICY_FIELDS.filter((field) => !omitted.has(field.name)).map(
-    (field) => replaced.get(field.name) ?? field,
-  );
+  return COMMON_POLICY_FIELDS.map((field) => replaced.get(field.name) ?? field);
 }
 
 /**

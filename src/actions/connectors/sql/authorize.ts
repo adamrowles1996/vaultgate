@@ -9,7 +9,6 @@
  * opened (ACT-26). No I/O.
  */
 import { isPatternMatch } from '../../policy.ts';
-import { excerptOf } from '../operation-summary.ts';
 
 import { classifyStatement } from './classify.ts';
 import { SQL_QUERY_TOOL } from './operation.ts';
@@ -78,17 +77,14 @@ export function authorize(request: SqlRequest, operation: SqlOperation): PolicyD
 }
 
 /**
-ACT-43: the statement as the agent wrote it, excerpted and never silently; ACT-60: the class the engine audits.
+ACT-26, ACT-60: the class the engine audits, `other` for a statement with no single class.
 */
 export function describeOperation(
   request: SqlRequest,
   operation: SqlOperation,
 ): OperationDescription {
   const reading = classifyStatement(operation.statement, request.destination.engine);
-  return {
-    ...excerptOf(operation.statement),
-    classification: reading.ok ? reading.facts.statementClass : 'other',
-  };
+  return { classification: reading.ok ? reading.facts.statementClass : 'other' };
 }
 
 /**

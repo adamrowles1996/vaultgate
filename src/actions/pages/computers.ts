@@ -26,9 +26,9 @@ import {
 
 import { outcomeTag } from './calls.ts';
 import { type ComputerKind, KIND_ORDER, KINDS } from './kinds.ts';
-import { CREATE_PATH, NEW_PATH, targetPath, UNEXPECTED_PATH } from './paths.ts';
+import { CREATE_PATH, NEW_PATH, targetPath } from './paths.ts';
 
-import type { ComputerSummary, Confirmation, MappedField } from './summary.ts';
+import type { ComputerSummary, MappedField, Reach } from './summary.ts';
 import type { ConsolePage } from '../../identity/index.ts';
 
 export interface AgentChip {
@@ -55,10 +55,6 @@ export interface ComputersView {
   readonly rows: readonly ComputerRow[];
   readonly filter: ComputerKind | undefined;
   readonly now: number;
-  /**
-  ACT-63: unexpected writes in the last seven days, for the attention strip.
-  */
-  readonly unexpectedCount: number;
   readonly notice?: string | undefined;
 }
 
@@ -78,9 +74,8 @@ const STATE_PILLS = {
   invalid: pill('bad', 'Needs fixing'),
 } as const;
 
-const CONFIRMATIONS: Readonly<Record<Confirmation, Html>> = {
-  confirmed: html`<span class="cell-sub">${icon('shield')} A person confirms writes</span>`,
-  unconfirmed: html`<span class="cell-sub warn">${icon('alert')} Writes are not confirmed</span>`,
+const REACH: Readonly<Record<Reach, Html>> = {
+  changes: html`<span class="cell-sub">Can change things</span>`,
   reads: html`<span class="cell-sub">Reads only</span>`,
 };
 
@@ -143,9 +138,7 @@ function row(computer: ComputerRow, now: number): Html {
     ${cell(COLUMNS[2], itemCell(computer))}
     ${cell(
       COLUMNS[3],
-      html`<span class="cell-main"
-        ><span>${summary.allows}</span>${CONFIRMATIONS[summary.confirmation]}</span
-      >`,
+      html`<span class="cell-main"><span>${summary.allows}</span>${REACH[summary.reach]}</span>`,
     )}
     ${cell(COLUMNS[4], agentsCell(computer.agents))}
     ${cell(COLUMNS[5], lastCallCell(computer, now))} ${cell(COLUMNS[6], STATE_PILLS[summary.state])}
@@ -206,27 +199,14 @@ function filters(view: ComputersView): Html {
 }
 
 function attention(view: ComputersView): Html {
-  const items = [
-    ...view.rows
-      .filter((row) => row.summary.state === 'invalid')
-      .map(
-        (row) =>
-          html`<a href="${targetPath(row.id)}"
-            ><span class="mono">${row.name}</span> needs fixing</a
-          >`,
-      ),
-    ...view.rows
-      .filter((row) => row.summary.confirmation === 'unconfirmed')
-      .map(
-        (row) =>
-          html`<a href="${targetPath(row.id)}"
-            ><span class="mono">${row.name}</span> changes things without a person’s OK</a
-          >`,
-      ),
-    ...(view.unexpectedCount > 0
-      ? [html`<a href="${UNEXPECTED_PATH}">${view.unexpectedCount} unexpected writes this week</a>`]
-      : []),
-  ];
+  const items = view.rows
+    .filter((row) => row.summary.state === 'invalid')
+    .map(
+      (row) =>
+        html`<a href="${targetPath(row.id)}"
+          ><span class="mono">${row.name}</span> needs fixing</a
+        >`,
+    );
   return when(
     items.length > 0,
     () =>

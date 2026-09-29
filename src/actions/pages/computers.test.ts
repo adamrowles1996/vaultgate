@@ -115,23 +115,22 @@ describe('the Computers page', () => {
     expect(listOf(unknown)).toContain('>api</a');
   });
 
-  it('ACT-1 ACT-49 puts what needs attention first: an invalid row and a target that writes unconfirmed', async () => {
+  it('ACT-1 ACT-40 puts an invalid row first in what needs attention, and marks a target that can change things without alarm', async () => {
     const harness = createPagesHarness();
     const { repo } = harness.actions.engine.targets;
     repo.insert(fixtureTargetRow({ id: 'row-1', name: 'broken', policy: {} }));
     await createHttpTarget(harness.actions, {
       name: 'writer',
-      policy: { allowed_methods: ['GET', 'POST'], confirm_writes: false },
+      policy: { allowed_methods: ['GET', 'POST'] },
     });
     const { browser } = await signedInOperator(harness, false);
     const markup = await pageText(browser, '/account/actions');
     expect(markup).toContain('<strong>Needs attention</strong>');
     expect(markup).toContain('<span class="mono">broken</span> needs fixing');
-    expect(markup).toContain(
-      '<span class="mono">writer</span> changes things without a person’s OK',
-    );
+    expect(markup).not.toContain('<span class="mono">writer</span> changes things');
     expect(listOf(markup)).toContain('<span class="pill pill-bad">Needs fixing</span>');
-    expect(listOf(markup)).toContain('Writes are not confirmed');
+    expect(listOf(markup)).toContain('Can change things');
+    expect(listOf(markup)).not.toContain('confirm');
   });
 
   it('ACT-5 shows the way to add the first computer when there is none, and names a deletion', async () => {
@@ -211,11 +210,7 @@ describe('the Computers page', () => {
     const harness = createPagesHarness();
     const { browser } = await signedInOperator(harness, false);
     harness.identity.database.exec('UPDATE operators SET email = NULL');
-    for (const path of [
-      '/account/actions',
-      '/account/actions/new',
-      '/account/actions/unexpected',
-    ]) {
+    for (const path of ['/account/actions', '/account/actions/new', '/account/actions/writes']) {
       const response = await browser.get(path);
       expect(response.status).toBe(303);
       expect(response.headers.get('location')).toBe('/account');

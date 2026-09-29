@@ -90,7 +90,6 @@ const engine = config.actions.enabled
       lookup: resolveAddresses,
       audit: auditSink,
       logger,
-      secretKey: config.secrets.secretKey,
       now: Date.now,
       schedule: (callback, delayMs) => {
         const timer = setTimeout(callback, delayMs);
@@ -98,7 +97,6 @@ const engine = config.actions.enabled
           clearTimeout(timer);
         };
       },
-      random: randomBytes,
       newId: randomUUID,
     })
   : undefined;

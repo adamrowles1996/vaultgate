@@ -110,7 +110,7 @@ describe('the sql target documents', () => {
     ]);
   });
 
-  it('ACT-43 summarises the destination as host, port and database, never a credential', () => {
+  it('ACT-5 summarises the destination as host, port and database, never a credential', () => {
     expect(sqlSchemas.summariseDestination(destination())).toBe('db.example.com:5432/reporting');
     expect(sqlSchemas.summariseDestination(destination({ engine: 'mssql', port: 1433 }))).toBe(
       'db.example.com:1433/reporting',

@@ -1,7 +1,7 @@
 /**
  * The pure half of the `winrm` connector (ACT-78): the shared command policy
- * of `../command.ts` — the ACT-39 decision, the ACT-43 summary with the
- * ACT-60 classification and the ACT-19 capabilities — bound to the `winrm`
+ * of `../command.ts` — the ACT-39 decision, the ACT-60 classification and
+ * the ACT-19 capabilities — bound to the `winrm`
  * documents and the `actions:winrm` scope. No I/O.
  */
 import {

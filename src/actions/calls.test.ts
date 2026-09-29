@@ -4,14 +4,12 @@ import { describe, expect, it } from 'vitest';
 
 import { listActionCalls, type StoredActionCall } from '../audit/actions-query.ts';
 import { openTestDatabase } from '../test-support/database.ts';
-import { unwrapFail, unwrapOk } from '../test-support/result.ts';
 
 import {
   type CallRow,
   completeCall,
   encodeArguments,
   INTERRUPTED_OUTCOME,
-  isNonceConsumed,
   recordCall,
 } from './calls.ts';
 
@@ -35,8 +33,6 @@ const ROW: CallRow = {
   outputTruncated: false,
   durationMs: 0,
   outcome: INTERRUPTED_OUTCOME,
-  elicitation: 'accepted',
-  confirmationNonce: 'nonce-1',
   requestId: 'req-1',
   ip: '203.0.113.9',
 };
@@ -62,11 +58,9 @@ describe('encodeArguments', () => {
 describe('recordCall', () => {
   it('ACT-60 writes every column and completeCall fills in the outcome, output and duration', () => {
     const database = openTestDatabase();
-    unwrapOk(recordCall(database, { ...ROW, confirmationNonce: undefined }));
+    recordCall(database, ROW);
     const truncated = openTestDatabase();
-    unwrapOk(
-      recordCall(truncated, { ...ROW, confirmationNonce: undefined, outputTruncated: true }),
-    );
+    recordCall(truncated, { ...ROW, outputTruncated: true });
     expect(rows(truncated).map((row) => row.outputTruncated)).toStrictEqual([true]);
     expect(rows(database)).toStrictEqual([
       {
@@ -88,7 +82,7 @@ describe('recordCall', () => {
         outputTruncated: false,
         durationMs: 0,
         outcome: 'error:interrupted',
-        elicitation: 'accepted',
+        elicitation: 'not_required',
         confirmationNonce: undefined,
         requestId: 'req-1',
         ip: '203.0.113.9',
@@ -108,35 +102,29 @@ describe('recordCall', () => {
     });
   });
 
-  it('ACT-46 consumes the confirmation nonce with the row and refuses a second row with the same nonce, leaving no trace of it', () => {
+  it('ACT-60 records every call as not_required with no nonce, since vaultgate asks no one to approve a call', () => {
     const database = openTestDatabase();
-    expect(isNonceConsumed(database, 'nonce-1')).toBe(false);
-    unwrapOk(recordCall(database, ROW));
-    expect(isNonceConsumed(database, 'nonce-1')).toBe(true);
-    expect(unwrapFail(recordCall(database, { ...ROW, id: 'call-2' })).code).toBe(
-      'confirmation_reused',
-    );
-    expect(rows(database).map((row) => row.id)).toStrictEqual(['call-1']);
-    expect(database.isTransaction).toBe(false);
+    recordCall(database, ROW);
+    recordCall(database, { ...ROW, id: 'call-2', at: 1001 });
+    expect(rows(database).map((row) => [row.elicitation, row.confirmationNonce])).toStrictEqual([
+      ['not_required', undefined],
+      ['not_required', undefined],
+    ]);
   });
 
   it('ACT-60 stores NULL for what a refused call could not know', () => {
     const database = openTestDatabase();
-    unwrapOk(
-      recordCall(database, {
-        ...ROW,
-        targetId: undefined,
-        connector: undefined,
-        revision: undefined,
-        operation: undefined,
-        classification: undefined,
-        confirmationNonce: undefined,
-        requestId: undefined,
-        ip: undefined,
-        outcome: 'denied:unknown_target',
-        elicitation: 'not_required',
-      }),
-    );
+    recordCall(database, {
+      ...ROW,
+      targetId: undefined,
+      connector: undefined,
+      revision: undefined,
+      operation: undefined,
+      classification: undefined,
+      requestId: undefined,
+      ip: undefined,
+      outcome: 'denied:unknown_target',
+    });
     expect(rows(database)[0]).toMatchObject({
       targetId: undefined,
       connector: undefined,

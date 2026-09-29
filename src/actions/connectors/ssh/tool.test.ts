@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  connectSdkClient,
-  createActionsApp,
-  scriptedElicitation,
-} from '../../../test-support/actions-app.ts';
+import { connectSdkClient, createActionsApp } from '../../../test-support/actions-app.ts';
 import { storedCalls } from '../../../test-support/actions-fixtures.ts';
 import { fakeSshClient, type FakeSsh } from '../../../test-support/fake-ssh-client.ts';
 import { createSshTarget, sshConnectorOver } from '../../../test-support/ssh-connector.ts';
@@ -33,7 +29,6 @@ describe('ssh_run through the MCP client SDK', () => {
     await createSshTarget(harness);
     const client = await connectSdkClient(app, {
       token: issue(['actions:ssh']),
-      elicitation: 'none',
     });
     const result = await client.callTool({
       name: 'ssh_run',
@@ -60,7 +55,6 @@ describe('ssh_run through the MCP client SDK', () => {
     await createSshTarget(harness);
     const client = await connectSdkClient(app, {
       token: issue(['actions:ssh']),
-      elicitation: 'none',
     });
     const result = await client.callTool({
       name: 'ssh_run',
@@ -75,31 +69,27 @@ describe('ssh_run through the MCP client SDK', () => {
     expect(fake.opened).toStrictEqual([]);
   });
 
-  it('ACT-40 ACT-43 asks a human to confirm the shell call and runs it once they accept', async () => {
+  it('ACT-40 runs the shell call at once, asking no one, and records it as a shell operation', async () => {
     const fake = fakeSshClient();
     const { app, harness, issue } = appOver(fake);
-    await createSshTarget(harness, { policy: { confirm_writes: true } });
-    const elicitation = scriptedElicitation([{ action: 'accept', content: { confirm: true } }]);
-    const client = await connectSdkClient(app, {
-      token: issue(['actions:ssh']),
-      elicitation: elicitation.handler,
-    });
+    await createSshTarget(harness);
+    const client = await connectSdkClient(app, { token: issue(['actions:ssh']) });
     const result = await client.callTool({
       name: 'ssh_run',
       arguments: { target: 'build-host', command: 'uptime' },
     });
     await client.close();
     expect(result.isError).toBeFalsy();
-    expect(JSON.stringify(elicitation.shown)).toContain('uptime');
-    expect(JSON.stringify(elicitation.shown)).toContain('vaultgate@build.example.com:22');
     expect(fake.commands).toHaveLength(1);
+    expect(storedCalls(harness.database)).toMatchObject([
+      { operation: 'shell', outcome: 'ok', elicitation: 'not_required' },
+    ]);
   });
 
   it('ACT-17 ACT-18 ACT-15 tools/list advertises ssh_run with target first, the 13.6.1 annotations and strict schemas', async () => {
     const { app, issue } = appOver(fakeSshClient());
     const client = await connectSdkClient(app, {
       token: issue(['actions:ssh']),
-      elicitation: 'none',
     });
     const listed = await client.listTools();
     await client.close();
@@ -137,7 +127,6 @@ describe('ssh_run through the MCP client SDK', () => {
     await createSshTarget(harness);
     const client = await connectSdkClient(app, {
       token: issue(['actions:http']),
-      elicitation: 'none',
     });
     const listed = await client.listTools();
     await client.close();

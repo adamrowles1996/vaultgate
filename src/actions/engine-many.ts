@@ -5,11 +5,11 @@
  * connector judges the targets together (a content type they all allow),
  * then every credential is fetched and every destination pinned, and the
  * connector runs the operation over all of them at once. Such tools are
- * read-only, so no confirmation is ever asked for, and a list may not carry
- * the arguments the tool allows with one target only.
+ * read-only, and a list may not carry the arguments the tool allows with one
+ * target only.
  */
 import { combineScrubbers } from './combined-scrub.ts';
-import { type CallFacts, recordFailure, reserveCall, type Reservation } from './engine-record.ts';
+import { type CallFacts, recordFailure, reserveCall } from './engine-record.ts';
 import { type Invocation, resolveCall, type ResolvedCall } from './engine-resolve.ts';
 import { runConnectorMany } from './engine-run-many.ts';
 import { fetchCredential, pinDestination, type ConnectorCall } from './engine-run.ts';
@@ -34,8 +34,6 @@ function factsFor(context: EngineContext, caller: Caller, invocation: Invocation
     resolved: undefined,
     description: undefined,
     scrub: undefined,
-    elicitation: 'not_required',
-    nonce: undefined,
   };
 }
 
@@ -246,10 +244,9 @@ async function executeMany(
     const support = createRunSupport(context, resolved.target.row, credential.value);
     calls.push({ resolved, credential: credential.value, pinned: pinned.value, support });
   }
-  // `callMany` refused an empty list, so there is at least one call; no nonce
-  // is ever consumed here (no confirmation), so a reservation cannot be refused.
+  // `callMany` refused an empty list, so there is at least one call.
   const [head, ...rest] = calls as [ConnectorCall, ...ConnectorCall[]];
-  const reservations = known.map((facts) => reserveCall(context, facts) as Reservation);
+  const reservations = known.map((facts) => reserveCall(context, facts));
   const scrub = combineScrubbers(
     head.credential.scrub,
     rest.map((call) => call.credential.scrub),

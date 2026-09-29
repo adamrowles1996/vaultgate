@@ -6,8 +6,6 @@
  */
 import { ACTION_SCOPE_CONNECTORS } from '../scopes/registry.ts';
 
-import { createConfirmations } from './confirm.ts';
-import { confirmationStep } from './engine-confirm.ts';
 import { listTargets, type TargetListing } from './engine-listing.ts';
 import { callMany } from './engine-many.ts';
 import { type CallFacts, recordFailure, reserveCall } from './engine-record.ts';
@@ -48,7 +46,7 @@ export interface ActionsEngine {
 }
 
 /**
-The last steps: credential, pinned destination, the reserved row (ACT-46), the run, the record.
+The last steps: credential, pinned destination, the reserved row (ACT-62), the run, the record.
 */
 async function execute(
   context: EngineContext,
@@ -66,13 +64,6 @@ async function execute(
     return { kind: 'error', error: recordFailure(context, known, pinned.error) };
   }
   const reservation = reserveCall(context, known);
-  if (reservation instanceof ActionError) {
-    credential.value.injected.dispose();
-    return {
-      kind: 'error',
-      error: recordFailure(context, { ...known, nonce: undefined }, reservation),
-    };
-  }
   const support = createRunSupport(context, resolved.target.row, credential.value);
   const output = await runConnector(context, {
     resolved,
@@ -112,8 +103,6 @@ async function call(
     resolved: resolution.call.ok ? resolution.call.value : undefined,
     description: resolution.description,
     scrub: undefined,
-    elicitation: 'not_required',
-    nonce: undefined,
   };
   if (!resolution.call.ok) {
     return { kind: 'error', error: recordFailure(context, facts, resolution.call.error) };
@@ -129,23 +118,7 @@ async function call(
     return { kind: 'error', error: recordFailure(context, facts, error) };
   }
   try {
-    const step = confirmationStep(context, caller, invocation, resolved);
-    if (step.kind === 'request') {
-      return {
-        kind: 'confirmation_required',
-        request: step.request,
-        requestState: step.requestState,
-      };
-    }
-    if (step.kind === 'refuse') {
-      const refused = { ...facts, elicitation: step.elicitation };
-      return { kind: 'error', error: recordFailure(context, refused, step.error) };
-    }
-    return await execute(
-      context,
-      { ...facts, elicitation: step.elicitation, nonce: step.nonce },
-      resolved,
-    );
+    return await execute(context, facts, resolved);
   } finally {
     limit.release();
   }
@@ -184,11 +157,6 @@ export function createActionsEngine(dependencies: EngineDependencies): ActionsEn
   });
   const context: EngineContext = {
     ...dependencies,
-    confirmations: createConfirmations({
-      secretKey: dependencies.secretKey,
-      random: dependencies.random,
-      now,
-    }),
     limits: createActionLimits(now),
     resolve: { config, targets: targets.repo, connectors, available: isAvailable },
     repo: targets.repo,

@@ -12,7 +12,6 @@ import { z } from 'zod';
 import { commonPolicySchema, isPatternMatch } from '../policy.ts';
 
 import { hasControlCharacter, hasNul } from './control-characters.ts';
-import { excerptOf } from './operation-summary.ts';
 
 import type { OperationDescription, OperationSchema, TargetCapabilities } from './connector.ts';
 import type { OutputSchema } from '../../mcp/tools/definition.ts';
@@ -178,7 +177,7 @@ function refusal(
 
 /**
  * The pure decision of ACT-39 (ACT-78). Every call is a `shell` operation
- * (ACT-40), so `confirm_writes` applies to all of them. §13.14 says turning
+ * (ACT-40), a non-read call whatever it runs. §13.14 says turning
  * `VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND` off makes an any-command target
  * refuse every call rather than quietly keep working, so the deployment is
  * closed over here.
@@ -195,20 +194,15 @@ export function createCommandAuthorize(
 }
 
 /**
- * ACT-43: the command as the agent wrote it, as an excerpt when it is long
- * and never silently. ACT-60: the class the engine audits is the word
- * `command`, except on an any-command target, where ACT-88 wants the whole
- * command recorded and the 4 KiB cap on `arguments` could cut it. The engine
- * scrubs both (ACT-61).
+ * ACT-60: the class the engine audits is the word `command`, except on an
+ * any-command target, where ACT-88 wants the whole command recorded and the
+ * 4 KiB cap on `arguments` could cut it. The engine scrubs it (ACT-61).
  */
 export function describeCommand(
   policy: CommandPolicy,
   operation: CommandOperation,
 ): OperationDescription {
-  return {
-    ...excerptOf(operation.command),
-    classification: policy.any_command ? operation.command : 'command',
-  };
+  return { classification: policy.any_command ? operation.command : 'command' };
 }
 
 /**

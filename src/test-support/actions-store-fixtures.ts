@@ -101,8 +101,6 @@ export function insertCallRow(database: DatabaseSync, overrides: Partial<CallRow
     outputTruncated: false,
     durationMs: 3,
     outcome: 'ok',
-    elicitation: 'not_required',
-    confirmationNonce: undefined,
     requestId: 'req-1',
     ip: '203.0.113.9',
     ...overrides,

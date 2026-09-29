@@ -24,7 +24,7 @@ import type { IdentityContext, IdentityEnvironment } from '../../identity/index.
 
 const NOTICES: Readonly<Record<string, string>> = {
   created: 'Connection created.',
-  updated: 'Connection saved; its revision has moved on and open confirmations are void.',
+  updated: 'Connection saved; its revision has moved on.',
   enabled: 'Connection enabled.',
   disabled: 'Connection disabled; agents no longer see it.',
   granted: 'Grant added.',

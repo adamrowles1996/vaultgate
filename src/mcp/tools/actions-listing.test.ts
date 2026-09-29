@@ -137,7 +137,7 @@ describe('actions tools in tools/list', () => {
     expect(listing?.description).toContain('pass a name it returned as target');
     expect(http?.description).toContain('actions_list_targets');
     expect(http?.description).toContain('never returns the credential');
-    expect(http?.description).toContain('human confirmation');
+    expect(http?.description).not.toContain('confirm');
     expect(Object.keys(http?.inputSchema.properties ?? {})[0]).toBe('target');
     expect(http?.inputSchema.required).toContain('target');
     expect(listing?.inputSchema.properties).toStrictEqual({});
@@ -163,7 +163,6 @@ describe('actions_list_targets', () => {
           description: 'The example API',
           connector: 'http',
           operations: ['read', 'write'],
-          confirm_writes: false,
         },
       ],
     });

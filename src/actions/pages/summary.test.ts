@@ -33,7 +33,7 @@ describe('what a computer allows, in a few words', () => {
       address: 'intranet.example/api',
       addressDetail: 'internal · plain transport',
       fields: [{ selector: 'password', isSecret: true }],
-      confirmation: 'reads',
+      reach: 'reads',
       state: 'enabled',
     });
     const sql = await createSqlTarget(harness.actions, { engine: 'mssql' });
@@ -59,17 +59,17 @@ describe('what a computer allows, in a few words', () => {
 });
 
 describe('the Computers page, for every kind of computer', () => {
-  it('ACT-4 ACT-5 ACT-63 files SQL Server, PostgreSQL and SSH apart, shows a missing item and counts the unexpected writes', async () => {
+  it('ACT-4 ACT-5 ACT-40 files SQL Server, PostgreSQL and SSH apart, shows a missing item and what can change things', async () => {
     const harness = createPagesHarness();
     await createSqlTarget(harness.actions, { name: 'erp', engine: 'mssql' });
     await createSqlTarget(harness.actions, { name: 'warehouse' });
     await createSshTarget(harness.actions, {
       name: 'web',
-      policy: { allowed_commands: ['uptime', 'w'], confirm_writes: true },
+      policy: { allowed_commands: ['uptime', 'w'] },
     });
     await createHttpTarget(harness.actions, {
       name: 'writer',
-      policy: { allowed_methods: ['GET', 'POST'], confirm_writes: false },
+      policy: { allowed_methods: ['GET', 'POST'] },
     });
     harness.actions.engine.targets.repo.insert(
       fixtureTargetRow({
@@ -89,13 +89,12 @@ describe('the Computers page, for every kind of computer', () => {
     expect(markup).toContain('>Linux · SSH <span class="count">1</span>');
     expect(markup).toContain('<span class="field-chip">login.username</span>');
     expect(markup).toContain('<span>2 commands</span>');
-    expect(markup).toContain('A person confirms writes');
+    expect(markup).toContain('Can change things');
+    expect(markup).toContain('Reads only');
     expect(markup).toContain('no such item in the vault');
     expect(markup).toContain('<span class="bad">');
-    expect(markup).toContain(
-      '<a href="/account/actions/unexpected">1 unexpected writes this week</a>',
-    );
+    expect(markup).not.toContain('unexpected');
     const sidebar = markup.slice(markup.indexOf('<aside'), markup.indexOf('</aside>'));
-    expect(sidebar).toContain('<span class="nav-badge" title="1 unexpected writes this week">');
+    expect(sidebar).not.toContain('nav-badge');
   });
 });

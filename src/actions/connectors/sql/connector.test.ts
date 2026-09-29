@@ -192,7 +192,6 @@ describe('the sql connector through the engine', () => {
         description: 'The reporting replica',
         connector: 'sql',
         operations: ['read'],
-        confirm_writes: false,
         engine: 'mssql',
       },
     ]);

@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  connectSdkClient,
-  createActionsApp,
-  scriptedElicitation,
-} from '../../../test-support/actions-app.ts';
+import { connectSdkClient, createActionsApp } from '../../../test-support/actions-app.ts';
 import { storedCalls } from '../../../test-support/actions-fixtures.ts';
 import { fakeWsman, type FakeWsman } from '../../../test-support/fake-wsman.ts';
 import { CANARY } from '../../../test-support/vault-fixture.ts';
@@ -29,7 +25,6 @@ describe('winrm_run through the MCP client SDK', () => {
     await createWinrmTarget(harness);
     const client = await connectSdkClient(app, {
       token: issue(['actions:winrm']),
-      elicitation: 'none',
     });
     const result = await client.callTool({
       name: 'winrm_run',
@@ -56,7 +51,6 @@ describe('winrm_run through the MCP client SDK', () => {
     await createWinrmTarget(harness);
     const client = await connectSdkClient(app, {
       token: issue(['actions:winrm']),
-      elicitation: 'none',
     });
     const result = await client.callTool({
       name: 'winrm_run',
@@ -71,33 +65,27 @@ describe('winrm_run through the MCP client SDK', () => {
     expect(fake.requests).toStrictEqual([]);
   });
 
-  it('ACT-40 ACT-43 asks a human to confirm the shell call and runs it once they accept', async () => {
+  it('ACT-40 runs the shell call at once, asking no one, and records it as a shell operation', async () => {
     const fake = fakeWsman();
     const { app, harness, issue } = appOver(fake);
-    await createWinrmTarget(harness, { policy: { confirm_writes: true } });
-    const elicitation = scriptedElicitation([{ action: 'accept', content: { confirm: true } }]);
-    const client = await connectSdkClient(app, {
-      token: issue(['actions:winrm']),
-      elicitation: elicitation.handler,
-    });
+    await createWinrmTarget(harness);
+    const client = await connectSdkClient(app, { token: issue(['actions:winrm']) });
     const result = await client.callTool({
       name: 'winrm_run',
       arguments: { target: 'build-agent', command: 'Get-ComputerInfo' },
     });
     await client.close();
     expect(result.isError).toBeFalsy();
-    expect(JSON.stringify(elicitation.shown)).toContain('Get-ComputerInfo');
-    expect(JSON.stringify(elicitation.shown)).toContain(
-      'vaultgate@win.example.com:5986 (powershell)',
-    );
     expect(fake.actions).toContain('Command');
+    expect(storedCalls(harness.database)).toMatchObject([
+      { operation: 'shell', outcome: 'ok', elicitation: 'not_required' },
+    ]);
   });
 
   it('ACT-17 ACT-18 ACT-15 tools/list advertises winrm_run with target first, the 13.6.1 annotations and strict schemas', async () => {
     const { app, issue } = appOver(fakeWsman());
     const client = await connectSdkClient(app, {
       token: issue(['actions:winrm']),
-      elicitation: 'none',
     });
     const listed = await client.listTools();
     await client.close();
@@ -135,7 +123,6 @@ describe('winrm_run through the MCP client SDK', () => {
     await createWinrmTarget(harness);
     const client = await connectSdkClient(app, {
       token: issue(['actions:ssh']),
-      elicitation: 'none',
     });
     const listed = await client.listTools();
     await client.close();

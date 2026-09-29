@@ -196,14 +196,12 @@ describe('the ssh connector through the engine', () => {
         description: 'The build server',
         connector: 'ssh',
         operations: ['shell'],
-        confirm_writes: false,
       },
       {
         name: 'jump-host',
         description: 'The build server',
         connector: 'ssh',
         operations: ['shell'],
-        confirm_writes: false,
         unrestricted: true,
       },
     ]);

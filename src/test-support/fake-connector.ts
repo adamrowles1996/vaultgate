@@ -61,8 +61,7 @@ export const echoTool: ConnectorTool<EchoOperation> = {
     'vault that you never see. `target` must be a name returned by actions_list_targets; `path` is ' +
     'appended to the target base URL. Returns the status, the allowed response headers, the body ' +
     '(capped, `truncated` when cut), its size and the duration; never returns the credential. A ' +
-    'non-2xx status is a normal result. The operator may require a human confirmation for every ' +
-    'non-GET call, which you cannot supply yourself.',
+    'non-2xx status is a normal result.',
   annotations: {
     title: 'HTTP request',
     readOnlyHint: false,
