@@ -51,8 +51,10 @@ const MAX_CALLS_PER_MINUTE = 600;
 const DEFAULT_CALLS_PER_MINUTE = 60;
 
 /**
-The common policy fields of ACT-1 with the defaults and ceilings of §13.11.
-*/
+ * The common policy fields of ACT-1 with the defaults and ceilings of §13.11.
+ * The object is not strict on purpose: a policy stored while it still carried
+ * the withdrawn `confirm_writes` (§13.8) reads back with that key dropped.
+ */
 export const commonPolicySchema = z.object({
   timeout_ms: z.number().int().min(MIN_TIMEOUT_MS).max(MAX_TIMEOUT_MS).default(DEFAULT_TIMEOUT_MS),
   max_output_bytes: z
@@ -67,7 +69,6 @@ export const commonPolicySchema = z.object({
     .min(1)
     .max(MAX_CALLS_PER_MINUTE)
     .default(DEFAULT_CALLS_PER_MINUTE),
-  confirm_writes: z.boolean().default(false),
 });
 
 export type CommonPolicy = z.output<typeof commonPolicySchema>;

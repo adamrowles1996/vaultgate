@@ -24,7 +24,6 @@ describe('sql_query through the MCP client SDK', () => {
     await createSqlTarget(harness);
     const client = await connectSdkClient(app, {
       token: issue(['actions:sql.read']),
-      elicitation: 'none',
     });
     const result = await client.callTool({
       name: 'sql_query',
@@ -61,7 +60,6 @@ describe('sql_query through the MCP client SDK', () => {
     await createSqlTarget(harness);
     const client = await connectSdkClient(app, {
       token: issue(['actions:sql.read']),
-      elicitation: 'none',
     });
     const result = await client.callTool({
       name: 'sql_query',
@@ -80,7 +78,6 @@ describe('sql_query through the MCP client SDK', () => {
     const { app, issue } = appOver(fakeSqlSessions());
     const client = await connectSdkClient(app, {
       token: issue(['actions:sql.read']),
-      elicitation: 'none',
     });
     const listed = await client.listTools();
     await client.close();
@@ -118,7 +115,6 @@ describe('sql_query through the MCP client SDK', () => {
     await createSqlTarget(harness);
     const client = await connectSdkClient(app, {
       token: issue(['actions:http']),
-      elicitation: 'none',
     });
     const listed = await client.listTools();
     await client.close();

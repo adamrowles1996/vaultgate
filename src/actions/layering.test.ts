@@ -12,7 +12,6 @@ describe('actions layering', () => {
       'engine.ts',
       'targets.ts',
       'policy.ts',
-      'confirm.ts',
       'scrub.ts',
       'limits.ts',
       'sessions.ts',

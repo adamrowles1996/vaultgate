@@ -202,7 +202,7 @@ describe('code schemas', () => {
     );
   });
 
-  it('ACT-43 ACT-49 summarises the repository and its ref, and no code call is ever a write', () => {
+  it('ACT-5 ACT-40 summarises the repository and its ref, and no code call is ever a write', () => {
     const destination = codeDestinationSchema.parse({ repository: 'acme/widgets' });
     expect(codeSchemas.summariseDestination(destination)).toBe('acme/widgets');
     expect(codeSchemas.summariseDestination({ ...destination, ref: 'v1.0' })).toBe(

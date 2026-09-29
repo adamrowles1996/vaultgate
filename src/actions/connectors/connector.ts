@@ -74,6 +74,13 @@ export interface ConnectorSchemas<Destination, Credential, Policy> {
   readonly credentialSchema: z.ZodType<Credential>;
   readonly policySchema: z.ZodType<Policy>;
   endpoints(destination: Destination): readonly Endpoint[];
+  /**
+   * ACT-3, ACT-124: hosts the credential mapping names beyond the destination
+   * (an `oauth2` token endpoint). A save checks each like a destination host;
+   * a call never pins one, because the run resolves it itself, when it uses
+   * it (ACT-55).
+   */
+  credentialEndpoints?(credential: Credential): readonly Endpoint[];
   credentialFields(credential: Credential): readonly CredentialField[];
   /**
   Save-time checks beyond the schemas (ACT-79, ACT-81); each problem is shown to the operator.
@@ -90,13 +97,13 @@ export interface ConnectorSchemas<Destination, Credential, Policy> {
    */
   basicUsername?(destination: Destination): string | undefined;
   /**
-  ACT-43: the host and, where relevant, the database, base path or origin. Never a credential.
+  ACT-5: the host and, where relevant, the database, base path or origin. Never a credential.
   */
   summariseDestination(destination: Destination): string;
   /**
-   * ACT-49: whether the policy permits an operation that is not a read, so
-   * the account page knows whether `confirm_writes` is in force for this
-   * target and can say so when the operator turns it off.
+   * ACT-40: whether the policy permits an operation that is not a read, so
+   * the account page can say whether a granted agent may change anything
+   * through this target.
    */
   allowsNonRead(policy: Policy): boolean;
   /**

@@ -164,20 +164,6 @@ export function fieldProblems(
 }
 
 /**
- * ACT-49: the target allows an operation that is not a read and asks no
- * human to confirm one. A row that fails its schema (ACT-1) refuses every
- * call, so it needs no such note.
- */
-function isUnconfirmed(target: TargetSummary): boolean {
-  const validated = validateTarget(target);
-  return (
-    validated.state === 'valid' &&
-    !validated.documents.common.confirm_writes &&
-    validated.schemas.allowsNonRead(validated.documents.policy)
-  );
-}
-
-/**
 ACT-4, ACT-54: the item's name, or the precise reason the operator (and only the operator) may see.
 */
 export async function describeItem(
@@ -234,7 +220,6 @@ export async function targetPageView(
     csrfToken: viewer.csrfToken,
     isReauthenticated: viewer.isReauthenticated,
     isUnrestricted: unrestrictedSchema.safeParse(target.policy).success,
-    isUnconfirmed: isUnconfirmed(target),
     notice: extras.notice,
     error: extras.error,
     check: extras.check,

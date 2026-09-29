@@ -110,7 +110,7 @@ src/
   oauth/                  metadata, clients (cimd, dcr, preregistered), authorize, token, revoke, scopes
   identity/               bootstrap, password (scrypt), totp, recovery codes, sessions, csrf, pages
   mcp/                    bearer verifier, server factory, tool registry, tool contracts
-  actions/                targets, grants, policy, confirmation, scrubbing, limits, the engine and connectors/ (spec 13; ACT-70 layer)
+  actions/                targets, grants, policy, scrubbing, limits, the engine and connectors/ (spec 13; ACT-70 layer)
   bitwarden/              serve-process (spawn boundary), vault-client, types, error mapping
   storage/                database, migrations/, repositories
   audit/                  the AuditEvent shape, the store-backed sink, listing and export

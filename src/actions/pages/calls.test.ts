@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { run } from '../../storage/query.ts';
 import {
   type ActionsHarness,
   caller,
   CLIENT_ID,
-  confirmationOf,
   createHttpTarget,
   httpInvocation,
   OPERATOR_ID,
@@ -86,8 +86,8 @@ describe('GET /account/actions/:id/calls', () => {
   });
 });
 
-describe('GET /account/actions/unexpected', () => {
-  it('ACT-63 lists every non-read call no human accepted, across targets, with the arguments excerpt', async () => {
+describe('GET /account/actions/writes', () => {
+  it('ACT-63 lists every non-read call across targets, with the arguments excerpt', async () => {
     const harness = createPagesHarness();
     await createHttpTarget(harness.actions, WRITABLE);
     await createHttpTarget(harness.actions, {
@@ -102,8 +102,8 @@ describe('GET /account/actions/unexpected', () => {
       httpInvocation({ target: 'other', method: 'POST', path: '/v1/pay', body: 'y' }),
     );
     const { browser } = await signedInOperator(harness);
-    const markup = await pageMarkup(browser, '/account/actions/unexpected');
-    expect(markup).toContain('<title>Unexpected writes · vaultgate</title>');
+    const markup = await pageMarkup(browser, '/account/actions/writes');
+    expect(markup).toContain('<title>Writes · vaultgate</title>');
     expect(rowsOf(markup)).toHaveLength(2);
     expect(markup).toContain(
       'data-label="Connection"><a class="mono" href="/account/actions/id-1">api</a>',
@@ -115,39 +115,24 @@ describe('GET /account/actions/unexpected', () => {
     expect(markup).toContain('data-label="Classification">POST</td>');
     expect(markup).toContain('&quot;path&quot;:&quot;/v1/pay&quot;');
     expect(markup).toContain('This is the whole trail kept for these calls.');
+    expect(markup).not.toContain('Confirmation');
   });
 
-  it('ACT-63 leaves out reads and the writes a human accepted, and keeps a deleted target’s calls', async () => {
+  it('ACT-63 leaves out reads, lists a write recorded before the confirmation was withdrawn, and keeps a deleted target’s calls', async () => {
     const harness = createPagesHarness();
-    const target = await createHttpTarget(harness.actions, {
-      policy: { allowed_methods: ['GET', 'POST'], confirm_writes: true },
-    });
+    const target = await createHttpTarget(harness.actions, WRITABLE);
     await harness.actions.engine.call(caller(), httpInvocation());
-    const post = httpInvocation({ method: 'POST', body: 'x' });
-    const pending = confirmationOf(await harness.actions.engine.call(caller(), post));
-    await harness.actions.engine.call(
-      caller({
-        confirmation: {
-          requestState: pending.requestState,
-          result: { action: 'accept', content: { confirm: true } },
-        },
-      }),
-      post,
-    );
     const { browser } = await signedInOperator(harness);
-    expect(await pageMarkup(browser, '/account/actions/unexpected')).toContain(
-      'No unexpected write has been recorded.',
+    expect(await pageMarkup(browser, '/account/actions/writes')).toContain(
+      'No write has been recorded.',
     );
-    const second = httpInvocation({ method: 'POST', body: 'y' });
-    const declined = confirmationOf(await harness.actions.engine.call(caller(), second));
-    await harness.actions.engine.call(
-      caller({
-        confirmation: { requestState: declined.requestState, result: { action: 'decline' } },
-      }),
-      second,
+    await harness.actions.engine.call(caller(), httpInvocation({ method: 'POST', body: 'x' }));
+    run(
+      harness.actions.database,
+      "UPDATE action_calls SET elicitation = 'accepted' WHERE classification = 'POST'",
     );
     harness.actions.engine.targets.remove(target.id, OPERATOR_ID);
-    const markup = await pageMarkup(browser, '/account/actions/unexpected');
+    const markup = await pageMarkup(browser, '/account/actions/writes');
     expect(rowsOf(markup)).toHaveLength(1);
     expect(markup).toContain('data-label="Connection"><span class="mono">api</span></td>');
     expect(markup).not.toContain('data-label="Connection"><a');
@@ -155,12 +140,12 @@ describe('GET /account/actions/unexpected', () => {
 
   it('ACT-5 sends a visitor with no session to the login form and links the view from the Activity page', async () => {
     const harness = createPagesHarness();
-    const anonymous = await harness.app.app.request('/account/actions/unexpected');
+    const anonymous = await harness.app.app.request('/account/actions/writes');
     expect(anonymous.status).toBe(303);
-    expect(anonymous.headers.get('location')).toBe('/login?next=%2Faccount%2Factions%2Funexpected');
+    expect(anonymous.headers.get('location')).toBe('/login?next=%2Faccount%2Factions%2Fwrites');
     const { browser } = await signedInOperator(harness);
     expect(await pageMarkup(browser, '/account/activity')).toContain(
-      '<a class="button small" href="/account/actions/unexpected">Unexpected writes',
+      '<a class="button small" href="/account/actions/writes">Writes</a>',
     );
   });
 
@@ -172,7 +157,7 @@ describe('GET /account/actions/unexpected', () => {
       httpInvocation({ method: 'POST', body: 'z'.repeat(400) }),
     );
     const { browser } = await signedInOperator(harness);
-    const markup = await pageMarkup(browser, '/account/actions/unexpected');
+    const markup = await pageMarkup(browser, '/account/actions/writes');
     expect(markup).toContain('…</code>');
     expect(markup).not.toContain('z'.repeat(400));
   });
@@ -189,7 +174,7 @@ describe('the older-calls cursor', () => {
 });
 
 describe('the Activity page', () => {
-  it('ACT-63 lists the latest calls across computers and flags this week’s unexpected writes', async () => {
+  it('ACT-63 lists the latest calls across computers and links the writes', async () => {
     const harness = createPagesHarness();
     await createHttpTarget(harness.actions, WRITABLE);
     await harness.actions.engine.call(caller(), httpInvocation());
@@ -199,33 +184,20 @@ describe('the Activity page', () => {
     expect(markup).toContain('<section class="card flush" id="recent-calls">');
     const recent = markup.slice(markup.indexOf('id="recent-calls"'));
     expect(rowsOf(recent)).toHaveLength(2);
-    expect(markup).toContain('1 this week');
+    expect(markup).not.toContain('this week');
     expect(markup).toContain('id="audit-export"');
   });
 
-  it('ACT-47 ACT-60 colours a failure red and an accepted confirmation green on a computer’s calls', async () => {
+  it('ACT-60 colours a success green and a failure red on a computer’s calls', async () => {
     const harness = createPagesHarness();
-    const target = await createHttpTarget(harness.actions, {
-      policy: { allowed_methods: ['GET', 'POST'], confirm_writes: true },
-    });
-    const post = httpInvocation({ method: 'POST', body: 'x' });
-    const pending = confirmationOf(await harness.actions.engine.call(caller(), post));
-    await harness.actions.engine.call(
-      caller({
-        confirmation: {
-          requestState: pending.requestState,
-          result: { action: 'accept', content: { confirm: true } },
-        },
-      }),
-      post,
-    );
+    const target = await createHttpTarget(harness.actions, WRITABLE);
+    await harness.actions.engine.call(caller(), httpInvocation({ method: 'POST', body: 'x' }));
     harness.actions.connector.behaviour.mode = 'fail';
     harness.actions.connector.behaviour.failWith = 'connection_failed';
     await harness.actions.engine.call(caller(), httpInvocation());
     const { browser } = await signedInOperator(harness);
     const markup = compact(await pageMarkup(browser, `/account/actions/${target.id}`));
-    expect(markup).toContain('<span class="tag tag-green"><svg class="icon"');
-    expect(markup).toContain('</svg>accepted</span>');
+    expect(markup).toContain('<span class="tag tag-green">ok</span>');
     expect(markup).toContain('<span class="tag tag-red">error:connection_failed</span>');
   });
 });

@@ -11,9 +11,9 @@ Where "Add computer" starts: the kinds to choose from, then the chosen connector
 export const NEW_PATH = `${CREATE_PATH}/new`;
 
 /**
-ACT-63: the unexpected-write view, which belongs to no single target.
+ACT-63: the writes view, every call that changed something, which belongs to no single target.
 */
-export const UNEXPECTED_PATH = `${CREATE_PATH}/unexpected`;
+export const WRITES_PATH = `${CREATE_PATH}/writes`;
 
 /**
 ACT-9: the grant writes of the connected-clients list, where the path names the client.

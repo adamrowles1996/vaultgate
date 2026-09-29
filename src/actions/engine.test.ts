@@ -155,10 +155,10 @@ describe('call resolution order', () => {
     expect(JSON.stringify(harness.audit)).not.toContain('/**');
   });
 
-  it('ACT-59 applies the per-target limit of the policy before confirmation, auditing denied:rate_limited with retry_after_s', async () => {
+  it('ACT-59 applies the per-target limit of the policy before the credential is fetched, auditing denied:rate_limited with retry_after_s', async () => {
     const harness = createActionsHarness();
     await createHttpTarget(harness, {
-      policy: { rate_limit_per_minute: 2, allowed_methods: ['GET', 'POST'], confirm_writes: true },
+      policy: { rate_limit_per_minute: 2, allowed_methods: ['GET', 'POST'] },
     });
     resultOf(await harness.engine.call(caller(), httpInvocation()));
     resultOf(await harness.engine.call(caller(), httpInvocation()));
@@ -210,7 +210,7 @@ describe('listTargets', () => {
     });
     await createHttpTarget(harness, {
       description: 'The example API',
-      policy: { allowed_methods: ['GET', 'POST'], confirm_writes: true },
+      policy: { allowed_methods: ['GET', 'POST'] },
     });
     await createHttpTarget(harness, { name: 'ungranted', grantTo: [] });
     const disabled = await createHttpTarget(harness, { name: 'disabled' });
@@ -223,7 +223,6 @@ describe('listTargets', () => {
         description: 'The example API',
         connector: 'http',
         operations: ['read', 'write'],
-        confirm_writes: true,
         engine: 'postgres',
         unrestricted: true,
       },

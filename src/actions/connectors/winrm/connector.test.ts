@@ -201,14 +201,12 @@ describe('the winrm connector through the engine', () => {
         description: 'The Windows build agent',
         connector: 'winrm',
         operations: ['shell'],
-        confirm_writes: false,
       },
       {
         name: 'jump-box',
         description: 'The Windows build agent',
         connector: 'winrm',
         operations: ['shell'],
-        confirm_writes: false,
         unrestricted: true,
       },
     ]);

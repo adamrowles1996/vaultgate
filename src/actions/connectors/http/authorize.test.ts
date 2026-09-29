@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { oauth2Credential } from '../../../test-support/oauth2.ts';
+
 import {
   authorize as authorizeRequest,
   capabilities,
@@ -51,6 +53,10 @@ const SIX = 'é'.repeat(6);
 
 function get(path: string, extra: Partial<HttpOperation> = {}): HttpOperation {
   return { method: 'GET', path, ...extra };
+}
+
+function sending(header: string): HttpOperation {
+  return get('/x', { headers: { [header]: 'mine' } });
 }
 
 function post(body: HttpOperation['body']): HttpOperation {
@@ -165,6 +171,19 @@ describe('authorize', () => {
     ).toBe('authorization');
     expect(injectedHeaderName(KEYED)).toBe('x-api-key');
     expect(injectedHeaderName(QUERY)).toBeUndefined();
+    expect(injectedHeaderName(oauth2Credential())).toBe('authorization');
+    expect(injectedHeaderName(oauth2Credential({ name: 'X-Access-Token' }))).toBe('x-access-token');
+  });
+
+  it('ACT-128 ACT-22 refuses the header an oauth2 token occupies whatever the allowlist says, and Authorization always', () => {
+    const permissive = policy({ allowed_request_headers: ['x-access-token', 'authorization'] });
+    const custom = oauth2Credential({ name: 'X-Access-Token', prefix: '' });
+    const bearer = oauth2Credential();
+    expect(authorize(permissive, sending('X-Access-Token'), custom)).toStrictEqual(DENIED_HEADER);
+    expect(authorize(permissive, sending('x-access-token'), custom)).toStrictEqual(DENIED_HEADER);
+    expect(authorize(permissive, sending('Authorization'), custom)).toStrictEqual(DENIED_HEADER);
+    expect(authorize(permissive, sending('Authorization'), bearer)).toStrictEqual(DENIED_HEADER);
+    expect(authorize(permissive, sending('X-Access-Token'), bearer).allowed).toBe(true);
   });
 
   it('ACT-39 refuses a body over max_body_bytes with reason body_size, counting UTF-8 bytes and the JSON serialisation', () => {
@@ -178,17 +197,11 @@ describe('authorize', () => {
     expect(authorize(small, post(undefined), BEARER).allowed).toBe(true);
   });
 
-  it('ACT-43 ACT-60 describes the operation as method and path, capped at 1 KiB, classified by method', () => {
+  it('ACT-60 describes the operation by its method for the audit trail', () => {
     const described = request(DEFAULT, BEARER);
     expect(
       describeOperation(described, { method: 'DELETE', path: '/v1/items/7?force=1' }),
-    ).toStrictEqual({ summary: 'DELETE /v1/items/7?force=1', classification: 'DELETE' });
-    const path = `/${'a'.repeat(2000)}?token=x`;
-    const long = describeOperation(described, { method: 'GET', path });
-    expect(long.summary).toHaveLength(768 + 3 + 192);
-    expect(long.summary.startsWith('GET /aaa')).toBe(true);
-    expect(long.summary.endsWith('?token=x')).toBe(true);
-    expect(long.omitted?.total).toBe(`GET ${path}`.length);
+    ).toStrictEqual({ classification: 'DELETE' });
   });
 
   it('ACT-19 reports one operation per allowed method with the actions:http scope', () => {

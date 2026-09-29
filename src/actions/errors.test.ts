@@ -16,12 +16,6 @@ const CODES = [
   'invalid_arguments',
   'policy_denied',
   'rate_limited',
-  'confirmation_unavailable',
-  'confirmation_declined',
-  'confirmation_cancelled',
-  'confirmation_expired',
-  'confirmation_invalid',
-  'confirmation_reused',
   'credential_unavailable',
   'credential_rotation_failed',
   'destination_refused',
@@ -64,18 +58,10 @@ describe('ActionError', () => {
     expect(new ActionError('timeout').detail).toBeUndefined();
   });
 
-  it('ACT-48 confirmation_unavailable carries the fixed message of the specification', () => {
-    expect(ACTION_ERROR_MESSAGES.confirmation_unavailable).toBe(
-      'this target requires a human confirmation and your client does not support MCP ' +
-        'elicitation; ask the operator to use a client that does, or to lift the requirement for ' +
-        'this target',
-    );
-  });
-
   it('ACT-60 classes a refusal before the run as denied and everything after it as error', () => {
     expect(outcomeOf(new ActionError('not_granted'))).toBe('denied:not_granted');
     expect(outcomeOf(new ActionError('rate_limited'))).toBe('denied:rate_limited');
-    expect(outcomeOf(new ActionError('confirmation_reused'))).toBe('denied:confirmation_reused');
+    expect(outcomeOf(new ActionError('policy_denied'))).toBe('denied:policy_denied');
     expect(outcomeOf(new ActionError('credential_unavailable'))).toBe(
       'error:credential_unavailable',
     );

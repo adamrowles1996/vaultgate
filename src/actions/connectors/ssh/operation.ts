@@ -39,9 +39,8 @@ export const SSH_RUN_DESCRIPTION =
   'background process) survives to the next call. Returns the exit code, standard output and ' +
   'standard error separately, whether either was cut at the output limit of the target, and ' +
   'the duration. It never returns the credential: any echo of it is replaced by [redacted:<field>]. ' +
-  'The operator may require a human to confirm each call, which you cannot answer yourself: ' +
-  'your client has to ask a person. A server whose host key does not match the pinned one is ' +
-  'host_key_mismatch and nothing is sent to it.';
+  'A server whose host key does not match the pinned one is host_key_mismatch and nothing is ' +
+  'sent to it.';
 
 export const sshRunTool: ConnectorTool<SshOperation> = {
   name: SSH_RUN_TOOL,

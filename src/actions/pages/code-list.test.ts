@@ -53,7 +53,7 @@ describe('Semble connections in the Connections list (ACT-5, ACT-119)', () => {
     expect(page).toContain('<dt>Token</dt><dd>No token: a public repository</dd>');
     expect(page).toContain('<span class="tag tag-plain">Semble · GitHub code search</span>');
     expect(page).toContain('href="/account/actions?kind=code">Semble · GitHub code search</a>');
-    expect(page).toContain('Nothing to confirm: the policy allows reads only');
+    expect(page).toContain('None: the policy allows reads only');
   });
 
   it('ACT-5 says what a code policy allows, and nothing of one out of shape', () => {

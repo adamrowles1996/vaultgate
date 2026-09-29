@@ -1,7 +1,7 @@
 /**
  * The pure half of the `ssh` connector (ACT-78): the shared command policy of
- * `../command.ts` — the ACT-39 decision, the ACT-43 summary with the ACT-60
- * classification and the ACT-19 capabilities — bound to the `ssh` documents
+ * `../command.ts` — the ACT-39 decision, the ACT-60 classification and the
+ * ACT-19 capabilities — bound to the `ssh` documents
  * and the `actions:ssh` scope. No I/O.
  */
 import {

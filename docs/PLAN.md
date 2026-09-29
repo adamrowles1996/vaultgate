@@ -159,7 +159,8 @@ credentials) succeed against the maintainer's Microsoft 365 tenant.
    over `pg` and `mssql` with read-only sessions where the engine allows; `actions:sql.read`.
 2. `feat(actions)`: `sql_execute` with `write_classes`, `statement_allowlist`, per-statement
    transaction; `actions:sql.write`; the elicitation flow of 13.8 (first write tool to need it),
-   including the no-elicitation refusal and every `ElicitResult` outcome (ACT-76).
+   including the no-elicitation refusal and every `ElicitResult` outcome (ACT-76). The flow has
+   since been withdrawn: see the note under M14.
 
 Exit: every corpus entry is a named test; a `sql.read` token cannot reach `sql_execute`; a
 confirmed target refuses a client without elicitation; live queries run against the
@@ -238,6 +239,12 @@ Exit: every ACT id in sections 13 and 14 up to ACT-90 is cited by a test or allo
 reason in `scripts/check-requirement-citations.mjs`, which `npm run quality` enforces; the guides
 (`tools-and-scopes.md`, `actions.md`) describe the layer.
 
+**Withdrawn 2026-09-29.** The confirmation this milestone hardened — `policy.confirm_writes`,
+ACT-41 to ACT-49 and ACT-76 — is withdrawn: approval belongs to the agent's client (spec 13
+§13.8 and the 2026-09-29 amendment of ADR 0007). The call history, the review of writes (the
+"unexpected write" view, which now lists every call that changed something), the grant
+management and the form messages stay.
+
 ### M15 `browser` (ACT-29…33, 91…102)
 
 1. `build(docker)`: the optional `browser` Compose profile with the pinned Playwright image,
@@ -291,6 +298,25 @@ search and `max_snippet_lines` 0 and `null` with the same results, in the same o
 same scores and snippets, as `semble` 0.6.1's own MCP server over checkouts of the same commits
 with the same locked dependencies (#101).
 
+### `http` private trust and the `oauth2` adapter (ACT-121…130)
+
+1. `feat(http)`: a destination may pin its leaf certificate (`certificate_sha256`) or trust a
+   private certificate authority (`ca_pem`) in place of the system store, on `https://` only and
+   for `base_url`'s origin only (ACT-121 to ACT-123) — the Proxmox VE API's own cluster
+   authority, for one.
+2. `feat(http)`: the `oauth2` credential mode (14.3a): any OAuth 2.0 token endpoint by the
+   client-credentials or refresh-token grant, client authentication in the form or by HTTP
+   Basic, the token in a header and prefix of the operator's choosing, one response rule and one
+   cache with `graph`, write-back of a rotated refresh token (ACT-124 to ACT-130) — Power BI,
+   Microsoft Fabric, Azure Resource Manager, national-cloud Graph, Zoho Books, HubSpot and Xero.
+3. `docs(guides)`: [HTTP targets](guides/http-targets.md), with each of those worked through.
+
+Exit: contract tests cover the pin, the authority and their refusals, both grants and both client
+authentications against a fake token endpoint, rotation and a failed write-back, the refusal
+Zoho sends with a `200`, and the ACT-53 canary on an `oauth2` target; a live call to each of the
+maintainer's Proxmox VE, Power BI, Fabric, Resource Manager and Zoho Books targets is recorded
+after the release that carries them.
+
 ### Post-1.0 candidates
 
 - Passkey (WebAuthn) operator login.
@@ -298,8 +324,8 @@ with the same locked dependencies (#101).
 - PostgreSQL store for multi-replica deployments.
 - Prometheus metrics.
 - Organisation collections filtering and per-client item allowlists.
-- Actions follow-ups: `http_get` with `readOnlyHint: true`, Graph national clouds, further
-  connectors only with a policy model as tight as spec 14.
+- Actions follow-ups: `http_get` with `readOnlyHint: true`, further connectors only with a
+  policy model as tight as spec 14. (Graph in a national cloud is served by `oauth2`.)
 - `code` follow-ups: GitHub Enterprise Server, GitLab and Gitea or Forgejo forges, each with its
   own archive and redirect rules (ADR 0008).
 - **Kerberos for `winrm`**, the successor to the NTLM that landed in M13. Microsoft deprecated

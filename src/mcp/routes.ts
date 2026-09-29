@@ -27,7 +27,6 @@ import {
   type ScopeRequirement,
 } from './scopes.ts';
 import { type CallContext, createVaultMcpServer } from './server.ts';
-import { elicitationCapability } from './tools/actions-call.ts';
 
 import type { ActionsEngine } from '../actions/engine.ts';
 import type { AuditSink } from '../audit/event.ts';
@@ -186,7 +185,6 @@ function serve(gate: Gate, context: McpContext, exchange: Exchange): Promise<Res
     scopes: exchange.verdict.scopes,
     requestId: context.get('requestId'),
     sourceIp: resolveSourceIp(context.req.raw, context.env, config),
-    elicitation: elicitationCapability(exchange.body),
   };
   const server = {
     vault: gate.dependencies.vaultClient,

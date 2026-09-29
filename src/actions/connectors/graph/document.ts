@@ -11,8 +11,6 @@
  */
 import { z } from 'zod';
 
-import type { CredentialField } from '../connector.ts';
-
 export const GRAPH_ORIGIN = 'https://graph.microsoft.com';
 export const GRAPH_DEFAULT_SCOPE = 'https://graph.microsoft.com/.default';
 export const GRAPH_TOKEN_HOST = 'login.microsoftonline.com';
@@ -48,25 +46,11 @@ export const graphCredentialSchema = z
 export type GraphCredential = z.output<typeof graphCredentialSchema>;
 
 /**
-ACT-4: the client secret and, for the refresh-token grant, the refresh token.
-*/
-export function graphCredentialFields(credential: GraphCredential): readonly CredentialField[] {
-  const field = (selector: string): CredentialField => ({
-    name: selector,
-    selector,
-    role: 'secret',
-  });
-  return credential.refresh_token_field === undefined
-    ? [field(credential.secret_field)]
-    : [field(credential.secret_field), field(credential.refresh_token_field)];
-}
-
-/**
  * ACT-81: the destination must be Microsoft Graph itself. The origin is
- * exact — national clouds are a separate host and are not supported — while
- * a path prefix under it is allowed, so a target may be pinned to one API
- * version (`https://graph.microsoft.com/v1.0`) and write its policy patterns
- * relative to that.
+ * exact — a national cloud is another host, reached through `oauth2`
+ * (ACT-130) — while a path prefix under it is allowed, so a target may be
+ * pinned to one API version (`https://graph.microsoft.com/v1.0`) and write
+ * its policy patterns relative to that.
  */
 export function graphDestinationProblems(baseUrl: string): readonly string[] {
   return new URL(baseUrl).origin === GRAPH_ORIGIN

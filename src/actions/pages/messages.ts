@@ -14,8 +14,6 @@ const FIELD_MESSAGES: Readonly<Record<string, string>> = {
     'How much output one call may return, in bytes: 1024 to 1048576. Longer output is cut and ' +
     'the result says so.',
   'policy.rate_limit_per_minute': 'How many calls this connection accepts per minute: 1 to 600.',
-  'policy.confirm_writes':
-    'Whether every non-read call asks a human to confirm it first. On for a new connection.',
   // http (§14.2)
   'policy.allowed_methods':
     'The HTTP methods an agent may use, at least one. GET, HEAD and OPTIONS count as reads; ' +

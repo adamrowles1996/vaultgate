@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { describe, expect, it } from 'vitest';
 
 import { HOST_KEYS } from '../../../test-support/fake-ssh-client.ts';
@@ -44,7 +42,7 @@ function request(overrides: Readonly<Record<string, unknown>> = {}): SshRequest 
 }
 
 describe('the ssh policy decision', () => {
-  it('ACT-40 allows a command the allowlist matches and calls it a shell operation, so confirm_writes applies', () => {
+  it('ACT-40 allows a command the allowlist matches and calls it a shell operation, a non-read call', () => {
     expect(ALLOWED(request(), { command: 'uptime', stdin: undefined })).toStrictEqual({
       allowed: true,
       operation: 'shell',
@@ -98,18 +96,10 @@ describe('the ssh policy decision', () => {
 });
 
 describe('the ssh operation description', () => {
-  it('ACT-43 ACT-60 excerpts a long command head and tail, says what is missing, and classifies it as command', () => {
+  it('ACT-60 classifies a command on a restricted target as command, however long it is', () => {
     const long = `${'echo '.repeat(500)}rm -rf /`;
     const description = describeOperation(request(), { command: long, stdin: undefined });
-    expect(description.summary.startsWith(long.slice(0, 768))).toBe(true);
-    expect(description.summary.endsWith(long.slice(-192))).toBe(true);
-    expect(description.summary).toContain('rm -rf /');
-    expect(description.omitted).toStrictEqual({
-      characters: long.length - 960,
-      total: long.length,
-      sha256: createHash('sha256').update(long, 'utf8').digest('hex'),
-    });
-    expect(description.classification).toBe('command');
+    expect(description).toStrictEqual({ classification: 'command' });
   });
 
   it('ACT-88 records the whole command of an any-command target, which the 4 KiB arguments cap could cut', () => {

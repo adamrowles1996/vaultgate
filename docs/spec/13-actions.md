@@ -11,11 +11,11 @@
 > ACT-88); M13 the `winrm` connector (14.6) with `winrm_run` (13.6.5; ACT-89, ACT-90); and M16
 > the `code` connector (14.8) with `code_search`, `code_find_related` and `code_read` (13.6.7;
 > ACT-103…120). M14
-> brought the per-target call history and ACT-63's "unexpected write" view, grant management from
-> the connected-clients list (since moved to the Agents page's matrix, ACT-9), the per-field validation messages of ACT-6, the `confirm_writes`
-> default of ACT-49 and the proof behind ACT-48's rewritten second half: the in-band fallback for
-> the 2025 wire is unimplementable under MCP-1, so a client on that wire is refused a confirmed
-> target with `confirmation_unavailable` and the clause now says why. Not yet: the `browser`
+> brought the per-target call history and ACT-63's review view, grant management from
+> the connected-clients list (since moved to the Agents page's matrix, ACT-9) and the per-field
+> validation messages of ACT-6. vaultgate's own per-call confirmation through MCP elicitation
+> (13.8, ACT-41…49 and ACT-76) was withdrawn after M16: approving a call is the agent's client's
+> job alone, through its own permission prompt, and vaultgate asks no one. Not yet: the `browser`
 > connector of M15 (no tool is listed until a connector's runtime lands). The per-connector
 > contracts are in [14 Action connectors](14-actions-connectors.md); the `ACT-n` sequence
 > continues there.
@@ -41,9 +41,9 @@ Design rules, in priority order:
 2. **Secrets never come back.** No tool in this section returns an injected value, and
    every result, error and audit row is scrubbed of every injected value and its
    encoded variants before it leaves the engine (13.9).
-3. **Read-only by default, writes are opt-in three times.** A write needs its own scope
-   at consent, a target policy that allows the operation, and (when the operator asks
-   for it) a per-call human confirmation through MCP elicitation (13.8).
+3. **Read-only by default, writes are opt-in twice.** A write needs its own scope at
+   consent and a target policy that allows the operation. Whether a person approves each
+   call is the agent's client's decision, made before the call reaches vaultgate (13.8).
 4. **Off unless enabled.** The whole layer is absent (no scopes, no tools, no pages)
    unless `VAULTGATE_ENABLE_ACTIONS=true`, and each connector has its own switch (13.14).
 5. **Still no arbitrary execution.** `ssh_run` and `winrm_run` run one command against
@@ -61,9 +61,8 @@ Design rules, in priority order:
 | Operation      | What one tool call asks a target to do: an HTTP request, a statement, a command, a browser action.                                              |
 | Injected value | A secret fetched from the vault for one call (a password, a key, a TOTP code, a token vaultgate obtained with one), never seen by the agent.    |
 | Grant          | The operator's decision that one OAuth client may use one target.                                                                               |
-| Confirmation   | A per-call human approval obtained through MCP elicitation for write, shell or browser-act operations on a target that requires it.             |
 | Session        | A `browser` target's logged-in Chromium context, opened by one client and bounded by a TTL (14.7); the only state the layer holds across calls. |
-| Engine         | `src/actions/`: target lookup, grant and scope checks, policy, confirmation, secret fetch, scrubbing, caps, sessions, audit.                    |
+| Engine         | `src/actions/`: target lookup, grant and scope checks, policy, secret fetch, scrubbing, caps, sessions, audit.                                  |
 
 ## 13.3 Targets
 
@@ -83,9 +82,9 @@ Design rules, in priority order:
 | `destination`                            | JSON                                                       | Connector-specific (section 14). Always a host, URL or origin the operator typed or took from the vault item (ACT-2); never derived from an agent argument. |
 | `internal`                               | boolean, default `false`                                   | When `true` the destination may resolve to a private-range address (13.10). Loopback and link-local are refused whatever this says.                         |
 | `credential`                             | JSON `{ item_id, mapping }`                                | `item_id` is a vault item id; `mapping` names which secret fields feed which injection points (section 14). The row holds field _names_, never values.      |
-| `policy`                                 | JSON                                                       | Connector-specific allowlists and limits (13.7) plus the common fields `timeout_ms`, `max_output_bytes`, `rate_limit_per_minute`, `confirm_writes`.         |
+| `policy`                                 | JSON                                                       | Connector-specific allowlists and limits (13.7) plus the common fields `timeout_ms`, `max_output_bytes`, `rate_limit_per_minute`.                           |
 | `enabled`                                | boolean, default `true`                                    | A disabled target is listed to no agent and refuses every call with `target_disabled`.                                                                      |
-| `revision`                               | integer                                                    | Incremented on every change; recorded on every call's audit row, used as the cache key for adapter tokens (14.3) and invalidates open confirmations (13.8). |
+| `revision`                               | integer                                                    | Incremented on every change; recorded on every call's audit row and used as the cache key for adapter tokens (14.3).                                        |
 | `created_at`, `updated_at`, `updated_by` | ms epoch, ms epoch, operator id                            | Conventions of section 07.                                                                                                                                  |
 
 - **ACT-2** A target's `destination` and `credential.item_id` MUST refer to things the operator
@@ -95,7 +94,7 @@ Design rules, in priority order:
   are offered beside the address field, a host field taking the host and any port an address
   names, a URL field only an `http://` or `https://` URL. The chosen address is copied into the
   destination when the target is saved, not linked: ACT-3 resolves and checks the saved address,
-  every confirmation binds to it, and a later change to the item does not move the target. A save
+  and a later change to the item does not move the target. A save
   that carries both a typed address and a different chosen one is refused rather than resolved
   silently, and so is a choice that names no address of its field.
 - **ACT-3** Saving a target validates the destination the same way a call does (13.10): each
@@ -117,8 +116,8 @@ Design rules, in priority order:
   description, destination summary, the vault item and the fields it maps (a secret field shown
   sealed, by name only; no value is ever drawn), what its policy allows, the granted clients, its
   last call and its state. `?kind=` shows one kind, and the sidebar has an entry per kind with its
-  count. What needs attention comes first: an invalid target (ACT-1), a target that writes without
-  confirmation (ACT-49), and the unexpected writes of the last seven days (ACT-63). **Add
+  count. What needs attention comes first: an invalid target (ACT-1). Each target says whether its
+  policy lets an agent change anything (ACT-40) or only read. **Add
   connection** (`GET /account/actions/new`) chooses the kind, then the vault item (`?q=` searches
   item summaries by name, username and address, at most 20 at a time, each shown with its login
   name, first address and field names, a secret field sealed; `?item=` takes the chosen or pasted
@@ -228,21 +227,21 @@ any of …"`), so a client learns in one challenge every scope that would satisf
   list of names, each resolved in turn and one audit row each, ACT-110) as its first argument and
   resolves it in this order, stopping at the first failure: layer enabled → target exists → client granted → connector enabled →
   target enabled → stored target valid (ACT-1) → token holds the tool's scope → arguments valid
-  → policy allows the operation (13.7) → rate limits (13.11) → confirmation if required (13.8)
+  → policy allows the operation (13.7) → rate limits (13.11)
   → credential fetched (13.9) → destination pinned (13.10) → run. Each failure has its own error
   code (13.16) and its own audit outcome, and the grant check comes before every check that
   would describe the target, so an ungranted client learns nothing about a target beyond
   `not_granted` (ACT-67 places `connector_disabled` after the grant for the same reason).
 - **ACT-17** Tool descriptions state the arguments' meaning, what the result contains, that the
   result never contains credentials, that `target` must come from `actions_list_targets`, and,
-  for the write, shell and browser tools, that the operator may require a confirmation the agent
-  cannot supply.
+  for the write, shell and browser tools, which calls change something.
 - **ACT-18** Annotations use the MCP `ToolAnnotations` fields exactly: `title`, `readOnlyHint`,
   `destructiveHint`, `idempotentHint`, `openWorldHint`. The `ToolAnnotations` type in
   `src/mcp/tools/definition.ts` currently fixes `openWorldHint: false`; the actions tools widen it
   to `boolean`. Annotations are hints the client MAY use to decide whether to ask its user; the
   MCP specification tells clients to treat them as untrusted, so the server-side controls of
-  13.7 and 13.8 never depend on them.
+  13.7 never depend on them. They are also how a client decides which calls to put in front of
+  its user for approval (13.8).
 
 | Tool                   | Scope               | `readOnlyHint` | `destructiveHint` | `idempotentHint` | `openWorldHint` |
 | ---------------------- | ------------------- | -------------- | ----------------- | ---------------- | --------------- |
@@ -264,9 +263,8 @@ post-M15 candidate (`http_get` with `readOnlyHint: true`), not a reason to weake
 ### 13.6.2 `actions_list_targets`
 
 - **ACT-19** Input: none. Output: `targets`, an array of `{ name, description, connector,
-operations, confirm_writes, engine?, unrestricted? }` where `operations` is the subset of `read`,
-  `write`, `shell`, `act` the target's policy allows and the token's scopes can reach,
-  `confirm_writes` says whether non-read calls will ask for confirmation, `engine` (`mssql` \|
+operations, engine?, unrestricted? }` where `operations` is the subset of `read`,
+  `write`, `shell`, `act` the target's policy allows and the token's scopes can reach, `engine` (`mssql` \|
   `postgres`) appears for `sql` targets and `unrestricted: true` marks an any-command target (ACT-88).
   A `code` target adds `repository`, its configured `ref` (absent for the default branch),
   `content` and `read` (whether `code_read` is allowed, ACT-112).
@@ -476,135 +474,37 @@ class? }` or `{ allowed: false, reason }` with `reason` one of `method`, `path`,
   `act`: every `sql_execute`, every `ssh_run` and `winrm_run`, every `http_request` whose method
   is not `GET`, `HEAD` or `OPTIONS`, and every `browser_click` and `browser_type`.
   `browser_open`, `browser_navigate`, `browser_snapshot`, `browser_screenshot` and
-  `browser_close` are `read` for policy purposes. Non-read calls are subject to `confirm_writes`
-  (13.8).
+  `browser_close` are `read` for policy purposes. Non-read calls carry `readOnlyHint: false` (ACT-18)
+  and are the ones ACT-63 lists for review.
 
-## 13.8 Confirmation through elicitation
+## 13.8 Approval belongs to the client
 
-- **ACT-41** When a target's `policy.confirm_writes` is `true` and the call is a non-read call,
-  the engine MUST obtain a human confirmation through MCP elicitation before it fetches the
-  credential, opens a connection or acts in a session. The confirmation asks for exactly one
-  boolean; it never asks for a secret, an address or free text (the MCP specification forbids
-  requesting sensitive information in form mode, and vaultgate has nothing else to ask).
-- **ACT-42** On protocol version `2026-07-28` the request is an `InputRequiredResult` (the
-  multi-round-trip pattern), which suits the stateless handler of MCP-1: nothing about the pending
-  call is held in memory. The result is exactly:
+vaultgate does not ask anyone to approve a call. A call that reaches a target the client is
+granted, with a token holding the scope and an operation the policy allows, runs. Whether a person
+approves it first is the agent's client's decision, taken before the call is sent, from its own
+permission settings and the tool annotations of ACT-18: `readOnlyHint: false` on every tool that
+can change something, `destructiveHint` where it can destroy. The operator's controls are the
+grant (ACT-9), the scopes (ACT-11), the policy (13.7) and the review of ACT-63.
 
-```json
-{
-  "resultType": "input_required",
-  "inputRequests": {
-    "confirm": {
-      "method": "elicitation/create",
-      "params": {
-        "mode": "form",
-        "message": "vaultgate: <client name> asks to run <tool> on target \"<name>\" (<connector>, <destination summary>).\n\nThe operation, every line of it quoted with \"> \":\n> <operation summary, one quoted line per line>\n\n[NOT SHOWN: … — present only when the summary is an excerpt, ACT-43]\n\nAllow this one call? It expires in 2 minutes and cannot be reused.",
-        "requestedSchema": {
-          "type": "object",
-          "properties": {
-            "confirm": {
-              "type": "boolean",
-              "title": "Allow this call",
-              "description": "Tick to let vaultgate run the operation shown above, once.",
-              "default": false
-            }
-          },
-          "required": ["confirm"]
-        }
-      }
-    }
-  },
-  "requestState": "<opaque, ACT-44>"
-}
-```
-
-- **ACT-43** `<destination summary>` is the host (and database, base path or origin) only;
-  `<operation summary>` is the method and path, the statement, the command or, for a browser
-  action, the page URL and the element's accessible name and the text to type, built from the
-  agent's arguments and the target's metadata and passed through the scrubber (13.9) like any
-  output. The message never contains an injected value, a policy pattern or a vault item id.
-
-  The summary is the last line of defence against a prompt-injected agent talking an honest human
-  into a call, so it is never shortened in silence. An operation longer than 1 KiB is shown as its
-  first 768 characters and its last 192, joined by `…` on lines of its own, and the message then
-  carries a line of vaultgate's own — outside the quoted block, where the agent's text cannot
-  reach — saying how many characters are missing and the SHA-256 of the whole operation. Showing
-  the tail matters: a payload appended to a long prelude is exactly what a head-only cut hides.
-  vaultgate does not refuse to confirm a long operation, because refusing would push an operator
-  towards `confirm_writes: false`, which is the weaker of the two states this clause exists to
-  protect.
-
-  Every line of the summary is prefixed with a quote marker (`>` and a space) and the message says so, so an agent cannot
-  reproduce the message's own trailer: a line it writes is a quoted line, and the trailer is the
-  only unquoted one. It is built before the credential is fetched (ACT-41), so at that
-  point there is no injected value to scrub; the canary suite of ACT-53 asserts it is clean.
-
-- **ACT-44** `requestState` is `base64url(payload) + "." + base64url(HMAC-SHA256(payload))` under
-  a key derived from `VAULTGATE_SECRET_KEY` (HKDF purpose `vaultgate/actions-confirmation/v1`),
-  where `payload` is JSON of `{ v: 1, nonce, target_id, revision, tool, client_id, token_prefix,
-args_sha256, issued_at, expires_at }` and `expires_at` is `issued_at + 120 000`. It carries no
-  secret and no argument text; the client learns nothing from it that it did not send.
-- **ACT-45** The client retries the same `tools/call` with `inputResponses.confirm` and the echoed
-  `requestState`. The engine verifies the HMAC, the expiry, that `client_id` and `token_prefix`
-  match the presenting token, that `target_id` and `revision` match the target as it is now
-  (a target edited in between invalidates the confirmation), and that `args_sha256` equals the
-  SHA-256 of the canonical JSON of the retried arguments. Any mismatch fails with
-  `confirmation_invalid`; an expired state fails `confirmation_expired`.
-- **ACT-46** The `nonce` is single-use: it is written to `action_calls.confirmation_nonce`
-  (unique index) inside the same transaction that records the call, before the connector runs;
-  a second retry with the same state fails `confirmation_reused`. Nonces are 16 random bytes.
-  The engine also refuses a nonce it finds already consumed before it fetches the credential;
-  the transaction is the backstop against a race between two retries.
-- **ACT-47** The `ElicitResult` is honoured as: `action: "accept"` with `content.confirm === true`
-  runs the call; `accept` with `confirm` false or absent, `decline` and `cancel` fail with
-  `confirmation_declined` (`accept` or `decline`) or `confirmation_cancelled` (`cancel`) and are
-  audited as such. No retry is offered by the server; the agent may call again and a new
-  confirmation is requested.
-- **ACT-48** Capability check: the client's elicitation support is read from the request's
-  `_meta["io.modelcontextprotocol/clientCapabilities"].elicitation` (an object with `form` or an
-  empty object means form mode). A request that carries no such envelope — which is every
-  request on a protocol version older than `2026-07-28` — declares no form-mode elicitation, and
-  a non-read call on a confirmed target then fails **before anything else happens** with
-  `confirmation_unavailable` and the fixed message "this target requires a human confirmation and
-  your client does not support MCP elicitation; ask the operator to use a client that does, or to
-  lift the requirement for this target". The engine never downgrades a confirmed target to
-  unconfirmed.
-
-  There is no in-band fallback on the older wire, and there cannot be one in this deployment
-  model. An earlier draft of this clause required the engine to fall back to the SDK's
-  server-to-client `elicitation/create` request when the negotiated version predates the
-  multi-round-trip pattern but the client declared `elicitation` at initialisation. That is
-  unimplementable under MCP-1: the 2025 wire declares the capability once, in `initialize`, and
-  the stateless handler builds a fresh server per HTTP request that never sees that message. The
-  SDK resolves the per-request capability view from the request envelope on a 2026-07-28 instance
-  and from the `initialize`-declared state on a 2025-era one, and documents that "per-request
-  instances that never saw an initialize (stateless legacy) hold nothing, so gates refuse there";
-  its legacy shim, asked to fulfil the request anyway, answers "no client capabilities are
-  available on this connection — per-request legacy serving cannot receive server-to-client
-  requests". The refusal is not merely equivalent to attempting the fallback — it is better:
-  the attempt returns an untyped `isError` text result instead of the `confirmation_unavailable`
-  code an agent can act on, records no `action_calls` row at all (ACT-60 records nothing for a
-  call that ends in a confirmation request, and the shim fails after the handler has returned),
-  and still shows no human a prompt. A deployment that wants confirmations for a 2025-wire client
-  would have to hold a session for it, which MCP-1 forbids; the supported answer is a client on
-  `2026-07-28`, or `confirm_writes: false` with the review that ACT-63 provides.
-
-- **ACT-49** A target with `confirm_writes: false` relies on the client-side prompt the
-  annotations invite (13.6.1) and on the operator's grant; `actions_list_targets` reports the
-  difference so an agent can warn its user. The create form defaults `confirm_writes` to
-  `true` for every new target whose policy allows a non-read operation.
+An earlier revision specified a per-call confirmation obtained through MCP elicitation
+(`policy.confirm_writes`, ACT-41 to ACT-49, tested per ACT-76). It was withdrawn: the clients in
+use could not answer it — a client on the 2025 wire can never be asked under the stateless handler
+of MCP-1 — and a target that required it refused every write to such a client, so the approval
+that actually worked was always the client's own.
+Those requirement numbers are not reused. A policy stored with `confirm_writes` reads back with the
+key dropped, and the `action_calls` columns that recorded confirmations keep their history (13.12).
 
 ## 13.9 Secret handling
 
 - **ACT-50** Injected values are fetched from the vault through `VaultClient` at the moment of
-  the call (after policy, rate limit and confirmation), held in memory only for the call, and
+  the call (after policy and rate limit), held in memory only for the call, and
   overwritten with zeros when the call ends (`Buffer.fill(0)`; string copies a connector library
   or the browser sidecar makes are outside vaultgate's control and are the reason connectors are
   separate sub-modules with the smallest possible surface). A value the run itself obtains joins
   the same holder and is zeroed with it. Nothing about them is cached, except the adapter token
   of ACT-82, which lives in the adapter's own in-process cache, and the scrub list a browser
   session keeps for its lifetime (14.7).
-- **ACT-51** Before any connector output, error text, snapshot or elicitation message leaves the
+- **ACT-51** Before any connector output, error text or snapshot leaves the
   engine, the scrubber replaces every occurrence of every injected value and of each of its
   encoded variants with `[redacted:<field>]`. The variants are: the raw value;
   `encodeURIComponent` of it; the `application/x-www-form-urlencoded` form (`+` for space);
@@ -628,7 +528,7 @@ args_sha256, issued_at, expires_at }` and `expires_at` is `issued_at + 120 000`.
   logger (they are added to the pino redaction backstop by field name, OPS-1) or an error message.
   The canary-containment suite (11.2) gains a fixture target per connector whose credential is a
   canary string and asserts that no canary, in any ACT-51 variant, appears in any tool result,
-  snapshot, screenshot-side DOM, audit row, log line or elicitation message when a fake
+  snapshot, screenshot-side DOM, audit row or log line when a fake
   destination echoes its request back.
 - **ACT-54** The layer never reveals through timing or errors whether a vault item exists to a
   client that is not granted the target (ACT-16 ordering), and `credential_unavailable` carries

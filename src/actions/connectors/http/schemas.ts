@@ -1,18 +1,25 @@
 /**
- * The `http` connector's target documents (spec §14.2) with the `graph`
- * credential adapter document of §14.3 (ACT-81) as a credential mode. The
- * schemas are the static half every build carries so the account page can
- * validate and edit targets; the runtime is `./index.ts` and, for the graph
- * mode, `../graph/adapter.ts`.
+ * The `http` connector's target documents (spec §14.2) with the adapter
+ * documents of `graph` (§14.3, ACT-81) and `oauth2` (§14.3a, ACT-124) as
+ * credential modes. The schemas are the static half every build carries so
+ * the account page can validate and edit targets; the runtime is
+ * `./index.ts` and, for the two adapter modes, `../graph/adapter.ts`. The
+ * destination may name a private trust in place of the system store: a leaf
+ * certificate pin (ACT-121) or a private certificate authority (ACT-122), one
+ * or the other and over TLS only.
  */
 import { z } from 'zod';
 
 import { commonPolicySchema, httpSubject } from '../../policy.ts';
+import { certificateSha256Schema, isPemCertificates, NOT_PEM_PROBLEM } from '../certificates.ts';
+import { graphCredentialSchema, graphDestinationProblems } from '../graph/document.ts';
 import {
-  graphCredentialFields,
-  graphCredentialSchema,
-  graphDestinationProblems,
-} from '../graph/document.ts';
+  adapterCredentialFields,
+  oauth2CredentialSchema,
+  oauth2TokenEndpoint,
+} from '../graph/oauth2-document.ts';
+
+import { headerNameSchema } from './header-name.ts';
 
 import type { ConnectorSchemas, CredentialField, Endpoint } from '../connector.ts';
 
@@ -25,14 +32,6 @@ export const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTION
 
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const DEFAULT_BODY_BYTES = 256 * 1024;
-
-/**
-RFC 9110 token characters; header names are compared lower-cased (ACT-34).
-*/
-const headerNameSchema = z
-  .string()
-  .regex(/^[\w!#$%&'*+.^`|~-]+$/, 'must be an HTTP header name')
-  .transform((name) => name.toLowerCase());
 
 function baseUrlProblem(text: string): string | undefined {
   let url: URL;
@@ -59,6 +58,8 @@ const baseUrlSchema = z.string().superRefine((text, context) => {
 
 export const httpDestinationSchema = z.strictObject({
   base_url: baseUrlSchema,
+  certificate_sha256: certificateSha256Schema.optional(),
+  ca_pem: z.string().min(1).optional(),
 });
 
 const fieldSelectorSchema = z.string().min(1);
@@ -85,6 +86,7 @@ export const httpCredentialSchema = z.discriminatedUnion('mode', [
     prefix: z.string().optional(),
   }),
   graphCredentialSchema,
+  oauth2CredentialSchema,
 ]);
 
 export const httpPolicySchema = commonPolicySchema.extend({
@@ -119,13 +121,49 @@ function credentialFields(credential: HttpCredential): readonly CredentialField[
     case 'basic': {
       return [field(credential.username_from, 'username'), field(credential.field)];
     }
-    case 'graph': {
-      return graphCredentialFields(credential);
+    case 'graph':
+    case 'oauth2': {
+      return adapterCredentialFields(credential);
     }
     default: {
       return [field(credential.field)];
     }
   }
+}
+
+/**
+ * ACT-121, ACT-122: a private trust is a TLS control, so on a plain
+ * `base_url` it would be silently ignored, which is worse than a refusal; the
+ * pin and the authority each replace the store, so naming both is a mistake
+ * too. Every problem is reported at once.
+ */
+function trustProblems(destination: HttpDestination): readonly string[] {
+  const isPinned = destination.certificate_sha256 !== undefined;
+  const hasAuthority = destination.ca_pem !== undefined;
+  const isPlain = new URL(destination.base_url).protocol === 'http:';
+  return [
+    ...(isPinned && hasAuthority
+      ? [
+          'destination.certificate_sha256: give a certificate pin or a certificate authority, not both',
+        ]
+      : []),
+    ...(isPinned && isPlain
+      ? ['destination.certificate_sha256: a certificate pin needs an https:// base_url']
+      : []),
+    ...(hasAuthority && isPlain
+      ? ['destination.ca_pem: a certificate authority needs an https:// base_url']
+      : []),
+    ...(destination.ca_pem === undefined || isPemCertificates(destination.ca_pem)
+      ? []
+      : [NOT_PEM_PROBLEM]),
+  ];
+}
+
+/**
+ACT-124: the `oauth2` token endpoint, which a save checks by the ACT-3 rule but a call never pins.
+*/
+function credentialEndpoints(credential: HttpCredential): readonly Endpoint[] {
+  return credential.mode === 'oauth2' ? [oauth2TokenEndpoint(credential)] : [];
 }
 
 /**
@@ -149,9 +187,10 @@ export const httpSchemas: ConnectorSchemas<HttpDestination, HttpCredential, Http
   credentialSchema: httpCredentialSchema,
   policySchema: httpPolicySchema,
   endpoints,
+  credentialEndpoints,
   credentialFields,
   saveProblems({ destination, credential, policy }) {
-    const problems: string[] = [];
+    const problems: string[] = [...trustProblems(destination)];
     if (credential.mode === 'graph') {
       problems.push(...graphDestinationProblems(destination.base_url));
     }

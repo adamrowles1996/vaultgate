@@ -14,8 +14,10 @@ import { coded, scripted } from '../../../test-support/http-connector.ts';
 import { unwrapFail, unwrapOk } from '../../../test-support/result.ts';
 import { SUPPORT_ADDRESS } from '../../../test-support/run-support.ts';
 
-import { requestToken, tokenUrl, type TokenRequest, type TokenGrant } from './token.ts';
+import { exchangePlan } from './exchange.ts';
+import { requestToken, type TokenRequest } from './token.ts';
 
+import type { TokenGrant } from './token-response.ts';
 import type { Result } from '../../../result.ts';
 import type { Answer, FakeTransport } from '../../../test-support/http-connector.ts';
 import type { ActionError } from '../../errors.ts';
@@ -24,7 +26,7 @@ const CLIENT_SECRET = 'client-secret-value';
 
 function requestFor(overrides: Partial<TokenRequest> = {}): TokenRequest {
   return {
-    credential: graphCredential(),
+    plan: exchangePlan(graphCredential()),
     clientSecret: CLIENT_SECRET,
     refreshToken: undefined,
     address: SUPPORT_ADDRESS,
@@ -73,7 +75,7 @@ describe('the graph token exchange', () => {
     expect(unwrapOk(outcome)).toStrictEqual({
       accessToken: GRAPH_CANARY.accessToken,
       expiresInMs: EXPIRES_IN * 1000,
-      rotatedRefreshToken: undefined,
+      refreshToken: undefined,
     });
   });
 
@@ -81,24 +83,19 @@ describe('the graph token exchange', () => {
     const { fake, outcome } = await exchange(
       tokenResponse({ refreshToken: GRAPH_CANARY.rotatedRefreshToken }),
       {
-        credential: graphCredential({
-          grant: 'refresh_token',
-          refresh_token_field: 'custom.refresh',
-        }),
+        plan: exchangePlan(
+          graphCredential({ grant: 'refresh_token', refresh_token_field: 'custom.refresh' }),
+        ),
         refreshToken: 'the-current-refresh-token',
       },
     );
     expect(formOf(fake.requests[0]!).get('refresh_token')).toBe('the-current-refresh-token');
     expect(formOf(fake.requests[0]!).get('grant_type')).toBe('refresh_token');
-    expect(unwrapOk(outcome).rotatedRefreshToken).toBe(GRAPH_CANARY.rotatedRefreshToken);
+    expect(unwrapOk(outcome).refreshToken).toBe(GRAPH_CANARY.rotatedRefreshToken);
   });
 
-  it('ACT-82 escapes the tenant into the path', () => {
-    expect(tokenUrl('contoso.onmicrosoft.com')).toBe(TOKEN_URL);
-  });
-
-  it('ACT-82 maps invalid_client and invalid_grant to authentication_failed, keeping the code and not the AADSTS text', async () => {
-    for (const error of ['invalid_client', 'invalid_grant']) {
+  it('ACT-82 ACT-126 maps invalid_client, invalid_grant and unauthorized_client to authentication_failed, keeping the code and not the AADSTS text', async () => {
+    for (const error of ['invalid_client', 'invalid_grant', 'unauthorized_client']) {
       const failure = await failureOf(tokenFailure(401, error));
       expect(failure.code).toBe('authentication_failed');
       expect(failure.detail).toStrictEqual({ error });
@@ -107,9 +104,9 @@ describe('the graph token exchange', () => {
   });
 
   it('ACT-82 maps any other token-endpoint answer to upstream_error with the status and, when it has one, the code', async () => {
-    expect(await failureOf(tokenFailure(400, 'unauthorized_client'))).toMatchObject({
+    expect(await failureOf(tokenFailure(400, 'invalid_scope'))).toMatchObject({
       code: 'upstream_error',
-      detail: { status: 400, error: 'unauthorized_client' },
+      detail: { status: 400, error: 'invalid_scope' },
     });
     expect(await failureOf(tokenFailure(503, undefined))).toMatchObject({
       code: 'upstream_error',

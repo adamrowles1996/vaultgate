@@ -42,10 +42,8 @@ export const WINRM_RUN_DESCRIPTION =
   'it ends; there is no session, so nothing (no directory, no variable, no background process) ' +
   'survives to the next call. Returns the exit code, standard output and standard error ' +
   'separately, whether either was cut at the output limit of the target, and the duration. It ' +
-  'never returns the credential: any echo of it is replaced by [redacted:<field>]. The operator ' +
-  'may require a human to confirm each call, which you cannot answer yourself: your client has ' +
-  'to ask a person. A host whose certificate is not the pinned one is tls_error and nothing is ' +
-  'sent to it.';
+  'never returns the credential: any echo of it is replaced by [redacted:<field>]. A host whose ' +
+  'certificate is not the pinned one is tls_error and nothing is sent to it.';
 
 export const winrmRunTool: ConnectorTool<WinrmOperation> = {
   name: WINRM_RUN_TOOL,

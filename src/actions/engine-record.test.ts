@@ -71,7 +71,6 @@ describe('what a call leaves behind', () => {
         clientName: 'Agent One',
         target: 'api',
         outcome: 'ok',
-        elicitation: 'not_required',
       },
     });
     expect(storeText(harness.database)).not.toContain('"status":200');

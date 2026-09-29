@@ -120,18 +120,11 @@ export function authorizeCodeMany(
 }
 
 /**
-ACT-116: `search`, `related` or `read`, with what the agent asked for.
+ACT-116: `search`, `related` or `read`.
 */
 export function describeCode(request: CodeRequest, operation: CodeOperation): OperationDescription {
   if (isSearch(operation)) {
-    // A query is at most 1 000 characters (ACT-110), under ACT-43's cap, so it is shown whole.
-    return { summary: `search ${operation.query}`, classification: 'search' };
+    return { classification: 'search' };
   }
-  if (isRelated(request.tool, operation)) {
-    return {
-      summary: `related ${operation.file_path}:${String(operation.line)}`,
-      classification: 'related',
-    };
-  }
-  return { summary: `read ${operation.file_path}`, classification: 'read' };
+  return { classification: isRelated(request.tool, operation) ? 'related' : 'read' };
 }

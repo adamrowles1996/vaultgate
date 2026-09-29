@@ -95,7 +95,8 @@ Only what its token's scopes allow, and the operator picks those on the consent 
 - Tool results travel to the agent over HTTPS: metadata, for `get_secret` one secret value, and for
   an action its scrubbed result.
 - With the actions layer enabled, vaultgate connects to the targets you defined, and for a
-  Microsoft Graph target to the Microsoft sign-in endpoint, over pinned connections.
+  Microsoft Graph or OAuth 2.0 target to the token endpoint that issues its tokens, over pinned
+  connections.
 - Nothing is sent to the vaultgate project or anyone else. There is no telemetry.
 - When a client registers with a Client ID Metadata Document, vaultgate fetches that HTTPS
   document once and caches it, through a fetcher that refuses private addresses.

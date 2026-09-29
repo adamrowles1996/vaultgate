@@ -20,11 +20,6 @@ import type { PagesHarness } from '../../test-support/actions-pages.ts';
 const BROWSER_ACCEPT = 'text/html,application/xhtml+xml';
 
 /**
-ACT-49: the note the target page carries once the operator turns the confirmation off.
-*/
-const UNCONFIRMED_NOTE = 'Confirmation is off: a granted client can change things here';
-
-/**
 The stored target's edit form, as posted back unchanged but for `fields`.
 */
 function editOf(fields: Record<string, string>): Record<string, string> {
@@ -109,7 +104,7 @@ describe('GET /account/actions/:id', () => {
     expect(markup).toContain('href="/account/actions/id-1/calls"');
   });
 
-  it('ACT-5 ACT-49 edits on a page of its own, with the policy in force and the name fixed', async () => {
+  it('ACT-5 edits on a page of its own, with the policy in force and the name fixed', async () => {
     const harness = createPagesHarness();
     const target = await createHttpTarget(harness.actions, { internal: true });
     const markup = await pageMarkup(harness, `/account/actions/${target.id}/edit`);
@@ -125,7 +120,7 @@ describe('GET /account/actions/:id', () => {
     expect(markup).toContain('name="policy.allowed_methods.POST" type="checkbox"  />');
     expect(markup).toContain('name="policy.timeout_ms"');
     expect(markup).toContain('value="30000"');
-    expect(markup).toContain('name="policy.confirm_writes" type="checkbox"  />');
+    expect(markup).not.toContain('confirm_writes');
     expect(markup).toContain('<button type="submit" class="primary">Save changes</button>');
   });
 
@@ -164,7 +159,7 @@ describe('GET /account/actions/:id', () => {
     expect(edit.status).toBe(403);
   });
 
-  it('ACT-49 notes a target that changes things without asking, and says nothing where it asks or reads only', async () => {
+  it('ACT-40 says whether a target can change things or reads only, and never speaks of a confirmation', async () => {
     const harness = createPagesHarness();
     await createHttpTarget(harness.actions, {
       policy: { allowed_methods: ['GET', 'POST'] },
@@ -174,26 +169,25 @@ describe('GET /account/actions/:id', () => {
       base_url: 'https://read.example.com',
       policy: { allowed_methods: ['GET', 'HEAD'] },
     });
-    await createHttpTarget(harness.actions, {
-      name: 'asks',
-      base_url: 'https://asks.example.com',
-      policy: { allowed_methods: ['GET', 'POST'], confirm_writes: true },
-    });
     await createSqlTarget(harness.actions, { name: 'replica' });
     await createSshTarget(harness.actions, { name: 'host' });
     await createWinrmTarget(harness.actions, { name: 'agent' });
     harness.actions.engine.targets.repo.insert(fixtureTargetRow({ id: 'row-1', policy: 'nope' }));
     const { browser } = await signedInOperator(harness);
-    const noted: boolean[] = [];
-    for (const id of ['id-1', 'id-2', 'id-3', 'id-4', 'id-5', 'id-6', 'row-1']) {
+    const reach: string[] = [];
+    for (const id of ['id-1', 'id-2', 'id-3', 'id-4', 'id-5', 'row-1']) {
       const page = await browser.get(`/account/actions/${id}`);
       expect(page.status).toBe(200);
       const markup = await page.text();
-      noted.push(markup.includes(UNCONFIRMED_NOTE));
+      for (const phrase of ['Confirmation is off', 'confirms every write', 'not confirmed']) {
+        expect(markup).not.toContain(phrase);
+      }
+      expect(markup).not.toContain('<dt>Confirmation</dt>');
+      reach.push(markup.includes('Can change things') ? 'changes' : 'reads');
     }
-    // api (http write), reader, asks, replica (sql read-only), host (ssh),
-    // agent (winrm), the invalid row.
-    expect(noted).toStrictEqual([true, false, false, false, true, true, false]);
+    // api (http write), reader, replica (sql read-only), host (ssh), agent
+    // (winrm), the invalid row.
+    expect(reach).toStrictEqual(['changes', 'reads', 'reads', 'changes', 'changes', 'reads']);
   });
 
   it('ID-15 offers no change before the password is confirmed and leads to confirming it and back', async () => {
@@ -231,7 +225,6 @@ describe('POST /account/actions/:id', () => {
         'credential.field': 'custom.API key',
         'credential.name': 'X-Api-Key',
         'policy.allowed_methods.POST': 'on',
-        'policy.confirm_writes': 'on',
       }),
     );
     expect(response.status).toBe(303);
@@ -243,7 +236,7 @@ describe('POST /account/actions/:id', () => {
         item_id: 'item-login',
         mapping: { mode: 'header', field: 'custom.API key', name: 'X-Api-Key' },
       },
-      policy: { allowed_methods: ['GET', 'HEAD', 'POST'], confirm_writes: true },
+      policy: { allowed_methods: ['GET', 'HEAD', 'POST'] },
       updatedBy: operatorId(harness),
     });
     expect(actionsAudit(harness)).toStrictEqual([

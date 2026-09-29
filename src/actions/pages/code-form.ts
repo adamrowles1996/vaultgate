@@ -4,8 +4,7 @@
  * repository, what may be searched and read, and the caps a build runs
  * under. The repositories the token can read are offered beside the
  * repository field (`repo-source.ts`); the common policy fields keep
- * the connector's own call timeout and leave out the write confirmation,
- * since nothing a code target does is a write.
+ * the connector's own call timeout.
  */
 import { CONTENT_TYPES, DEFAULT_EXCLUDE } from '../connectors/code/schemas.ts';
 
@@ -185,7 +184,7 @@ const TIMEOUT: FieldDescriptor = cap(
 export const codeForm: ConnectorForm = {
   kind: 'code',
   fields: [...destination, ...credential, ...reading, ...caps],
-  common: { omit: ['confirm_writes'], replace: [TIMEOUT] },
+  common: { replace: [TIMEOUT] },
   network: 'public',
   notes: {
     destination:

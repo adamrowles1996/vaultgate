@@ -2,15 +2,20 @@
  * Certificate pinning for the pinned transport (ACT-57). A destination
  * document may name the SHA-256 of the leaf certificate it will present; that
  * pin then *replaces* the system trust store, which is what makes it useful —
- * the hosts it is meant for (a WinRM listener with its own certificate)
- * present a certificate no public authority signed. It is never an "ignore
- * certificate errors" switch: the socket is corked from the moment it is
- * created and is uncorked only once the certificate the server presented is
- * the pinned one, so not one byte of the request — least of all the
- * credential — reaches a host that fails the check, and a handshake that
- * never completes leaves the socket corked until the call's timeout.
+ * the hosts it is meant for (a WinRM listener or an internal API with its own
+ * certificate, ACT-121) present a certificate no public authority signed. It
+ * is never an "ignore certificate errors" switch: the socket is corked from
+ * the moment it is created and is uncorked only once the certificate the
+ * server presented is the pinned one, so not one byte of the request — least
+ * of all the credential — reaches a host that fails the check, and a
+ * handshake that never completes leaves the socket corked until the call's
+ * timeout. A destination may instead name a private certificate authority
+ * (ACT-122), which replaces the store too but leaves the verification —
+ * chain and identity — to Node.
  */
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
+import { checkServerIdentity } from 'node:tls';
 
 import type { Duplex } from 'node:stream';
 import type { ConnectionOptions } from 'node:tls';
@@ -68,10 +73,14 @@ export interface TlsPlan {
   readonly address: string;
   readonly port: number;
   /**
-  ACT-55: the URL's host name, kept for SNI so the server picks the right certificate.
+  ACT-55: the URL's host without brackets; a name is sent as SNI so the server picks the right certificate.
   */
   readonly servername: string;
   readonly guard: CertificateGuard;
+  /**
+  ACT-122: PEM certificates Node verifies the chain against in place of the system store.
+  */
+  readonly ca?: string | undefined;
 }
 
 /**
@@ -115,24 +124,44 @@ export function guardCertificate<Socket extends GuardedSocket>(
   return socket;
 }
 
+type ServerIdentity = Pick<ConnectionOptions, 'servername' | 'checkServerIdentity'>;
+
+/**
+ * ACT-55, ACT-122: how the server is named and whose identity its certificate
+ * must prove. A host name is sent as SNI, and Node checks the certificate
+ * against it. An address is never sent — SNI has no syntax for one, and Node
+ * refuses to try — so Node's own check is handed that address instead, and
+ * matches it against the certificate's IP subject-alternative names.
+ */
+function serverIdentity(host: string): ServerIdentity {
+  return isIP(host) === 0
+    ? { servername: host }
+    : { checkServerIdentity: (_name, certificate) => checkServerIdentity(host, certificate) };
+}
+
 /**
  * The `createConnection` an `https.request` uses when its destination holds
- * its socket or pins its certificate: the socket goes to the validated
- * address, the host name is the TLS server name only, and the chain is judged
- * by the pin where there is one and by the system store where there is not.
+ * its socket, pins its certificate or names its own authority: the socket
+ * goes to the validated address, the host is the TLS server name and the
+ * identity to prove only, and the chain is judged by the pin where there is
+ * one and otherwise by Node, against the private authority (ACT-122) or the
+ * system store.
  */
 export function tlsConnection(connect: TlsConnect, plan: TlsPlan): () => Duplex {
+  const { ca, guard } = plan;
   return () =>
     guardCertificate(
       connect({
         host: plan.address,
         port: plan.port,
-        servername: plan.servername,
+        ...serverIdentity(plan.servername),
         // A pin *is* the verification (ACT-57), and `guardCertificate` writes
-        // nothing until it passes; without one the system store verifies.
-        rejectUnauthorized: plan.guard.check === undefined,
+        // nothing until it passes; without one Node verifies. A plan that
+        // names both is held to both: neither ever loosens the other.
+        rejectUnauthorized: guard.check === undefined || ca !== undefined,
+        ...(ca !== undefined && { ca }),
       }),
-      plan.guard,
+      guard,
     );
 }
 

@@ -12,7 +12,7 @@ describe('the headers and notices of every Actions page', () => {
       '/account/actions/new?connector=http',
       `/account/actions/${target.id}`,
       `/account/actions/${target.id}/calls`,
-      '/account/actions/unexpected',
+      '/account/actions/writes',
     ];
     for (const path of pages) {
       const response = await browser.get(path);

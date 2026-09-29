@@ -3,7 +3,8 @@
  * token endpoint and a fake Graph behind one transport, told apart by host,
  * and the documents a graph target is made of. The token endpoint's answers
  * carry canary strings, so the scrub assertions of ACT-53 have something to
- * find if the adapter ever leaks one.
+ * find if the adapter ever leaks one. The `oauth2` fixtures (`./oauth2.ts`)
+ * put their token endpoint on a host of their own and share the rest.
  */
 import { GRAPH_ORIGIN, GRAPH_TOKEN_HOST } from '../actions/connectors/graph/document.ts';
 
@@ -71,33 +72,48 @@ export function tokenFailure(status: number, error: string | undefined): Respons
   return Response.json(body, { status });
 }
 
-export function isTokenRequest(request: PinnedRequest): boolean {
-  return new URL(request.url).host === GRAPH_TOKEN_HOST;
+/**
+Whether the request went to the token endpoint: Microsoft's, or the `oauth2` one on `host`.
+*/
+export function isTokenRequest(request: PinnedRequest, host = GRAPH_TOKEN_HOST): boolean {
+  return new URL(request.url).host === host;
 }
 
 export function formOf(request: PinnedRequest): URLSearchParams {
   return new URLSearchParams(request.body?.toString('utf8') ?? '');
 }
 
-export function tokenRequests(fake: FakeTransport): readonly PinnedRequest[] {
-  return fake.requests.filter((request) => isTokenRequest(request));
-}
-
-export function graphRequests(fake: FakeTransport): readonly PinnedRequest[] {
-  return fake.requests.filter((request) => !isTokenRequest(request));
+export function tokenRequests(
+  fake: FakeTransport,
+  host = GRAPH_TOKEN_HOST,
+): readonly PinnedRequest[] {
+  return fake.requests.filter((request) => isTokenRequest(request, host));
 }
 
 /**
-One transport for both fakes: the token endpoint and Graph itself each see their own request index.
+The requests to the API itself: every one that did not go to the token endpoint on `host`.
+*/
+export function graphRequests(
+  fake: FakeTransport,
+  host = GRAPH_TOKEN_HOST,
+): readonly PinnedRequest[] {
+  return fake.requests.filter((request) => !isTokenRequest(request, host));
+}
+
+type Answering = (request: PinnedRequest, index: number) => Answer;
+
+/**
+One transport for both fakes: the token endpoint on `host` and the API each see their own request index.
 */
 export function graphTransport(
-  token: (request: PinnedRequest, index: number) => Answer,
-  api: (request: PinnedRequest, index: number) => Answer,
+  token: Answering,
+  api: Answering,
+  host = GRAPH_TOKEN_HOST,
 ): FakeTransport {
   let tokens = 0;
   let calls = 0;
   return fakeTransport((request) => {
-    if (isTokenRequest(request)) {
+    if (isTokenRequest(request, host)) {
       tokens += 1;
       return token(request, tokens - 1);
     }

@@ -15,7 +15,6 @@ import { registerActionsTools } from './tools/actions.ts';
 import { failureResult, type Tool, type ToolFailure } from './tools/definition.ts';
 import { ALL_TOOLS } from './tools/index.ts';
 
-import type { Caller } from '../actions/caller.ts';
 import type { ActionsEngine } from '../actions/engine.ts';
 import type { AuditEvent, AuditSink } from '../audit/event.ts';
 import type { VerifiedToken } from '../auth/token-types.ts';
@@ -58,10 +57,6 @@ export interface CallContext {
   readonly scopes: readonly Scope[];
   readonly requestId: string;
   readonly sourceIp: string;
-  /**
-  ACT-48: whether the request declared form-mode elicitation.
-  */
-  readonly elicitation: Caller['elicitation'];
 }
 
 export interface ServerDependencies {

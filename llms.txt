@@ -33,8 +33,11 @@
   code_search, code_find_related and code_read under actions:code, with the arguments of semble's
   own MCP server (repo is a connection name or a list of them). vaultgate fetches the credential, connects to the pinned
   destination, runs the operation inside the policy and scrubs every injected value from the
-  result. Agents never pass a host, URL base, database or credential. Writes can require a human
-  confirmation per call. Nothing executes on the vaultgate host.
+  result. Agents never pass a host, URL base, database or credential. An http target may pin its
+  destination's certificate or trust a private certificate authority, and may obtain its token
+  from an OAuth 2.0 token endpoint (graph and oauth2 modes). vaultgate asks no one to approve a
+  call: approval is the agent client's job, from each tool's annotations. Nothing executes on the
+  vaultgate host.
 - Vault tools: search and read item metadata, folders and collections; reveal one secret field of
   one item per call; generate passwords and passphrases; create, update and trash items when write
   is enabled.

@@ -3,7 +3,8 @@
 > **Status: the interface (14.1), the `http` connector (14.2), the `graph` credential adapter
 > (14.3), the `sql` connector (14.4), the `ssh` connector (14.5), the `winrm` connector (14.6)
 > and the `code` connector (14.8, in [14a](14a-code-connector.md)) have landed (M9, M10, M11,
-> M12, M13, M16); `browser` is M15.** The
+> M12, M13, M16), and so have the `http` destination's private trust (ACT-121 to ACT-123) and
+> the `oauth2` credential adapter (14.3a); `browser` is M15.** The
 > connector contracts of the actions layer ([13 Actions](13-actions.md),
 > [13a Actions in operation](13a-actions-operations.md),
 > [ADR 0007](../adr/0007-typed-actions-with-operator-policy.md)). A document whose runtime has
@@ -26,13 +27,15 @@ interface ConnectorSchemas<Destination, Credential, Policy> {
   readonly policySchema: z.ZodType<Policy>;
   /** The hosts a destination names and whether each is reached over TLS (ACT-3, ACT-55, ACT-57). */
   endpoints(destination: Destination): readonly Endpoint[];
+  /** Hosts the credential mapping names beyond the destination (an `oauth2` token endpoint): checked at save like a destination host (ACT-3, ACT-124), never pinned by a call, which resolves each itself when it uses it (ACT-55). */
+  credentialEndpoints?(credential: Credential): readonly Endpoint[];
   /** The vault fields a mapping needs, as `get_secret` selectors (ACT-4). */
   credentialFields(credential: Credential): readonly CredentialField[];
   /** ACT-51: the login name of the `base64(username:secret)` variant, when this connector builds one and the destination holds the name rather than the vault (`winrm`). */
   basicUsername?(destination: Destination): string | undefined;
   /** Save-time rules beyond the schemas (ACT-79, ACT-81); each problem is shown to the operator. */
   saveProblems(documents: TargetDocuments<Destination, Credential, Policy>): readonly string[];
-  /** The host (and database, base path or origin) for ACT-43 and the operator pages. */
+  /** The host (and database, base path or origin) for the operator pages (ACT-5). */
   summariseDestination(destination: Destination): string;
 }
 
@@ -52,7 +55,7 @@ interface Connector<Destination, Credential, Policy, Operation> extends Connecto
     credential: Credential,
     destination: Destination,
   ): PolicyDecision;
-  /** The ACT-43 operation summary and the ACT-60 classification, for the same reason. */
+  /** The ACT-60 classification the audit trail records, for the same reason. */
   describe(operation: Operation, destination: Destination): OperationDescription;
   /** Runs one operation with the injected values; output is raw, the engine scrubs it. */
   run(
@@ -92,8 +95,8 @@ statement separator hide.
 
 | Document      | Fields                                                                                                                                                                                                                                                                                                                                                                                                            |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `destination` | `base_url` (`https://` origin plus optional path prefix, no query or fragment; `http://` only when `internal: true`).                                                                                                                                                                                                                                                                                             |
-| `credential`  | `mode` (`bearer` \| `basic` \| `header` \| `query` \| `graph`); `field` (a `get_secret` field selector such as `password` or `custom.api-key`); for `basic` also `username_from` (`login.username` or a field selector); for `header` the header `name`; for `query` the parameter `name`; for `graph` the adapter document of 14.3. `header` and `query` MAY carry a `prefix` (for example `Token` and a space). |
+| `destination` | `base_url` (`https://` origin plus optional path prefix, no query or fragment; `http://` only when `internal: true`); `certificate_sha256` (optional pin: the SHA-256 of the DER leaf certificate, ACT-121); `ca_pem` (optional private certificate authority: one or more PEM certificates, ACT-122). Either replaces the system store; they are mutually exclusive and need an `https://` `base_url`.           |
+| `credential`  | `mode` (`bearer` \| `basic` \| `header` \| `query` \| `graph` \| `oauth2`); `field` (a `get_secret` selector, such as `custom.api-key`); for `basic` also `username_from` (`login.username` or a field selector); for `header` and `query` the header or parameter `name`; for `graph` and `oauth2` the documents of 14.3 and 14.3a. `header` and `query` MAY carry a `prefix` (for example `Token` and a space). |
 | `policy`      | Common fields; `allowed_methods` (default `["GET","HEAD"]`); `allowed_paths` (one or more patterns, ACT-34, matched against the path and query relative to `base_url`); `allowed_request_headers` (names; default `accept`, `content-type`, `if-none-match`); `response_headers`; `max_body_bytes` (default 256 KiB, max 4 MiB); `follow_redirects` (default `false`); `allow_query_credentials`.                 |
 
 - **ACT-79** Injection modes: `bearer` sets `Authorization: Bearer <value>`; `basic` sets
@@ -101,15 +104,53 @@ statement separator hide.
   appends `<name>=<url-encoded value>` to the query string, after any query the agent gave, with
   `<prefix><value>` encoded by `encodeURIComponent`, one of the ACT-51 scrub variants (allowed
   only when `policy` sets `allow_query_credentials: true`, because query strings reach proxy and
-  server logs). `graph` is 14.3.
+  server logs). `graph` is 14.3 and `oauth2` is 14.3a.
 - **ACT-80** Requests go through the pinned transport of `src/net/pinned-https.ts` (OAUTH-8),
-  which has two schemes: `https:` verifies the certificate against the system store with no
-  insecure option (ACT-57), and plain `node:http` serves an `http://` `base_url`, which only an
-  `internal` target may have; both connect to the pinned address with the host name kept for
-  SNI, the certificate check and `Host`. Every request carries `User-Agent: vaultgate/<version>`
-  (the `package.json` version), the policy timeout as its `AbortSignal`, and its response body
-  is read up to `max_output_bytes` plus the guard band of ACT-52, after which the stream is
-  cancelled.
+  which has two schemes: `https:` verifies the certificate against the system store, or in its
+  place against the destination's pin (ACT-121) or private certificate authority (ACT-122), with
+  no insecure option either way (ACT-57), and plain `node:http` serves an `http://` `base_url`,
+  which only an `internal` target may have; both connect to the pinned address with the host
+  kept for SNI (a name only: an IP literal is never sent as SNI), the certificate check and
+  `Host`. Every request carries `User-Agent: vaultgate/<version>` (the `package.json` version),
+  the policy timeout as its `AbortSignal`, and its response body is read up to
+  `max_output_bytes` plus the guard band of ACT-52, after which the stream is cancelled.
+
+An internal API often presents a certificate that no public authority signed: a Proxmox VE
+cluster, for one, signs each node's certificate with the cluster's own authority and names the
+node in it, which need not be the address it is reached at. The system store cannot verify such
+a certificate, so the destination may name the trust to use in its place — the one certificate
+it presents, or the authority that signs it.
+
+- **ACT-121** `destination.certificate_sha256` pins the destination's leaf certificate: the
+  SHA-256 of its DER encoding as `openssl` and `Get-FileHash` print it — 64 hexadecimal digits,
+  with or without colons, in either case — read in one form, lower-case without separators,
+  through the schema the `winrm` pin uses (14.6). As there, the pin **replaces** the system store
+  rather than adding to it (ACT-57): the socket is held corked until the certificate the
+  destination presented matches, so no byte of the request, least of all the credential,
+  reaches a host that fails it, and a mismatch is `tls_error`. It applies to every request sent
+  to the destination, the first and each redirect hop ACT-22 follows alike. It needs an
+  `https://` `base_url`; a pin on an `http://` one would verify nothing and is refused at save. A
+  renewed certificate needs a new pin.
+- **ACT-122** `destination.ca_pem` names a private certificate authority: one or more PEM
+  certificates, each of which must parse, checked at save as `sql`'s `ca_pem` is (a PEM pasted
+  without its line breaks is refused). It **replaces** the system store for requests to the
+  destination: Node verifies the chain against those certificates alone, with
+  `rejectUnauthorized` on and no way to turn it off, and checks the certificate's identity
+  against `base_url`'s host. A host name is sent as SNI and matched against the names the
+  certificate carries; an IP literal is never sent as SNI — SNI has no syntax for an address,
+  and Node refuses one — and is matched against the certificate's IP subject-alternative names
+  instead. A chain or identity failure is `tls_error`, with the error code as its only `detail`
+  (ACT-74). Like the pin it applies to the first request and every redirect hop and needs an
+  `https://` `base_url`, and it is mutually exclusive with `certificate_sha256`: a destination
+  that names both is refused at save. Unlike the pin it survives the renewal of a certificate
+  the same authority signs, but `base_url`'s host must be a name or address that certificate
+  carries.
+- **ACT-123** Only requests to `base_url`'s origin carry the destination's pin or certificate
+  authority: the request the agent asked for and the redirect hops ACT-22 keeps under
+  `base_url`. A token endpoint exchange — the `graph` adapter's to `login.microsoftonline.com`
+  (ACT-82), or any other a credential mode performs — never carries either and is verified
+  against the system store: the destination's private trust vouches for the destination, not for
+  the identity provider that issues its tokens.
 
 ## 14.3 `graph` credential adapter
 
@@ -119,7 +160,7 @@ agent must never see the client secret, the refresh token or the access token.
 
 - **ACT-81** `credential.mode = "graph"` is valid only when `base_url` is on the
   `https://graph.microsoft.com` origin exactly (a path prefix under it, such as `/v1.0`, is
-  allowed; national clouds are another origin and are a post-M15 candidate). The adapter document
+  allowed; a national cloud is another origin, reached with `oauth2`, ACT-130). The adapter document
   holds `tenant_id` (a GUID or a domain name, validated by shape because it is placed in a URL
   path), `client_id` (a GUID), `grant` (`client_credentials` \| `refresh_token`), `scope`
   (default `https://graph.microsoft.com/.default`), `secret_field` (the vault field holding the
@@ -134,10 +175,10 @@ agent must never see the client secret, the refresh token or the access token.
   before its `expires_in`, is never stored, is never logged, and is an injected value for
   scrubbing (ACT-51). A `401` from Graph invalidates the cache and the request is retried once
   with a fresh token; a `401` on that attempt is the result. The token endpoint's own failures
-  map to `authentication_failed` for `invalid_client` and `invalid_grant` (the OAuth error code
-  is the only `detail`; the AADSTS description quotes the request and is not scrub-safe),
-  `connection_failed`, `tls_error` or `timeout` for a transport failure, and `upstream_error`
-  otherwise.
+  map to `authentication_failed` for `invalid_client`, `invalid_grant`, `unauthorized_client`
+  and `invalid_code` (ACT-126: the OAuth error code is the only `detail`; the AADSTS description
+  quotes the request and is not scrub-safe), `connection_failed`, `tls_error` or `timeout` for a
+  transport failure, and `upstream_error` otherwise.
 - **ACT-83** When the token endpoint returns a new `refresh_token` (Microsoft rotates them), the
   adapter writes it back to `refresh_token_field` of the vault item through `VaultClient` and
   records `actions.credential_rotated` (target name, item id, field name; never the value). The
@@ -147,6 +188,80 @@ agent must never see the client secret, the refresh token or the access token.
   fields it can write are the ones `ItemPatch` expresses (a custom field, the login password, the
   notes), and any other selector is `credential_rotation_failed` with `detail.reason`
   `unwritable_field`.
+
+## 14.3a `oauth2` credential adapter
+
+The `graph` adapter generalised to any OAuth 2.0 token endpoint, for the APIs the maintainer's
+agents call besides Graph: Power BI, Microsoft Fabric and Azure Resource Manager (Entra ID client
+credentials), and Zoho Books, HubSpot and Xero (refresh tokens). One token service serves both
+modes, so what 14.3 says of the secrets holds here too: the agent never sees the client secret,
+the refresh token or the access token.
+
+- **ACT-124** `credential.mode = "oauth2"` holds `token_url` (`https://` only — never `http://`,
+  even on an internal target, because the client secret is sent to it — with no query, fragment
+  or userinfo), `grant` (`client_credentials` \| `refresh_token`), `client_id` (a literal, not a
+  secret: 1 to 512 printable ASCII characters, no space), `secret_field` (the vault field holding
+  the client secret), `refresh_token_field` (required for the `refresh_token` grant and refused
+  for `client_credentials`, which never reads it, so the engine never fetches a secret it does
+  not use), `scope` (optional), `client_auth` (`post`, the default, \| `basic`), `name` (the
+  header the token goes in, lower-cased like the `header` mode's, default `authorization`) and
+  `prefix` (default `Bearer` and a space). Unlike `graph` it constrains `base_url` no further than
+  14.2 does. A save checks the document's shape, ACT-4 over `secret_field` and
+  `refresh_token_field`, and ACT-3 over the host of `token_url`, whose problems are filed under
+  the credential mapping; that host is not an endpoint of the destination and a call never pins
+  it (ACT-125). Nothing connects at save.
+- **ACT-125** Before the request the adapter exchanges the grant at `token_url` through the
+  pinned transport, its host resolved and validated by the ACT-55 and ACT-56 rules for the
+  target's `internal` flag each time a token is exchanged, as ACT-82 does for Graph. The body is
+  `application/x-www-form-urlencoded`: `grant_type`, the current `refresh_token` for that grant,
+  and `scope` only when the document sets one. With `client_auth: post` the form also carries
+  `client_id` and `client_secret`; with `basic` the client authenticates as RFC 6749 §2.3.1 says,
+  `Authorization: Basic base64(<client_id>:<client_secret>)` with each half form-urlencoded
+  first, and neither is in the form.
+- **ACT-126** One response rule serves `graph` and `oauth2`. The body is read up to 64 KiB and
+  validated against a schema before a field is read (T33). A 2xx JSON object with a non-empty
+  `access_token` is a grant: `expires_in` is a positive integer or a string of digits and, when
+  absent or null, is taken as 300 s — conservative, so a token whose lifetime vaultgate was not
+  told is served from the cache for four minutes (the 60 s margin of ACT-129) and then exchanged
+  again; `refresh_token` is optional; `token_type` is ignored, because `prefix` decides the
+  scheme. A 2xx body that carries `error` and no `access_token` is a refusal like a non-2xx
+  answer (Zoho Books answers a spent refresh token so); any other 2xx body is `upstream_error`
+  (`reason: invalid_token_response`). A refusal whose `error` is `invalid_client`,
+  `invalid_grant`, `unauthorized_client` or `invalid_code` is `authentication_failed` with
+  `detail.error`; any other is `upstream_error` with `detail.status` and `detail.error`. Only an
+  error code matching `^[A-Za-z0-9_.-]{1,64}$` reaches `detail`, and the status stands alone
+  otherwise; `error_description` never does, because it may quote the request and is not
+  scrub-safe. A transport failure maps as ACT-82 says.
+- **ACT-127** A `refresh_token` in the grant that differs from the one the call holds is written
+  back to `refresh_token_field` as ACT-83 says: through `VaultClient`, **before** the destination
+  request, after it has joined the scrub table, recorded as `actions.credential_rotated`, and a
+  failed write-back fails the call with `credential_rotation_failed`. One equal to the held token
+  writes nothing and records nothing (HubSpot answers with the same token and Zoho Books with
+  none; Xero rotates it). The rule is shared with `graph`, where Microsoft always rotates, so its
+  behaviour is unchanged; a `client_credentials` mapping has no refresh-token field and never
+  writes.
+- **ACT-128** The token is injected as `<name>: <prefix><access_token>` —
+  `Authorization: Bearer <token>` by default, `Authorization: Zoho-oauthtoken <token>` for Zoho —
+  on the request and on every redirect hop that carries the credential again (ACT-22). The header
+  it occupies is refused from the agent's `headers` exactly as the `header` mode's is (ACT-22),
+  and `authorization` is refused whatever `name` says. The access token joins the scrub table as
+  `oauth2.access_token` the moment it is obtained or served from the cache (`graph` keeps
+  `graph.access_token`); the client secret and the refresh tokens are injected values already,
+  and the ACT-53 canary suite covers an `oauth2` target with either client authentication.
+- **ACT-129** The token is cached and retired as ACT-82 says, in the one cache both adapters
+  share: in process memory only, keyed by target id and `revision`, until 60 s before it
+  expires, never stored and never logged; a call served from the cache exchanges and resolves
+  nothing. A `401` from the destination discards the cached token and the request is retried once
+  with a fresh one; a `401` on that attempt is the result.
+- **ACT-130** `graph` remains the Microsoft Graph preset of this adapter: its token URL is
+  `https://login.microsoftonline.com/<tenant_id>/oauth2/v2.0/token`, its client authentication
+  `post`, its header `Authorization: Bearer`, its scope `https://graph.microsoft.com/.default`
+  unless set, and its `base_url` on `https://graph.microsoft.com` (ACT-81). Every other Entra ID
+  resource — Power BI (`https://analysis.windows.net/powerbi/api/.default`), Microsoft Fabric
+  (`https://api.fabric.microsoft.com/.default`), Azure Resource Manager
+  (`https://management.azure.com/.default`) — and the national clouds, with their own sign-in
+  hosts and Graph origins, are reached through `oauth2`: the client-credentials grant against
+  the tenant's token URL on the cloud's sign-in host, with the resource's `/.default` scope.
 
 ## 14.4 `sql`
 
@@ -367,7 +482,7 @@ allowed origins. The design therefore treats every session as a shell session wi
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `destination` | `origins` (one or more exact origins, `https://` unless `internal: true`; navigation is confined to them); `login_url` (under one of `origins`); optional `login_form` (`username_selector`, `password_selector`, `totp_selector`, `submit_selector`; CSS selectors that override the heuristics of ACT-93); optional `logged_in_check` (a CSS selector that must be present after login, or a URL prefix). |
 | `credential`  | `username_from` (`login.username` default); `password_field` (`password` default); `totp` (`auto` default: type the item's TOTP code when the item has one and the page asks; `never`).                                                                                                                                                                                                                     |
-| `policy`      | Common fields; `operations` (`["read"]` default: open, navigate, snapshot, screenshot, close; or `["read","act"]` adding click and type); `screenshots` (default `false`); `session_ttl_s` (idle, default 900, max 3 600); `max_sessions` (per client, default 1, max 4); `confirm_writes` applies to `act` calls.                                                                                          |
+| `policy`      | Common fields; `operations` (`["read"]` default: open, navigate, snapshot, screenshot, close; or `["read","act"]` adding click and type); `screenshots` (default `false`); `session_ttl_s` (idle, default 900, max 3 600); `max_sessions` (per client, default 1, max 4); `act` calls are non-read calls (ACT-40).                                                                                          |
 
 ### 14.7.1 Sidecar architecture
 

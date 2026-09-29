@@ -34,8 +34,8 @@ export interface PageOptions extends AuditRange {
 
 /**
  * One comparison the rows must satisfy besides the window: the account page
- * reads one target's calls and, for the unexpected-write view, the calls that
- * are neither reads nor accepted confirmations (ACT-63).
+ * reads one target's calls and, for the writes view, the calls that are not
+ * reads (ACT-63).
  */
 export interface PageFilter {
   readonly column: string;

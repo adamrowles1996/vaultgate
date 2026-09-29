@@ -1,6 +1,6 @@
 /**
  * One computer's page (ACT-5, ACT-63): its state with any validation problem
- * (ACT-1) and standing warnings (ACT-49, ACT-88), then cards for where it
+ * (ACT-1) and standing warnings (ACT-88), then cards for where it
  * points, what it signs in with (the vault item's name and the fields it
  * maps, secret ones sealed), what its policy allows, the agents granted it
  * (ACT-9) and its recent calls. Inside the re-authentication window (ID-15)
@@ -41,10 +41,6 @@ export interface TargetPageView {
   ACT-88: the target's policy allows any command; the page says so on every visit.
   */
   readonly isUnrestricted: boolean;
-  /**
-  ACT-49: the policy allows a non-read operation and asks no human to confirm one.
-  */
-  readonly isUnconfirmed: boolean;
   readonly notice: string | undefined;
   readonly error: string | undefined;
   readonly target: TargetSummary;
@@ -79,14 +75,6 @@ const UNRESTRICTED_WARNING =
   'This connection allows any command: a granted client can run anything its login can, and ' +
   'every call is audited with the full command.';
 
-/**
-ACT-49: the note a target carries once the operator turns the confirmation off.
-*/
-const UNCONFIRMED_NOTE =
-  'Confirmation is off: a granted client can change things here without asking anyone. New ' +
-  'connections ask for a confirmation on every non-read call; this one relies on the grant and ' +
-  'on the prompt the client may show. Review the unexpected writes below.';
-
 function actionForm(action: string, view: TargetPageView, button: Html, body: Html = EMPTY): Html {
   return html`<form method="post" action="${action}">
     ${hidden('csrf', view.csrfToken)} ${body} ${button}
@@ -102,12 +90,8 @@ function stateTags(view: TargetPageView): Html {
           summary.state === 'enabled' ? 'ok' : 'off',
           summary.state === 'enabled' ? 'Enabled' : 'Disabled',
         );
-  const confirmation = {
-    confirmed: tag('A person confirms every write', 'green', 'shield'),
-    unconfirmed: tag('Writes are not confirmed', 'amber', 'alert'),
-    reads: tag('Reads only'),
-  }[summary.confirmation];
-  return html`${state} ${confirmation}`;
+  const reach = { changes: tag('Can change things'), reads: tag('Reads only') }[summary.reach];
+  return html`${state} ${reach}`;
 }
 
 function headerActions(view: TargetPageView): Html {
@@ -165,8 +149,7 @@ function banners(view: TargetPageView): Html {
   );
   const check = view.check === undefined ? EMPTY : checkCard(view.check);
   return html`${check} ${errorBanner(view.error)} ${invalid}
-  ${when(view.isUnrestricted, () => errorBanner(UNRESTRICTED_WARNING))}
-  ${when(view.isUnconfirmed, () => errorBanner(UNCONFIRMED_NOTE))} ${noticeBanner(view.notice)}`;
+  ${when(view.isUnrestricted, () => errorBanner(UNRESTRICTED_WARNING))} ${noticeBanner(view.notice)}`;
 }
 
 function connectionCard(view: TargetPageView): Html {
@@ -216,18 +199,17 @@ function credentialCard(view: TargetPageView): Html {
 
 function rulesCard(view: TargetPageView): Html {
   const { summary } = view;
-  const confirm = {
-    confirmed: 'A person confirms every write',
-    unconfirmed: 'Writes run without asking anyone',
-    reads: 'Nothing to confirm: the policy allows reads only',
-  }[summary.confirmation];
+  const changes = {
+    changes: 'Allowed; every call that changes something is audited and listed under Writes',
+    reads: 'None: the policy allows reads only',
+  }[summary.reach];
   return html`<section class="card">
     ${cardHead('Rules')}
     <dl class="kv">
       <dt>Allows</dt>
       <dd>${summary.allows === '' ? 'see the policy' : summary.allows}</dd>
-      <dt>Confirmation</dt>
-      <dd>${confirm}</dd>
+      <dt>Changes</dt>
+      <dd>${changes}</dd>
     </dl>
   </section>`;
 }

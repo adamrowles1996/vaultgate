@@ -17,7 +17,6 @@ export interface TargetListing {
   readonly description: string;
   readonly connector: ConnectorKind;
   readonly operations: readonly OperationKind[];
-  readonly confirm_writes: boolean;
   readonly engine?: 'mssql' | 'postgres';
   readonly unrestricted?: true;
   /**
@@ -96,7 +95,6 @@ export function listTargets(
       description: row.description,
       connector: row.connector,
       operations,
-      confirm_writes: target.documents.common.confirm_writes,
       ...(capabilities.engine !== undefined && { engine: capabilities.engine }),
       ...(capabilities.unrestricted === true && { unrestricted: true }),
       ...codeListing(capabilities.code),

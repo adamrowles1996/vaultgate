@@ -1,16 +1,15 @@
 /**
  * The call trail as the operator reads it (ACT-63): the table a computer's
  * page and its history page share, the history page itself with its "older
- * calls" link, the unexpected-write view — every non-read call across
- * targets that no human accepted, which is what makes a target with
- * `confirm_writes: false` reviewable — and the recent calls the Activity page
- * shows. Results are never stored; the arguments are, scrubbed (ACT-61), so
- * the excerpt here is the only record of what ran.
+ * calls" link, the writes view — every non-read call across targets, which is
+ * where an operator reviews what agents changed — and the recent calls the
+ * Activity page shows. Results are never stored; the arguments are, scrubbed
+ * (ACT-61), so the excerpt here is the only record of what ran.
  */
-import { cell, EMPTY, type Html, html, tableHead, when } from '../../identity/pages/template.ts';
+import { cell, type Html, html, tableHead, when } from '../../identity/pages/template.ts';
 import { cardHead, pageHead, tag, type TagTone } from '../../identity/pages/ui.ts';
 
-import { callsPath, CREATE_PATH, targetPath, UNEXPECTED_PATH } from './paths.ts';
+import { callsPath, CREATE_PATH, targetPath, WRITES_PATH } from './paths.ts';
 
 import type { ConsolePage } from '../../identity/index.ts';
 
@@ -25,7 +24,6 @@ export interface CallItem {
   readonly operation: string;
   readonly classification: string;
   readonly outcome: string;
-  readonly elicitation: string;
   readonly outputBytes: number;
   readonly clientId: string;
   /**
@@ -50,7 +48,7 @@ export interface CallHistoryView {
   readonly older: CallCursor | undefined;
 }
 
-export interface UnexpectedView {
+export interface WritesView {
   readonly calls: readonly CallItem[];
   readonly older: CallCursor | undefined;
 }
@@ -62,7 +60,6 @@ const CALL_COLUMNS = [
   'Operation',
   'Classification',
   'Outcome',
-  'Confirmation',
   'Output bytes',
 ] as const;
 
@@ -73,7 +70,6 @@ const TRAIL_COLUMNS = [
   'Tool',
   'Classification',
   'Outcome',
-  'Confirmation',
   'Arguments',
 ] as const;
 
@@ -116,24 +112,13 @@ export function outcomeTag(outcome: string): Html {
   return tag(outcome, outcomeTone(outcome));
 }
 
-/**
-ACT-47: whether a person was asked, and what they answered.
-*/
-export function confirmationText(elicitation: string): Html {
-  if (elicitation === 'not_required') {
-    return html`<span class="cell-sub">Not needed</span>`;
-  }
-  return elicitation === 'accepted' ? tag('accepted', 'green', 'check') : tag(elicitation, 'amber');
-}
-
 function callRow(call: CallItem): Html {
   return html`<tr>
     ${cell(CALL_COLUMNS[0], call.at)} ${cell(CALL_COLUMNS[1], call.clientName)}
     ${cell(CALL_COLUMNS[2], html`<span class="mono">${call.tool}</span>`)}
     ${cell(CALL_COLUMNS[3], call.operation)} ${cell(CALL_COLUMNS[4], call.classification)}
     ${cell(CALL_COLUMNS[5], outcomeTag(call.outcome))}
-    ${cell(CALL_COLUMNS[6], confirmationText(call.elicitation))}
-    ${cell(CALL_COLUMNS[7], String(call.outputBytes))}
+    ${cell(CALL_COLUMNS[6], String(call.outputBytes))}
   </tr>`;
 }
 
@@ -188,13 +173,12 @@ function trailRow(call: CallItem): Html {
     ${cell(TRAIL_COLUMNS[3], html`<span class="mono">${call.tool}</span>`)}
     ${cell(TRAIL_COLUMNS[4], call.classification)}
     ${cell(TRAIL_COLUMNS[5], outcomeTag(call.outcome))}
-    ${cell(TRAIL_COLUMNS[6], confirmationText(call.elicitation))}
-    ${cell(TRAIL_COLUMNS[7], html`<code>${call.argumentsExcerpt}</code>`)}
+    ${cell(TRAIL_COLUMNS[6], html`<code>${call.argumentsExcerpt}</code>`)}
   </tr>`;
 }
 
 /**
-Calls across computers, newest first: the unexpected writes, or everything recent on Activity.
+Calls across computers, newest first: the writes, or everything recent on Activity.
 */
 export function renderTrailTable(calls: readonly CallItem[], empty: string): Html {
   if (calls.length === 0) {
@@ -209,36 +193,34 @@ export function renderTrailTable(calls: readonly CallItem[], empty: string): Htm
 }
 
 /**
-ACT-63: every non-read call, across targets, that no human accepted through a confirmation.
+ACT-63: every non-read call across targets, newest first, whatever its outcome.
 */
-export function unexpectedPage(view: UnexpectedView): ConsolePage {
+export function writesPage(view: WritesView): ConsolePage {
   return {
-    title: 'Unexpected writes',
+    title: 'Writes',
     active: 'activity',
-    crumbs: [{ label: 'Activity', href: '/account/activity' }, { label: 'Unexpected writes' }],
+    crumbs: [{ label: 'Activity', href: '/account/activity' }, { label: 'Writes' }],
     body: html`${pageHead(
-        'Unexpected writes',
-        'Every call that changed something — a write, a shell command or a browser action — and was not accepted by a human through a confirmation, newest first, across every connection. A connection that asks for confirmation on every non-read call appears here only when one was declined, cancelled, expired or refused.',
+        'Writes',
+        'Every call that changed something or tried to — a write, a shell command or a browser action — newest first, across every connection. vaultgate asks no one to approve a call: a person approves writes in the agent’s own client, and this is where you review what ran.',
       )}
       <section class="card flush">
-        ${renderTrailTable(view.calls, 'No unexpected write has been recorded.')}
-        ${olderLink(UNEXPECTED_PATH, view.older)}
+        ${renderTrailTable(view.calls, 'No write has been recorded.')}
+        ${olderLink(WRITES_PATH, view.older)}
       </section>`,
-    returnTo: UNEXPECTED_PATH,
+    returnTo: WRITES_PATH,
   };
 }
 
 /**
-The Activity page's section (ACT-63): the latest calls across computers and the way to the unexpected writes.
+The Activity page's section (ACT-63): the latest calls across computers and the way to the writes.
 */
-export function activitySection(calls: readonly CallItem[], unexpectedCount: number): Html {
-  const badge =
-    unexpectedCount > 0 ? tag(`${String(unexpectedCount)} this week`, 'amber', 'alert') : EMPTY;
+export function activitySection(calls: readonly CallItem[]): Html {
   return html`<section class="card flush" id="recent-calls">
     ${cardHead(
       'Recent calls',
       'The latest calls agents made through your connections.',
-      html`<a class="button small" href="${UNEXPECTED_PATH}">Unexpected writes ${badge}</a>`,
+      html`<a class="button small" href="${WRITES_PATH}">Writes</a>`,
     )}
     ${renderTrailTable(calls, 'No agent has made a call yet.')}
   </section>`;

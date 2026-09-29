@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { GRAPH_CLIENT, GRAPH_TENANT, graphCredential } from '../../../test-support/graph.ts';
+import { GRAPH_CLIENT, GRAPH_TENANT } from '../../../test-support/graph.ts';
 
 import {
   GRAPH_DEFAULT_SCOPE,
-  graphCredentialFields,
   graphCredentialSchema,
   graphDestinationProblems,
 } from './document.ts';
@@ -55,20 +54,6 @@ describe('the graph adapter document', () => {
       }).success,
     ).toBe(true);
     expect(graphCredentialSchema.safeParse({ ...BASE, secret_field: '' }).success).toBe(false);
-  });
-
-  it('ACT-4 names the client secret, and the refresh token when the mapping has one', () => {
-    expect(graphCredentialFields(graphCredential())).toStrictEqual([
-      { name: 'password', selector: 'password', role: 'secret' },
-    ]);
-    expect(
-      graphCredentialFields(
-        graphCredential({ grant: 'refresh_token', refresh_token_field: 'custom.refresh' }),
-      ),
-    ).toStrictEqual([
-      { name: 'password', selector: 'password', role: 'secret' },
-      { name: 'custom.refresh', selector: 'custom.refresh', role: 'secret' },
-    ]);
   });
 
   it('ACT-81 allows a path prefix under the Graph origin and nothing on another origin', () => {

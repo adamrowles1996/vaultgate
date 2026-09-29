@@ -56,7 +56,7 @@ describe('the ssh destination document', () => {
     expect(sshSchemas.endpoints(parsed)).toStrictEqual([{ host: 'build.example.com', tls: true }]);
   });
 
-  it('ACT-43 summarises the destination as the login, host and port, never a credential', () => {
+  it('ACT-5 summarises the destination as the login, host and port, never a credential', () => {
     const parsed = sshDestinationSchema.parse(destination({ port: 2222 }));
     expect(sshSchemas.summariseDestination(parsed)).toBe('vaultgate@build.example.com:2222');
   });
@@ -112,7 +112,6 @@ describe('the ssh policy document', () => {
       allowed_commands: [],
       any_command: false,
       timeout_ms: 30_000,
-      confirm_writes: false,
     });
   });
 

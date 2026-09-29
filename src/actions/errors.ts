@@ -15,16 +15,6 @@ export const ACTION_ERROR_MESSAGES = {
   invalid_arguments: 'the arguments do not match the tool schema',
   policy_denied: "the target's policy does not allow this operation",
   rate_limited: 'too many calls; retry after the number of seconds in detail.retry_after_s',
-  confirmation_unavailable:
-    'this target requires a human confirmation and your client does not support MCP ' +
-    'elicitation; ask the operator to use a client that does, or to lift the requirement for ' +
-    'this target',
-  confirmation_declined: 'the human declined the call',
-  confirmation_cancelled: 'the human dismissed the confirmation prompt',
-  confirmation_expired: 'the confirmation has expired; call again to request a new one',
-  confirmation_invalid:
-    'the confirmation does not verify or does not match this call; call again to request a new one',
-  confirmation_reused: 'the confirmation has already been used; call again to request a new one',
   credential_unavailable:
     'the credential for this target is not available; the operator can see why on the account page',
   credential_rotation_failed: 'the rotated refresh token could not be written back to the vault',
@@ -73,12 +63,6 @@ const DENIED_CODES: ReadonlySet<ActionErrorCode> = new Set<ActionErrorCode>([
   'invalid_arguments',
   'policy_denied',
   'rate_limited',
-  'confirmation_unavailable',
-  'confirmation_declined',
-  'confirmation_cancelled',
-  'confirmation_expired',
-  'confirmation_invalid',
-  'confirmation_reused',
 ]);
 
 export class ActionError extends Error {

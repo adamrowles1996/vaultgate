@@ -144,29 +144,25 @@ export const ACTION_CALL_FORMATS: Readonly<Record<ExportFormat, LineFormat<Store
 
 /**
  * What the account page asks of the call trail (ACT-63): one target's calls,
- * or the unexpected writes — every call that is not a read and whose
- * elicitation did not end in an accepted confirmation, across targets. The
- * export asks for neither and reads them all.
+ * or the writes — every call that is not a read, across targets. The export
+ * asks for neither and reads them all.
  */
 export interface CallFilter {
   readonly targetId?: string | undefined;
-  readonly unexpectedOnly?: boolean | undefined;
+  readonly writesOnly?: boolean | undefined;
 }
 
 /**
-ACT-63: a non-read call that no human accepted is the one an operator needs to see.
+ACT-63: a write, a shell command or a browser action; a call refused before its operation was known has none.
 */
-const UNEXPECTED_WRITE: readonly PageFilter[] = [
-  { column: 'operation', operator: '<>', value: 'read' },
-  { column: 'elicitation', operator: '<>', value: 'accepted' },
-];
+const WRITE: readonly PageFilter[] = [{ column: 'operation', operator: '<>', value: 'read' }];
 
 function filtersOf(filter: CallFilter): readonly PageFilter[] {
   return [
     ...(filter.targetId === undefined
       ? []
       : [{ column: 'target_id', operator: '=', value: filter.targetId } as const]),
-    ...(filter.unexpectedOnly === true ? UNEXPECTED_WRITE : []),
+    ...(filter.writesOnly === true ? WRITE : []),
   ];
 }
 

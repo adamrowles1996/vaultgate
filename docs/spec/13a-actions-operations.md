@@ -1,8 +1,8 @@
 # 13a Actions in operation: network, limits, audit, storage and architecture
 
 > **Status: as [13 Actions](13-actions.md), of which this is the second half.** Section 13
-> specifies what a target is, who may use it, what the tools are, how a call is judged and how a
-> human confirms it; this file specifies how a deployment runs, bounds, records, stores and
+> specifies what a target is, who may use it, what the tools are and how a call is judged; this
+> file specifies how a deployment runs, bounds, records, stores and
 > verifies that layer. The section numbers and the `ACT-n` sequence continue from 13 without a
 > break, so a citation such as §13.16 or ACT-74 means the same thing wherever it is written.
 > The two files exist because one had outgrown the repository's file-size gate (11.1), not
@@ -24,9 +24,9 @@
   addresses are refused always, whatever `internal` says: `bw serve` listens on loopback and an
   `http` target reaching it would be a path from a token to the whole vault.
 - **ACT-57** TLS is required unless the destination allows plain transport under `internal: true`
-  (section 14), and certificate verification uses the system store or the pin the destination
-  document provides. There is no "ignore certificate errors" option; a failed verification is
-  `tls_error`.
+  (section 14), and certificate verification uses the system store, or the pin or the private
+  certificate authority the destination document provides. There is no "ignore certificate
+  errors" option; a failed verification is `tls_error`.
 - **ACT-58** Connections are opened after the policy decision and closed at the end of the call;
   the engine keeps no connection, agent or shell across calls. The one exception is a browser
   session (14.7), which is bounded, bound to one client and closed by every revocation path. A
@@ -46,13 +46,12 @@
 | Rows (`sql_query`)          | `policy.max_rows`, 500; ceiling 10 000                                          | call    | `truncated: true`                                              |
 | Browser sessions per client | `policy.max_sessions`, 1; ceiling 4                                             | client  | `session_limit`                                                |
 | Browser session lifetime    | `policy.session_ttl_s`, 900 idle; 3 600 absolute                                | session | `session_expired`                                              |
-| Confirmations pending       | 2 minutes each                                                                  | state   | `confirmation_expired`                                         |
 | Index builds (`code`)       | 1 in flight per target and commit; `policy.build_timeout_s`, 600; ceiling 3 600 | target  | A second trigger joins the running build (ACT-108)             |
 | Build wait (`code`)         | `policy.build_wait_s`, 90; ceiling 290                                          | call    | `index_not_ready` (`building`), the build carries on (ACT-112) |
 
 - **ACT-59** Limits are the in-memory token buckets of OPS-6 (single replica, 10 000 keys), sit
-  inside the per-token limit of MCP-5, and are applied before confirmation so an agent cannot
-  spend confirmations to probe them. A rate-limited call is audited with outcome
+  inside the per-token limit of MCP-5, and are applied before the credential is fetched. A
+  rate-limited call is audited with outcome
   `denied:rate_limited`.
 
 ## 13.12 Audit
@@ -70,26 +69,27 @@
   the rest against — `ssh` and `winrm` also have ACT-88's full command in `classification`, and
   a 64 KiB `sql` statement has nothing else), `output_bytes`,
   `output_truncated`, `duration_ms`, `outcome` (`ok` \| `denied:<code>` \| `error:<code>`),
-  `elicitation` (`not_required` \| `accepted` \| `declined` \| `cancelled` \| `unavailable` \|
-  `invalid`), `confirmation_nonce`, `request_id`, `ip`. Results, snapshots and screenshots are
-  never stored. A call that ends in a confirmation request (ACT-42) records nothing yet: the
-  retry that carries the answer is the call that is recorded.
-- **ACT-61** Arguments are stored because an operator who finds an unexpected write needs to see
+  `elicitation`, `confirmation_nonce`, `request_id`, `ip`. Results, snapshots and screenshots are
+  never stored. `elicitation` and `confirmation_nonce` belong to the withdrawn confirmation of
+  13.8: a call recorded now has `not_required` and no nonce, and a row written before it was
+  withdrawn keeps what it recorded (`accepted`, `declined`, `cancelled`, `unavailable` or
+  `invalid`), in the table and in the export.
+- **ACT-61** Arguments are stored because an operator reviewing a write needs to see
   the statement, command or typed text that ran, and because the agent supplied them in the
   clear; the scrubber still runs over them (a prompt-injected agent could echo a value it obtained
   elsewhere).
 - **ACT-62** `action_calls` rows are append-only from the application's point of view, retained
   for `VAULTGATE_AUDIT_RETENTION_DAYS` like `audit_events` (MCP-15, STORE-6), and included in the
   audit export (OPS-5) as a second stream (`--stream actions`; the Activity page's export offers both).
-  The one exception is a call's own row: it is reserved (outcome `error:interrupted`, the nonce
-  consumed) before the connector runs and completed with the outcome, output size and duration
+  The one exception is a call's own row: it is reserved (outcome `error:interrupted`) before the
+  connector runs and completed with the outcome, output size and duration
   when the call ends. That completion is the only update path, and nothing deletes a row before
   retention.
-- **ACT-63** A target's page shows its last 50 calls with their outcome and elicitation result,
-  and its open sessions. The console's Activity page shows the latest calls across targets and
-  links to an "unexpected write" view listing every non-read call whose elicitation is not
-  `accepted`, so a target with `confirm_writes: false` is reviewable; the Connections page and the
-  sidebar count those of the last seven days.
+- **ACT-63** A target's page shows its last 50 calls with their outcome, and its open sessions.
+  The console's Activity page shows the latest calls across targets and links to the **Writes**
+  view (`/account/actions/writes`), every non-read call across targets, newest first, whatever its
+  outcome and whenever it was recorded: vaultgate asks no one to approve a call (13.8), so this is
+  where the operator reviews what agents changed.
 
 ## 13.13 Storage
 
@@ -109,16 +109,16 @@ database:
 | `action_sessions`       | `id_hash` (SHA-256 of the session id), `target_id`, `client_id`, `token_prefix`, `opened_at`, `last_used_at`, `expires_at`, `closed_at`, `close_reason` (`agent` \| `idle` \| `absolute` \| `revoked` \| `target_changed` \| `operator` \| `shutdown` \| `error`), `calls`; the live context lives in the sidecar, this row is the record and the revocation handle (14.7) |
 | `action_code_snapshots` | `target_id` (primary key, FK `action_targets.id`, cascade), `snapshot_key`, `fingerprint` (of the extraction policy), `commit_sha`, `ref` (the name it was resolved from), `indexed_at`; rewritten as the configured ref moves on, deleted with the target's snapshots                                                                                                     |
 
-- **ACT-64** No column holds an injected value, a vault secret, a token, a raw session id or a
-  `requestState` (STORE-4 extended). `credential` holds the item id and field names; the vault
+- **ACT-64** No column holds an injected value, a vault secret, a token or a raw session id
+  (STORE-4 extended). `credential` holds the item id and field names; the vault
   stays the only secret store, so a database leak yields destinations and policies but no way to
   use them.
 - **ACT-65** Indexes: `action_targets(name)`, `action_grants(client_id)`, `action_calls(at)`,
-  `action_calls(target_id, at)`, `action_calls(confirmation_nonce)`, `action_sessions(id_hash)`,
-  `action_sessions(client_id)`.
+  `action_calls(target_id, at)`, `action_calls(confirmation_nonce)` (kept for the rows of the
+  withdrawn confirmation), `action_sessions(id_hash)`, `action_sessions(client_id)`.
 - **ACT-66** Backup and restore (STORE-7, STORE-8) are unchanged; targets survive a
-  `VAULTGATE_SECRET_KEY` rotation (nothing in them is encrypted under it) and only in-flight
-  confirmations and open sessions are lost. The maintenance task (STORE-6) closes `action_sessions`
+  `VAULTGATE_SECRET_KEY` rotation (nothing in them is encrypted under it) and only open
+  sessions are lost. The maintenance task (STORE-6) closes `action_sessions`
   rows past `expires_at` that the engine did not close itself.
 
 ## 13.14 Configuration
@@ -156,22 +156,21 @@ database:
 src/actions/
   engine.ts            createActionsEngine: listTargets (ACT-19) and call in the ACT-16 order
   engine-resolve.ts    layer → target → grant → connector → enabled → valid → scope → arguments → policy
-  engine-confirm.ts    the confirmation step (ACT-41…48) before the credential is fetched
   engine-run.ts        credential fetch (ACT-50, 54), destination pinning (ACT-55, 56), run under the timeout, scrub and cap
   engine-record.ts     the action_calls row and the MCP-13 audit event of every call (ACT-60, 61)
   engine-listing.ts    actions_list_targets (ACT-19)
-  caller.ts            who is calling: client, token prefix, scopes, request, elicitation capability, confirmation input
+  caller.ts            who is calling: client, token prefix, scopes, request
   errors.ts            the codes and fixed messages of 13.16 (ACT-74)
   targets.ts           the targets service: create, edit, enable, disable, delete, grant, revoke, consent revocation (ACT-10)
   targets-lifecycle.ts create, update, enable, disable, delete with the revision bump and the ACT-7 events
   targets-checks.ts    the save-time checks: ACT-3, ACT-4, ACT-35, ACT-57, ACT-88 and the connector's own
+  canonical-json.ts    the canonical JSON that decides which fields a save changed (ACT-7)
   targets-schemas.ts   the common row schema (ACT-1) and the connector documents through the schema registry
   targets-repo.ts      the repository over action_targets and action_grants
   targets-context.ts   what the target operations share: the summary the pages render, the ACT-7 record
-  calls.ts             the action_calls writer: reserve, complete, the single-use nonce (ACT-46)
+  calls.ts             the action_calls writer: reserve and complete (ACT-60, 62)
   policy.ts            pattern matcher (ACT-34), HTTP subject normalisation (ACT-35), common policy fields, PolicyDecision (ACT-39)
   destination.ts       the private-range rule and the pinned address (ACT-55, 56)
-  confirm.ts           requestState mint/verify (ACT-44…46), ElicitResult handling, the ACT-42 document
   scrub.ts             variant generation and replacement (ACT-51, 52)
   secrets.ts           the secrets one call holds, its run's own included (ACT-50, 82)
   run-support.ts       what the engine lends a run: a second host, a captured secret, the ACT-83 rotation
@@ -182,8 +181,9 @@ src/actions/
   connectors/
     connector.ts       the connector interface (14.1)
     registry.ts        schemas of every connector; runtimes loaded for enabled connectors only (ACT-73)
-    http/              the runtime (M9): schemas (14.2), the tool (ACT-20, 21), authorize (pure), request, response, run, index
-    graph/             the 14.3 adapter: document, token exchange, cache, write-back
+    certificates.ts    the certificate pin and PEM checks the http, sql and winrm documents share
+    http/              the runtime (M9): schemas (14.2), header names, the tool (ACT-20, 21), authorize (pure), request, response, the destination's trust (ACT-121 to 123), run, index
+    graph/             the 14.3 and 14.3a adapters: the graph and oauth2 documents, the exchange plan, token exchange and response rule, cache, write-back
     sql/               tokeniser and classifier; mssql/ and postgres/ drivers
     ssh/               the runtime (M12): schemas (14.5), the host-key parser and matcher, the tool, authorize (pure), the ssh2 driver shape, client, channel, run
     winrm/             the runtime (M13): schemas (14.6), the tool, authorize (pure), the SOAP envelopes, the strict response reader, client (shell lifecycle), run, index
@@ -230,12 +230,6 @@ src/actions/
 | `invalid_arguments`          | Argument shape or parameter binding problem (ACT-20, 23, 27, 29…33).                                                                                                                                                                                                                                |
 | `policy_denied`              | The policy refused the operation; `detail.reason` is one of ACT-39's reasons.                                                                                                                                                                                                                       |
 | `rate_limited`               | ACT-59; `detail.retry_after_s`.                                                                                                                                                                                                                                                                     |
-| `confirmation_unavailable`   | The target requires confirmation and the client cannot elicit (ACT-48).                                                                                                                                                                                                                             |
-| `confirmation_declined`      | The human declined or did not tick the box (ACT-47).                                                                                                                                                                                                                                                |
-| `confirmation_cancelled`     | The human dismissed the prompt (ACT-47).                                                                                                                                                                                                                                                            |
-| `confirmation_expired`       | The retried `requestState` is older than 2 minutes (ACT-45).                                                                                                                                                                                                                                        |
-| `confirmation_invalid`       | The `requestState` does not verify or does not match the retried call (ACT-45).                                                                                                                                                                                                                     |
-| `confirmation_reused`        | The nonce was already consumed (ACT-46).                                                                                                                                                                                                                                                            |
 | `credential_unavailable`     | The vault is locked, or the item or field is missing (one fixed message, ACT-54).                                                                                                                                                                                                                   |
 | `credential_rotation_failed` | The `graph` refresh-token write-back failed (ACT-83).                                                                                                                                                                                                                                               |
 | `destination_refused`        | The destination resolved to an address the private-range rule refuses (ACT-56).                                                                                                                                                                                                                     |
@@ -295,14 +289,8 @@ src/actions/
   API and a Microsoft 365 tenant for `http`/`graph`, a SQL Server and a PostgreSQL database for
   `sql`, a Linux host for `ssh`, a Windows host for `winrm`, two of the maintainer's own web
   applications for `browser`).
-- **ACT-76** The elicitation flow is tested in-process with the SDK client declaring, in turn,
-  form-mode elicitation on `2026-07-28`, elicitation at `initialize` on an older negotiated
-  version, and no elicitation, asserting the behaviours of ACT-42 and ACT-48 and every outcome of
-  ACT-47, with replay, expiry, edited-target and altered-argument retries refused (ACT-45, 46).
-  The older-version case asserts the refusal ACT-48 records: the client is answered
-  `confirmation_unavailable`, is never shown a prompt though it offered to render one, and the
-  call leaves its `action_calls` row; a read on the same target and the same wire still runs, so
-  the limit is the confirmation and nothing else.
+- ACT-76 specified the in-process tests of the confirmation flow of 13.8 and was withdrawn with
+  it; the number is not reused.
 - **ACT-77** The classifier (13.7.2) has a corpus of statements per engine, including comment and
   string tricks (`SELECT 1; DROP …`, `SELECT '…; DROP' …`, `/* */` splits, dollar quoting,
   `SELECT … INTO`, `WITH … AS (DELETE …)`, `EXEC` inside a string), and every corpus entry is a

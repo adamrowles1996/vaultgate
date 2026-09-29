@@ -1,25 +1,21 @@
 /**
  * The `action_calls` writer (spec §13.12, ACT-60, ACT-61): one row per call,
  * arguments scrubbed and capped, results never stored. A call that reaches
- * the connector is inserted before the run, which consumes the confirmation
- * nonce inside the same transaction (ACT-46), and completed by one update
- * when the call ends; a refused call is one insert. Nothing else updates or
+ * the connector is inserted before the run and completed by one update when
+ * the call ends; a refused call is one insert. Nothing else updates or
  * deletes a row: retention is the store's maintenance task (ACT-62).
+ *
+ * The table keeps its `elicitation` and `confirmation_nonce` columns for the
+ * rows written while vaultgate asked for its own confirmations (§13.8,
+ * withdrawn): a row written now records `not_required` and no nonce.
  */
 import { createHash } from 'node:crypto';
 
-import { z } from 'zod';
+import { run } from '../storage/query.ts';
 
-import { fail, ok, type Result } from '../result.ts';
-import { get, run, transaction } from '../storage/query.ts';
-
-import { ActionError, type ActionOutcome } from './errors.ts';
-
-import type { ElicitationOutcome } from './confirm.ts';
+import type { ActionOutcome } from './errors.ts';
 import type { OperationKind } from './policy.ts';
 import type { DatabaseSync } from 'node:sqlite';
-
-export type Elicitation = 'not_required' | ElicitationOutcome | 'unavailable' | 'invalid';
 
 /**
 The outcome a reserved row carries until the call completes; left behind only by a process that died mid-call.
@@ -49,8 +45,6 @@ export interface CallRow {
   readonly outputTruncated: boolean;
   readonly durationMs: number;
   readonly outcome: CallOutcome;
-  readonly elicitation: Elicitation;
-  readonly confirmationNonce: string | undefined;
   readonly requestId: string | undefined;
   readonly ip: string | undefined;
 }
@@ -64,13 +58,16 @@ export interface CallCompletion {
 
 const ARGUMENTS_CAP_BYTES = 4096;
 
+/**
+What a row written today records in the columns of the withdrawn confirmation (§13.8).
+*/
+const NOT_REQUIRED = 'not_required';
+
 const INSERT =
   'INSERT INTO action_calls (id, at, target_id, target_name, connector, revision, tool, ' +
   'session_id_hash, client_id, token_prefix, operation, classification, arguments, ' +
   'arguments_truncated, output_bytes, output_truncated, duration_ms, outcome, elicitation, ' +
-  'confirmation_nonce, request_id, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-
-const nonceRow = z.object({ id: z.string() });
+  'confirmation_nonce, request_id, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)';
 
 /**
  * ACT-60: the arguments as JSON, cut at 4 KiB. What is cut is named: the
@@ -79,7 +76,7 @@ const nonceRow = z.object({ id: z.string() });
  * and gives them something to check the rest against. `ssh` and `winrm` also
  * have ACT-88's full command in `classification`; `sql` has nothing else, and
  * a 64 KiB statement would otherwise hide its operative clause from the one
- * view that exists to catch an unexpected write.
+ * view that exists to review every write.
  */
 export function encodeArguments(value: unknown): {
   readonly text: string;
@@ -104,7 +101,10 @@ function orNull<T extends string | number>(value: T | undefined): T | null {
   return value ?? null;
 }
 
-function insert(database: DatabaseSync, row: CallRow): void {
+/**
+Records a call: one insert, before the run for a call that reaches the connector (ACT-62).
+*/
+export function recordCall(database: DatabaseSync, row: CallRow): void {
   const encoded = encodeArguments(row.arguments);
   run(
     database,
@@ -127,42 +127,10 @@ function insert(database: DatabaseSync, row: CallRow): void {
     row.outputTruncated ? 1 : 0,
     row.durationMs,
     row.outcome,
-    row.elicitation,
-    orNull(row.confirmationNonce),
+    NOT_REQUIRED,
     orNull(row.requestId),
     orNull(row.ip),
   );
-}
-
-/**
-ACT-46: whether a recorded call has already consumed the confirmation nonce.
-*/
-export function isNonceConsumed(database: DatabaseSync, nonce: string): boolean {
-  return (
-    get(database, 'SELECT id FROM action_calls WHERE confirmation_nonce = ?', nonceRow, nonce) !==
-    undefined
-  );
-}
-
-/**
- * Records a call. With a confirmation nonce the insert runs in a transaction
- * that first checks the nonce is unused, so a replayed confirmation fails
- * `confirmation_reused` before the connector runs (ACT-46); the unique index
- * is the backstop.
- */
-export function recordCall(database: DatabaseSync, row: CallRow): Result<void, ActionError> {
-  if (row.confirmationNonce === undefined) {
-    insert(database, row);
-    return ok(undefined);
-  }
-  const nonce = row.confirmationNonce;
-  return transaction(database, () => {
-    if (isNonceConsumed(database, nonce)) {
-      return fail(new ActionError('confirmation_reused'));
-    }
-    insert(database, row);
-    return ok(undefined);
-  });
 }
 
 /**

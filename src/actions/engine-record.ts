@@ -1,10 +1,10 @@
 /**
  * What every call leaves behind (ACT-60): the MCP-13 audit event and the
  * `action_calls` row, results never stored (ACT-61). A refused call is one
- * row; a call that reaches the connector reserves its row first (consuming
- * the confirmation nonce, ACT-46) and completes it when it ends.
+ * row; a call that reaches the connector reserves its row first and
+ * completes it when it ends (ACT-62).
  */
-import { completeCall, type Elicitation, INTERRUPTED_OUTCOME, recordCall } from './calls.ts';
+import { completeCall, INTERRUPTED_OUTCOME, recordCall } from './calls.ts';
 import { ActionError, type ActionOutcome, outcomeOf } from './errors.ts';
 
 import type { Caller } from './caller.ts';
@@ -39,8 +39,6 @@ export interface CallFacts {
   Present once the credential was fetched; arguments are scrubbed with it (ACT-61).
   */
   readonly scrub: Scrubber | undefined;
-  readonly elicitation: Elicitation;
-  readonly nonce: string | undefined;
 }
 
 export interface OutputFacts {
@@ -93,13 +91,9 @@ function scrubbedError(facts: CallFacts, error: ActionError): ActionError {
     : new ActionError(error.code, facts.scrub.deep(error.detail));
 }
 
-function insertRow(
-  dependencies: RecordDependencies,
-  facts: CallFacts,
-  ending: Ending,
-): { readonly id: string; readonly reserved: ActionError | undefined } {
+function insertRow(dependencies: RecordDependencies, facts: CallFacts, ending: Ending): string {
   const id = dependencies.newId();
-  const reserved = recordCall(dependencies.database, {
+  recordCall(dependencies.database, {
     id,
     at: facts.startedAt,
     targetId: facts.row?.id,
@@ -117,12 +111,10 @@ function insertRow(
     outputTruncated: ending.output.truncated,
     durationMs: ending.durationMs,
     outcome: ending.outcome,
-    elicitation: facts.elicitation,
-    confirmationNonce: facts.nonce,
     requestId: facts.caller.requestId,
     ip: facts.caller.ip,
   });
-  return { id, reserved: reserved.ok ? undefined : reserved.error };
+  return id;
 }
 
 function auditEvent(
@@ -144,36 +136,21 @@ function auditEvent(
       clientName: facts.caller.clientName,
       target: facts.invocation.target,
       outcome,
-      elicitation: facts.elicitation,
     },
   });
 }
 
 /**
- * Writes a refused or failed call as one row and one event and yields the
- * error the agent receives, scrubbed. A confirmation nonce already consumed
- * turns the outcome into `confirmation_reused`.
- */
+Writes a refused or failed call as one row and one event and yields the error the agent receives, scrubbed.
+*/
 export function recordFailure(
   dependencies: RecordDependencies,
   facts: CallFacts,
   error: ActionError,
 ): ActionError {
-  const attempted = scrubbedError(facts, error);
+  const final = scrubbedError(facts, error);
   const durationMs = dependencies.now() - facts.startedAt;
-  const { reserved } = insertRow(dependencies, facts, {
-    outcome: outcomeOf(attempted),
-    output: NO_OUTPUT,
-    durationMs,
-  });
-  const final = reserved ?? attempted;
-  if (reserved !== undefined) {
-    insertRow(
-      dependencies,
-      { ...facts, nonce: undefined },
-      { outcome: outcomeOf(final), output: NO_OUTPUT, durationMs },
-    );
-  }
+  insertRow(dependencies, facts, { outcome: outcomeOf(final), output: NO_OUTPUT, durationMs });
   auditEvent(dependencies, facts, outcomeOf(final), durationMs);
   return final;
 }
@@ -186,20 +163,14 @@ export interface Reservation {
 }
 
 /**
-Reserves the row before the connector runs (ACT-46); a consumed nonce refuses the call here.
+ACT-62: the row is written before the connector runs, so a process that dies mid-call leaves it `error:interrupted`.
 */
-export function reserveCall(
-  dependencies: RecordDependencies,
-  facts: CallFacts,
-): Reservation | ActionError {
-  const { id, reserved } = insertRow(dependencies, facts, {
+export function reserveCall(dependencies: RecordDependencies, facts: CallFacts): Reservation {
+  const id = insertRow(dependencies, facts, {
     outcome: INTERRUPTED_OUTCOME,
     output: NO_OUTPUT,
     durationMs: 0,
   });
-  if (reserved !== undefined) {
-    return reserved;
-  }
   return {
     complete(outcome, output) {
       const durationMs = dependencies.now() - facts.startedAt;

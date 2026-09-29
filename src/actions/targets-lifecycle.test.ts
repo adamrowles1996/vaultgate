@@ -27,7 +27,7 @@ const EDIT = {
     item_id: 'item-login',
     mapping: { mode: 'header', field: 'custom.API key', name: 'X-Api-Key' },
   },
-  policy: { allowed_paths: ['/**'], confirm_writes: true },
+  policy: { allowed_paths: ['/**'], rate_limit_per_minute: 30 },
 };
 
 describe('target lifecycle', () => {
@@ -189,31 +189,27 @@ describe('target lifecycle', () => {
     const harness = createActionsHarness();
     const created = await createHttpTarget(harness, { grantTo: [CLIENT_ID, OTHER_CLIENT_ID] });
     openSession(harness.database, 'session-1', created.id, CLIENT_ID);
-    unwrapOk(
-      recordCall(harness.database, {
-        id: 'call-1',
-        at: 1,
-        targetId: created.id,
-        targetName: 'api',
-        connector: 'http',
-        revision: 1,
-        tool: 'http_request',
-        sessionIdHash: undefined,
-        clientId: CLIENT_ID,
-        tokenPrefix: 'prefix',
-        operation: 'read',
-        classification: 'GET',
-        arguments: {},
-        outputBytes: 0,
-        outputTruncated: false,
-        durationMs: 0,
-        outcome: INTERRUPTED_OUTCOME,
-        elicitation: 'not_required',
-        confirmationNonce: undefined,
-        requestId: undefined,
-        ip: undefined,
-      }),
-    );
+    recordCall(harness.database, {
+      id: 'call-1',
+      at: 1,
+      targetId: created.id,
+      targetName: 'api',
+      connector: 'http',
+      revision: 1,
+      tool: 'http_request',
+      sessionIdHash: undefined,
+      clientId: CLIENT_ID,
+      tokenPrefix: 'prefix',
+      operation: 'read',
+      classification: 'GET',
+      arguments: {},
+      outputBytes: 0,
+      outputTruncated: false,
+      durationMs: 0,
+      outcome: INTERRUPTED_OUTCOME,
+      requestId: undefined,
+      ip: undefined,
+    });
     harness.audit.length = 0;
     unwrapOk(harness.engine.targets.remove(created.id, OPERATOR_ID));
     expect(harness.engine.targets.get(created.id)).toBeUndefined();

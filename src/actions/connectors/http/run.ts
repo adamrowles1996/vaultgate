@@ -9,23 +9,26 @@
 import { type PinnedFetch, type PinnedMethod, readBodyCapped } from '../../../net/pinned-https.ts';
 import { fail, ok, type Result } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
+import { exchangePlan } from '../graph/exchange.ts';
 
 import {
-  bearerInjection,
   buildRequest,
   credentialInjection,
   inject,
   type Injection,
+  isTokenCredential,
   isUnderBase,
   type OutgoingRequest,
   toPinned,
+  tokenInjection,
 } from './request.ts';
 import { toOutput, transportFailure } from './response.ts';
+import { destinationTrust } from './trust.ts';
 
 import type { HttpOperation } from './operation.ts';
 import type { HttpCredential, HttpDestination, HttpPolicy } from './schemas.ts';
 import type { ConnectorOutput, RunContext } from '../connector.ts';
-import type { GraphTokens } from '../graph/adapter.ts';
+import type { TokenService } from '../graph/adapter.ts';
 
 export type HttpRunContext = RunContext<HttpDestination, HttpCredential, HttpPolicy>;
 
@@ -105,8 +108,13 @@ async function exchange(
   context: HttpRunContext,
   plan: Exchange,
 ): Promise<Response> {
+  // ACT-121, ACT-122, ACT-123: the destination's own trust goes on every request to base_url,
+  // the first and each hop, and on nothing else; a token exchange never passes through here.
+  const trust = destinationTrust(context.destination);
+  const send = (outgoing: OutgoingRequest): Promise<Response> =>
+    transport({ ...toPinned(outgoing, plan.address, context.signal), ...trust });
   let request = plan.first;
-  let response = await transport(toPinned(request, plan.address, context.signal));
+  let response = await send(request);
   for (let hops = 0; hops < MAX_HOPS && context.policy.follow_redirects; hops += 1) {
     const hop = nextHop(response, request, context.destination.base_url, plan.injection);
     if (hop === undefined) {
@@ -114,7 +122,7 @@ async function exchange(
     }
     await response.body?.cancel();
     request = hop;
-    response = await transport(toPinned(request, plan.address, context.signal));
+    response = await send(request);
   }
   return response;
 }
@@ -123,35 +131,36 @@ const UNAUTHORIZED = 401;
 
 /**
  * The credential in its injection point: a vault value for the mapped modes,
- * an access token the adapter obtains for `graph` (ACT-82). `isRetry` tells
- * the adapter to discard the token it cached.
+ * an access token the adapter obtains for `graph` and `oauth2` (ACT-82,
+ * ACT-128). `isRetry` tells the adapter to discard the token it cached.
  */
 async function injectionFor(
-  tokens: GraphTokens,
+  tokens: TokenService,
   context: HttpRunContext,
   isRetry: boolean,
 ): Promise<Result<Injection, ActionError>> {
   const { credential } = context;
-  if (credential.mode !== 'graph') {
+  if (!isTokenCredential(credential)) {
     return credentialInjection(credential, context.injected);
   }
   const token = await tokens.accessToken({ ...context, credential }, isRetry);
-  return token.ok ? ok(bearerInjection(token.value)) : token;
+  return token.ok ? ok(tokenInjection(exchangePlan(credential).header, token.value)) : token;
 }
 
 /**
- * ACT-82: a `401` on a graph target may mean the cached token was revoked
- * before it expired, so one attempt is made with a fresh one. A `401` on
- * that attempt is the result the agent sees, like any other status.
+ * ACT-82, ACT-129: a `401` on a `graph` or `oauth2` target may mean the
+ * cached token was revoked before it expired, so one attempt is made with a
+ * fresh one. A `401` on that attempt is the result the agent sees, like any
+ * other status.
  */
 function isStaleToken(context: HttpRunContext, response: Response): boolean {
-  return response.status === UNAUTHORIZED && context.credential.mode === 'graph';
+  return response.status === UNAUTHORIZED && isTokenCredential(context.credential);
 }
 
 interface Attempt {
   readonly transport: PinnedFetch;
   readonly version: string;
-  readonly tokens: GraphTokens;
+  readonly tokens: TokenService;
   readonly address: string;
 }
 
@@ -193,9 +202,9 @@ async function readResponse(
 }
 
 /**
-`run` of the `http` connector over an injected transport (ACT-78), with the `graph` adapter for that mode.
+`run` of the `http` connector over an injected transport (ACT-78), with the token service for the adapter modes.
 */
-export function createRun(transport: PinnedFetch, version: string, tokens: GraphTokens): HttpRun {
+export function createRun(transport: PinnedFetch, version: string, tokens: TokenService): HttpRun {
   return async (context, operation) => {
     const [endpoint] = context.pinned;
     if (endpoint === undefined) {

@@ -20,7 +20,6 @@ const VALID = {
   'credential.field': 'password',
   'policy.allowed_methods.GET': 'on',
   'policy.allowed_paths': '/v1/**\r\n\r\n  /health  ',
-  'policy.confirm_writes': 'on',
   'policy.timeout_ms': '5000',
 };
 
@@ -60,7 +59,7 @@ function actionsAudit(harness: PagesHarness) {
 }
 
 describe('GET /account/actions/new', () => {
-  it('ACT-2 ACT-5 ACT-49 offers the create form with the defaults and ceilings once the password is confirmed', async () => {
+  it('ACT-2 ACT-5 offers the create form with the defaults and ceilings once the password is confirmed', async () => {
     const harness = createPagesHarness();
     const { browser } = await signedInOperator(harness, false);
     const before = await browser.get('/account/actions/new?connector=http');
@@ -77,7 +76,7 @@ describe('GET /account/actions/new', () => {
     expect(markup).toContain('<form method="post" action="/account/actions" class="target-form">');
     expect(markup).toContain('name="name"');
     expect(markup).toContain(String.raw`pattern="[a-z0-9][a-z0-9\-]{0,62}"`);
-    expect(markup).toContain('name="policy.confirm_writes" type="checkbox" checked');
+    expect(markup).not.toContain('confirm_writes');
     expect(markup).toContain('name="policy.allowed_methods.GET" type="checkbox" checked');
     expect(markup).toContain('name="policy.allowed_methods.HEAD" type="checkbox" checked');
     expect(markup).toContain('name="policy.allowed_methods.POST" type="checkbox"  />');
@@ -122,7 +121,7 @@ describe('GET /account/actions/new', () => {
 });
 
 describe('POST /account/actions', () => {
-  it('ACT-2 ACT-3 ACT-4 ACT-6 ACT-7 ACT-49 creates a target from the form, resolving the destination and checking the vault item, and records the event', async () => {
+  it('ACT-2 ACT-3 ACT-4 ACT-6 ACT-7 creates a target from the form, resolving the destination and checking the vault item, and records the event', async () => {
     const harness = createPagesHarness();
     const { browser, csrf } = await signedInOperator(harness);
     const response = await browser.submit('/account/actions', { csrf, ...VALID });
@@ -138,7 +137,6 @@ describe('POST /account/actions', () => {
       policy: {
         allowed_methods: ['GET'],
         allowed_paths: ['/v1/**', '/health'],
-        confirm_writes: true,
         follow_redirects: false,
         allow_query_credentials: false,
         timeout_ms: 5000,

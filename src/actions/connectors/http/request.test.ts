@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { graphCredential } from '../../../test-support/graph.ts';
+import { oauth2Credential } from '../../../test-support/oauth2.ts';
 import { unwrapFail, unwrapOk } from '../../../test-support/result.ts';
 import { createSecretHolder } from '../../secrets.ts';
+import { exchangePlan } from '../graph/exchange.ts';
 
 import {
   bearerInjection,
@@ -9,10 +12,12 @@ import {
   credentialInjection,
   encodeBody,
   inject,
+  isTokenCredential,
   isUnderBase,
   requestSubject,
   resolveUnderBase,
   toPinned,
+  tokenInjection,
 } from './request.ts';
 
 import type { HttpOperation } from './operation.ts';
@@ -90,12 +95,23 @@ describe('credentialInjection', () => {
     ).toBe('credential_unavailable');
   });
 
-  it('ACT-82 puts a graph access token in the same Authorization header a bearer credential uses', () => {
-    expect(bearerInjection('access-token')).toStrictEqual({
+  it('ACT-82 ACT-128 puts a graph access token in the same Authorization header a bearer credential uses, and an oauth2 one in <name>: <prefix><token>', () => {
+    const graph = tokenInjection(exchangePlan(graphCredential()).header, 'access-token');
+    expect(graph).toStrictEqual(bearerInjection('access-token'));
+    expect(graph).toStrictEqual({
       kind: 'header',
       name: 'authorization',
       value: 'Bearer access-token',
     });
+    const zoho = oauth2Credential({ prefix: 'Zoho-oauthtoken ' });
+    expect(tokenInjection(exchangePlan(zoho).header, 'access-token')).toStrictEqual({
+      kind: 'header',
+      name: 'authorization',
+      value: 'Zoho-oauthtoken access-token',
+    });
+    expect(isTokenCredential(zoho)).toBe(true);
+    expect(isTokenCredential(graphCredential())).toBe(true);
+    expect(isTokenCredential(BEARER)).toBe(false);
   });
 });
 

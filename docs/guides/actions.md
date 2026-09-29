@@ -42,9 +42,9 @@ it, its last call and its state. A secret field appears as a sealed chip bearing
 no value is ever shown. The sidebar has an entry per kind, and the filters above the table show
 one kind at a time.
 
-What needs attention comes first: a target that no longer passes validation, a target that
-changes things without asking a person, and this week's unexpected writes, which open the
-cross-target review described under
+What needs attention comes first: a target that no longer passes validation. Each row also says
+whether its policy lets an agent change anything or only read; every call that changed something
+is listed in the cross-target **Writes** review described under
 [Sessions, calls and the audit trail](#sessions-calls-and-the-audit-trail).
 
 **Add connection**, at the top of the sidebar, asks what kind of connection it is, then which vault
@@ -96,20 +96,16 @@ without the password confirmation. A DNS record that moved, or a vault item that
 since the connection was saved, shows up there before an agent's call fails on it. Neither check
 connects to the destination or reads a secret.
 
-### Confirmation is on for a new target
+### Who approves a call
 
-**Ask a human to confirm every non-read call** starts on for every new target, whatever the
-connector. While it is on, a call that would change something answers the agent's client with an
-elicitation prompt, and runs only once a human ticks the box; see
-[Confirmation](tools-and-scopes.md#confirmation). If you turn it off on a target whose policy
-allows anything but a read, its page carries a standing note saying so, and every such call
-appears in **Unexpected writes**.
-
-The confirmation needs a client on MCP protocol revision `2026-07-28`. A client on an older
-revision is refused every non-read call on that target with `confirmation_unavailable`, and no
-fallback is possible — the older wire declares elicitation only during `initialize`, which
-vaultgate's stateless per-request handler never sees. Reads still work. If your agent's client is
-older, use one on `2026-07-28` or turn the confirmation off and review the writes here.
+vaultgate asks no one to approve a call. A granted client whose token holds the scope runs any
+operation the target's policy allows, at once. If you want a person to approve writes, that is the
+agent's client's job, and every client worth using has a place for it: Claude Code, for one, asks
+before it calls a tool unless its permission settings allow the tool, and every actions tool that
+can change something says so in its annotations (`readOnlyHint: false`), which is what such a
+prompt is built on. vaultgate's controls are the grant, the scopes, the policy — which is where to
+narrow a target that must never delete — and the **Writes** review of every call that changed
+something. See [Who approves a call](tools-and-scopes.md#who-approves-a-call).
 
 ## Creating an `http` target
 
@@ -124,18 +120,22 @@ this says: `bw serve` listens on loopback.
 **Destination.** The `base_url`: an `https://` origin with an optional path prefix, no query
 string or fragment (`http://` only on an internal target). Every request path the agent gives is
 appended to it and must stay under it after normalisation. Saving resolves the host and checks
-every address against the private-range rule; it does not connect.
+every address against the private-range rule; it does not connect. An internal API whose
+certificate no public authority signed can name its own trust instead of the system store — a
+certificate fingerprint or a private certificate authority: see
+[A destination with its own certificate](http-targets.md#a-destination-with-its-own-certificate).
 
 **Credential mapping.** The vault item, chosen before the form (see [The Connections pages](#the-connections-pages)), and
 how the secret is injected:
 
-| Mode     | What is sent                                                                              | Fields                                                                                                                                                                         |
-| -------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bearer` | `Authorization: Bearer <value>`                                                           | the secret field                                                                                                                                                               |
-| `basic`  | `Authorization: Basic base64(username:value)`                                             | the secret field; the username field (`login.username` unless said otherwise)                                                                                                  |
-| `header` | `<name>: <prefix><value>`                                                                 | the secret field, the header name, an optional prefix                                                                                                                          |
-| `query`  | `<name>=<url-encoded value>` appended to the query string, after the agent's own query    | the secret field, the parameter name, an optional prefix; the policy must allow query credentials                                                                              |
-| `graph`  | A Microsoft Graph access token obtained server-side (client credentials or refresh token) | tenant id, application id, grant, scope, the client secret field and, for the refresh grant, the refresh token field (see [Microsoft Graph targets](#microsoft-graph-targets)) |
+| Mode     | What is sent                                                                                                                           | Fields                                                                                                                                                                                                                  |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bearer` | `Authorization: Bearer <value>`                                                                                                        | the secret field                                                                                                                                                                                                        |
+| `basic`  | `Authorization: Basic base64(username:value)`                                                                                          | the secret field; the username field (`login.username` unless said otherwise)                                                                                                                                           |
+| `header` | `<name>: <prefix><value>`                                                                                                              | the secret field, the header name, an optional prefix                                                                                                                                                                   |
+| `query`  | `<name>=<url-encoded value>` appended to the query string, after the agent's own query                                                 | the secret field, the parameter name, an optional prefix; the policy must allow query credentials                                                                                                                       |
+| `graph`  | A Microsoft Graph access token obtained server-side (client credentials or refresh token)                                              | tenant id, application id, grant, scope, the client secret field and, for the refresh grant, the refresh token field (see [Microsoft Graph targets](http-targets.md#microsoft-graph-targets))                           |
+| `oauth2` | `<name>: <prefix><token>`, a token obtained server-side from any OAuth 2.0 token endpoint (`Authorization: Bearer <token>` by default) | the token endpoint, client id and client authentication, grant, optional scope, the client secret field and, for the refresh grant, the refresh token field (see [OAuth 2.0 targets](http-targets.md#oauth-20-targets)) |
 
 Each field is picked from the chosen item's own fields, a secret one
 by its name with "secret" beside it and never its value. If the item cannot be read, the form falls back to typing a `get_secret` selector: `password`, `totp`, `notes`, `custom.<name>` for a hidden custom field, `card.number`, `card.code`, `identity.<field>` or `sshKey.privateKey`. Saving checks that the item exists and carries every mapped field (through the vault's metadata; no secret is read), and the target's page then shows the item's name beside its id.
@@ -162,59 +162,16 @@ stays the only secret store.
 - The common limits every connector shares: **timeout** (default 30 s, at most 300 s),
   **maximum output** (default 256 KiB, at most 1 MiB; longer output is truncated) and **calls per
   minute** (default 60, at most 600).
-- **Ask a human to confirm every non-read call**: on for every new target. A non-read call then
-  asks the client for a confirmation through MCP elicitation before the credential is fetched; a
-  client that cannot elicit is refused such calls. Untick it only for a target whose writes you
-  are content to delegate to whichever client holds a grant.
 
 A rejected save comes back with every problem listed and the values you typed.
 
-## Microsoft Graph targets
+## Tokens, private certificates and worked examples
 
-The `graph` credential mode makes vaultgate obtain the Microsoft Graph access token itself, so
-the agent never sees the client secret, the refresh token or the access token — it only ever
-calls `http_request` on a target whose `base_url` is `https://graph.microsoft.com` (a path
-prefix such as `/v1.0` is allowed, and then every `path` the agent gives is relative to it).
-
-**In Entra ID.** Register an application, note its **Directory (tenant) ID** and **Application
-(client) ID**, and create a client secret. Then choose the grant:
-
-- **Client credentials** — the application acts as itself. Give it _application_ permissions
-  (for example `User.Read.All`) and grant admin consent. The scope stays
-  `https://graph.microsoft.com/.default`, which means "every application permission this app has
-  consented to"; Microsoft rejects any other scope for this grant.
-- **Refresh token** — the application acts as one signed-in user. Give it the _delegated_
-  permissions you need, add `offline_access`, and obtain a refresh token once through an
-  interactive sign-in of that user (the authorization-code flow, outside vaultgate). The scope is
-  then the delegated scopes you want on each token, space separated, for example
-  `https://graph.microsoft.com/User.Read offline_access`.
-
-**In the vault.** Put the client secret in a field of one item — a hidden custom field is the
-natural home — and, for the refresh-token grant, put the refresh token in a second hidden custom
-field of the same item. Map them as **Graph client secret field** (`custom.<name>`) and **Graph
-refresh token field**.
-
-**What happens on a call.** Before the request, vaultgate posts the grant to
-`https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token` through the same pinned transport
-the request uses: the host is resolved and checked against the private-range rule like any other
-destination. The access token is held in process memory only, keyed by the target and its
-revision, until sixty seconds before it expires; it is never stored and never logged, and it is
-redacted from every result as `[redacted:graph.access_token]`. Editing the target retires the
-cached token. A `401` from Graph discards it and the request is retried once with a fresh one; a
-second `401` is returned as the result, like any other status.
-
-**Rotation.** Microsoft rotates refresh tokens: when the token endpoint returns a new one,
-vaultgate writes it back into the mapped vault field **before** it makes the Graph request and
-records an `actions.credential_rotated` event naming the target, the item and the field (never
-the value). If that write-back fails the call fails with `credential_rotation_failed` rather
-than proceeding, so you learn while the old token still works — check that the vault is unlocked
-and that the mapped field is one vaultgate can write (a custom field, the login password or the
-notes).
-
-**Errors.** `authentication_failed` means the token endpoint rejected the credential
-(`invalid_client`: the secret is wrong or expired; `invalid_grant`: the refresh token is spent,
-revoked or for another tenant); the OAuth error code is in `detail.error` and the call history
-carries it too. Any other answer from the token endpoint is `upstream_error` with its status.
+Two things some APIs need have a guide of their own, [HTTP targets](http-targets.md): a
+destination whose certificate no public authority signed, with Proxmox VE worked through, and a
+token vaultgate obtains itself from an identity provider — Microsoft Graph with the `graph` mode,
+any other OAuth 2.0 token endpoint with `oauth2` — with Power BI, Microsoft Fabric, Azure Resource
+Manager, Zoho Books, HubSpot and Xero worked through.
 
 A target's vault item must be one vaultgate has already synced. The vault is synced on the
 interval `VAULTGATE_BW_SYNC_INTERVAL` sets (15 minutes by default), so an item created in the
@@ -253,10 +210,9 @@ What vaultgate does with it, in order:
    is actually built is checked against the base URL as well, so a protocol-relative path can
    never move the request to another host.
 2. **Read or write.** `GET`, `HEAD` and `OPTIONS` are read calls; every other method is a
-   non-read call and, on a target that asks a human to confirm, waits for the confirmation
-   before the credential is fetched.
-3. **The credential, from the vault, for this call only.** Fetched after the policy decision
-   and the confirmation, placed in its injection point and zeroed when the call ends.
+   non-read call, listed under **Writes** once it has run.
+3. **The credential, from the vault, for this call only.** Fetched after the policy decision,
+   placed in its injection point and zeroed when the call ends.
 4. **One pinned connection.** The base URL's host is resolved once, every address checked
    against the private-range rule, and the request goes to that address with the host name kept
    for TLS (SNI and certificate verification against the system store; there is no way to skip
@@ -353,8 +309,9 @@ Two more fields matter only to `sql_execute`:
   `DELETE FROM sessions WHERE *` admits any single-line delete from that table. An empty list
   means no statement restriction, and the classification and the login are then the controls.
 
-**Ask a human to confirm every non-read call** is on for every new target and is what makes
-`sql_execute` safe to grant at all; see "Calling a `sql` target" below.
+What makes `sql_execute` safe to grant is the login below, the write classes and the statement
+allowlist; whether a person approves each statement is up to the agent's client
+([Who approves a call](#who-approves-a-call)).
 
 ### The dedicated login
 
@@ -506,7 +463,7 @@ target policy includes the `write` operation calls `sql_execute`:
 }
 ```
 
-Everything in "Calling a `sql` target" applies, with four differences:
+Everything in "Calling a `sql` target" applies, with three differences:
 
 1. **The classification must be a write.** The statement's first keyword must be `INSERT`,
    `UPDATE`, `DELETE` or `MERGE` (`dml`), or — only when **Allowed write classes** includes
@@ -516,23 +473,13 @@ Everything in "Calling a `sql` target" applies, with four differences:
    talked into doing the other's work, whatever scopes the token holds.
 2. **Then the statement allowlist**, if the target carries one: a statement outside it is
    `policy_denied` with `detail.reason: "statement_pattern"`.
-3. **A human confirms it**, unless you untick **Ask a human to confirm every non-read call**.
-   The agent's client shows the target, the destination (host, port and database only) and the
-   statement — every line of it quoted with `>`, and, when it is longer than 1 KiB, its head and
-   its tail with an unquoted line saying how much is missing and the SHA-256 of the whole — and
-   asks for one tick. The confirmation lasts two minutes, is bound to this call's
-   exact arguments and to this target at this revision, and cannot be used twice: editing the
-   target, changing a parameter, retrying with another token or answering late all fail
-   (`confirmation_invalid`, `confirmation_expired`, `confirmation_reused`). A client that cannot
-   elicit is refused with `confirmation_unavailable` before the vault is touched — vaultgate
-   never downgrades a confirmed target to an unconfirmed one.
-4. **It runs in its own transaction**, committed when the statement succeeds and rolled back on
+3. **It runs in its own transaction**, committed when the statement succeeds and rolled back on
    any error; if the policy timeout elapses the connection is dropped, which rolls it back too.
    The result is `rows_affected`, the rows the statement returned through `RETURNING` or
    `OUTPUT` (empty when it returned none) and `duration_ms`.
 
-The statement the agent ran is kept in the call history, scrubbed, whether it was confirmed or
-not, so an unexpected write can be read back on the target's page.
+The statement the agent ran is kept in the call history, scrubbed, so every write can be read
+back on the target's page and under **Writes**.
 
 ## Creating an `ssh` target
 
@@ -557,7 +504,7 @@ comment at the end. `ssh-keygen -lf` prints the same key as a fingerprint
 (`SHA256:` followed by a base64 digest), and the field takes that form too. The safest source is the server itself:
 `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, read over your existing administrative
 access, rather than `ssh-keyscan` from a host that may be answered by somebody else. Rotating the
-server's key means editing the target, which bumps its revision and voids any open confirmation.
+server's key means editing the target, which bumps its revision.
 
 vaultgate offers the library's modern algorithms with `ssh-rsa` (the SHA-1 signature algorithm)
 removed, so a server that can only do `ssh-rsa` cannot be reached; `rsa-sha2-256` and
@@ -640,7 +587,7 @@ so turning a target into a shell takes both a deployment change and an operator 
 target carries a standing warning on its page, is reported to agents as `unrestricted: true`, and
 has the full command of every call written to the audit trail. Turning the switch off later does
 not quietly leave it working: every call is refused with `policy_denied` and agents stop seeing
-the target at all. Leave `confirm_writes` on for these, so each call needs a human's approval.
+the target at all. Have the agent's client ask a person before each call to such a target.
 
 ## Calling an `ssh` target
 
@@ -738,8 +685,8 @@ openssl s_client -connect build-agent.example.com:5986 </dev/null 2>/dev/null |
 ```
 
 Paste the 64 hexadecimal digits into **Certificate fingerprint**, with or without the colons, in
-either case. Renewing the certificate means editing the target, which bumps its revision and voids
-any open confirmation; that is the cost of option 1 over option 2.
+either case. Renewing the certificate means editing the target, which bumps its revision; that is
+the cost of option 1 over option 2.
 
 ### The plain listener on 5985
 
@@ -945,21 +892,17 @@ starts with none. A grant never widens a token: the client still needs the conne
 
 The connection's page shows its open sessions (browser sessions, a later milestone), with **Close
 sessions** under **Manage**, and the last 50 calls with their time, agent, tool, operation,
-classification, outcome, confirmation and output size. **Whole call history** above that table
+classification, outcome and output size. **Whole call history** above that table
 pages back through the rest, 50 at a time, newest first, following **Older calls** until the
-trail ends. Results are never stored; the arguments are, scrubbed, so an unexpected write can be
-read back.
+trail ends. Results are never stored; the arguments are, scrubbed, so a write can be read back.
 
-**Unexpected writes**, linked from the Activity page and from the Connections page when there are some, is the same trail across every target,
-narrowed to the calls that matter when something has gone wrong: every call that was not a read
-and that no human accepted through a confirmation, newest first, with the time, the target, the
-client, the tool, the classification, the outcome and an excerpt of the arguments; an excerpt
-that was cut at the 4 KiB limit says so and carries the SHA-256 of the whole, so a long statement
-can still be identified. A target that
-asks for confirmation on every non-read call appears here only when one was declined, cancelled,
-expired or refused; a target with the confirmation off appears here for every write it makes,
-which is the point. The rows of a deleted target stay (the audit trail outlives the target) and
-name it without a link.
+**Writes**, linked from the Activity page, is the same trail across every target, narrowed to
+the calls that changed something or tried to: every call that was not a read, newest first, with
+the time, the target, the client, the tool, the classification, the outcome and an excerpt of the
+arguments; an excerpt that was cut at the 4 KiB limit says so and carries the SHA-256 of the
+whole, so a long statement can still be identified. vaultgate asks no one to approve a call, so
+this is where you review what agents changed. The rows of a deleted target stay (the audit trail
+outlives the target) and name it without a link.
 
 Every change to a target records an `actions.*` audit event with the target name, the
 connector, your operator id and, for an edit, the names of the fields that changed (the
@@ -971,8 +914,8 @@ the CLI does the same with `node dist/cli.js audit export --stream actions`.
 
 An agent with an `actions:*` scope calls `actions_list_targets` and sees, for each granted and
 enabled target of an enabled connector whose runtime is loaded, its name, your description, the
-connector, the operations its policy and the token's scopes allow, and whether non-read calls
-require a confirmation. It never sees the destination, a vault item id, a credential field name
+connector and the operations its policy and the token's scopes allow. It never sees the
+destination, a vault item id, a credential field name
 or a policy pattern, and no tool ever returns an injected value: every result, error and audit
 row is scrubbed of the value and its encoded forms before it leaves the engine.
 

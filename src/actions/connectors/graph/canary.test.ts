@@ -20,7 +20,7 @@ import { echoResponse, harnessOver, surfaces } from '../../../test-support/http-
 import { CANARY } from '../../../test-support/vault-fixture.ts';
 import { scrubVariants } from '../../scrub.ts';
 
-import { ACCESS_TOKEN_FIELD } from './adapter.ts';
+import { GRAPH_ACCESS_TOKEN_FIELD as ACCESS_TOKEN_FIELD } from './exchange.ts';
 
 const REFRESH_FIELD = 'custom.API key';
 

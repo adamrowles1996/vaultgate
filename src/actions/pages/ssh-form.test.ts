@@ -37,7 +37,6 @@ describe('the ssh form', () => {
       'policy.timeout_ms',
       'policy.max_output_bytes',
       'policy.rate_limit_per_minute',
-      'policy.confirm_writes',
     ]);
   });
 

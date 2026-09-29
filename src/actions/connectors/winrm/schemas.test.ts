@@ -157,7 +157,7 @@ describe('the winrm connector schemas', () => {
     ]);
   });
 
-  it('ACT-43 summarises the destination as the login, the host and the shell, never a credential', () => {
+  it('ACT-5 summarises the destination as the login, the host and the shell, never a credential', () => {
     const parsed = winrmDestinationSchema.parse(destination());
     expect(winrmSchemas.summariseDestination(parsed)).toBe(
       'vaultgate@win.example.com:5986 (powershell)',
