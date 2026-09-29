@@ -24,9 +24,9 @@
   addresses are refused always, whatever `internal` says: `bw serve` listens on loopback and an
   `http` target reaching it would be a path from a token to the whole vault.
 - **ACT-57** TLS is required unless the destination allows plain transport under `internal: true`
-  (section 14), and certificate verification uses the system store or the pin the destination
-  document provides. There is no "ignore certificate errors" option; a failed verification is
-  `tls_error`.
+  (section 14), and certificate verification uses the system store, or the pin or the private
+  certificate authority the destination document provides. There is no "ignore certificate
+  errors" option; a failed verification is `tls_error`.
 - **ACT-58** Connections are opened after the policy decision and closed at the end of the call;
   the engine keeps no connection, agent or shell across calls. The one exception is a browser
   session (14.7), which is bounded, bound to one client and closed by every revocation path. A

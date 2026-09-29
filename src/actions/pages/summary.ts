@@ -51,6 +51,10 @@ const commandPolicy = z.object({
 const httpPolicy = z.object({ allowed_methods: z.array(z.string()) });
 const codePolicy = z.object({ content: z.array(z.string()), allow_read: z.boolean() });
 const codeDestination = z.object({ ref: z.string().optional() });
+const httpTrust = z.object({
+  certificate_sha256: z.string().optional(),
+  ca_pem: z.string().optional(),
+});
 
 /**
 ACT-119: a public repository read without a token signs in with nothing.
@@ -107,6 +111,20 @@ export function allowsOf(connector: TargetSummary['connector'], policy: unknown)
 }
 
 /**
+ACT-121, ACT-122: what an `http` destination's certificate is verified against in place of the system store.
+*/
+function trustOf(target: TargetSummary): string {
+  const trust = httpTrust.safeParse(target.destination);
+  if (target.connector !== 'http' || !trust.success) {
+    return '';
+  }
+  if (trust.data.certificate_sha256 !== undefined) {
+    return ' · pinned certificate';
+  }
+  return trust.data.ca_pem === undefined ? '' : ' · private certificate authority';
+}
+
+/**
 Where the destination is: the network and the transport, or for a repository which ref it follows.
 */
 function addressDetailOf(target: TargetSummary, isEncrypted: boolean): string {
@@ -115,7 +133,7 @@ function addressDetailOf(target: TargetSummary, isEncrypted: boolean): string {
     return code.data.ref === undefined ? 'GitHub · default branch' : 'GitHub · configured ref';
   }
   const network = target.internal ? 'internal' : 'public';
-  return `${network} · ${isEncrypted ? 'encrypted' : 'plain transport'}`;
+  return `${network} · ${isEncrypted ? 'encrypted' : 'plain transport'}${trustOf(target)}`;
 }
 
 function stateOf(target: TargetSummary): ComputerState {

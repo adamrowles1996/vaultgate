@@ -92,7 +92,7 @@ statement separator hide.
 
 | Document      | Fields                                                                                                                                                                                                                                                                                                                                                                                                            |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `destination` | `base_url` (`https://` origin plus optional path prefix, no query or fragment; `http://` only when `internal: true`).                                                                                                                                                                                                                                                                                             |
+| `destination` | `base_url` (`https://` origin plus optional path prefix, no query or fragment; `http://` only when `internal: true`); `certificate_sha256` (optional pin: the SHA-256 of the DER leaf certificate, ACT-121); `ca_pem` (optional private certificate authority: one or more PEM certificates, ACT-122). Either replaces the system store; they are mutually exclusive and need an `https://` `base_url`.           |
 | `credential`  | `mode` (`bearer` \| `basic` \| `header` \| `query` \| `graph`); `field` (a `get_secret` field selector such as `password` or `custom.api-key`); for `basic` also `username_from` (`login.username` or a field selector); for `header` the header `name`; for `query` the parameter `name`; for `graph` the adapter document of 14.3. `header` and `query` MAY carry a `prefix` (for example `Token` and a space). |
 | `policy`      | Common fields; `allowed_methods` (default `["GET","HEAD"]`); `allowed_paths` (one or more patterns, ACT-34, matched against the path and query relative to `base_url`); `allowed_request_headers` (names; default `accept`, `content-type`, `if-none-match`); `response_headers`; `max_body_bytes` (default 256 KiB, max 4 MiB); `follow_redirects` (default `false`); `allow_query_credentials`.                 |
 
@@ -103,13 +103,51 @@ statement separator hide.
   only when `policy` sets `allow_query_credentials: true`, because query strings reach proxy and
   server logs). `graph` is 14.3.
 - **ACT-80** Requests go through the pinned transport of `src/net/pinned-https.ts` (OAUTH-8),
-  which has two schemes: `https:` verifies the certificate against the system store with no
-  insecure option (ACT-57), and plain `node:http` serves an `http://` `base_url`, which only an
-  `internal` target may have; both connect to the pinned address with the host name kept for
-  SNI, the certificate check and `Host`. Every request carries `User-Agent: vaultgate/<version>`
-  (the `package.json` version), the policy timeout as its `AbortSignal`, and its response body
-  is read up to `max_output_bytes` plus the guard band of ACT-52, after which the stream is
-  cancelled.
+  which has two schemes: `https:` verifies the certificate against the system store, or in its
+  place against the destination's pin (ACT-121) or private certificate authority (ACT-122), with
+  no insecure option either way (ACT-57), and plain `node:http` serves an `http://` `base_url`,
+  which only an `internal` target may have; both connect to the pinned address with the host
+  kept for SNI (a name only: an IP literal is never sent as SNI), the certificate check and
+  `Host`. Every request carries `User-Agent: vaultgate/<version>` (the `package.json` version),
+  the policy timeout as its `AbortSignal`, and its response body is read up to
+  `max_output_bytes` plus the guard band of ACT-52, after which the stream is cancelled.
+
+An internal API often presents a certificate that no public authority signed: a Proxmox VE
+cluster, for one, signs each node's certificate with the cluster's own authority and names the
+node in it, which need not be the address it is reached at. The system store cannot verify such
+a certificate, so the destination may name the trust to use in its place — the one certificate
+it presents, or the authority that signs it.
+
+- **ACT-121** `destination.certificate_sha256` pins the destination's leaf certificate: the
+  SHA-256 of its DER encoding as `openssl` and `Get-FileHash` print it — 64 hexadecimal digits,
+  with or without colons, in either case — read in one form, lower-case without separators,
+  through the schema the `winrm` pin uses (14.6). As there, the pin **replaces** the system store
+  rather than adding to it (ACT-57): the socket is held corked until the certificate the
+  destination presented matches, so no byte of the request, least of all the credential,
+  reaches a host that fails it, and a mismatch is `tls_error`. It applies to every request sent
+  to the destination, the first and each redirect hop ACT-22 follows alike. It needs an
+  `https://` `base_url`; a pin on an `http://` one would verify nothing and is refused at save. A
+  renewed certificate needs a new pin.
+- **ACT-122** `destination.ca_pem` names a private certificate authority: one or more PEM
+  certificates, each of which must parse, checked at save as `sql`'s `ca_pem` is (a PEM pasted
+  without its line breaks is refused). It **replaces** the system store for requests to the
+  destination: Node verifies the chain against those certificates alone, with
+  `rejectUnauthorized` on and no way to turn it off, and checks the certificate's identity
+  against `base_url`'s host. A host name is sent as SNI and matched against the names the
+  certificate carries; an IP literal is never sent as SNI — SNI has no syntax for an address,
+  and Node refuses one — and is matched against the certificate's IP subject-alternative names
+  instead. A chain or identity failure is `tls_error`, with the error code as its only `detail`
+  (ACT-74). Like the pin it applies to the first request and every redirect hop and needs an
+  `https://` `base_url`, and it is mutually exclusive with `certificate_sha256`: a destination
+  that names both is refused at save. Unlike the pin it survives the renewal of a certificate
+  the same authority signs, but `base_url`'s host must be a name or address that certificate
+  carries.
+- **ACT-123** Only requests to `base_url`'s origin carry the destination's pin or certificate
+  authority: the request the agent asked for and the redirect hops ACT-22 keeps under
+  `base_url`. A token endpoint exchange — the `graph` adapter's to `login.microsoftonline.com`
+  (ACT-82), or any other a credential mode performs — never carries either and is verified
+  against the system store: the destination's private trust vouches for the destination, not for
+  the identity provider that issues its tokens.
 
 ## 14.3 `graph` credential adapter
 

@@ -1,7 +1,9 @@
 /**
  * The `http` connector's form (spec §14.2, §14.3): one descriptor per field
  * of its three documents, in the order the operator reads them, including
- * the `graph` adapter's (ACT-81), whose exchange vaultgate performs itself.
+ * the `graph` adapter's (ACT-81), whose exchange vaultgate performs itself,
+ * and the destination's private trust: a certificate pin (ACT-121) or a
+ * private certificate authority in the multi-line box a PEM needs (ACT-122).
  */
 import { HTTP_METHODS } from '../connectors/http/schemas.ts';
 
@@ -30,6 +32,28 @@ const destination: readonly FieldDescriptor[] = [
     help:
       'An https:// origin with an optional path prefix, no query or fragment; http:// only on an ' +
       'internal connection. Every request path is appended to it and must stay under it.',
+  },
+  {
+    document: 'destination',
+    name: 'certificate_sha256',
+    label: 'Certificate fingerprint (SHA-256)',
+    kind: 'text',
+    help:
+      'Optional, https:// only. Leave this and the authority below empty to verify the API ' +
+      'against the system certificate store; give the SHA-256 of its certificate — 64 ' +
+      'hexadecimal digits, colons optional — to pin that one certificate instead. A renewed ' +
+      'certificate needs a new fingerprint.',
+  },
+  {
+    document: 'destination',
+    name: 'ca_pem',
+    label: 'Certificate authority (PEM)',
+    kind: 'text',
+    multiline: true,
+    help:
+      'Optional, https:// only, and not together with a fingerprint. The PEM of the private ' +
+      'authority that signs the API’s certificate, trusted in place of the system store; the base ' +
+      'URL’s host must be a name or address that certificate carries.',
   },
 ];
 

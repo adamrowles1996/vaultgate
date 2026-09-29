@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import { caller, createHttpTarget, httpInvocation } from '../../test-support/actions-fixtures.ts';
+import {
+  caller,
+  createHttpTarget,
+  httpInvocation,
+  OPERATOR_ID,
+  targetInput,
+} from '../../test-support/actions-fixtures.ts';
 import { createPagesHarness, signedInOperator } from '../../test-support/actions-pages.ts';
 import { fixtureTargetRow } from '../../test-support/actions-store-fixtures.ts';
 import { compact, pageText } from '../../test-support/identity-app.ts';
+import { unwrapOk } from '../../test-support/result.ts';
 import { createSqlTarget } from '../../test-support/sql-connector.ts';
 import { createSshTarget } from '../../test-support/ssh-connector.ts';
+import { TEST_CERTIFICATE_PEM } from '../../test-support/test-certificate.ts';
 
 import { allowsOf, summarise } from './summary.ts';
 
@@ -55,6 +63,23 @@ describe('what a computer allows, in a few words', () => {
       fields: [],
       state: 'invalid',
     });
+  });
+});
+
+describe('what an http destination’s certificate is verified against', () => {
+  it('ACT-5 ACT-121 ACT-122 says when the destination pins its certificate or trusts a private authority', async () => {
+    const { actions } = createPagesHarness();
+    const trusting = async (name: string, trust: Readonly<Record<string, string>>) => {
+      const destination = { base_url: 'https://pve.example.internal:8006/api2/json', ...trust };
+      const input = { ...targetInput({ name }), destination };
+      return summarise(unwrapOk(await actions.engine.targets.create(input, OPERATOR_ID)));
+    };
+    const pinned = await trusting('pinned', { certificate_sha256: 'ab'.repeat(32) });
+    const authority = await trusting('authority', { ca_pem: TEST_CERTIFICATE_PEM });
+    const store = await trusting('store', {});
+    expect(pinned.addressDetail).toBe('public · encrypted · pinned certificate');
+    expect(authority.addressDetail).toBe('public · encrypted · private certificate authority');
+    expect(store.addressDetail).toBe('public · encrypted');
   });
 });
 

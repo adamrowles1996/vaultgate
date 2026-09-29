@@ -82,6 +82,8 @@ describe('valuesFromDocuments', () => {
     });
     expect(Object.fromEntries(values)).toStrictEqual({
       'destination.base_url': 'https://api.example.com',
+      'destination.certificate_sha256': '',
+      'destination.ca_pem': '',
       'credential.mode': 'header',
       'credential.name': 'X-Key',
       'credential.prefix': '7',
