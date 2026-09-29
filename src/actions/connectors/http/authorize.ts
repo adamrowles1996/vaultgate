@@ -28,11 +28,12 @@ const FORBIDDEN_HEADERS: ReadonlySet<string> = new Set([
 ]);
 
 /**
-The header a credential mapping occupies, lower-cased; `query` occupies none.
+The header a credential mapping occupies, lower-cased; `query` occupies none (ACT-22, ACT-128).
 */
 export function injectedHeaderName(credential: HttpCredential): string | undefined {
   switch (credential.mode) {
-    case 'header': {
+    case 'header':
+    case 'oauth2': {
       return credential.name;
     }
     case 'query': {

@@ -112,7 +112,10 @@ export interface EchoConnector extends Connector<
 
 function injectedText(context: EchoContext): string {
   const credential = context.credential;
-  const field = credential.mode === 'graph' ? credential.secret_field : credential.field;
+  const field =
+    credential.mode === 'graph' || credential.mode === 'oauth2'
+      ? credential.secret_field
+      : credential.field;
   return context.injected.value(field)?.toString('utf8') ?? '';
 }
 
@@ -134,7 +137,8 @@ function injection(credential: HttpCredential, value: string, username = ''): In
       const pair = Buffer.from(`${username}:${value}`).toString('base64');
       return { header: ['authorization', `Basic ${pair}`] };
     }
-    case 'header': {
+    case 'header':
+    case 'oauth2': {
       return { header: [credential.name, `${credential.prefix ?? ''}${value}`] };
     }
     case 'query': {
@@ -254,10 +258,7 @@ export function createEchoConnector(overrides: Partial<EchoBehaviour> = {}): Ech
     tools: [echoTool],
     capabilities: (_destination, policy) => capabilities(policy, behaviour.advertise),
     authorize,
-    describe: (_request, operation) => ({
-      summary: `${operation.method} ${operation.path}`,
-      classification: operation.method,
-    }),
+    describe: (_request, operation) => ({ classification: operation.method }),
     run(context, operation): Promise<Result<ConnectorOutput, ActionError>> {
       contexts.push(context);
       switch (behaviour.mode) {

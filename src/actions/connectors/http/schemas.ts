@@ -1,21 +1,25 @@
 /**
- * The `http` connector's target documents (spec §14.2) with the `graph`
- * credential adapter document of §14.3 (ACT-81) as a credential mode. The
- * schemas are the static half every build carries so the account page can
- * validate and edit targets; the runtime is `./index.ts` and, for the graph
- * mode, `../graph/adapter.ts`. The destination may name a private trust in
- * place of the system store: a leaf certificate pin (ACT-121) or a private
- * certificate authority (ACT-122), one or the other and over TLS only.
+ * The `http` connector's target documents (spec §14.2) with the adapter
+ * documents of `graph` (§14.3, ACT-81) and `oauth2` (§14.3a, ACT-124) as
+ * credential modes. The schemas are the static half every build carries so
+ * the account page can validate and edit targets; the runtime is
+ * `./index.ts` and, for the two adapter modes, `../graph/adapter.ts`. The
+ * destination may name a private trust in place of the system store: a leaf
+ * certificate pin (ACT-121) or a private certificate authority (ACT-122), one
+ * or the other and over TLS only.
  */
 import { z } from 'zod';
 
 import { commonPolicySchema, httpSubject } from '../../policy.ts';
 import { certificateSha256Schema, isPemCertificates, NOT_PEM_PROBLEM } from '../certificates.ts';
+import { graphCredentialSchema, graphDestinationProblems } from '../graph/document.ts';
 import {
-  graphCredentialFields,
-  graphCredentialSchema,
-  graphDestinationProblems,
-} from '../graph/document.ts';
+  adapterCredentialFields,
+  oauth2CredentialSchema,
+  oauth2TokenEndpoint,
+} from '../graph/oauth2-document.ts';
+
+import { headerNameSchema } from './header-name.ts';
 
 import type { ConnectorSchemas, CredentialField, Endpoint } from '../connector.ts';
 
@@ -28,14 +32,6 @@ export const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTION
 
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const DEFAULT_BODY_BYTES = 256 * 1024;
-
-/**
-RFC 9110 token characters; header names are compared lower-cased (ACT-34).
-*/
-const headerNameSchema = z
-  .string()
-  .regex(/^[\w!#$%&'*+.^`|~-]+$/, 'must be an HTTP header name')
-  .transform((name) => name.toLowerCase());
 
 function baseUrlProblem(text: string): string | undefined {
   let url: URL;
@@ -90,6 +86,7 @@ export const httpCredentialSchema = z.discriminatedUnion('mode', [
     prefix: z.string().optional(),
   }),
   graphCredentialSchema,
+  oauth2CredentialSchema,
 ]);
 
 export const httpPolicySchema = commonPolicySchema.extend({
@@ -124,8 +121,9 @@ function credentialFields(credential: HttpCredential): readonly CredentialField[
     case 'basic': {
       return [field(credential.username_from, 'username'), field(credential.field)];
     }
-    case 'graph': {
-      return graphCredentialFields(credential);
+    case 'graph':
+    case 'oauth2': {
+      return adapterCredentialFields(credential);
     }
     default: {
       return [field(credential.field)];
@@ -162,6 +160,13 @@ function trustProblems(destination: HttpDestination): readonly string[] {
 }
 
 /**
+ACT-124: the `oauth2` token endpoint, which a save checks by the ACT-3 rule but a call never pins.
+*/
+function credentialEndpoints(credential: HttpCredential): readonly Endpoint[] {
+  return credential.mode === 'oauth2' ? [oauth2TokenEndpoint(credential)] : [];
+}
+
+/**
  * ACT-35: subjects are matched after normalisation, so a pattern is written
  * in normalised form too, or it could never match; one that climbs above
  * `base_url` could never be reached.
@@ -182,6 +187,7 @@ export const httpSchemas: ConnectorSchemas<HttpDestination, HttpCredential, Http
   credentialSchema: httpCredentialSchema,
   policySchema: httpPolicySchema,
   endpoints,
+  credentialEndpoints,
   credentialFields,
   saveProblems({ destination, credential, policy }) {
     const problems: string[] = [...trustProblems(destination)];

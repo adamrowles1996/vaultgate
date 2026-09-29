@@ -69,6 +69,9 @@ function readScalar(field: FieldDescriptor, raw: string): unknown {
     case 'boolean': {
       return raw === 'on';
     }
+    case 'text': {
+      return text !== undefined && field.verbatim === true ? raw : text;
+    }
     default: {
       return text;
     }

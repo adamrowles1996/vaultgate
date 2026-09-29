@@ -2,8 +2,9 @@
  * The request an `http_request` becomes (ACT-20, ACT-79, ACT-80): the URL
  * under `base_url`, the agent's headers with vaultgate's `User-Agent`, the
  * body, and the credential in its injection point (`bearer`, `basic`,
- * `header` or `query`). Built once per hop; the credential is applied again
- * only to a hop that stays under `base_url` (ACT-22).
+ * `header` or `query`, or an adapter's access token, ACT-128). Built once
+ * per hop; the credential is applied again only to a hop that stays under
+ * `base_url` (ACT-22).
  */
 import { fail, ok, type Result } from '../../../result.ts';
 import { ActionError } from '../../errors.ts';
@@ -13,6 +14,7 @@ import type { HttpOperation } from './operation.ts';
 import type { HttpCredential } from './schemas.ts';
 import type { PinnedMethod, PinnedRequest } from '../../../net/pinned-https.ts';
 import type { InjectedValues } from '../../scrub.ts';
+import type { TokenCredential, TokenHeader } from '../graph/exchange.ts';
 
 export interface EncodedBody {
   readonly bytes: Buffer;
@@ -30,9 +32,16 @@ export interface OutgoingRequest {
 }
 
 /**
-A credential whose value the mapping names a vault field for; every mode but `graph`.
+A credential whose value the mapping names a vault field for; every mode but `graph` and `oauth2`.
 */
-export type MappedCredential = Exclude<HttpCredential, { mode: 'graph' }>;
+export type MappedCredential = Exclude<HttpCredential, TokenCredential>;
+
+/**
+A credential whose value is an access token the adapter obtains during the run (ACT-82, ACT-125).
+*/
+export function isTokenCredential(credential: HttpCredential): credential is TokenCredential {
+  return credential.mode === 'graph' || credential.mode === 'oauth2';
+}
 
 /**
 Where the credential goes: one header, or one query parameter (ACT-79).
@@ -109,10 +118,17 @@ function basicInjection(
 }
 
 /**
-ACT-79, and the injection point of a `graph` access token once the adapter has one (ACT-82).
+ACT-79: `Authorization: Bearer <value>`.
 */
 export function bearerInjection(value: string): Injection {
   return { kind: 'header', name: 'authorization', value: `Bearer ${value}` };
+}
+
+/**
+ACT-128: an adapter's access token as `<name>: <prefix><token>`; `graph`'s header is `Authorization: Bearer`.
+*/
+export function tokenInjection(header: TokenHeader, token: string): Injection {
+  return { kind: 'header', name: header.name, value: `${header.prefix}${token}` };
 }
 
 function prefixedInjection(
@@ -134,9 +150,9 @@ function prefixedInjection(
 
 /**
  * ACT-79: the value in its injection point, or `credential_unavailable`
- * when the call holds no value for it. The `graph` mode is not here: its
- * value is an access token the adapter obtains during the run (ACT-82), and
- * `run` puts it in `bearerInjection` itself.
+ * when the call holds no value for it. The `graph` and `oauth2` modes are
+ * not here: their value is an access token the adapter obtains during the
+ * run (ACT-82, ACT-125), and `run` puts it in `tokenInjection` itself.
  */
 export function credentialInjection(
   credential: MappedCredential,
