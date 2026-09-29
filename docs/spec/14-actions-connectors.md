@@ -93,7 +93,7 @@ statement separator hide.
 | Document      | Fields                                                                                                                                                                                                                                                                                                                                                                                                            |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `destination` | `base_url` (`https://` origin plus optional path prefix, no query or fragment; `http://` only when `internal: true`).                                                                                                                                                                                                                                                                                             |
-| `credential`  | `mode` (`bearer` \| `basic` \| `header` \| `query` \| `graph`); `field` (a `get_secret` field selector such as `password` or `custom.api-key`); for `basic` also `username_from` (`login.username` or a field selector); for `header` the header `name`; for `query` the parameter `name`; for `graph` the adapter document of 14.3. `header` and `query` MAY carry a `prefix` (for example `Token` and a space). |
+| `credential`  | `mode` (`bearer` \| `basic` \| `header` \| `query` \| `graph` \| `oauth2`); `field` (a `get_secret` selector, such as `custom.api-key`); for `basic` also `username_from` (`login.username` or a field selector); for `header` and `query` the header or parameter `name`; for `graph` and `oauth2` the documents of 14.3 and 14.3a. `header` and `query` MAY carry a `prefix` (for example `Token` and a space). |
 | `policy`      | Common fields; `allowed_methods` (default `["GET","HEAD"]`); `allowed_paths` (one or more patterns, ACT-34, matched against the path and query relative to `base_url`); `allowed_request_headers` (names; default `accept`, `content-type`, `if-none-match`); `response_headers`; `max_body_bytes` (default 256 KiB, max 4 MiB); `follow_redirects` (default `false`); `allow_query_credentials`.                 |
 
 - **ACT-79** Injection modes: `bearer` sets `Authorization: Bearer <value>`; `basic` sets
@@ -101,7 +101,7 @@ statement separator hide.
   appends `<name>=<url-encoded value>` to the query string, after any query the agent gave, with
   `<prefix><value>` encoded by `encodeURIComponent`, one of the ACT-51 scrub variants (allowed
   only when `policy` sets `allow_query_credentials: true`, because query strings reach proxy and
-  server logs). `graph` is 14.3.
+  server logs). `graph` is 14.3 and `oauth2` is 14.3a.
 - **ACT-80** Requests go through the pinned transport of `src/net/pinned-https.ts` (OAUTH-8),
   which has two schemes: `https:` verifies the certificate against the system store with no
   insecure option (ACT-57), and plain `node:http` serves an `http://` `base_url`, which only an
@@ -119,7 +119,7 @@ agent must never see the client secret, the refresh token or the access token.
 
 - **ACT-81** `credential.mode = "graph"` is valid only when `base_url` is on the
   `https://graph.microsoft.com` origin exactly (a path prefix under it, such as `/v1.0`, is
-  allowed; national clouds are another origin and are a post-M15 candidate). The adapter document
+  allowed; a national cloud is another origin, reached with `oauth2`, ACT-130). The adapter document
   holds `tenant_id` (a GUID or a domain name, validated by shape because it is placed in a URL
   path), `client_id` (a GUID), `grant` (`client_credentials` \| `refresh_token`), `scope`
   (default `https://graph.microsoft.com/.default`), `secret_field` (the vault field holding the
@@ -134,10 +134,10 @@ agent must never see the client secret, the refresh token or the access token.
   before its `expires_in`, is never stored, is never logged, and is an injected value for
   scrubbing (ACT-51). A `401` from Graph invalidates the cache and the request is retried once
   with a fresh token; a `401` on that attempt is the result. The token endpoint's own failures
-  map to `authentication_failed` for `invalid_client` and `invalid_grant` (the OAuth error code
-  is the only `detail`; the AADSTS description quotes the request and is not scrub-safe),
-  `connection_failed`, `tls_error` or `timeout` for a transport failure, and `upstream_error`
-  otherwise.
+  map to `authentication_failed` for `invalid_client`, `invalid_grant`, `unauthorized_client`
+  and `invalid_code` (ACT-126: the OAuth error code is the only `detail`; the AADSTS description
+  quotes the request and is not scrub-safe), `connection_failed`, `tls_error` or `timeout` for a
+  transport failure, and `upstream_error` otherwise.
 - **ACT-83** When the token endpoint returns a new `refresh_token` (Microsoft rotates them), the
   adapter writes it back to `refresh_token_field` of the vault item through `VaultClient` and
   records `actions.credential_rotated` (target name, item id, field name; never the value). The
@@ -147,6 +147,80 @@ agent must never see the client secret, the refresh token or the access token.
   fields it can write are the ones `ItemPatch` expresses (a custom field, the login password, the
   notes), and any other selector is `credential_rotation_failed` with `detail.reason`
   `unwritable_field`.
+
+## 14.3a `oauth2` credential adapter
+
+The `graph` adapter generalised to any OAuth 2.0 token endpoint, for the APIs the maintainer's
+agents call besides Graph: Power BI, Microsoft Fabric and Azure Resource Manager (Entra ID client
+credentials), and Zoho Books, HubSpot and Xero (refresh tokens). One token service serves both
+modes, so what 14.3 says of the secrets holds here too: the agent never sees the client secret,
+the refresh token or the access token.
+
+- **ACT-124** `credential.mode = "oauth2"` holds `token_url` (`https://` only — never `http://`,
+  even on an internal target, because the client secret is sent to it — with no query, fragment
+  or userinfo), `grant` (`client_credentials` \| `refresh_token`), `client_id` (a literal, not a
+  secret: 1 to 512 printable ASCII characters, no space), `secret_field` (the vault field holding
+  the client secret), `refresh_token_field` (required for the `refresh_token` grant and refused
+  for `client_credentials`, which never reads it, so the engine never fetches a secret it does
+  not use), `scope` (optional), `client_auth` (`post`, the default, \| `basic`), `name` (the
+  header the token goes in, lower-cased like the `header` mode's, default `authorization`) and
+  `prefix` (default `Bearer` and a space). Unlike `graph` it constrains `base_url` no further than
+  14.2 does. A save checks the document's shape, ACT-4 over `secret_field` and
+  `refresh_token_field`, and ACT-3 over the host of `token_url`, whose problems are filed under
+  the credential mapping; that host is not an endpoint of the destination and a call never pins
+  it (ACT-125). Nothing connects at save.
+- **ACT-125** Before the request the adapter exchanges the grant at `token_url` through the
+  pinned transport, its host resolved and validated by the ACT-55 and ACT-56 rules for the
+  target's `internal` flag each time a token is exchanged, as ACT-82 does for Graph. The body is
+  `application/x-www-form-urlencoded`: `grant_type`, the current `refresh_token` for that grant,
+  and `scope` only when the document sets one. With `client_auth: post` the form also carries
+  `client_id` and `client_secret`; with `basic` the client authenticates as RFC 6749 §2.3.1 says,
+  `Authorization: Basic base64(<client_id>:<client_secret>)` with each half form-urlencoded
+  first, and neither is in the form.
+- **ACT-126** One response rule serves `graph` and `oauth2`. The body is read up to 64 KiB and
+  validated against a schema before a field is read (T33). A 2xx JSON object with a non-empty
+  `access_token` is a grant: `expires_in` is a positive integer or a string of digits and, when
+  absent or null, is taken as 300 s — conservative, so a token whose lifetime vaultgate was not
+  told is served from the cache for four minutes (the 60 s margin of ACT-129) and then exchanged
+  again; `refresh_token` is optional; `token_type` is ignored, because `prefix` decides the
+  scheme. A 2xx body that carries `error` and no `access_token` is a refusal like a non-2xx
+  answer (Zoho Books answers a spent refresh token so); any other 2xx body is `upstream_error`
+  (`reason: invalid_token_response`). A refusal whose `error` is `invalid_client`,
+  `invalid_grant`, `unauthorized_client` or `invalid_code` is `authentication_failed` with
+  `detail.error`; any other is `upstream_error` with `detail.status` and `detail.error`. Only an
+  error code matching `^[A-Za-z0-9_.-]{1,64}$` reaches `detail`, and the status stands alone
+  otherwise; `error_description` never does, because it may quote the request and is not
+  scrub-safe. A transport failure maps as ACT-82 says.
+- **ACT-127** A `refresh_token` in the grant that differs from the one the call holds is written
+  back to `refresh_token_field` as ACT-83 says: through `VaultClient`, **before** the destination
+  request, after it has joined the scrub table, recorded as `actions.credential_rotated`, and a
+  failed write-back fails the call with `credential_rotation_failed`. One equal to the held token
+  writes nothing and records nothing (HubSpot answers with the same token and Zoho Books with
+  none; Xero rotates it). The rule is shared with `graph`, where Microsoft always rotates, so its
+  behaviour is unchanged; a `client_credentials` mapping has no refresh-token field and never
+  writes.
+- **ACT-128** The token is injected as `<name>: <prefix><access_token>` —
+  `Authorization: Bearer <token>` by default, `Authorization: Zoho-oauthtoken <token>` for Zoho —
+  on the request and on every redirect hop that carries the credential again (ACT-22). The header
+  it occupies is refused from the agent's `headers` exactly as the `header` mode's is (ACT-22),
+  and `authorization` is refused whatever `name` says. The access token joins the scrub table as
+  `oauth2.access_token` the moment it is obtained or served from the cache (`graph` keeps
+  `graph.access_token`); the client secret and the refresh tokens are injected values already,
+  and the ACT-53 canary suite covers an `oauth2` target with either client authentication.
+- **ACT-129** The token is cached and retired as ACT-82 says, in the one cache both adapters
+  share: in process memory only, keyed by target id and `revision`, until 60 s before it
+  expires, never stored and never logged; a call served from the cache exchanges and resolves
+  nothing. A `401` from the destination discards the cached token and the request is retried once
+  with a fresh one; a `401` on that attempt is the result.
+- **ACT-130** `graph` remains the Microsoft Graph preset of this adapter: its token URL is
+  `https://login.microsoftonline.com/<tenant_id>/oauth2/v2.0/token`, its client authentication
+  `post`, its header `Authorization: Bearer`, its scope `https://graph.microsoft.com/.default`
+  unless set, and its `base_url` on `https://graph.microsoft.com` (ACT-81). Every other Entra ID
+  resource — Power BI (`https://analysis.windows.net/powerbi/api/.default`), Microsoft Fabric
+  (`https://api.fabric.microsoft.com/.default`), Azure Resource Manager
+  (`https://management.azure.com/.default`) — and the national clouds, with their own sign-in
+  hosts and Graph origins, are reached through `oauth2`: the client-credentials grant against
+  the tenant's token URL on the cloud's sign-in host, with the resource's `/.default` scope.
 
 ## 14.4 `sql`
 
