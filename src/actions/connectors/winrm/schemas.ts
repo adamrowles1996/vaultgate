@@ -10,6 +10,7 @@
  */
 import { z } from 'zod';
 
+import { certificateSha256Schema } from '../certificates.ts';
 import { commandPolicyProblems, commandPolicySchema, type CommandPolicy } from '../command.ts';
 
 import type { ConnectorSchemas, CredentialField, Endpoint } from '../connector.ts';
@@ -24,9 +25,6 @@ export const WINRM_SHELLS = ['powershell', 'cmd'] as const;
  * has deliberately enabled it, and it is accepted only over TLS.
  */
 export const WINRM_AUTH = ['negotiate', 'basic'] as const;
-
-const SHA256_HEX = /^[\da-f]{64}$/u;
-const SEPARATORS = /[\s:]/gu;
 
 /**
 Why the endpoint is refused, or `undefined` when it is acceptable.
@@ -54,26 +52,6 @@ const urlSchema = z.string().superRefine((text, context) => {
   }
 });
 
-/**
- * ACT-57: the SHA-256 of the DER leaf certificate, as `openssl` and
- * `Get-FileHash` print it — with or without the colons, in either case. It is
- * stored in one form so the comparison at connect time is a string equality.
- */
-const certificateSchema = z
-  .string()
-  .transform((text, context) => {
-    const digest = text.replaceAll(SEPARATORS, '').toLowerCase();
-    if (SHA256_HEX.test(digest)) {
-      return digest;
-    }
-    context.addIssue({
-      code: 'custom',
-      message: 'must be a SHA-256 fingerprint: 64 hexadecimal digits, colons optional',
-    });
-    return z.NEVER;
-  })
-  .optional();
-
 export const winrmDestinationSchema = z.strictObject({
   url: urlSchema,
   /**
@@ -82,7 +60,10 @@ export const winrmDestinationSchema = z.strictObject({
   username: z.string().min(1),
   auth: z.enum(WINRM_AUTH).default('negotiate'),
   shell: z.enum(WINRM_SHELLS).default('powershell'),
-  certificate_sha256: certificateSchema,
+  /**
+  ACT-57: the pin of `../certificates.ts`, which the `http` destination shares (ACT-121).
+  */
+  certificate_sha256: certificateSha256Schema.optional(),
 });
 
 export const winrmCredentialSchema = z.strictObject({
