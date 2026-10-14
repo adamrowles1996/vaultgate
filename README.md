@@ -24,8 +24,9 @@ short-lived, scoped, revocable token and nothing else.
 > its sidecar ([guide](docs/guides/code-search.md)). An `http` destination may pin its certificate
 > or trust a private certificate authority, and the `oauth2` credential mode obtains tokens from
 > any OAuth 2.0 token endpoint ([guide](docs/guides/http-targets.md)). vaultgate's own per-call
-> write confirmation is withdrawn: approval belongs to the agent's client. `browser` is M15; see
-> [`docs/PLAN.md`](docs/PLAN.md).
+> write confirmation is withdrawn: approval belongs to the agent's client. The opt-in credential
+> relay serves `bw serve`'s read API to programs on tagged Tailscale nodes
+> ([guide](docs/guides/credential-relay.md)). `browser` is M15; see [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Why
 

@@ -10,6 +10,12 @@ import {
   publicUrlSchema,
   secretKeySchema,
 } from './primitives.ts';
+import {
+  DEFAULT_TAILSCALE_SOCKET,
+  relayIdsSchema,
+  relayListenSchema,
+  relayTagsSchema,
+} from './relay.ts';
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -75,7 +81,38 @@ const baseEnvironmentSchema = z.object({
   VAULTGATE_ACTIONS_ENABLE_CODE: booleanSchema('false'),
   VAULTGATE_ACTIONS_CODE_URL: codeUrlSchema,
   VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND: booleanSchema('false'),
+  // The credential relay (spec §15.2): off unless a listen address is set.
+  VAULTGATE_RELAY_LISTEN: relayListenSchema,
+  VAULTGATE_RELAY_TAGS: relayTagsSchema,
+  VAULTGATE_RELAY_COLLECTIONS: relayIdsSchema,
+  VAULTGATE_RELAY_ITEMS: relayIdsSchema,
+  VAULTGATE_RELAY_TAILSCALE_SOCKET: z.string().startsWith('/').default(DEFAULT_TAILSCALE_SOCKET),
 });
+
+type BaseEnvironment = z.output<typeof baseEnvironmentSchema>;
+
+/**
+RELAY-1: a relay with a listen address needs a tag to admit and something to answer.
+*/
+function relayRules(data: BaseEnvironment, context: z.RefinementCtx): void {
+  if (data.VAULTGATE_RELAY_LISTEN === undefined) {
+    return;
+  }
+  if (data.VAULTGATE_RELAY_TAGS.length === 0) {
+    context.addIssue({
+      code: 'custom',
+      path: ['VAULTGATE_RELAY_TAGS'],
+      message: 'is required when VAULTGATE_RELAY_LISTEN is set',
+    });
+  }
+  if (data.VAULTGATE_RELAY_COLLECTIONS.length + data.VAULTGATE_RELAY_ITEMS.length === 0) {
+    context.addIssue({
+      code: 'custom',
+      path: ['VAULTGATE_RELAY_COLLECTIONS'],
+      message: 'or VAULTGATE_RELAY_ITEMS is required when VAULTGATE_RELAY_LISTEN is set',
+    });
+  }
+}
 
 /**
  * Cross-field rules the object schema cannot express column by column.
@@ -98,6 +135,7 @@ export const environmentSchema = baseEnvironmentSchema.superRefine((data, contex
       message: 'is required when VAULTGATE_ACTIONS_ENABLE_CODE is true',
     });
   }
+  relayRules(data, context);
 });
 
 export type ParsedEnvironment = z.output<typeof environmentSchema>;

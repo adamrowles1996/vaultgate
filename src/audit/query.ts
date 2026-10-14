@@ -29,7 +29,7 @@ const outcomeSchema = z.union([
 const rowSchema = z.object({
   id: z.string(),
   at: z.number().int(),
-  category: z.enum(['identity', 'oauth', 'mcp', 'actions']),
+  category: z.enum(['identity', 'oauth', 'mcp', 'actions', 'relay']),
   action: z.string(),
   outcome: outcomeSchema,
   operator_id: z.string().nullable(),

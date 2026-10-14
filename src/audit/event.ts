@@ -4,7 +4,7 @@
  * only vault reference is the item id (and the field name for `get_secret`).
  * The store-backed sink assigns the row id and the timestamp as it appends.
  */
-type AuditCategory = 'identity' | 'oauth' | 'mcp' | 'actions';
+type AuditCategory = 'identity' | 'oauth' | 'mcp' | 'actions' | 'relay';
 
 /**
 `error:<code>` carries a tool's failure code (MCP-13); `denied` is a refused request.

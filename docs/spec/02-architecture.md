@@ -43,6 +43,7 @@
 | Config and logging   | Environment validation, structured logs with redaction                                                                          | `src/config/`, `src/logger.ts` |
 | Network              | Proxy-aware client address, address classes, rate limiters, HTTP(S) transport pinned to a checked address                       | `src/net/`                     |
 | Actions              | Operator-defined targets and the engine that runs typed operations at them with vault credentials (spec 13, 14; off by default) | `src/actions/`                 |
+| Credential relay     | `bw serve`-compatible read API for tagged tailnet nodes, on its own listener (spec 15; off by default)                          | `src/relay/`                   |
 
 ## 2.2 Module boundaries (enforced)
 
