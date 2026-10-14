@@ -79,6 +79,13 @@ describe('loadConfig', () => {
         codeUrl: undefined,
         allowAnyCommand: false,
       },
+      relay: {
+        listen: undefined,
+        tags: [],
+        collections: [],
+        items: [],
+        tailscaleSocket: '/var/run/tailscale/tailscaled.sock',
+      },
       secrets: {
         secretKey: KEY_BYTES,
         masterPassword: 'master-password',
@@ -163,6 +170,13 @@ describe('loadConfig', () => {
         browserCdpUrl: undefined,
         codeUrl: undefined,
         allowAnyCommand: false,
+      },
+      relay: {
+        listen: undefined,
+        tags: [],
+        collections: [],
+        items: [],
+        tailscaleSocket: '/var/run/tailscale/tailscaled.sock',
       },
       secrets: {
         secretKey: KEY_BYTES,

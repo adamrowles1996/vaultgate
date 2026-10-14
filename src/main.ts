@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import { serve } from '@hono/node-server';
+import { createAdaptorServer, serve } from '@hono/node-server';
 import { getConnInfo } from '@hono/node-server/conninfo';
 
 import { loadConnectors } from './actions/connectors/registry.ts';
@@ -20,6 +20,8 @@ import { createGuards, createIdentity, CURRENT_PARAMETERS } from './identity/ind
 import { createLogger } from './logger.ts';
 import { createPinnedHttpsFetch } from './net/pinned-https.ts';
 import { createAuthorizationServer } from './oauth/server.ts';
+import { createRelay } from './relay/index.ts';
+import { startRelayListener } from './relay/listener.ts';
 import { openStore } from './storage/index.ts';
 import { VERSION } from './version.ts';
 
@@ -224,8 +226,40 @@ const server = serve({ fetch: app.fetch, hostname: config.host, port: config.por
   logger.info({ host: address.address, port: address.port }, 'vaultgate listening');
 });
 
+// The credential relay listens on its own address only when configured
+// (RELAY-1, RELAY-2); it shares no route with the listener above, and a bind
+// that fails before the tailnet interface is up is retried, never fatal.
+const RELAY_RETRY_MS = 10_000; // between attempts to bind the tailnet address
+const relayListen = config.relay.listen;
+const relayListener =
+  relayListen === undefined
+    ? undefined
+    : startRelayListener({
+        server: createAdaptorServer({
+          fetch: createRelay({
+            config: config.relay,
+            listen: relayListen,
+            vault: vault.client,
+            audit: auditSink,
+            logger,
+            now: Date.now,
+            peerAddress: (context) => getConnInfo(context).remote.address,
+          }).fetch,
+        }),
+        listen: relayListen,
+        logger,
+        retryMs: RELAY_RETRY_MS,
+        schedule: (callback, delayMs) => {
+          const timer = setTimeout(callback, delayMs);
+          return () => {
+            clearTimeout(timer);
+          };
+        },
+      });
+
 function shutdown(signal: NodeJS.Signals): void {
   logger.info({ signal }, 'shutting down');
+  relayListener?.close();
   server.close((error) => {
     // Lock and stop bw serve before the store closes (VAULT-7).
     void vault.stop().then(() => {

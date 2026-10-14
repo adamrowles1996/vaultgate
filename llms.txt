@@ -13,7 +13,9 @@
   (docs/spec/13-actions.md, docs/spec/13a-actions-operations.md, docs/spec/14-actions-connectors.md,
   docs/guides/actions.md), and M16 adds the `code` connector, Semble code search over GitHub
   repositories through a sidecar (docs/spec/14a-code-connector.md, docs/guides/code-search.md);
-  the `browser` connector is M15 (docs/PLAN.md). Single maintainer.
+  the `browser` connector is M15 (docs/PLAN.md). The opt-in credential relay serves `bw serve`'s
+  read API to programs on tagged Tailscale nodes (docs/spec/15-credential-relay.md,
+  docs/guides/credential-relay.md). Single maintainer.
 - Apache-2.0 (LICENSE, NOTICE). Source: https://github.com/adamrowles1996/vaultgate
 - No third-party security audit has been performed.
 

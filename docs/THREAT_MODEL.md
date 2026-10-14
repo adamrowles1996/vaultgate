@@ -23,6 +23,13 @@ Planned with the actions layer (spec 13, 14; ADR 0007):
 | Destination data returned to agents                 | Query results, page content and command output. Leaving the destination is the feature; caps and audit bound it (ACT-52, 60).                                                                                    |
 | Repository snapshots and indexes (`code`, ADR 0008) | A plaintext copy of each configured repository, held only in the code sidecar's storage. As sensitive as the repository; never in vaultgate's data directory or backups; deleted with the target (ACT-105, 109). |
 
+With the credential relay (spec 15, ADR 0009):
+
+| Asset                     | Impact if compromised                                                                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| In-scope relay secrets    | Every secret the relay's scope covers, in plaintext, to any process on a node carrying a listed tag. Bounded by the scope (RELAY-4), audited per read.   |
+| Tailscale node identities | Whoever holds a node key for a listed tag is an admitted caller. Held by the Tailscale daemon on each node; ephemeral nodes expire when they go offline. |
+
 ## Trust boundaries
 
 1. Internet ↔ reverse proxy / ingress (TLS terminates here).
@@ -37,6 +44,9 @@ Planned with the actions layer (spec 13, 14; ADR 0007):
 9. Planned: vaultgate ↔ browser sidecar (CDP on an internal network; on Azure a separate Container
    App with internal-only ingress, never vaultgate's own network namespace) and sidecar ↔ websites
    (the sidecar resolves names itself; origin confinement and network placement are the controls).
+10. With the relay: tagged tailnet node ↔ vaultgate relay listener (WireGuard between the two
+    nodes, plain HTTP inside it), and vaultgate ↔ the local Tailscale daemon's LocalAPI socket,
+    which names each caller.
 
 ## Attackers
 
@@ -56,6 +66,14 @@ Planned with the actions layer:
 | **Hostile destination**               | A site, API or host the operator configured that has since been compromised: returns content crafted to inject the agent, echoes credentials, or attacks the browser.                        |
 | **Compromised operator session**      | Holds an operator cookie (not the password) and tries to create or widen a target.                                                                                                           |
 | **On-path attacker to a destination** | Sits between vaultgate and an action destination: reads, drops and rewrites what crosses, and terminates TLS in front of the destination where the deployment's trust configuration lets it. |
+
+With the credential relay:
+
+| Attacker                       | Capabilities                                                                                                                               |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Process on a tagged node**   | Runs on a node the relay admits (a sandbox's agent, a build step, a dependency it installed); can read every in-scope secret, as intended. |
+| **Tailnet peer without a tag** | Any other node on the tailnet, user-owned or carrying another tag; can open a connection to the relay's address.                           |
+| **Web page on a tagged node**  | Script in a browser that runs on an admitted node, which can send requests to the relay's address but cannot set `Host` or drop `Origin`.  |
 
 ## Threats and mitigations
 
@@ -116,6 +134,18 @@ Planned with the actions layer (spec 13, 14):
 | T48 | The client secret reaching the wrong host, or crossing in clear, on an `oauth2` token exchange                                  | `token_url` is operator-set, `https://` only even on an internal target, without a query, fragment or userinfo (ACT-124); its host is checked at save and resolved and checked by the private-range rule for every exchange, which the system store verifies (ACT-3, 55, 125); the client secret, the refresh tokens and the access token are scrubbed (ACT-128)                                                                                                                                                                                                                                                                                                                      |
 | T49 | A rotated refresh token lost, leaving a credential nobody can use                                                               | A refresh token the endpoint changed is written back to the vault before the request runs, and a failed write-back fails the call with `credential_rotation_failed`; `actions.credential_rotated` records the target, item and field, never the value (ACT-83, 127)                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | T50 | A hostile token endpoint steering vaultgate through its answer                                                                  | The answer is read up to 64 KiB and schema-validated before a field is read; only an OAuth error code of a fixed shape reaches `detail`, never the description that can quote the request (ACT-126)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+
+With the credential relay (spec 15, ADR 0009):
+
+| ID  | Threat                                                                    | Mitigation (spec ids)                                                                                                                                                                                                                          |
+| --- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T51 | A process on an admitted node reading in-scope secrets for an attacker    | Accepted: handing values to admitted nodes is the feature. Off by default (RELAY-1); scope by collection or id (RELAY-4); per-node rate limit (RELAY-9); every read audited with the node name (RELAY-8); list cap and required term (RELAY-6) |
+| T52 | An untagged tailnet peer, or anything off the tailnet, reaching the relay | One configured address, never a wildcard (RELAY-2); the caller named by the Tailscale daemon from the socket address, and refused unless it carries a listed tag, user-owned nodes always (RELAY-3); no Funnel (15.7)                          |
+| T53 | A caller claiming another identity through a header                       | The socket address alone is resolved; `X-Forwarded-For` and every other header are ignored (RELAY-3)                                                                                                                                           |
+| T54 | A web page on an admitted node, or DNS rebinding, driving the relay       | Requests with an `Origin` are refused, and `Host` must be the listen address, which a rebound name cannot be (RELAY-2, RELAY-3)                                                                                                                |
+| T55 | Learning which items exist outside the scope by probing names and ids     | Out-of-scope, trashed and unsupported items are answered exactly as missing ones, and searches are filtered to the scope before ambiguity is judged (RELAY-4, RELAY-6)                                                                         |
+| T56 | A TOTP seed leaving with an item                                          | `login.totp` is always `null`; only the current code is answered, on its own route (RELAY-7)                                                                                                                                                   |
+| T57 | A locked vault, a slow daemon or an early start taking vaultgate down     | The `whois` question is bounded at 2 s (RELAY-3); vault failures are `503`/`500`, never a partial item (RELAY-10); a failed bind is retried, never fatal (RELAY-2); the limiter holds at most 10 000 keys (RELAY-9, T21)                       |
 
 ### T37 in full: the NTLM primitives
 
@@ -201,3 +231,18 @@ Planned with the actions layer:
   challenge can strip the timestamp and suppress the MIC. What remains is the server's own check
   of the attribute list the client echoes back, and, over TLS, the channel binding, which is
   computed from the connection rather than from anything the challenge says.
+
+With the credential relay:
+
+- An admitted node's processes hold in-scope secrets in memory, as any host running a vault client
+  does. What they do with them next (log, pass to a child, send elsewhere) is outside vaultgate's
+  sight; the audit trail records what was read, by which node, and when.
+- **Tagging is the authorisation.** Whoever can create a node with a listed tag (anyone holding
+  an auth key or OAuth client that may assign it, and every tag owner in the tailnet policy) is an
+  admitted caller. The guide asks for a dedicated tag, ephemeral pre-authorised keys only, and
+  tag owners kept to the operator; vaultgate cannot check any of it.
+- The local Tailscale daemon is trusted to name callers truthfully. A compromise of that daemon,
+  or root on the vaultgate host, defeats the identity check, as it defeats every other control.
+- Traffic between nodes is encrypted by WireGuard, including through a DERP relay; the HTTP inside
+  it is not separately encrypted, so anything that can read a node's own loopback or interfaces
+  can read its answers.

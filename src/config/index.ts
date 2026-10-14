@@ -10,10 +10,12 @@ import {
 } from './secret-files.ts';
 
 import type { PreregisteredClient } from './primitives.ts';
+import type { RelayConfig } from './relay.ts';
 
 export type { ActionsConfig } from './actions.ts';
 export type { Environment } from './environment.ts';
 export type { LogLevel } from './schema.ts';
+export type { RelayConfig } from './relay.ts';
 
 interface BitwardenConfig {
   readonly server: string | undefined;
@@ -56,6 +58,7 @@ export interface Config {
   readonly logLevel: LogLevel;
   readonly bitwarden: BitwardenConfig;
   readonly actions: ActionsConfig;
+  readonly relay: RelayConfig;
   readonly secrets: Secrets;
 }
 
@@ -117,6 +120,13 @@ function toConfig(data: ParsedEnvironment): Config {
       browserCdpUrl: data.VAULTGATE_ACTIONS_BROWSER_CDP_URL,
       codeUrl: data.VAULTGATE_ACTIONS_CODE_URL,
       allowAnyCommand: data.VAULTGATE_ACTIONS_ALLOW_ANY_COMMAND,
+    },
+    relay: {
+      listen: data.VAULTGATE_RELAY_LISTEN,
+      tags: data.VAULTGATE_RELAY_TAGS,
+      collections: data.VAULTGATE_RELAY_COLLECTIONS,
+      items: data.VAULTGATE_RELAY_ITEMS,
+      tailscaleSocket: data.VAULTGATE_RELAY_TAILSCALE_SOCKET,
     },
     secrets: {
       secretKey: data.VAULTGATE_SECRET_KEY,

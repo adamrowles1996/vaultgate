@@ -1,5 +1,6 @@
-// Requirement-citation gate for the actions layer (docs/PLAN.md M14 exit).
-// Every `ACT-n` the specification defines must be named by at least one test,
+// Requirement-citation gate for the actions layer (docs/PLAN.md M14 exit) and
+// the credential relay (spec 15). Every `ACT-n` and `RELAY-n` the
+// specification defines must be named by at least one test,
 // so the traceability the specification claims is a fact rather than a habit.
 // A requirement no test can prove yet is listed below with the milestone that
 // will prove it; anything else missing fails the build.
@@ -12,6 +13,7 @@ const SPEC_FILES = [
   'docs/spec/13a-actions-operations.md',
   'docs/spec/14-actions-connectors.md',
   'docs/spec/14a-code-connector.md',
+  'docs/spec/15-credential-relay.md',
 ];
 
 const TEST_ROOT = 'src';
@@ -22,14 +24,14 @@ const PREFIX = 'ACT-';
  * A requirement is defined where the specification writes it in bold at the
  * head of its clause: `- **ACT-42** On protocol version …`.
  */
-const DEFINITION = /\*\*(ACT-\d+)\*\*/g;
+const DEFINITION = /\*\*((?:ACT|RELAY)-\d+)\*\*/g;
 
 /**
  * A test cites a requirement by naming it in the title of an `it`, `test` or
  * `describe` block, which is how CONTRIBUTING.md asks for them.
  */
 const TEST_TITLE = /\b(?:it|test|describe)\(\s*[`'"]([^`'"]*)/g;
-const CITATION = /\bACT-\d+\b/g;
+const CITATION = /\b(?:ACT|RELAY)-\d+\b/g;
 
 /**
  * Requirements no test proves, each with the reason. `M15` marks the
@@ -50,7 +52,11 @@ const ALLOWED = new Map(
 );
 
 function bySequence(left, right) {
-  return Number(left.slice(PREFIX.length)) - Number(right.slice(PREFIX.length));
+  const [leftPrefix, leftNumber] = left.split('-', 2);
+  const [rightPrefix, rightNumber] = right.split('-', 2);
+  return leftPrefix === rightPrefix
+    ? Number(leftNumber) - Number(rightNumber)
+    : leftPrefix.localeCompare(rightPrefix);
 }
 
 function definedRequirements() {
@@ -157,5 +163,5 @@ const allowed = ALLOWED.keys()
   .toArray().length;
 console.log(
   `Requirement citation gate passed: ${String(defined.size - allowed)} of ${String(defined.size)} ` +
-    `actions requirements are cited by a test; ${String(allowed)} are allowed without one.`,
+    `actions and relay requirements are cited by a test; ${String(allowed)} are allowed without one.`,
 );

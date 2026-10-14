@@ -27,6 +27,7 @@ relies on.
 | [Actions](actions.md)                             | Targets, grants and policy for the actions layer; calling an `http` target.                   |
 | [HTTP targets](http-targets.md)                   | Private certificates (Proxmox VE) and OAuth 2.0 tokens: Graph, Power BI, Fabric, Azure, Zoho. |
 | [Code search](code-search.md)                     | Semble connections to GitHub repositories: token, sidecar, tools, parity.                     |
+| [Credential relay](credential-relay.md)           | Secrets for programs on tagged Tailscale nodes, through the `bw serve` API.                   |
 
 ## Operate
 

@@ -37,12 +37,12 @@ describe('actions layering', () => {
     expect(CRUISER).toContain(
       "from: { path: '^src/(identity|oauth|bitwarden)/' },\n      to: { path: '^src/actions/' },",
     );
-    expect(CRUISER).toContain("to: { path: '^src/(identity|oauth|mcp|bitwarden|actions)/' }");
+    expect(CRUISER).toContain("to: { path: '^src/(identity|oauth|mcp|bitwarden|actions|relay)/' }");
     expect(CRUISER).toContain(
-      "to: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|actions|http)/' }",
+      "to: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|actions|relay|http)/' }",
     );
     expect(CRUISER).toContain(
-      "from: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|actions)/' }",
+      "from: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|actions|relay)/' }",
     );
   });
 

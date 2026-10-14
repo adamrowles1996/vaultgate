@@ -9,9 +9,10 @@
 //   audit                       the event shape and the store sink every
 //                               feature records through; knows no feature
 //   identity, oauth, mcp,       features: independent of each other except
-//   bitwarden, actions          through interfaces in the layers below them
+//   bitwarden, actions, relay   through interfaces in the layers below them
 //                               (actions: ACT-70, type-only imports from
-//                               identity/ and mcp/ are the one exception)
+//                               identity/ and mcp/ are the one exception;
+//                               relay: RELAY-11, the vault interface only)
 //   http                        composition of features into routes
 //   main.ts, cli.ts             process entrypoints
 const RUNTIME = { path: '^src/', pathNot: [String.raw`\.test\.ts$`, '^src/test-support/'] };
@@ -46,13 +47,13 @@ export default {
       name: 'foundation-imports-nothing-above-itself',
       severity: 'error',
       from: { path: '^src/(result|config|logger|net|scopes|auth)' },
-      to: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|actions|http)/' },
+      to: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|actions|relay|http)/' },
     },
     {
       name: 'storage-knows-no-features',
       severity: 'error',
       from: { path: '^src/storage/' },
-      to: { path: '^src/(identity|oauth|mcp|bitwarden|audit|actions|http)/' },
+      to: { path: '^src/(identity|oauth|mcp|bitwarden|audit|actions|relay|http)/' },
     },
     {
       name: 'audit-knows-no-features',
@@ -60,7 +61,7 @@ export default {
       comment:
         'identity, oauth, mcp and actions record events through src/audit/ (one AuditEvent shape, one sink); the audit module never looks back up at them. The action_calls reader lives here, the writer in actions/ (ACT-62).',
       from: { path: '^src/audit/' },
-      to: { path: '^src/(identity|oauth|mcp|bitwarden|actions)/' },
+      to: { path: '^src/(identity|oauth|mcp|bitwarden|actions|relay)/' },
     },
     {
       name: 'mcp-uses-the-vault-interface-not-bitwarden',
@@ -104,6 +105,21 @@ export default {
       },
     },
     {
+      name: 'relay-uses-only-its-allowed-layers',
+      severity: 'error',
+      comment:
+        'RELAY-11: src/relay/ may import result, config, logger, net, vault and audit; it reads the vault through VaultClient and never imports bitwarden/, storage/ or another feature.',
+      from: { path: '^src/relay/' },
+      to: { path: '^src/(bitwarden|storage|identity|oauth|mcp|actions|http)/' },
+    },
+    {
+      name: 'features-never-import-relay',
+      severity: 'error',
+      comment: 'RELAY-11: only the composition layer builds the relay.',
+      from: { path: '^src/(identity|oauth|mcp|bitwarden|actions|http)/' },
+      to: { path: '^src/relay/' },
+    },
+    {
       name: 'features-never-import-actions',
       severity: 'error',
       comment:
@@ -122,7 +138,7 @@ export default {
     {
       name: 'features-do-not-import-the-composition-layer',
       severity: 'error',
-      from: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|actions)/' },
+      from: { path: '^src/(storage|identity|oauth|mcp|bitwarden|audit|actions|relay)/' },
       to: { path: String.raw`^src/(http/|main\.ts$|cli\.ts$)` },
     },
     {
