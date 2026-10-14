@@ -16,6 +16,10 @@ export interface RelayScope {
   Lower-cased item ids in scope whatever their collections.
   */
   readonly items: ReadonlySet<string>;
+  /**
+  RELAY-12: every live login and secure note, listed or not.
+  */
+  readonly all: boolean;
 }
 
 export type Resolution =
@@ -30,19 +34,25 @@ How many matches a search reads before the scope filter; the vault returns them 
 */
 const SEARCH_LIMIT = 500;
 
-export function createScope(collections: readonly string[], items: readonly string[]): RelayScope {
+export function createScope(
+  collections: readonly string[],
+  items: readonly string[],
+  isWholeVault = false,
+): RelayScope {
   return {
     collections: new Set(collections.map((id) => id.toLowerCase())),
     items: new Set(items.map((id) => id.toLowerCase())),
+    all: isWholeVault,
   };
 }
 
 /**
-RELAY-4: a live login or secure note, listed by id or held in a listed collection.
+RELAY-4, RELAY-12: a live login or secure note, listed by id, held in a listed collection, or any with the whole-vault scope.
 */
 export function isInScope(scope: RelayScope, item: ItemSummary): boolean {
   const isServedType = item.type === 'login' || item.type === 'secureNote';
   const isListed =
+    scope.all ||
     scope.items.has(item.id.toLowerCase()) ||
     item.collectionIds.some((id) => scope.collections.has(id.toLowerCase()));
   return item.deletedDate === null && isServedType && isListed;

@@ -46,9 +46,10 @@ problem, not just the first.
 | `VAULTGATE_RELAY_TAGS`                | with the relay  |                                      | Comma-separated Tailscale tags (`tag:name`); a caller's node must carry one (RELAY-3).                                                                                                             |
 | `VAULTGATE_RELAY_COLLECTIONS`         | with the relay¹ |                                      | Comma-separated collection ids whose items the relay answers (RELAY-4).                                                                                                                            |
 | `VAULTGATE_RELAY_ITEMS`               | with the relay¹ |                                      | Comma-separated item ids the relay answers whatever their collections (RELAY-4).                                                                                                                   |
+| `VAULTGATE_RELAY_ALL_ITEMS`           | no              | `false`                              | Puts every live login and secure note in scope, whatever its collections (RELAY-12); start-up logs a warning.                                                                                      |
 | `VAULTGATE_RELAY_TAILSCALE_SOCKET`    | no              | `/var/run/tailscale/tailscaled.sock` | The local Tailscale daemon's LocalAPI socket, asked who each caller is (RELAY-3).                                                                                                                  |
 
-¹ At least one of `VAULTGATE_RELAY_COLLECTIONS` and `VAULTGATE_RELAY_ITEMS` when `VAULTGATE_RELAY_LISTEN` is set.
+¹ At least one of `VAULTGATE_RELAY_COLLECTIONS` and `VAULTGATE_RELAY_ITEMS` when `VAULTGATE_RELAY_LISTEN` is set, unless `VAULTGATE_RELAY_ALL_ITEMS` is true.
 
 - **CFG-1** Every secret-bearing variable (`*_PASSWORD`, `*_SECRET`, `*_KEY`, `*_TOKEN`) has a
   `_FILE` variant. The file must be readable only by the service user; a world-readable secret
