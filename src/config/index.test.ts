@@ -84,6 +84,7 @@ describe('loadConfig', () => {
         tags: [],
         collections: [],
         items: [],
+        allItems: false,
         tailscaleSocket: '/var/run/tailscale/tailscaled.sock',
       },
       secrets: {
@@ -176,6 +177,7 @@ describe('loadConfig', () => {
         tags: [],
         collections: [],
         items: [],
+        allItems: false,
         tailscaleSocket: '/var/run/tailscale/tailscaled.sock',
       },
       secrets: {

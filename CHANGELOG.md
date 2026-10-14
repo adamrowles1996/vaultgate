@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- RELAY-12: **`VAULTGATE_RELAY_ALL_ITEMS`**, a whole-vault scope for the credential relay. Items in
+  a personal vault belong to no collection, so a collection scope cannot reach them; with this set,
+  every live login and secure note is in scope, whatever its organisation or collections. It is
+  the widest setting, and start-up logs a warning while the relay listens with it.
+
 ## [0.1.0-rc.24] - 2026-10-14
 
 ### Added

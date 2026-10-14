@@ -54,6 +54,7 @@ describe('relay configuration', () => {
       tags: [],
       collections: [],
       items: [],
+      allItems: false,
       tailscaleSocket: DEFAULT_TAILSCALE_SOCKET,
     });
   });
@@ -71,6 +72,7 @@ describe('relay configuration', () => {
       tags: ['tag:sandbox', 'tag:ci'],
       collections: [COLLECTION.toLowerCase()],
       items: [ITEM],
+      allItems: false,
       tailscaleSocket: '/run/tailscale/tailscaled.sock',
     });
   });
@@ -78,7 +80,7 @@ describe('relay configuration', () => {
   it('RELAY-1 requires a tag and something in scope once a listen address is set', () => {
     const message = issues({ ...REQUIRED, VAULTGATE_RELAY_LISTEN: '100.64.0.10:8087' });
     expect(message).toContain('VAULTGATE_RELAY_TAGS: is required when VAULTGATE_RELAY_LISTEN');
-    expect(message).toContain('VAULTGATE_RELAY_COLLECTIONS: or VAULTGATE_RELAY_ITEMS is required');
+    expect(message).toContain('VAULTGATE_RELAY_COLLECTIONS: or VAULTGATE_RELAY_ITEMS');
     const onlyItems = loadConfig({
       ...ENABLED,
       VAULTGATE_RELAY_COLLECTIONS: '',
@@ -100,5 +102,25 @@ describe('relay configuration', () => {
     expect(issues({ ...ENABLED, VAULTGATE_RELAY_TAILSCALE_SOCKET: 'tailscaled.sock' })).toContain(
       'VAULTGATE_RELAY_TAILSCALE_SOCKET',
     );
+  });
+
+  it('RELAY-12 accepts a whole-vault scope without collections or items, and warns about it', () => {
+    const loaded = unwrapOk(
+      loadConfig({
+        ...REQUIRED,
+        VAULTGATE_RELAY_LISTEN: '100.64.0.10:8087',
+        VAULTGATE_RELAY_TAGS: 'tag:sandbox',
+        VAULTGATE_RELAY_ALL_ITEMS: 'true',
+      }),
+    );
+    expect(loaded.config.relay.allItems).toBe(true);
+    expect(loaded.warnings).toContainEqual(
+      expect.stringContaining('VAULTGATE_RELAY_ALL_ITEMS is true'),
+    );
+  });
+
+  it('RELAY-12 says nothing about a whole-vault scope while the relay is off', () => {
+    const loaded = unwrapOk(loadConfig({ ...REQUIRED, VAULTGATE_RELAY_ALL_ITEMS: 'true' }));
+    expect(loaded.warnings.filter((warning) => warning.includes('RELAY'))).toStrictEqual([]);
   });
 });

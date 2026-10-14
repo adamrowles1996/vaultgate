@@ -33,6 +33,10 @@ export interface RelayConfig {
   */
   readonly items: readonly string[];
   /**
+  RELAY-12: every live login and secure note is in scope, whatever its collections.
+  */
+  readonly allItems: boolean;
+  /**
   The local Tailscale daemon's LocalAPI socket, asked who each caller is.
   */
   readonly tailscaleSocket: string;
@@ -119,3 +123,15 @@ function listSchema(
 export const relayTagsSchema = listSchema(TAG, 'a Tailscale tag such as tag:servers');
 
 export const relayIdsSchema = listSchema(UUID, 'a vault id (a UUID)');
+
+/**
+RELAY-12: the start-up warning a whole-vault scope earns, so nobody turns it on unseen.
+*/
+export function relayWarnings(relay: RelayConfig): readonly string[] {
+  return relay.listen !== undefined && relay.allItems
+    ? [
+        'VAULTGATE_RELAY_ALL_ITEMS is true: the credential relay answers every login and secure ' +
+          'note in the vault to every node carrying a listed tag',
+      ]
+    : [];
+}

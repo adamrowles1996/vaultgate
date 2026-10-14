@@ -2,6 +2,7 @@ import { fail, ok, type Result } from '../result.ts';
 
 import { type ActionsConfig, actionsWarnings } from './actions.ts';
 import { type Environment, withoutEmptyValues } from './environment.ts';
+import { type RelayConfig, relayWarnings } from './relay.ts';
 import { environmentSchema, type LogLevel, type ParsedEnvironment } from './schema.ts';
 import {
   readSecretFileFromDisk,
@@ -10,7 +11,6 @@ import {
 } from './secret-files.ts';
 
 import type { PreregisteredClient } from './primitives.ts';
-import type { RelayConfig } from './relay.ts';
 
 export type { ActionsConfig } from './actions.ts';
 export type { Environment } from './environment.ts';
@@ -126,6 +126,7 @@ function toConfig(data: ParsedEnvironment): Config {
       tags: data.VAULTGATE_RELAY_TAGS,
       collections: data.VAULTGATE_RELAY_COLLECTIONS,
       items: data.VAULTGATE_RELAY_ITEMS,
+      allItems: data.VAULTGATE_RELAY_ALL_ITEMS,
       tailscaleSocket: data.VAULTGATE_RELAY_TAILSCALE_SOCKET,
     },
     secrets: {
@@ -160,7 +161,14 @@ export function loadConfig(
     return fail(new ConfigError(resolved.issues));
   }
   const config = toConfig(parsed.data);
-  return ok({ config, warnings: [...resolved.warnings, ...actionsWarnings(config.actions)] });
+  return ok({
+    config,
+    warnings: [
+      ...resolved.warnings,
+      ...actionsWarnings(config.actions),
+      ...relayWarnings(config.relay),
+    ],
+  });
 }
 
 function masked(value: string | Buffer | undefined): '[set]' | '[unset]' {

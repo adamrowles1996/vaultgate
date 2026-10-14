@@ -28,16 +28,18 @@ the threat model (T51 to T58) states what they do not cover.
 
 - **RELAY-1** The relay MUST be off unless `VAULTGATE_RELAY_LISTEN` is set. With it set, start-up
   MUST refuse a configuration without at least one tag in `VAULTGATE_RELAY_TAGS` and at least one
-  id in `VAULTGATE_RELAY_COLLECTIONS` or `VAULTGATE_RELAY_ITEMS`. Tags MUST have the form
+  id in `VAULTGATE_RELAY_COLLECTIONS` or `VAULTGATE_RELAY_ITEMS`, unless
+  `VAULTGATE_RELAY_ALL_ITEMS` is true (RELAY-12). Tags MUST have the form
   `tag:name` and ids MUST be UUIDs; both are compared without regard to case.
 
-| Variable                           | Default                              | Meaning                                                                                                  |
-| ---------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `VAULTGATE_RELAY_LISTEN`           |                                      | `address:port` (IPv6 in brackets) of the relay's own listener, normally the host's tailnet address.      |
-| `VAULTGATE_RELAY_TAGS`             |                                      | Comma-separated Tailscale tags; a caller's node must carry at least one.                                 |
-| `VAULTGATE_RELAY_COLLECTIONS`      |                                      | Comma-separated collection ids; their items are in scope.                                                |
-| `VAULTGATE_RELAY_ITEMS`            |                                      | Comma-separated item ids in scope whatever their collections.                                            |
-| `VAULTGATE_RELAY_TAILSCALE_SOCKET` | `/var/run/tailscale/tailscaled.sock` | The local Tailscale daemon's LocalAPI socket, which the relay asks who each caller is. An absolute path. |
+| Variable                           | Default                              | Meaning                                                                                                                           |
+| ---------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `VAULTGATE_RELAY_LISTEN`           |                                      | `address:port` (IPv6 in brackets) of the relay's own listener, normally the host's tailnet address.                               |
+| `VAULTGATE_RELAY_TAGS`             |                                      | Comma-separated Tailscale tags; a caller's node must carry at least one.                                                          |
+| `VAULTGATE_RELAY_COLLECTIONS`      |                                      | Comma-separated collection ids; their items are in scope.                                                                         |
+| `VAULTGATE_RELAY_ITEMS`            |                                      | Comma-separated item ids in scope whatever their collections.                                                                     |
+| `VAULTGATE_RELAY_ALL_ITEMS`        | `false`                              | Puts every live login and secure note in scope, whatever its collections (RELAY-12). The widest setting; start-up logs a warning. |
+| `VAULTGATE_RELAY_TAILSCALE_SOCKET` | `/var/run/tailscale/tailscaled.sock` | The local Tailscale daemon's LocalAPI socket, which the relay asks who each caller is. An absolute path.                          |
 
 ## 15.3 Listener and admission
 
@@ -65,6 +67,12 @@ the threat model (T51 to T58) states what they do not cover.
   trash, and either its id is listed in `VAULTGATE_RELAY_ITEMS` or one of its collections is listed
   in `VAULTGATE_RELAY_COLLECTIONS`. Every other item MUST be answered exactly as an item that does
   not exist, on every route, so a caller cannot learn that it exists.
+
+- **RELAY-12** With `VAULTGATE_RELAY_ALL_ITEMS` true, every live login and secure note MUST be in
+  scope, whatever its organisation or collections, including items in a personal vault that no
+  collection can name. The other rules of RELAY-4 still apply (no trash, no other item types), and
+  start-up MUST log a warning naming the setting while the relay listens. It is the widest scope
+  the relay offers: every admitted node can read every such secret.
 
 ## 15.5 Routes
 

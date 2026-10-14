@@ -37,7 +37,7 @@ export function createRelay(options: RelayOptions): RelayApp {
   return createRelayApp({
     listen: options.listen,
     tags: options.config.tags,
-    scope: createScope(options.config.collections, options.config.items),
+    scope: createScope(options.config.collections, options.config.items, options.config.allItems),
     whoIs: createWhoIs(localApi),
     vault: options.vault,
     audit: options.audit,

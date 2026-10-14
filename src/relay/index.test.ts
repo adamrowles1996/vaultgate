@@ -24,6 +24,7 @@ const CONFIG: RelayConfig = {
   tags: ['tag:sandbox'],
   collections: [SCOPED_COLLECTION],
   items: [],
+  allItems: false,
   tailscaleSocket: '/nonexistent/vaultgate-test/tailscaled.sock',
 };
 

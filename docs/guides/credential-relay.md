@@ -56,6 +56,11 @@ need, and note its id: it is the `collectionId` in the web vault's address bar w
 is open. An item can sit in several collections, so adding it to this one changes nothing else.
 You can also list individual items by id.
 
+Items in a personal vault belong to no collection, so a collection scope cannot reach them. To
+serve the whole vault, personal items included, set `VAULTGATE_RELAY_ALL_ITEMS=true` instead of
+listing collections or ids. It is the widest scope there is: every admitted node can then read
+every login and secure note, and start-up logs a warning saying so.
+
 The relay answers logins and secure notes that are not in the trash. Everything else is answered
 exactly as an item that does not exist, so a caller cannot learn what lies outside the scope.
 

@@ -86,6 +86,7 @@ const baseEnvironmentSchema = z.object({
   VAULTGATE_RELAY_TAGS: relayTagsSchema,
   VAULTGATE_RELAY_COLLECTIONS: relayIdsSchema,
   VAULTGATE_RELAY_ITEMS: relayIdsSchema,
+  VAULTGATE_RELAY_ALL_ITEMS: booleanSchema('false'),
   VAULTGATE_RELAY_TAILSCALE_SOCKET: z.string().startsWith('/').default(DEFAULT_TAILSCALE_SOCKET),
 });
 
@@ -105,11 +106,13 @@ function relayRules(data: BaseEnvironment, context: z.RefinementCtx): void {
       message: 'is required when VAULTGATE_RELAY_LISTEN is set',
     });
   }
-  if (data.VAULTGATE_RELAY_COLLECTIONS.length + data.VAULTGATE_RELAY_ITEMS.length === 0) {
+  const scoped = data.VAULTGATE_RELAY_COLLECTIONS.length + data.VAULTGATE_RELAY_ITEMS.length;
+  if (scoped === 0 && !data.VAULTGATE_RELAY_ALL_ITEMS) {
     context.addIssue({
       code: 'custom',
       path: ['VAULTGATE_RELAY_COLLECTIONS'],
-      message: 'or VAULTGATE_RELAY_ITEMS is required when VAULTGATE_RELAY_LISTEN is set',
+      message:
+        'or VAULTGATE_RELAY_ITEMS (or VAULTGATE_RELAY_ALL_ITEMS) is required when VAULTGATE_RELAY_LISTEN is set',
     });
   }
 }
