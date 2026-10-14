@@ -1,6 +1,6 @@
 # 15 The credential relay
 
-> **Status: added after 0.1.0-rc.23 (see the changelog).** Decided in
+> **Status: added in 0.1.0-rc.24.** Decided in
 > [ADR 0009](../adr/0009-tailnet-credential-relay.md). Off unless `VAULTGATE_RELAY_LISTEN` is set.
 > Requirement identifiers are `RELAY-n`.
 

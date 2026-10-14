@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.24] - 2026-10-14
+
 ### Added
 
 - Spec 15, ADR 0009, RELAY-1 to RELAY-11: **the credential relay**, an opt-in, read-only,
@@ -662,7 +664,8 @@ Release candidates 0.1.0-rc.1 to 0.1.0-rc.9 are in
 [`docs/changelog-archive.md`](docs/changelog-archive.md). They are kept verbatim; this file holds
 the current release and the ones after it, so it stays inside the repository's 64 KiB file gate.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.23...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.24...HEAD
+[0.1.0-rc.24]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.23...v0.1.0-rc.24
 [0.1.0-rc.23]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.22...v0.1.0-rc.23
 [0.1.0-rc.22]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.21...v0.1.0-rc.22
 [0.1.0-rc.21]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.20...v0.1.0-rc.21
