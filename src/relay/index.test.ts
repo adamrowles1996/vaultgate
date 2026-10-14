@@ -36,7 +36,14 @@ function fakeLocalApi(asked: RequestOptions[]): LocalRequestFunction {
     const outgoing = new PassThrough();
     outgoing.on('finish', () => {
       const body = Buffer.from(
-        JSON.stringify({ Node: { Name: 'sandbox-1.example.ts.net.', Tags: ['tag:sandbox'] } }),
+        JSON.stringify({
+          Node: {
+            Name: 'sandbox-1.example.ts.net.',
+            Tags: ['tag:sandbox'],
+            Addresses: [`${PEER_ADDRESS}/32`],
+            AllowedIPs: [`${PEER_ADDRESS}/32`],
+          },
+        }),
       );
       const message: LocalMessage = Object.assign(Readable.from([body]), { statusCode: 200 });
       callback(message);

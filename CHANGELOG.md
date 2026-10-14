@@ -14,8 +14,9 @@ All notable changes to this project are documented here. The format follows
   `/object/{username,password,notes,totp,uri}` (and acknowledges `/sync`), so a client of a local
   `bw serve` switches by changing one URL. Each caller is named by the local Tailscale daemon's
   `whois` from the socket address and served only if its node carries a tag in
-  `VAULTGATE_RELAY_TAGS`; requests with an `Origin`, or whose `Host` is not the listen address,
-  are refused. Only logins and secure notes in `VAULTGATE_RELAY_COLLECTIONS`, or listed in
+  `VAULTGATE_RELAY_TAGS`, routes for no address but its own (a subnet router or exit node never
+  is), and owns the address it connected from; requests with an `Origin`, or whose `Host` is not
+  the listen address, are refused. Only logins and secure notes in `VAULTGATE_RELAY_COLLECTIONS`, or listed in
   `VAULTGATE_RELAY_ITEMS`, exist for it; everything else is answered as missing. TOTP seeds are
   never returned. Every request is audited in the new `relay` category with the node name, and
   each node is limited to 300 requests a minute. Off unless `VAULTGATE_RELAY_LISTEN` is set; a

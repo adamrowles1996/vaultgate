@@ -22,7 +22,7 @@ The trust an operator extends by enabling the relay is **every in-scope secret, 
 any process on any node carrying a listed tag**. Unlike an action or `get_secret`, the value
 leaves vaultgate and enters the caller's process memory, and vaultgate cannot see what happens to
 it next. The scope (RELAY-4), the tags (RELAY-3) and the audit trail (RELAY-8) are the controls;
-the threat model (T51 to T57) states what they do not cover.
+the threat model (T51 to T58) states what they do not cover.
 
 ## 15.2 Configuration
 
@@ -51,9 +51,13 @@ the threat model (T51 to T57) states what they do not cover.
   carrying an `Origin` header is refused; the socket's remote address (never a header such as
   `X-Forwarded-For`, and an IPv4-mapped IPv6 address read as its IPv4 form) is resolved by the
   local Tailscale daemon's LocalAPI `whois`, bounded by a 2 s timeout; an address the daemon does
-  not name, a failed or malformed answer, and a node that carries none of the listed tags are
-  refused. A node a user owns has no tags and is therefore always refused. Every refusal is
-  `403` with `{"success":false,"message":"Forbidden."}` and reaches neither a route nor the vault.
+  not name and a failed or malformed answer are refused; and the node it names MUST carry at
+  least one listed tag (so a node a user owns, which has no tags, is always refused), MUST NOT
+  route for any address but its own (a subnet router or an exit node: any route among its
+  allowed IPs beyond its own addresses, or any primary route), because traffic it forwards
+  reaches the relay under its identity, and MUST have the socket address among its own
+  addresses. Every refusal is `403` with `{"success":false,"message":"Forbidden."}` and reaches
+  neither a route nor the vault.
 
 ## 15.4 Scope
 

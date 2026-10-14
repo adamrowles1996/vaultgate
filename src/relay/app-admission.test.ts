@@ -77,7 +77,7 @@ describe('relay admission', () => {
   });
 
   it('RELAY-3 refuses a node that carries none of the listed tags', async () => {
-    const userNode = { node: 'laptop.example.ts.net', tags: [] };
+    const userNode = { ...PEER, node: 'laptop.example.ts.net', tags: [] };
     const harness = relayHarness({ whoIs: () => Promise.resolve(userNode) });
     const response = await relayGet(harness, PASSWORD_PATH);
     expect(response.status).toBe(403);
@@ -85,6 +85,21 @@ describe('relay admission', () => {
       { reason: 'untagged', node: 'laptop.example.ts.net' },
     ]);
     expect(harness.logged()).toContain('relay refused');
+  });
+
+  it('RELAY-3 refuses a subnet router or exit node, whose forwarded traffic carries its identity', async () => {
+    const router = { ...PEER, node: 'gateway.example.ts.net', routes: true };
+    const harness = relayHarness({ whoIs: () => Promise.resolve(router) });
+    expect(await relayStatus(harness, PASSWORD_PATH)).toBe(403);
+    expect(denials(harness.audit.events)).toStrictEqual([
+      { reason: 'router', node: 'gateway.example.ts.net' },
+    ]);
+  });
+
+  it('RELAY-3 refuses a connection from an address that is not the node’s own', async () => {
+    const harness = relayHarness({ peerAddress: '192.168.1.50' });
+    expect(await relayStatus(harness, PASSWORD_PATH)).toBe(403);
+    expect(denials(harness.audit.events)).toStrictEqual([{ reason: 'address', node: PEER.node }]);
   });
 
   it('RELAY-9 limits each node, answers 429 with Retry-After, and refills', async () => {
@@ -97,7 +112,7 @@ describe('relay admission', () => {
     expect(limited.status).toBe(429);
     expect(limited.headers.get('retry-after')).toBe('1');
     expect(await limited.json()).toStrictEqual({ success: false, message: 'Too many requests.' });
-    nodes.current = { node: 'sandbox-2.example.ts.net', tags: ['tag:sandbox'] };
+    nodes.current = { ...PEER, node: 'sandbox-2.example.ts.net' };
     expect(await relayStatus(harness, '/status')).toBe(200);
     nodes.current = PEER;
     harness.advance(60_000);

@@ -21,7 +21,7 @@ import {
 } from './handlers.ts';
 import { SCALAR_KINDS, type ScalarKind } from './item-body.ts';
 import { failure, FORBIDDEN, type RelayReply, UNKNOWN_ROUTE } from './responses.ts';
-import { isAdmitted, type WhoIs } from './whois.ts';
+import { admissionProblem, type WhoIs } from './whois.ts';
 
 import type { RelayListen } from '../config/relay.ts';
 import type { Logger } from '../logger.ts';
@@ -102,8 +102,9 @@ async function admit(
   if (peer === undefined) {
     return { reason: 'not_a_peer', ip: address };
   }
-  if (!isAdmitted(peer, dependencies.tags)) {
-    return { reason: 'untagged', ip: address, node: peer.node };
+  const problem = admissionProblem(peer, dependencies.tags, address);
+  if (problem !== undefined) {
+    return { reason: problem, ip: address, node: peer.node };
   }
   const decision = limiter.take(peer.node);
   if (!decision.allowed) {

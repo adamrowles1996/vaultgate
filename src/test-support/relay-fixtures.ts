@@ -46,6 +46,8 @@ export const PEER_ADDRESS = '100.64.0.20';
 export const PEER: TailnetPeer = {
   node: 'sandbox-1.example.ts.net',
   tags: ['tag:sandbox'],
+  addresses: [PEER_ADDRESS, 'fd7a:115c:a1e0::20'],
+  routes: false,
 };
 
 export function summary(

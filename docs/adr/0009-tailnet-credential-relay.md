@@ -26,8 +26,10 @@ for tagged tailnet nodes.
   client that already talks to a local `bw serve` switches by changing one URL.
 - **Identity from the tailnet.** There is no relay token. The local Tailscale daemon names the
   node behind each connection (`whois`), and only a node carrying a tag the operator listed is
-  served. Tailscale already holds a key per node and expires ephemeral ones; a second credential
-  for the relay would only be another secret for each sandbox to hold.
+  served, from its own address. A subnet router or exit node is never served, whatever its tags:
+  what it forwards would arrive with its identity. Tailscale already holds a key per node and
+  expires ephemeral ones; a second credential for the relay would only be another secret for each
+  sandbox to hold.
 - **Scope by collection or id.** Only items the operator placed in a listed collection, or listed
   by id, exist as far as the relay is concerned; everything else is answered as missing.
 - **Secrets through `getSecret`.** The relay composes its answers from `VaultClient` and reads
@@ -40,7 +42,7 @@ for tagged tailnet nodes.
 
 - This is the first vaultgate surface that hands a secret value to a process the operator does
   not run on the vaultgate host. Whatever runs on a tagged node can read every in-scope secret.
-  The controls are the tag, the scope and the audit trail. The threat model (T51 to T57) states
+  The controls are the tag, the scope and the audit trail. The threat model (T51 to T58) states
   what they do not cover.
 - Tailscale becomes a dependency of this feature (not of vaultgate): the daemon must run on the
   vaultgate host, and its LocalAPI socket must be reachable from the service.

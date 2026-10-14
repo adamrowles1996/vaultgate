@@ -45,6 +45,10 @@ Join the callers with **ephemeral, pre-authorised** keys or an OAuth client that
 so a node disappears when its machine does. Anyone who can create a node with the tag is an
 admitted caller, so treat the key like a credential.
 
+The relay never admits a subnet router or an exit node, even one carrying the tag: devices behind
+it reach the tailnet under its identity, so admitting it would admit them. Give routers a tag of
+their own; a router that carries the callers' tag is refused, and the audit log says `router`.
+
 ## 2. Choose the scope
 
 Create a collection in your organisation (for example _Relay_), add only the items the callers
