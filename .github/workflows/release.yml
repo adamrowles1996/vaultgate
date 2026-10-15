@@ -1,29 +1,87 @@
 name: Release
 
-# A signed tag vX.Y.Z on main (docs/spec/11-quality-gates.md, QG-10) produces:
+# A tag vX.Y.Z on main (docs/spec/11-quality-gates.md, QG-10) produces:
 # the multi-arch images of vaultgate and of its code sidecar (ACT-113) on GHCR,
 # each signed with cosign keyless, with SBOM and provenance attached; and a
 # GitHub release carrying the install tarball and the sidecar bundle, each with
 # its checksum and a build provenance attestation, and the matching CHANGELOG
 # section as notes (DEP-1).
+#
+# Two ways in. Pushing the tag starts it. Or run the workflow by hand on main with
+# the version (workflow_dispatch): the `tag` job checks that main's head is the
+# `chore(release): vX.Y.Z` commit and that package.json carries that version, then
+# creates the annotated tag itself and the jobs below build from it. A tag pushed
+# with the workflow token starts no second run, so the release runs once.
 on:
   push:
     tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, without the leading v (for example 0.1.0-rc.26)
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
   cancel-in-progress: false
 
 env:
   IMAGE: ghcr.io/adamrowles1996/vaultgate
   CODE_IMAGE: ghcr.io/adamrowles1996/vaultgate-code
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
 
 jobs:
+  tag:
+    name: Create the release tag (manual run only)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - name: Check the version and main's head, then push the annotated tag
+        env:
+          VERSION: ${{ inputs.version }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::run the release from main, not $REF"; exit 1
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$VERSION' is not a semantic version without the v"; exit 1
+          fi
+          pkg=$(node -p "require('./package.json').version")
+          if [ "$pkg" != "$VERSION" ]; then
+            echo "::error::package.json on main is $pkg, not $VERSION"; exit 1
+          fi
+          subject=$(git log -1 --format=%s)
+          case "$subject" in
+            "chore(release): v$VERSION"|"chore(release): v$VERSION (#"*) ;;
+            *) echo "::error::main's head is '$subject', not the chore(release): v$VERSION commit"; exit 1 ;;
+          esac
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::tag v$VERSION already exists"; exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "v$VERSION"
+          git push origin "refs/tags/v$VERSION"
+
   verify:
     name: Quality gates
+    needs: tag
+    if: ${{ !cancelled() && (needs.tag.result == 'success' || needs.tag.result == 'skipped') }}
     permissions:
       contents: read
     uses: ./.github/workflows/ci.yml
@@ -31,6 +89,7 @@ jobs:
   image:
     name: Multi-arch image, signature, SBOM, provenance
     needs: verify
+    if: ${{ !cancelled() && needs.verify.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -44,6 +103,7 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -58,8 +118,8 @@ jobs:
           images: ${{ env.IMAGE }}
           # latest=auto: `latest` follows every non-prerelease semver tag.
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ env.RELEASE_TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.RELEASE_TAG }}
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -84,6 +144,7 @@ jobs:
   code-image:
     name: Code sidecar image, signature, SBOM, provenance
     needs: verify
+    if: ${{ !cancelled() && needs.verify.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -97,6 +158,7 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -110,8 +172,8 @@ jobs:
         with:
           images: ${{ env.CODE_IMAGE }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ env.RELEASE_TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.RELEASE_TAG }}
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -136,6 +198,7 @@ jobs:
   release-assets:
     name: Install tarball, sidecar bundle and GitHub release
     needs: verify
+    if: ${{ !cancelled() && needs.verify.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -148,6 +211,7 @@ jobs:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -159,16 +223,17 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build
       - name: Build vaultgate-<version>.tgz, vaultgate-code-<version>.tgz, their .sha256 and the release notes
-        run: scripts/release-assets.sh "${GITHUB_REF_NAME#v}"
+        run: scripts/release-assets.sh "${RELEASE_TAG#v}"
       - name: Attest the build provenance of both tarballs (Sigstore)
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: release/*.tgz
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
           body_path: release/notes.md
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           fail_on_unmatched_files: true
           files: |
             release/vaultgate-*.tgz
