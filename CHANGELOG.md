@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- QG-10: **the release workflow can be started by hand** (`workflow_dispatch`, input `version`).
+  It checks that `main`'s head is the `chore(release): vX.Y.Z` commit and that `package.json`
+  carries that version, creates the annotated `vX.Y.Z` tag itself, then builds, signs and
+  publishes as before. A session that cannot push tags can now cut a release; pushing the tag
+  still works.
+
 ## [0.1.0-rc.25] - 2026-10-14
 
 ### Added
