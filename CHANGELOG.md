@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.26] - 2026-10-26
+
 ### Added
 
 - MCP-17: **`update_item` edits custom fields.** `set_fields` writes values by exact field name,
@@ -703,7 +705,8 @@ Release candidates 0.1.0-rc.1 to 0.1.0-rc.9 are in
 [`docs/changelog-archive.md`](docs/changelog-archive.md). They are kept verbatim; this file holds
 the current release and the ones after it, so it stays inside the repository's 64 KiB file gate.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.25...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.26...HEAD
+[0.1.0-rc.26]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.25...v0.1.0-rc.26
 [0.1.0-rc.25]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.24...v0.1.0-rc.25
 [0.1.0-rc.24]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.23...v0.1.0-rc.24
 [0.1.0-rc.23]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.22...v0.1.0-rc.23
