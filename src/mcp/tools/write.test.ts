@@ -128,6 +128,55 @@ describe('update_item', () => {
     expect(await failureCode(toolUpdateItem, vault, conflicting)).toBe('conflicting_arguments');
   });
 
+  it('MCP-17 renames, removes and writes custom fields, returning no hidden value', async () => {
+    const vault = new InMemoryVaultClient();
+    const output = await runOk(toolUpdateItem, vault, {
+      item_id: 'item-login',
+      rename_fields: [{ from: 'API key', to: 'Sandbox - API key' }],
+      remove_fields: ['Linked username'],
+      set_fields: [
+        { name: 'Environment', value: 'staging' },
+        { name: 'Production - API key', value: 'prod-secret' },
+        { name: 'Production - App ID', value: '' },
+        { name: 'Region', value: 'eu', kind: 'text' },
+      ],
+    });
+    expect(output['item']).toMatchObject({
+      custom_fields: [
+        { name: 'Environment', kind: 'text', value: 'staging' },
+        { name: 'Sandbox - API key', kind: 'hidden', value: null },
+        { name: 'MFA enrolled', kind: 'boolean', value: 'true' },
+        { name: 'Production - API key', kind: 'hidden', value: null },
+        { name: 'Production - App ID', kind: 'hidden', value: null },
+        { name: 'Region', kind: 'text', value: 'eu' },
+      ],
+    });
+    expect(vault.storedSecrets('item-login')?.hiddenFields).toStrictEqual({
+      'Sandbox - API key': CANARY.hiddenField,
+      'Production - API key': 'prod-secret',
+    });
+    const text = JSON.stringify(output);
+    expect(text).not.toContain(CANARY.hiddenField);
+    expect(text).not.toContain('prod-secret');
+  });
+
+  it('MCP-17 refuses an edit that cannot apply and changes nothing', async () => {
+    const vault = new InMemoryVaultClient();
+    const before = unwrapOk(await vault.getItem('item-login'));
+    const edits = [
+      { remove_fields: ['missing'] },
+      { rename_fields: [{ from: 'Environment', to: 'MFA enrolled' }] },
+      { set_fields: [{ name: 'API key', value: 'x', kind: 'text' }] },
+      { set_fields: [{ name: 'Region', value: 'eu' }], remove_fields: ['Region'] },
+    ];
+    for (const edit of edits) {
+      expect(await failureCode(toolUpdateItem, vault, { item_id: 'item-login', ...edit })).toBe(
+        'invalid_item',
+      );
+    }
+    expect(unwrapOk(await vault.getItem('item-login'))).toStrictEqual(before);
+  });
+
   it('§5.4 maps not_found and vault failures', async () => {
     expect(
       await failureCode(toolUpdateItem, new InMemoryVaultClient(), { item_id: 'nope', name: 'x' }),

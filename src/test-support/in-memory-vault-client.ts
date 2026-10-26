@@ -17,6 +17,7 @@ import {
 } from '../vault/client.ts';
 
 import {
+  editedStoredItem,
   FIXED_NOW,
   mergedCustomFields,
   mergedLogin,
@@ -171,10 +172,16 @@ export class InMemoryVaultClient implements VaultClient {
   }
 
   updateItem(id: string, patch: ItemPatch): VaultResult<ItemSummary> {
-    const existing = this.#items.get(id);
-    if (existing === undefined) {
+    const stored = this.#items.get(id);
+    if (stored === undefined) {
       return this.#notFound(id);
     }
+    const edited =
+      patch.fieldEdits === undefined ? ok(stored) : editedStoredItem(stored, patch.fieldEdits);
+    if (!edited.ok) {
+      return this.#reject(edited.error);
+    }
+    const existing = edited.value;
     const secrets = mergedSecrets(existing.secrets, patch);
     const summary: ItemSummary = {
       ...existing.summary,

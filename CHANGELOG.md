@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- MCP-17: **`update_item` edits custom fields.** `set_fields` writes values by exact field name,
+  creating a missing field (`hidden` unless `kind` is `text` or `boolean`); `rename_fields` renames
+  fields, keeping their kinds and values; `remove_fields` deletes fields. A field's kind never
+  changes in place, so a hidden value cannot be made readable; an ambiguous or conflicting edit is
+  refused with `invalid_item` and changes nothing. Writing a non-empty hidden value needs
+  `vault:reveal` as well, as an explicit password does.
+
 ### Security
 
 - The code sidecar's locked runtime dependencies take `certifi` 2026.10.23 (PYSEC-2026-4320, fixed

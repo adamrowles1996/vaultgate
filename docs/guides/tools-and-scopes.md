@@ -150,6 +150,19 @@ Partial update: only the fields given change.
 | `folder_id`                                     | A folder id, or `null` to move the item out of its folder.        |
 | `generate_password: true`                       | Rotate the password to a new generated one without seeing it.     |
 | `password`                                      | An explicit value. Needs `vault:reveal` as well as `vault:write`. |
+| `set_fields`                                    | Custom fields to write: `{ name, value, kind? }`, see below.      |
+| `rename_fields`                                 | Custom fields to rename: `{ from, to }`.                          |
+| `remove_fields`                                 | Names of custom fields to delete.                                 |
+
+Custom fields are matched by their exact name, the one `get_secret` takes as `custom.<name>`.
+`set_fields` writes a value, and creates the field when the item has none of that name: `hidden`
+unless `kind` is `text` or `boolean`. An empty `value` leaves the field empty, which is how to
+make a placeholder. A renamed field keeps its kind and value. A field's kind never changes in
+place: to turn a hidden field into a text one, remove it and set it again, which drops its value.
+Each field may be named once per call, a field to rename, remove or set must be the only one of
+its name, and a `boolean` takes `true` or `false`; anything else fails with `invalid_item` and
+changes nothing. A non-empty value for a hidden field (any `kind` but `text` or `boolean`) needs
+`vault:reveal` as well as `vault:write`, as an explicit password does; renames and removals do not.
 
 Returns `item`, the updated summary; never secret values. Writes are read-after-write
 consistent: the tool waits (up to 5 s) until the new revision is visible before returning.

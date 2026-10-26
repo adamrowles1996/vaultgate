@@ -18,7 +18,13 @@ import {
 import { DEFAULT_PASSWORD_LENGTH } from './generate.ts';
 import { folderSchema, itemIdSchema, itemSummarySchema, toItemSummaryOutput } from './schemas.ts';
 
-import type { ItemPatch, NewItem, NewLoginFields, VaultClient } from '../../vault/client.ts';
+import type {
+  CustomFieldEdits,
+  ItemPatch,
+  NewItem,
+  NewLoginFields,
+  VaultClient,
+} from '../../vault/client.ts';
 
 const passwordInputs = {
   password: z
@@ -114,6 +120,71 @@ export const toolCreateItem: Tool = defineTool({
   run: runCreateItem,
 });
 
+/**
+MCP-17: at most this many changes of each kind in one call.
+*/
+const MAX_FIELD_CHANGES = 50;
+const fieldName = z.string().min(1);
+
+const fieldInputs = {
+  set_fields: z
+    .array(
+      z.strictObject({
+        name: fieldName,
+        value: z.string().describe('The value; the empty string leaves the field empty.'),
+        kind: z
+          .enum(['text', 'hidden', 'boolean'])
+          .optional()
+          .describe(
+            'For a new field, its kind (default hidden). An existing field keeps its own kind; ' +
+              'naming a different one is refused.',
+          ),
+      }),
+    )
+    .max(MAX_FIELD_CHANGES)
+    .optional()
+    .describe(
+      'Custom fields to write, by exact name; a missing one is created. A non-empty value ' +
+        'for a hidden field (any kind but text or boolean) also needs vault:reveal.',
+    ),
+  rename_fields: z
+    .array(z.strictObject({ from: fieldName, to: fieldName }))
+    .max(MAX_FIELD_CHANGES)
+    .optional()
+    .describe('Custom fields to rename; each keeps its kind and value.'),
+  remove_fields: z
+    .array(fieldName)
+    .max(MAX_FIELD_CHANGES)
+    .optional()
+    .describe('Custom fields to delete, by exact name.'),
+};
+
+interface FieldInputs {
+  readonly set_fields?:
+    | readonly { name: string; value: string; kind?: 'text' | 'hidden' | 'boolean' | undefined }[]
+    | undefined;
+  readonly rename_fields?: readonly { from: string; to: string }[] | undefined;
+  readonly remove_fields?: readonly string[] | undefined;
+}
+
+/**
+The custom-field changes a call asks for (MCP-17), or `undefined` when it asks for none.
+*/
+function fieldEditsOf(input: FieldInputs): CustomFieldEdits | undefined {
+  const edits: CustomFieldEdits = {
+    ...(input.set_fields !== undefined && {
+      set: input.set_fields.map(({ name, value, kind }) => ({
+        name,
+        value,
+        ...(kind !== undefined && { kind }),
+      })),
+    }),
+    ...(input.rename_fields !== undefined && { rename: input.rename_fields }),
+    ...(input.remove_fields !== undefined && { remove: input.remove_fields }),
+  };
+  return Object.keys(edits).length > 0 ? edits : undefined;
+}
+
 const updateInput = z.strictObject({
   item_id: itemIdSchema,
   name: z.string().min(1).optional(),
@@ -123,6 +194,7 @@ const updateInput = z.strictObject({
   folder_id: z.string().nullable().optional(),
   favorite: z.boolean().optional(),
   ...passwordInputs,
+  ...fieldInputs,
 });
 
 const runUpdateItem: ToolRun<typeof updateInput, typeof itemOutput> = async (vault, input) => {
@@ -131,12 +203,14 @@ const runUpdateItem: ToolRun<typeof updateInput, typeof itemOutput> = async (vau
     return password;
   }
   const login = loginFields(input, password.value);
+  const fieldEdits = fieldEditsOf(input);
   const patch: ItemPatch = {
     ...(input.name !== undefined && { name: input.name }),
     ...(input.notes !== undefined && { notes: input.notes }),
     ...(input.folder_id !== undefined && { folderId: input.folder_id }),
     ...(input.favorite !== undefined && { favorite: input.favorite }),
     ...(Object.keys(login).length > 0 && { login }),
+    ...(fieldEdits !== undefined && { fieldEdits }),
   };
   const result = await vault.updateItem(input.item_id, patch);
   return result.ok ? ok({ item: toItemSummaryOutput(result.value) }) : result;
@@ -146,9 +220,13 @@ export const toolUpdateItem: Tool = defineTool({
   name: 'update_item',
   description:
     'Partially updates one item: name, username, URIs, notes, folder (null to clear), favourite ' +
-    'flag and password. Only the fields given change. Set generate_password: true to rotate the ' +
-    'password to a new generated one without seeing it; an explicit password also needs ' +
-    'vault:reveal. Returns the updated summary, never secret values.',
+    'flag, password and custom fields. Only the fields given change. Set generate_password: true ' +
+    'to rotate the password to a new generated one without seeing it; an explicit password also ' +
+    'needs vault:reveal. Custom fields are matched by exact name and each may be named once: ' +
+    'set_fields writes values (creating a missing field, hidden unless kind says otherwise), ' +
+    'rename_fields renames fields keeping their values, remove_fields deletes fields; a ' +
+    'non-empty hidden value in set_fields also needs vault:reveal. Returns the updated summary, ' +
+    'never secret values.',
   annotations: { ...WRITE, title: 'Update item' },
   inputSchema: updateInput,
   outputSchema: itemOutput,

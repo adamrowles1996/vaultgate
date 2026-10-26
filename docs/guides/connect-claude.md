@@ -129,8 +129,8 @@ page rather than a redirect, so no code can leak.
 at consent, or the deployment has since disabled `vault:write`. vaultgate answers `403` and lists
 every scope the call needs. Disconnect on the Agents page and connect again, ticking the scope.
 Tools outside the token's scopes are not even listed, so Claude normally does not try them; the
-exception is `create_item`/`update_item` with an explicit `password`, which additionally needs
-`vault:reveal`.
+exception is `create_item`/`update_item` with an explicit `password`, or `update_item` writing a
+hidden custom-field value, which additionally needs `vault:reveal`.
 
 **`vault_unavailable` in tool results.** The vault is not unlocked; see
 [First run § When `vault` keeps failing](first-run.md#when-vault-keeps-failing).
