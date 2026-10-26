@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- The code sidecar's locked runtime dependencies take `certifi` 2026.10.23 (PYSEC-2026-4320, fixed
+  in 2026.10.19) and `filelock` 4.2.4 (CVE-2026-112907, CVE-2026-112913 and CVE-2026-112940, fixed
+  in 4.2.1), which CI's `pip-audit --strict` gate now requires.
+
 ### Changed
 
 - RELAY-13: **the credential relay's `/sync` syncs the vault.** It was acknowledged without
