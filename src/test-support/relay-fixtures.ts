@@ -6,6 +6,7 @@
  */
 import { createRelayApp, type RelayApp } from '../relay/app.ts';
 import { createScope, type RelayScope } from '../relay/scope.ts';
+import { createRelaySync, type RequestSync } from '../relay/sync.ts';
 
 import { InMemoryVaultClient } from './in-memory-vault-client.ts';
 import { captureLogger } from './logging.ts';
@@ -161,6 +162,10 @@ export interface RelayHarness {
 
 export interface RelayHarnessOptions {
   readonly whoIs?: WhoIs;
+  /**
+  The operator's sync `/sync` asks for; the in-memory vault's own by default.
+  */
+  readonly requestSync?: RequestSync;
   readonly peerAddress?: string | undefined;
   readonly listen?: { readonly host: string; readonly port: number };
 }
@@ -178,6 +183,7 @@ export function relayHarness(options: RelayHarnessOptions = {}): RelayHarness {
     whoIs: options.whoIs ?? (() => Promise.resolve(PEER)),
     peerAddress: () => address,
     vault,
+    sync: createRelaySync(options.requestSync ?? (() => vault.sync()), () => nowMs),
     audit,
     logger,
     now: () => nowMs,

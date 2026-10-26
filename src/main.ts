@@ -240,6 +240,7 @@ const relayListener =
             config: config.relay,
             listen: relayListen,
             vault: vault.client,
+            requestSync: () => vaultConnection.sync(),
             audit: auditSink,
             logger,
             now: Date.now,

@@ -23,6 +23,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- RELAY-13: **the credential relay's `/sync` syncs the vault.** It was acknowledged without
+  touching the vault, so a change made outside vaultgate stayed invisible to relay callers and to
+  vaultgate's own tools until the next scheduled sync (`VAULTGATE_BW_SYNC_INTERVAL`, 15 minutes by
+  default). It now asks for the operator's own sync (VAULT-19), answers once that sync has
+  finished, and answers `503` or `500` when it fails. Relay callers together start at most one
+  sync every 10 seconds; a request inside that window shares the sync already started.
+
 - QG-10: **the release workflow can be started by hand** (`workflow_dispatch`, input `version`).
   It checks that `main`'s head is the `chore(release): vX.Y.Z` commit and that `package.json`
   carries that version, creates the annotated `vX.Y.Z` tag itself, then builds, signs and

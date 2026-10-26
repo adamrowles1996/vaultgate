@@ -2,6 +2,7 @@ import { PassThrough, Readable, type Writable } from 'node:stream';
 
 import { describe, expect, it } from 'vitest';
 
+import { ok } from '../result.ts';
 import { captureLogger } from '../test-support/logging.ts';
 import {
   LISTEN,
@@ -58,6 +59,7 @@ function relay(request?: LocalRequestFunction): ReturnType<typeof createRelay> {
     config: CONFIG,
     listen: LISTEN,
     vault: relayVault(),
+    requestSync: () => Promise.resolve(ok(undefined)),
     audit: new RecordingSink(),
     logger: captureLogger().logger,
     now: () => 0,
