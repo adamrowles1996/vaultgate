@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 
 [[package]]
@@ -296,9 +296,10 @@ wheels = [
 
 [[package]]
 name = "model2vec"
-version = "0.9.0"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "huggingface-hub" },
     { name = "jinja2" },
     { name = "joblib" },
     { name = "numpy" },
@@ -306,9 +307,9 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fd/e5/118c4a8af078ff97d9228718fbcd7d4f7e9cae93c3af59652d6f3407010a/model2vec-0.9.0.tar.gz", hash = "sha256:f50229cea128c9db5cfa7b2173478294be3c84e5d3d7fb8487ebd7af285383ab", size = 4590528, upload-time = "2026-08-12T14:24:38.524Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/04/48/2ceace43798ca7cb8c32c50c7956d7446d7f90a3b3f65b201fb7fd87344c/model2vec-0.10.0.tar.gz", hash = "sha256:47119ef1f917b4da7a0010bf10c587c923639a6af4ea51cb2d424fc329d09d2f", size = 4622501, upload-time = "2026-10-11T10:47:59.266Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/af/ea/80246465cafa36a6c8c8ac767778423940e5b826fa57c10ebd957b570c1c/model2vec-0.9.0-py3-none-any.whl", hash = "sha256:8bcf3258d5668678739c13226a562d39eeaeb8fcac9b142bc4aceef8800d5b9d", size = 59865, upload-time = "2026-08-12T14:24:36.626Z" },
+    { url = "https://files.pythonhosted.org/packages/84/c5/2b1b5648195bfcada5de6a1164d560c968ded8fc68f2ddd6118b21cb26b7/model2vec-0.10.0-py3-none-any.whl", hash = "sha256:a39c40de4f82c5e0e50c14bbb87a935c1c62094f3f0f0d8fde8e24f4a4f35b16", size = 89504, upload-time = "2026-10-11T10:47:57.679Z" },
 ]
 
 [[package]]
@@ -539,7 +540,7 @@ wheels = [
 
 [[package]]
 name = "semble"
-version = "0.6.1"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "model2vec" },
@@ -551,9 +552,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "vicinity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/64/ef/00bacf43342a0f2c4511e13daee39aa487fe9d8907e4a952f8a505812314/semble-0.6.1.tar.gz", hash = "sha256:d0045f1516d0f05d739631985f33e2c234eab9ea99f32d6223184827a143428d", size = 116546, upload-time = "2026-09-25T07:17:42.929Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b1/36/322a4802521f6a84b1ac5ed1dbd539129c439c78cfaaef1897f79ad8ba1a/semble-0.7.0.tar.gz", hash = "sha256:83a2bfeea20854d1354cfa95ed83ad580fac5dcf8ccdbd4f987da216bf5f694f", size = 121881, upload-time = "2026-10-16T12:16:20.02Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/de/62/0287f43a8d6012fa9a4406d75bc6a6a1ee3d190732e8d7d9760122f77bc2/semble-0.6.1-py3-none-any.whl", hash = "sha256:fea96cf60d93555966d57f26604b8ef935bf3f876757568cec9fe655dd651256", size = 88135, upload-time = "2026-09-25T07:17:41.508Z" },
+    { url = "https://files.pythonhosted.org/packages/af/10/00ed65627f5050d006ea01b363f709bdb208d037176bb2fb8e7044df5c12/semble-0.7.0-py3-none-any.whl", hash = "sha256:06c568d5a06f3a5352f22357d5a7ab17525d4404fddde8f1ae1405e3e87ac4a7", size = 91636, upload-time = "2026-10-16T12:16:18.518Z" },
 ]
 
 [[package]]
@@ -655,7 +656,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "semble", specifier = "==0.6.1" },
+    { name = "semble", specifier = "==0.7.0" },
     { name = "semble-grammars", specifier = "==0.1.2" },
 ]
 
