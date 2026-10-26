@@ -82,15 +82,13 @@ the threat model (T51 to T58) states what they do not cover.
   | Route                                                         | Answer                                                                          |
   | ------------------------------------------------------------- | ------------------------------------------------------------------------------- |
   | `GET /status`                                                 | `{"object":"template","template":{…}}` (RELAY-10)                               |
-  | `POST /sync`                                                  | `{"object":"message","title":"Syncing complete.","message":null}`; nothing else |
+  | `POST /sync`                                                  | `{"object":"message","title":"Syncing complete.","message":null}` (RELAY-13)    |
   | `GET /list/object/items?search=<term>`                        | `{"object":"list","data":[<item>…]}` (RELAY-6)                                  |
   | `GET /object/item/<id or term>`                               | `<item>` (RELAY-7)                                                              |
   | `GET /object/{username,password,notes,totp,uri}/<id or term>` | `{"object":"string","data":<value>}`; the empty string when the item holds none |
 
-  `/sync` MUST NOT touch the vault: vaultgate syncs on its own schedule (VAULT-9) and a caller
-  cannot drive it. Any other path or method, `/unlock`, `/lock`, writes, `/generate` and the
-  folder and collection lists included, MUST be answered `404` with
-  `{"success":false,"message":"Unknown route."}`.
+  Any other path or method, `/unlock`, `/lock`, writes, `/generate` and the folder and collection
+  lists included, MUST be answered `404` with `{"success":false,"message":"Unknown route."}`.
 
 - **RELAY-6** A term that is a UUID MUST read that item; any other term MUST be the vault's own
   search (name, username, URI) filtered to the scope. One match is the answer. Several matches of
@@ -105,6 +103,15 @@ the threat model (T51 to T58) states what they do not cover.
   `login` (`uris`, `username`, `password`, `totp`) or `secureNote`, `collectionIds`,
   `revisionDate`. `login.totp` MUST always be `null`: a TOTP seed never leaves vaultgate, and the
   current code is answered on the `totp` route only.
+- **RELAY-13** `POST /sync` MUST ask for the operator's own sync (VAULT-19), which joins a sync
+  already running, and MUST answer only once that sync has finished: `Syncing complete.` when it
+  succeeded, otherwise as RELAY-10 (`503` while the vault is unavailable, `500` for any other
+  failure). Relay callers together MUST start at most one sync every 10 seconds: a request within
+  10 s of the start of the last sync a relay request started MUST answer with that sync's outcome
+  instead of starting another, whichever node asks, and its `relay.sync` event records
+  `shared: true`. A node can so pick up a change made outside vaultgate at once, instead of
+  waiting up to `VAULTGATE_BW_SYNC_INTERVAL` for the next scheduled sync (VAULT-9), but cannot
+  make vaultgate ask the vault server more often than once every 10 s.
 
 ## 15.6 Audit, limits and failures
 
@@ -122,7 +129,8 @@ the threat model (T51 to T58) states what they do not cover.
   other vault failure is `500` `Vault error.` An item or list answer MUST fail whole if any one
   of its secrets cannot be read: no partial item is ever answered.
 - **RELAY-11** `src/relay/` MUST read the vault through the `VaultClient` interface only, with
-  every secret read through `getSecret`; it MUST NOT import `src/bitwarden/`, `src/storage/` or
+  every secret read through `getSecret`, and ask for a sync only through the function the
+  composition layer passes it (RELAY-13); it MUST NOT import `src/bitwarden/`, `src/storage/` or
   another feature, and no feature but the composition layer MAY import it.
 
 ## 15.7 Non-goals

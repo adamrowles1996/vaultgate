@@ -38,7 +38,7 @@ function withStatus(harness: RelayHarness, state: VaultLockState): void {
   vi.spyOn(harness.vault, 'status').mockResolvedValue(ok(status));
 }
 
-describe('relay status and sync', () => {
+describe('relay status', () => {
   it('RELAY-10 reports the lock state and nothing about the server or account', async () => {
     const harness = relayHarness();
     for (const state of ['unlocked', 'locked', 'unauthenticated'] as const) {
@@ -72,20 +72,6 @@ describe('relay status and sync', () => {
     const broken = await relayGet(harness, '/status');
     expect(broken.status).toBe(500);
     expect(harness.audit.events.at(-1)?.outcome).toBe('error:vault_protocol_error');
-  });
-
-  it('RELAY-5 acknowledges /sync without touching the vault', async () => {
-    const harness = relayHarness();
-    harness.vault.failWith(UNAVAILABLE);
-    const response = await harness.app.request('/sync', {
-      method: 'POST',
-      headers: { host: '100.64.0.10:8087' },
-    });
-    expect(await json(response)).toStrictEqual({
-      success: true,
-      data: { object: 'message', title: 'Syncing complete.', message: null },
-    });
-    expect(harness.audit.events.at(-1)?.action).toBe('relay.sync');
   });
 });
 

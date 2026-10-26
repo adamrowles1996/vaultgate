@@ -1,9 +1,9 @@
 /**
  * The relay's read routes (RELAY-5), each audited (RELAY-8). A handler
  * receives a caller the admission check already accepted and answers in
- * `bw serve`'s envelope. Nothing here writes to the vault: `/sync` is
- * acknowledged without touching it, because the vault already syncs on its
- * own schedule (VAULT-9) and a caller must not be able to drive it.
+ * `bw serve`'s envelope. Nothing here writes to the vault: `/sync` asks for
+ * the operator's own sync, at most once every ten seconds whichever node
+ * asks (RELAY-13).
  */
 import { type ItemBody, revealItem, revealScalar, type ScalarKind } from './item-body.ts';
 import {
@@ -17,6 +17,7 @@ import {
 } from './responses.ts';
 import { findInScope, type RelayScope, resolveOne } from './scope.ts';
 
+import type { RelaySync } from './sync.ts';
 import type { AuditDetails, AuditOutcome, AuditSink } from '../audit/event.ts';
 import type { ItemSummary, VaultClient, VaultError } from '../vault/client.ts';
 
@@ -32,6 +33,7 @@ export interface HandlerDependencies {
   readonly vault: VaultClient;
   readonly scope: RelayScope;
   readonly audit: AuditSink;
+  readonly sync: RelaySync;
 }
 
 /**
@@ -103,9 +105,21 @@ export async function handleStatus(
   });
 }
 
-export function handleSync(dependencies: HandlerDependencies, caller: Caller): RelayReply {
-  record(dependencies, caller, 'sync', { outcome: 'ok' });
-  return success({ object: 'message', title: 'Syncing complete.', message: null });
+/**
+RELAY-13: answered once the vault has synced, or with the reason it did not.
+*/
+export async function handleSync(
+  dependencies: HandlerDependencies,
+  caller: Caller,
+): Promise<RelayReply> {
+  const { result, shared } = await dependencies.sync();
+  record(dependencies, caller, 'sync', {
+    outcome: result.ok ? 'ok' : failed(result.error),
+    ...(shared && { details: { shared } }),
+  });
+  return result.ok
+    ? success({ object: 'message', title: 'Syncing complete.', message: null })
+    : vaultFailure(result.error);
 }
 
 /**
