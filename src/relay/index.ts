@@ -8,6 +8,7 @@ import { createLocalHttp, type LocalRequestFunction } from '../net/local-http.ts
 
 import { createRelayApp, type RelayApp } from './app.ts';
 import { createScope } from './scope.ts';
+import { createRelaySync, type RequestSync } from './sync.ts';
 import { createWhoIs } from './whois.ts';
 
 import type { AuditSink } from '../audit/event.ts';
@@ -22,6 +23,10 @@ export interface RelayOptions {
   readonly config: RelayConfig;
   readonly listen: RelayListen;
   readonly vault: VaultClient;
+  /**
+  The operator's sync (VAULT-19), which `/sync` asks for (RELAY-13).
+  */
+  readonly requestSync: RequestSync;
   readonly audit: AuditSink;
   readonly logger: Logger;
   readonly now: () => number;
@@ -40,6 +45,7 @@ export function createRelay(options: RelayOptions): RelayApp {
     scope: createScope(options.config.collections, options.config.items, options.config.allItems),
     whoIs: createWhoIs(localApi),
     vault: options.vault,
+    sync: createRelaySync(options.requestSync, options.now),
     audit: options.audit,
     logger: options.logger,
     now: options.now,

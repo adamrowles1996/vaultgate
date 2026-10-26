@@ -156,7 +156,9 @@ export function createRelayApp(dependencies: RelayAppDependencies): RelayApp {
   app.get('/status', async (context) =>
     send(context, await handleStatus(dependencies, context.var.caller)),
   );
-  app.post('/sync', (context) => send(context, handleSync(dependencies, context.var.caller)));
+  app.post('/sync', async (context) =>
+    send(context, await handleSync(dependencies, context.var.caller)),
+  );
   app.get('/list/object/items', async (context) =>
     send(context, await handleList(dependencies, context.var.caller, context.req.query('search'))),
   );

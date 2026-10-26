@@ -1,6 +1,6 @@
 # ADR 0009: A read-only credential relay for tagged tailnet nodes
 
-Date: 2026-10-14. Status: accepted. Specification: [15 The credential relay](../spec/15-credential-relay.md).
+Date: 2026-10-14, amended 2026-10-26 (below). Status: accepted. Specification: [15 The credential relay](../spec/15-credential-relay.md).
 
 ## Context
 
@@ -51,3 +51,12 @@ for tagged tailnet nodes.
 - The actions layer stays the right answer wherever an operation can be expressed as an action:
   then nothing leaves vaultgate at all. The relay is for programs that cannot be reshaped that way.
 - ADR 0004 is unchanged: the relay executes nothing and fetches nothing on a caller's behalf.
+
+## Amendment, 2026-10-26: `/sync` syncs
+
+`/sync` was a no-op, so a change made outside vaultgate stayed invisible to every relay caller,
+and to vaultgate's own tools, until the next scheduled sync, up to `VAULTGATE_BW_SYNC_INTERVAL`
+later. It now asks for the operator's own sync (VAULT-19, the console's **Sync now**), and relay
+callers together start at most one every 10 seconds; a request inside that window shares the sync
+already started (RELAY-13). A sync reads from the vault server and changes nothing in the vault,
+so the relay stays read-only.
