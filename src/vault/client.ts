@@ -135,6 +135,32 @@ export interface CustomFieldPatch {
   readonly value: string;
 }
 
+export type WritableFieldKind = Exclude<CustomFieldKind, 'linked'>;
+
+export interface CustomFieldSet {
+  readonly name: string;
+  /**
+  The new value; the empty string leaves the field empty.
+  */
+  readonly value: string;
+  readonly kind?: WritableFieldKind;
+}
+
+export interface CustomFieldRename {
+  readonly from: string;
+  readonly to: string;
+}
+
+/**
+ * Custom-field changes `update_item` asks for (MCP-17); `planFieldEdits` in
+ * `field-edits.ts` holds the rules both clients apply.
+ */
+export interface CustomFieldEdits {
+  readonly set?: readonly CustomFieldSet[];
+  readonly rename?: readonly CustomFieldRename[];
+  readonly remove?: readonly string[];
+}
+
 export interface ItemPatch {
   readonly name?: string;
   readonly folderId?: string | null;
@@ -142,6 +168,7 @@ export interface ItemPatch {
   readonly favorite?: boolean;
   readonly login?: NewLoginFields;
   readonly customFields?: readonly CustomFieldPatch[];
+  readonly fieldEdits?: CustomFieldEdits;
 }
 
 export type VaultErrorCode =

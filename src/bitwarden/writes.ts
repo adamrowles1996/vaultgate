@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { ok, type Result } from '../result.ts';
 
 import { type Clock, sleep } from './clock.ts';
-import { newItemBody, patchedItemBody, summariseItem } from './items.ts';
+import { newItemBody, patchedItemBody, summariseItem, withFieldEdits } from './items.ts';
 import { itemPath } from './requests.ts';
 import { itemSchema, type RawItem } from './types.ts';
 
@@ -90,7 +90,9 @@ export async function updateItem(
   id: string,
   patch: ItemPatch,
 ): Promise<Result<ItemSummary, VaultError>> {
-  const before = await readItem(context.api, id);
+  const read = await readItem(context.api, id);
+  const before =
+    read.ok && patch.fieldEdits !== undefined ? withFieldEdits(read.value, patch.fieldEdits) : read;
   if (!before.ok) {
     return before;
   }

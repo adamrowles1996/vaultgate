@@ -30,7 +30,7 @@ human-readable `content` text. Names are stable API.
 | `generate_password`   | `vault:generate` | Random password with length and character-class options; nothing is stored.                                                                                                                           |
 | `generate_passphrase` | `vault:generate` | Diceware-style passphrase with word count and separator options.                                                                                                                                      |
 | `create_item`         | `vault:write`    | Create a login or secure note. Accepts an optional `generate_password: true` to have vaultgate fill the password without the agent ever seeing it.                                                    |
-| `update_item`         | `vault:write`    | Partial update of name, username, URIs, notes, folder, favourite; `password` only via `generate_password: true` or explicit value with `vault:reveal` also held.                                      |
+| `update_item`         | `vault:write`    | Partial update of name, username, URIs, notes, folder, favourite and custom fields (MCP-17); `password` only via `generate_password: true` or explicit value with `vault:reveal` also held.           |
 | `trash_item`          | `vault:write`    | Soft delete (moves to trash). There is no permanent delete tool.                                                                                                                                      |
 | `create_folder`       | `vault:write`    | Create a folder.                                                                                                                                                                                      |
 
@@ -52,6 +52,18 @@ join this surface only on a deployment that enables the layer, for tokens with a
   a search, and ask for `max_snippet_lines: null` when a snippet is not enough. Any other token is
   told that read tools return metadata only and that `get_secret` is the sole, audited way to read
   a secret value.
+- **MCP-17** `update_item` edits custom fields by exact name, as `get_secret`'s `custom.<name>`
+  names them. `set_fields` writes values (the empty string leaves a field empty), creating a
+  missing field as `hidden` unless its `kind` is `text` or `boolean`; `rename_fields` renames a
+  field, which keeps its kind and value; `remove_fields` deletes one. A call names each field at
+  most once, and a field it renames, removes or sets must be the only one of that name. A rename
+  onto a name the item already has, a `kind` other than an existing field's own, a value for a
+  `linked` field and a `boolean` value other than `true` or `false` are refused with
+  `invalid_item`, and a refused call changes nothing. A field's kind never changes in place, so a
+  hidden value can never be made readable through `get_item`. A non-empty `set_fields` value
+  whose `kind` is neither `text` nor `boolean` is secret material and, like an explicit password,
+  needs `vault:reveal` as well; renaming or removing a field does not. A call makes at most 50
+  changes of each kind.
 
 ## 6.3 Secret-handling rules
 
@@ -59,7 +71,8 @@ join this surface only on a deployment that enables the layer, for tokens with a
   structurally incapable of carrying them (no free-form pass-through of vault objects), and
   contract tests assert that a fixture item full of canary strings yields no canary in any
   non-`get_secret` result.
-- **MCP-10** Tool inputs that may contain a secret (`update_item.password`) are marked and
+- **MCP-10** Tool inputs that may contain a secret (`update_item.password` and the values in
+  `update_item.set_fields`) are marked and
   excluded from logs and audit payloads.
 - **MCP-11** `get_secret` for `totp` returns the current code and its remaining validity, never the
   TOTP seed.

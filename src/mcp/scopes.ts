@@ -3,7 +3,8 @@
  * `src/scopes/registry.ts`.
  *
  * No scope implies another (OAUTH-36); a tool needs exactly the scopes
- * listed here, and `create_item`/`update_item` with an explicit password
+ * listed here, and `create_item`/`update_item` with an explicit password,
+ * like `update_item` writing a hidden custom-field value (MCP-17),
  * additionally need `vault:reveal` because the agent is handling secret
  * material.
  */
@@ -45,6 +46,30 @@ export function isToolName(value: string): value is ToolName {
   return (TOOL_NAMES as readonly string[]).includes(value);
 }
 
+const VISIBLE_FIELD_KINDS: ReadonlySet<unknown> = new Set(['text', 'boolean']);
+
+/**
+MCP-17: a non-empty value for a field that may be hidden, which is secret material like a password.
+*/
+function isSecretFieldValue(field: unknown): boolean {
+  if (typeof field !== 'object' || field === null) {
+    return false;
+  }
+  const value = 'value' in field ? field.value : undefined;
+  const kind = 'kind' in field ? field.kind : undefined;
+  return typeof value === 'string' && value.length > 0 && !VISIBLE_FIELD_KINDS.has(kind);
+}
+
+function hasSecretFieldValue(input: unknown): boolean {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    'set_fields' in input &&
+    Array.isArray(input.set_fields) &&
+    input.set_fields.some((field) => isSecretFieldValue(field))
+  );
+}
+
 function hasExplicitPassword(input: unknown): boolean {
   return (
     typeof input === 'object' &&
@@ -72,7 +97,8 @@ export interface ScopeRequirement {
 export function requiredScopes(tool: ToolName, input: unknown): ScopeRequirement {
   const base = TOOL_SCOPES[tool];
   const requiresReveal =
-    (tool === 'update_item' || tool === 'create_item') && hasExplicitPassword(input);
+    ((tool === 'update_item' || tool === 'create_item') && hasExplicitPassword(input)) ||
+    (tool === 'update_item' && hasSecretFieldValue(input));
   return { scopes: requiresReveal ? [base, 'vault:reveal'] : [base], mode: 'all' };
 }
 

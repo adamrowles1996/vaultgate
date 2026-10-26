@@ -3,9 +3,13 @@
  * strip every secret value (VAULT-13), write bodies carry only what the
  * contract allows, and secret reads pick one field from a raw item.
  */
+import { ok, type Result } from '../result.ts';
+import { planFieldEdits, type PlannedField } from '../vault/field-edits.ts';
+
 import { FIELD_TYPES, ITEM_TYPES, type RawField, type RawItem } from './types.ts';
 
 import type {
+  CustomFieldEdits,
   CustomFieldKind,
   CustomFieldPatch,
   CustomFieldSummary,
@@ -15,6 +19,7 @@ import type {
   LoginSummary,
   NewItem,
   SecretField,
+  VaultError,
 } from '../vault/client.ts';
 
 const ITEM_TYPE_NAMES: Readonly<Record<RawItem['type'], ItemType>> = {
@@ -143,6 +148,42 @@ function patchedFields(raw: RawItem, patch: readonly CustomFieldPatch[]): readon
       .filter((field) => !names.has(field.name))
       .map((field) => ({ name: field.name, value: field.value, type: FIELD_TYPES.hidden })),
   ];
+}
+
+interface RawExisting {
+  readonly name: string;
+  readonly kind: CustomFieldKind;
+  readonly raw: RawField;
+}
+
+/**
+ * A kept or rewritten field carries everything `bw serve` gave it, `linkedId`
+ * included, so nothing vaultgate does not model is lost; a new one is built.
+ */
+function editedField(planned: PlannedField<RawExisting>): RawField {
+  if ('keep' in planned) {
+    const { raw, name } = planned.keep;
+    return planned.name === name ? raw : { ...raw, name: planned.name };
+  }
+  return {
+    ...planned.replaces?.raw,
+    name: planned.name,
+    value: planned.value,
+    type: FIELD_TYPES[planned.kind],
+  };
+}
+
+/**
+The raw item with its custom fields edited (MCP-17), or why the edit cannot apply.
+*/
+export function withFieldEdits(raw: RawItem, edits: CustomFieldEdits): Result<RawItem, VaultError> {
+  const existing = (raw.fields ?? []).map((field) => ({
+    name: field.name ?? '',
+    kind: FIELD_KIND_NAMES[field.type],
+    raw: field,
+  }));
+  const plan = planFieldEdits(existing, edits);
+  return plan.ok ? ok({ ...raw, fields: plan.value.map((planned) => editedField(planned)) }) : plan;
 }
 
 /**

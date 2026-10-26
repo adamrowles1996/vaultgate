@@ -1,5 +1,9 @@
-import type { ItemSecrets } from './vault-fixture.ts';
+import { ok, type Result } from '../result.ts';
+import { planFieldEdits, type PlannedField } from '../vault/field-edits.ts';
+
+import type { ItemSecrets, StoredItem } from './vault-fixture.ts';
 import type {
+  CustomFieldEdits,
   CustomFieldSummary,
   ItemPatch,
   ItemSummary,
@@ -7,6 +11,7 @@ import type {
   SearchQuery,
   SecretField,
   SecretValue,
+  VaultError,
 } from '../vault/client.ts';
 
 export const FIXED_NOW = '2026-09-22T10:00:00.000Z';
@@ -151,4 +156,44 @@ export function newLogin(item: NewItem, secrets: ItemSecrets): ItemSummary['logi
         hasTotp: false,
       }
     : null;
+}
+
+function plannedValue(
+  planned: PlannedField<CustomFieldSummary>,
+  hidden: Readonly<Record<string, string>>,
+): string | null {
+  if (!('keep' in planned)) {
+    return planned.value;
+  }
+  return planned.keep.kind === 'hidden' ? (hidden[planned.keep.name] ?? null) : planned.keep.value;
+}
+
+/**
+ * MCP-17 on a stored item: the shared plan applied to the summary's fields
+ * and to the hidden values, which this fake keeps as secrets by field name.
+ */
+export function editedStoredItem(
+  stored: StoredItem,
+  edits: CustomFieldEdits,
+): Result<StoredItem, VaultError> {
+  const plan = planFieldEdits(stored.summary.customFields, edits);
+  if (!plan.ok) {
+    return plan;
+  }
+  const hidden = stored.secrets.hiddenFields ?? {};
+  const fields = plan.value.map((planned) => ({ planned, value: plannedValue(planned, hidden) }));
+  const customFields = fields.map(({ planned, value }) => ({
+    name: planned.name,
+    kind: planned.kind,
+    value: planned.kind === 'text' || planned.kind === 'boolean' ? value : null,
+  }));
+  const hiddenFields = Object.fromEntries(
+    fields.flatMap(({ planned, value }) =>
+      value !== null && planned.kind === 'hidden' ? [[planned.name, value]] : [],
+    ),
+  );
+  return ok({
+    summary: { ...stored.summary, customFields },
+    secrets: { ...stored.secrets, hiddenFields },
+  });
 }

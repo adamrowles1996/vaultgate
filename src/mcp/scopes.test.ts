@@ -46,6 +46,39 @@ describe('scopes', () => {
     });
   });
 
+  it('MCP-17 requires vault:reveal as well when update_item writes a hidden custom-field value', () => {
+    const scopesOf = (setFields: unknown): unknown =>
+      requiredScopes('update_item', { item_id: 'x', set_fields: setFields }).scopes;
+    const both = ['vault:write', 'vault:reveal'];
+    expect(scopesOf([{ name: 'a', value: 'secret' }])).toStrictEqual(both);
+    expect(scopesOf([{ name: 'a', value: 'secret', kind: 'hidden' }])).toStrictEqual(both);
+    expect(
+      scopesOf([
+        { name: 'a', value: 'plain', kind: 'text' },
+        { name: 'b', value: 'secret' },
+      ]),
+    ).toStrictEqual(both);
+    expect(scopesOf([{ name: 'a', value: 'plain', kind: 'text' }])).toStrictEqual(['vault:write']);
+    expect(scopesOf([{ name: 'a', value: 'true', kind: 'boolean' }])).toStrictEqual([
+      'vault:write',
+    ]);
+    expect(scopesOf([{ name: 'a', value: '' }])).toStrictEqual(['vault:write']);
+    expect(scopesOf([null, 'a', { name: 'a', value: 7 }, { name: 'b' }])).toStrictEqual([
+      'vault:write',
+    ]);
+    expect(scopesOf('a')).toStrictEqual(['vault:write']);
+    expect(
+      requiredScopes('update_item', {
+        item_id: 'x',
+        rename_fields: [{ from: 'a', to: 'b' }],
+        remove_fields: ['c'],
+      }).scopes,
+    ).toStrictEqual(['vault:write']);
+    expect(
+      requiredScopes('create_item', { name: 'x', set_fields: [{ name: 'a', value: 's' }] }).scopes,
+    ).toStrictEqual(['vault:write']);
+  });
+
   it('OAUTH-16 OAUTH-33 narrows held scopes to the enabled set and judges an all-of requirement against it', () => {
     const effective = effectiveScopes(
       ['vault:write', 'vault:read', 'offline_access'],
