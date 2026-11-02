@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "vaultgate",
-  "version": "0.1.0-rc.26",
+  "version": "0.1.0-rc.27",
   "description": "Use the credentials in your Bitwarden or Vaultwarden vault without seeing them, through your own self-hosted vaultgate server.",
   "author": {
     "name": "vaultgate",
