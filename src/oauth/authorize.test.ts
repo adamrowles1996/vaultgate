@@ -17,6 +17,27 @@ import {
 import { createOAuthHarness, RESOURCE } from '../test-support/oauth-harness.ts';
 import { cimdDocument } from '../test-support/oauth-http.ts';
 
+/**
+ * A signed-in authorization request from a client shaped like
+ * https://chatgpt.com/oauth/client.json (MCP SEP-3149), with the given supported methods.
+ */
+function authorizeChatGpt(supported: readonly string[]): ReturnType<typeof authorize> {
+  const id = 'https://chatgpt.com/oauth/client.json';
+  const redirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
+  const harness = harnessWithClients();
+  harness.cimd.set(id, () =>
+    Response.json({
+      client_id: id,
+      client_name: 'ChatGPT',
+      redirect_uris: [redirect],
+      token_endpoint_auth_method: 'private_key_jwt',
+      token_endpoint_auth_methods_supported: supported,
+      jwks_uri: 'https://chatgpt.com/oauth/jwks.json',
+    }),
+  );
+  return authorize(harness, query({ client_id: id, redirect_uri: redirect }), harness.signIn());
+}
+
 describe('GET /oauth/authorize', () => {
   it('OAUTH-17 without a session parks the request, binds a cookie and redirects to login with next=', async () => {
     const harness = harnessWithClients();
@@ -140,6 +161,18 @@ describe('GET /oauth/authorize', () => {
     const response = await authorize(harness, query(overrides), harness.signIn());
     expect(response.status).toBe(302);
     expect(response.headers.get('location')).toMatch(CONSENT_PATH);
+  });
+
+  it("OAUTH-5 accepts ChatGPT's document, which lists none beside a private_key_jwt preference", async () => {
+    const response = await authorizeChatGpt(['none', 'private_key_jwt']);
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toMatch(CONSENT_PATH);
+  });
+
+  it('OAUTH-5 refuses a document whose supported methods leave out none', async () => {
+    const response = await authorizeChatGpt(['private_key_jwt']);
+    expect(response.status).toBe(400);
+    expect(response.text).toContain('token_endpoint_auth_methods_supported');
   });
 
   it('T22 refetches the CIMD document when the presented redirect is not in the cached copy', async () => {

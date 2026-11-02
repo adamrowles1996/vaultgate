@@ -109,7 +109,7 @@ password is vaultgate's own operator login; it is not, and never becomes, your B
 password. Sign in, and on the **Vault** page connect the vault: server, API key client id and
 secret, and master password. vaultgate stores that connection encrypted under
 `VAULTGATE_SECRET_KEY`, so it survives restarts and upgrades. Then add `https://<host>/mcp` to
-Claude (or Claude Code, Codex, the MCP Inspector) as a remote MCP server and approve the scopes on
+Claude (or Claude Code, Codex, ChatGPT, the MCP Inspector) as a remote MCP server and approve the scopes on
 the consent page. The `bw` CLI that vaultgate drives is bundled in the image and installed by
 `install.sh`; nothing else is needed on the host. Walkthrough:
 [`docs/guides/first-run.md`](docs/guides/first-run.md); details and the verification of the
@@ -161,18 +161,18 @@ plus `vaultgate-<version>.tgz` and its `.sha256` for the script install.
 
 ## Documentation
 
-| Document                                       | What it is                                                                                                                                                       |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`docs/guides/`](docs/guides/README.md)        | User guides: first run, connecting Claude, Claude Code, Codex and the Inspector, tools and scopes, self-hosted Bitwarden, backup, upgrading, security model, FAQ |
-| [`docs/spec/`](docs/spec/README.md)            | The normative specification, one file per concern                                                                                                                |
-| [`docs/PLAN.md`](docs/PLAN.md)                 | Milestones, exit criteria, risks                                                                                                                                 |
-| [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | Assets, attackers, mitigations, residual risks                                                                                                                   |
-| [`docs/comparison.md`](docs/comparison.md)     | How vaultgate differs from the other Bitwarden MCP servers, with dated verification notes                                                                        |
-| [`docs/adoption.md`](docs/adoption.md)         | Listings, channels and app-store definitions, with the submission mechanics for each                                                                             |
-| [`server.json`](server.json)                   | The MCP Registry listing; how to publish it: [`docs/guides/publishing.md`](docs/guides/publishing.md)                                                            |
-| [`docs/adr/`](docs/adr/README.md)              | Architecture decision records                                                                                                                                    |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development workflow and quality gates                                                                                                                           |
-| [`SECURITY.md`](SECURITY.md)                   | Reporting vulnerabilities                                                                                                                                        |
+| Document                                       | What it is                                                                                                                                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`docs/guides/`](docs/guides/README.md)        | User guides: first run, connecting Claude, Claude Code, Codex, ChatGPT and the Inspector, tools and scopes, self-hosted Bitwarden, backup, upgrading, security model, FAQ |
+| [`docs/spec/`](docs/spec/README.md)            | The normative specification, one file per concern                                                                                                                         |
+| [`docs/PLAN.md`](docs/PLAN.md)                 | Milestones, exit criteria, risks                                                                                                                                          |
+| [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | Assets, attackers, mitigations, residual risks                                                                                                                            |
+| [`docs/comparison.md`](docs/comparison.md)     | How vaultgate differs from the other Bitwarden MCP servers, with dated verification notes                                                                                 |
+| [`docs/adoption.md`](docs/adoption.md)         | Listings, channels and app-store definitions, with the submission mechanics for each                                                                                      |
+| [`server.json`](server.json)                   | The MCP Registry listing; how to publish it: [`docs/guides/publishing.md`](docs/guides/publishing.md)                                                                     |
+| [`docs/adr/`](docs/adr/README.md)              | Architecture decision records                                                                                                                                             |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Development workflow and quality gates                                                                                                                                    |
+| [`SECURITY.md`](SECURITY.md)                   | Reporting vulnerabilities                                                                                                                                                 |
 
 ## Development
 

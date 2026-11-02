@@ -48,6 +48,10 @@ Three mechanisms, resolved in this order when a `client_id` is presented:
 
 - **OAUTH-5** Only public clients are supported. `token_endpoint_auth_method` MUST be `none`;
   registration requests asking for a confidential method are rejected with `invalid_client_metadata`.
+  A CIMD that lists `token_endpoint_auth_methods_supported` (MCP SEP-3149) names every method its
+  client can use, and its singular `token_endpoint_auth_method` is then only a preference: that
+  list MUST include `none`, and the singular field is not checked. Without the list, the singular
+  field MUST be absent or `none`.
 - **OAUTH-6** Every `redirect_uri` MUST be `https://…` or a loopback address (`http://localhost`,
   `http://127.0.0.1`, `http://[::1]`, any port). Anything else is rejected at registration and at
   authorize time.

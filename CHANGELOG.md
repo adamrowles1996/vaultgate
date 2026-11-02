@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Connecting ChatGPT, and a ChatGPT plugin package.** A new guide covers adding vaultgate in
+  ChatGPT as a custom MCP server ([guide](docs/guides/connect-chatgpt.md)).
+  `deploy/chatgpt-plugin/` holds the server connection, a skill that steers ChatGPT to actions
+  rather than `get_secret`, and the vaultgate icon, and `scripts/chatgpt-plugin.sh <public-url>`
+  builds the ZIP that ChatGPT uploads for one deployment.
+
+### Fixed
+
+- OAUTH-5: **ChatGPT can sign in.** Its client metadata document lists `none` and
+  `private_key_jwt` in `token_endpoint_auth_methods_supported` and names `private_key_jwt` as its
+  singular `token_endpoint_auth_method` preference (MCP SEP-3149). vaultgate read the singular
+  field as binding and refused the document with `invalid_client`. A document's supported list
+  now decides, and must include `none`; the singular field is checked only when there is no list.
+
 ## [0.1.0-rc.26] - 2026-10-26
 
 ### Added
