@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A ChatGPT plugin package.** `deploy/chatgpt-plugin/` holds the server connection, a skill that
+  steers ChatGPT to actions rather than `get_secret`, and the vaultgate icon, and
+  `scripts/chatgpt-plugin.sh <public-url>` builds the ZIP that ChatGPT uploads for one deployment.
+  Its `mcp.json` asks for dynamic client registration, because ChatGPT's client metadata document
+  sets `token_endpoint_auth_method` to `private_key_jwt`, which vaultgate refuses
+  ([guide](docs/guides/connect-chatgpt.md)).
+
 ## [0.1.0-rc.26] - 2026-10-26
 
 ### Added

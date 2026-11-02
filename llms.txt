@@ -63,7 +63,7 @@
 ## Key documents
 
 - README.md: overview, quick start, comparison table
-- docs/guides/README.md: connect Claude, Claude Code, Codex and the MCP Inspector; tools and scopes;
+- docs/guides/README.md: connect Claude, Claude Code, Codex, ChatGPT and the MCP Inspector; tools and scopes;
   backup, upgrading, security model, FAQ
 - docs/spec/README.md: the normative specification (OAuth, identity, vault backend, MCP surface,
   storage, configuration, deployment, operations, quality gates, compatibility)

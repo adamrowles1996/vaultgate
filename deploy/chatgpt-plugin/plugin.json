@@ -1,0 +1,36 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "vaultgate",
+  "version": "0.1.0-rc.26",
+  "description": "Use the credentials in your Bitwarden or Vaultwarden vault without seeing them, through your own self-hosted vaultgate server.",
+  "author": {
+    "name": "vaultgate",
+    "url": "https://github.com/adamrowles1996/vaultgate"
+  },
+  "homepage": "https://github.com/adamrowles1996/vaultgate#readme",
+  "repository": "https://github.com/adamrowles1996/vaultgate",
+  "license": "Apache-2.0",
+  "keywords": ["bitwarden", "vaultwarden", "credentials", "secrets", "mcp"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "vaultgate",
+        "shortDescription": "Credentials used, never shown",
+        "longDescription": "vaultgate is a self-hosted gateway to your Bitwarden or Vaultwarden vault. ChatGPT names a target the operator defined (a web API, Microsoft Graph, a SQL Server or PostgreSQL database, an SSH or WinRM host, a GitHub repository for code search) and describes an operation; vaultgate injects the credential from the vault, runs the operation under the operator's policy and returns a result with every injected value removed. Vault tools return item metadata only, and the one tool that returns a secret value is a separate scope with every call audited. For people who run their own vaultgate: this plugin connects to the server named in its mcp.json, signs in through that server's own OAuth consent page, and can do only what the operator granted to ChatGPT there.",
+        "developerName": "vaultgate",
+        "category": "Developer Tools",
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://github.com/adamrowles1996/vaultgate#readme",
+        "supportURL": "https://github.com/adamrowles1996/vaultgate/issues",
+        "defaultPrompt": [
+          "List the vaultgate targets I can use and what each one is for.",
+          "Check that the vault is connected and when it last synced.",
+          "Find the vault item for our GitHub account without revealing any secret."
+        ],
+        "brandColor": "#D4A24C",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/logo.png"
+      }
+    }
+  }
+}
