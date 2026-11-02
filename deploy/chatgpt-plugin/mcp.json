@@ -3,17 +3,7 @@
   "mcpServers": {
     "vaultgate": {
       "type": "streamable-http",
-      "url": "https://vaultgate.example.com/mcp",
-      "extensions": {
-        "com.openai": {
-          "auth": {
-            "type": "oauth",
-            "client": {
-              "mode": "dcr"
-            }
-          }
-        }
-      }
+      "url": "https://vaultgate.example.com/mcp"
     }
   }
 }

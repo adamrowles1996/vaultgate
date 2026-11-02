@@ -41,6 +41,19 @@ describe('parseCimdDocument', () => {
     [{ redirect_uris: ['http://agent.example.com/cb'] }, 'redirect_uris.0'],
     [{ client_id: 'http://agent.example.com/client.json' }, 'client_id'],
     [{ token_endpoint_auth_method: 'client_secret_basic' }, 'token_endpoint_auth_method'],
+    [{ token_endpoint_auth_method: '' }, 'token_endpoint_auth_method'],
+    [{ token_endpoint_auth_methods_supported: [] }, 'token_endpoint_auth_methods_supported'],
+    [
+      { token_endpoint_auth_methods_supported: ['private_key_jwt'] },
+      'token_endpoint_auth_methods_supported',
+    ],
+    [
+      {
+        token_endpoint_auth_method: 'none',
+        token_endpoint_auth_methods_supported: ['client_secret_basic'],
+      },
+      'token_endpoint_auth_methods_supported',
+    ],
     [{ grant_types: ['client_credentials'] }, 'grant_types'],
     [{ response_types: ['token'] }, 'response_types.0'],
     [{ application_type: 'desktop' }, 'application_type'],
@@ -66,6 +79,34 @@ describe('parseCimdDocument', () => {
       'authorization_code',
       'refresh_token',
     ]);
+  });
+
+  it("OAUTH-9 accepts ChatGPT's document: its supported methods include none, so its singular preference does not bind", () => {
+    // https://chatgpt.com/oauth/client.json as published on 2026-11-02 (MCP SEP-3149 form).
+    const chatgptId = 'https://chatgpt.com/oauth/client.json';
+    const chatgpt = {
+      client_id: chatgptId,
+      client_uri: 'https://chatgpt.com/',
+      redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+      token_endpoint_auth_method: 'private_key_jwt',
+      token_endpoint_auth_methods_supported: ['none', 'private_key_jwt'],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      client_name: 'ChatGPT',
+      logo_uri: 'https://persistent.oaistatic.com/sonic/misc/openai-logo.png',
+      token_endpoint_auth_signing_alg: 'RS256',
+      jwks_uri: 'https://chatgpt.com/oauth/jwks.json',
+    };
+    const parsed = parseCimdDocument(chatgptId, chatgpt);
+    expect(parsed).toStrictEqual({ ok: true, document: chatgpt });
+  });
+
+  it('OAUTH-9 accepts a supported-methods list that includes none without a singular field', () => {
+    const parsed = parseCimdDocument(
+      CLIENT_ID,
+      document({ token_endpoint_auth_methods_supported: ['none'] }),
+    );
+    expect(parsed.ok).toBe(true);
   });
 
   it('OAUTH-9 rejects a non-object body', () => {
