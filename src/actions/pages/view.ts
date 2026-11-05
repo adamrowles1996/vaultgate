@@ -122,6 +122,7 @@ export function activeGrants(
       clientId: grant.clientId,
       clientName: names.get(grant.clientId) ?? grant.clientId,
       grantedAt: grant.grantedAt,
+      ...(grant.readOnly === true && { readOnly: true as const }),
     }));
 }
 

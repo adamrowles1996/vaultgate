@@ -66,8 +66,8 @@ describe('migration 005: the code connector (13.13, ADR 0008)', () => {
       insertTarget(store, 'too-early', 'code');
     }).toThrow(/CHECK constraint failed/u);
     expect(unwrapOk(migrate(store, MIGRATIONS, NOW))).toStrictEqual({
-      applied: [5],
-      version: 5,
+      applied: [5, 6],
+      version: 6,
     });
     insertTarget(store, 'target-2', 'code');
     expect(
@@ -79,6 +79,9 @@ describe('migration 005: the code connector (13.13, ADR 0008)', () => {
     expect(
       all(store, 'SELECT target_id, client_id, granted_by FROM action_grants', grantSchema),
     ).toStrictEqual([{ target_id: 'target-1', client_id: 'vg_c_agent', granted_by: 'operator-1' }]);
+    expect(
+      all(store, 'SELECT read_only FROM action_grants', z.object({ read_only: z.number() })),
+    ).toStrictEqual([{ read_only: 0 }]);
     expect(indexNames(store)).toStrictEqual([
       'idx_action_grants_client_id',
       'idx_action_targets_name',

@@ -157,7 +157,7 @@ describe('running a call', () => {
       }),
     );
     for (const name of ['no-username', 'bad-selector']) {
-      repo.grant(name, 'vg_c_agent', 0, 'operator-1');
+      repo.grant(name, 'vg_c_agent', 0, { by: 'operator-1', isReadOnly: false });
     }
     await createHttpTarget(harness, {
       name: 'basic',

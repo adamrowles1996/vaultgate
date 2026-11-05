@@ -17,6 +17,7 @@ export interface GrantItem {
   readonly clientId: string;
   readonly clientName: string;
   readonly grantedAt: number;
+  readonly readOnly?: true;
 }
 
 /**
@@ -51,11 +52,12 @@ function grantRow(grant: GrantItem, view: GrantsCardView): Html {
     html`<button type="submit" class="ghost small">Remove</button>`,
     hidden('client_id', grant.clientId),
   );
+  const access = grant.readOnly === true ? ' · Read only' : '';
+  const granted = `Granted ${formatInstant(grant.grantedAt)}${access}`;
   return html`<li class="grant">
     ${monogram(grant.clientId, grant.clientName)}
     <span class="cell-main"
-      ><span>${grant.clientName}</span
-      ><span class="cell-sub">Granted ${formatInstant(grant.grantedAt)}</span></span
+      ><span>${grant.clientName}</span><span class="cell-sub">${granted}</span></span
     >
     ${when(view.isReauthenticated, () => remove)}
   </li>`;
@@ -77,7 +79,10 @@ function picker(view: GrantsCardView): Html {
       `${targetPath(view.targetId)}/grants`,
       view,
       html`<button type="submit">${icon('plus')}Grant</button>`,
-      select,
+      html`${select}<label
+          ><input type="checkbox" name="read_only" /> Read only (deny writes, shells and browser
+          actions)</label
+        >`,
     )}
   </div>`;
 }

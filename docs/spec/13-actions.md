@@ -175,6 +175,10 @@ Design rules, in priority order:
   grant through the same checks and the same ACT-7 event. The connected-clients list names each
   client's targets, linking to them. A client with no grant sees the target nowhere and
   a call to it answers `not_granted`.
+  A grant may carry a read-only ceiling. Such a grant permits only operations classified as
+  `read`, regardless of broader token scopes or target policy, and denies other operations
+  before fetching credentials. Listings reflect the ceiling. Repeating a grant cannot clear
+  an active ceiling; remove and re-grant to widen it. Existing grants have no ceiling.
 - **ACT-10** Revoking a client's consent (OAUTH-30) MUST also revoke that client's grants and
   close its sessions, so a reconnected client starts with none.
 - **ACT-11** A grant does not widen a token: the token still needs the connector's scope (13.5)

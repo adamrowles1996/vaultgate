@@ -61,7 +61,12 @@ const WRITES: readonly WriteRoute[] = [
     path: 'grants',
     notice: 'granted',
     write: (dependencies, target, gate) =>
-      dependencies.targets.grant(target.id, gate.form.get(CLIENT_FIELD) ?? '', gate.operatorId),
+      dependencies.targets.grant(
+        target.id,
+        gate.form.get(CLIENT_FIELD) ?? '',
+        gate.operatorId,
+        gate.form.get('read_only') === 'on',
+      ),
   },
   {
     path: 'grants/revoke',

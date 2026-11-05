@@ -54,7 +54,7 @@ export interface TargetsService {
   update(id: string, input: unknown, operatorId: string): Promise<TargetResult>;
   setEnabled(id: string, isEnabled: boolean, operatorId: string): TargetResult;
   remove(id: string, operatorId: string): Result<void, TargetProblems>;
-  grant(id: string, clientId: string, operatorId: string): TargetResult;
+  grant(id: string, clientId: string, operatorId: string, isReadOnly?: boolean): TargetResult;
   revokeGrant(id: string, clientId: string, operatorId: string): TargetResult;
   /**
   ACT-5's "close sessions": every open session on the target, recorded as `sessions_closed` (ACT-7).
@@ -81,14 +81,21 @@ function grantTarget(
   context: TargetsContext,
   id: string,
   clientId: string,
-  operatorId: string,
+  options: { readonly operatorId: string; readonly isReadOnly: boolean },
 ): TargetResult {
+  const { operatorId, isReadOnly } = options;
   return withTarget(context, id, (row) => {
     if (!context.repo.clientExists(clientId)) {
       return fail(new TargetProblems(['client_id: no such client']));
     }
-    context.repo.grant(id, clientId, context.now(), operatorId);
-    recordTargetEvent(context, { action: 'grant_added', row, operatorId, clientId });
+    context.repo.grant(id, clientId, context.now(), { by: operatorId, isReadOnly });
+    recordTargetEvent(context, {
+      action: 'grant_added',
+      row,
+      operatorId,
+      clientId,
+      ...(context.repo.isReadOnly(id, clientId) && { details: { readOnly: true } }),
+    });
     return ok(summariseTarget(context.repo, row));
   });
 }
@@ -151,7 +158,8 @@ export function createTargetsService(dependencies: TargetsServiceDependencies): 
     update: (id, input, operatorId) => updateTarget(context, id, input, operatorId),
     setEnabled: (id, isEnabled, operatorId) => setTargetEnabled(context, id, isEnabled, operatorId),
     remove: (id, operatorId) => removeTarget(context, id, operatorId),
-    grant: (id, clientId, operatorId) => grantTarget(context, id, clientId, operatorId),
+    grant: (id, clientId, operatorId, isReadOnly = false) =>
+      grantTarget(context, id, clientId, { operatorId, isReadOnly }),
     revokeGrant: (id, clientId, operatorId) => revokeTargetGrant(context, id, clientId, operatorId),
     closeSessions: (id, operatorId) => closeTargetSessions(context, id, operatorId),
     checkNew: (input) => checkNewTarget(context, input),
