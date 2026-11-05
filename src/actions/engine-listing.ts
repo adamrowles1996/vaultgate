@@ -30,7 +30,7 @@ export interface TargetListing {
 
 export interface ListingDependencies {
   readonly config: Pick<ActionsConfig, 'enabled' | 'connectors'>;
-  readonly targets: Pick<TargetsRepo, 'listGranted'>;
+  readonly targets: Pick<TargetsRepo, 'listGranted' | 'isReadOnly'>;
   readonly connectors: ConnectorRegistry;
   /**
   ACT-115: false for a connector that found itself unable to serve; its targets are not listed.
@@ -80,10 +80,14 @@ export function listTargets(
       target.documents.destination,
       target.documents.policy,
     );
+    const isReadOnly = dependencies.targets.isReadOnly(row.id, caller.clientId);
     const operations = [
       ...new Set(
         capabilities.operations
-          .filter((grant) => caller.scopes.includes(grant.scope))
+          .filter(
+            (grant) =>
+              caller.scopes.includes(grant.scope) && (!isReadOnly || grant.operation === 'read'),
+          )
           .map((grant) => grant.operation),
       ),
     ];

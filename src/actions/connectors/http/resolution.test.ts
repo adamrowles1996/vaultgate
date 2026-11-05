@@ -98,8 +98,8 @@ describe('the http connector through the engine: refusals and failures', () => {
         },
       }),
     );
-    repo.grant('graph-row', CLIENT_ID, 0, OPERATOR_ID);
-    repo.grant('query-row', CLIENT_ID, 0, OPERATOR_ID);
+    repo.grant('graph-row', CLIENT_ID, 0, { by: OPERATOR_ID, isReadOnly: false });
+    repo.grant('query-row', CLIENT_ID, 0, { by: OPERATOR_ID, isReadOnly: false });
     const graph = errorOf(await harness.engine.call(caller(), httpInvocation({ target: 'graph' })));
     const queried = errorOf(
       await harness.engine.call(caller(), httpInvocation({ target: 'queried' })),

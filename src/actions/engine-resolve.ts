@@ -34,7 +34,7 @@ export interface Invocation {
 
 export interface ResolveDependencies {
   readonly config: Pick<ActionsConfig, 'enabled' | 'connectors'>;
-  readonly targets: Pick<TargetsRepo, 'findByName' | 'isGranted'>;
+  readonly targets: Pick<TargetsRepo, 'findByName' | 'isGranted' | 'isReadOnly'>;
   readonly connectors: ConnectorRegistry;
 }
 
@@ -136,10 +136,19 @@ export function resolveCall(
   if (row === undefined) {
     return { row: undefined, ...refused(new ActionError('unknown_target')) };
   }
-  return {
-    row,
-    ...(dependencies.targets.isGranted(row.id, caller.clientId)
-      ? resolveGranted(dependencies, caller.scopes, invocation, row)
-      : refused(new ActionError('not_granted'))),
-  };
+  const attempt = dependencies.targets.isGranted(row.id, caller.clientId)
+    ? resolveGranted(dependencies, caller.scopes, invocation, row)
+    : refused(new ActionError('not_granted'));
+  if (
+    attempt.call.ok &&
+    attempt.call.value.decision.operation !== 'read' &&
+    dependencies.targets.isReadOnly(row.id, caller.clientId)
+  ) {
+    return {
+      row,
+      description: attempt.description,
+      call: fail(new ActionError('policy_denied', { reason: 'grant_read_only' })),
+    };
+  }
+  return { row, ...attempt };
 }

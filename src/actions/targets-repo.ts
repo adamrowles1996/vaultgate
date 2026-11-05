@@ -38,6 +38,7 @@ const grantRowSchema = z.object({
   granted_at: z.number(),
   granted_by: z.string(),
   revoked_at: z.number().nullable(),
+  read_only: flag,
 });
 
 const idRowSchema = z.object({ id: z.string() });
@@ -48,6 +49,7 @@ export interface GrantRecord {
   readonly grantedAt: number;
   readonly grantedBy: string;
   readonly revokedAt: number | undefined;
+  readonly readOnly?: true;
 }
 
 /**
@@ -81,8 +83,14 @@ export interface TargetsRepo {
   */
   clientExists(clientId: string): boolean;
   isGranted(targetId: string, clientId: string): boolean;
+  isReadOnly(targetId: string, clientId: string): boolean;
   listGrants(targetId: string): readonly GrantRecord[];
-  grant(targetId: string, clientId: string, at: number, by: string): void;
+  grant(
+    targetId: string,
+    clientId: string,
+    at: number,
+    options: { readonly by: string; readonly isReadOnly: boolean },
+  ): void;
   revokeGrant(targetId: string, clientId: string, at: number): number;
   /**
   ACT-10: every active grant of the client, on consent revocation.
@@ -119,6 +127,7 @@ function toGrant(row: z.output<typeof grantRowSchema>): GrantRecord {
     grantedAt: row.granted_at,
     grantedBy: row.granted_by,
     revokedAt: row.revoked_at ?? undefined,
+    ...(row.read_only && { readOnly: true as const }),
   };
 }
 
@@ -198,12 +207,9 @@ function targetWrites(
   };
 }
 
-function grantQueries(
+function grantReads(
   database: DatabaseSync,
-): Pick<
-  TargetsRepo,
-  'clientExists' | 'isGranted' | 'listGrants' | 'grant' | 'revokeGrant' | 'revokeGrantsForClient'
-> {
+): Pick<TargetsRepo, 'clientExists' | 'isGranted' | 'isReadOnly' | 'listGrants'> {
   return {
     clientExists: (clientId) =>
       get(
@@ -220,6 +226,14 @@ function grantQueries(
         targetId,
         clientId,
       ) !== undefined,
+    isReadOnly: (targetId, clientId) =>
+      get(
+        database,
+        'SELECT target_id AS id FROM action_grants WHERE target_id = ? AND client_id = ? AND revoked_at IS NULL AND read_only = 1',
+        idRowSchema,
+        targetId,
+        clientId,
+      ) !== undefined,
     listGrants: (targetId) =>
       all(
         database,
@@ -227,17 +241,27 @@ function grantQueries(
         grantRowSchema,
         targetId,
       ).map((row) => toGrant(row)),
-    grant(targetId, clientId, at, by) {
+  };
+}
+
+function grantWrites(
+  database: DatabaseSync,
+): Pick<TargetsRepo, 'grant' | 'revokeGrant' | 'revokeGrantsForClient'> {
+  return {
+    grant(targetId, clientId, at, options) {
       run(
         database,
-        `INSERT INTO action_grants (target_id, client_id, granted_at, granted_by, revoked_at)
-          VALUES (?, ?, ?, ?, NULL)
+        `INSERT INTO action_grants (target_id, client_id, granted_at, granted_by, revoked_at, read_only)
+          VALUES (?, ?, ?, ?, NULL, ?)
           ON CONFLICT (target_id, client_id) DO UPDATE SET granted_at = excluded.granted_at,
-            granted_by = excluded.granted_by, revoked_at = NULL`,
+            granted_by = excluded.granted_by, read_only = CASE WHEN action_grants.revoked_at IS NULL
+              THEN max(action_grants.read_only, excluded.read_only) ELSE excluded.read_only END,
+            revoked_at = NULL`,
         targetId,
         clientId,
         at,
-        by,
+        options.by,
+        options.isReadOnly ? 1 : 0,
       );
     },
     revokeGrant: (targetId, clientId, at) =>
@@ -259,5 +283,10 @@ function grantQueries(
 }
 
 export function createTargetsRepo(database: DatabaseSync): TargetsRepo {
-  return { ...targetReads(database), ...targetWrites(database), ...grantQueries(database) };
+  return {
+    ...targetReads(database),
+    ...targetWrites(database),
+    ...grantReads(database),
+    ...grantWrites(database),
+  };
 }

@@ -15,6 +15,25 @@ Microsoft Graph credential adapter), `sql`, `ssh` and `winrm` — and what an ag
 targets through `http_request`, `sql_query`, `sql_execute`, `ssh_run` and `winrm_run`. The
 `browser` connector lands with M15; until then its targets cannot be created.
 
+## Read-only client grants
+
+On a connection's page, choose an agent and tick **Read only** before **Grant**
+when that client should read a connection whose policy also permits writes.
+The grant is a ceiling: token scopes and the connection policy still apply.
+It denies writes, shells and browser actions before credentials are fetched;
+`actions_list_targets` lists only read for that client. Other clients keep
+their existing access. Remove and re-grant to change this ceiling. Removing
+consent revokes the grant as usual. Existing grants retain their access.
+
+A target missing from one client's list can mean a missing grant, rather than
+an unavailable database. Inspect that client's action audit and grant first.
+Do not test a denied operation with another client's token.
+
+HTTP allowlists describe supported API paths. An allowed GitHub metadata path
+does not imply workflow runs, jobs, logs or query strings are allowed. Use the
+client's native GitHub workflow tools when those paths are outside the target
+policy; do not widen the target merely to duplicate that route.
+
 ## Enabling the layer
 
 The layer is off unless the deployment says otherwise, and each connector has its own switch:
