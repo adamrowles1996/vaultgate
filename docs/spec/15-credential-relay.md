@@ -80,18 +80,17 @@ the threat model (T51 to T58) states what they do not cover.
 - **RELAY-5** The relay MUST answer only these routes, each in `bw serve`'s envelope
   (`{"success":true,"data":…}` or `{"success":false,"message":…}`):
 
-  | Route         | Answer                                                                       |
-  | ------------- | ---------------------------------------------------------------------------- |
-  | `GET /status` | `{"object":"template","template":{…}}` (RELAY-10)                            |
-  | `POST /sync`  | `{"object":"message","title":"Syncing complete.","message":null}` (RELAY-13) |
+  | Route                                                         | Answer                                                                          |
+  | ------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+  | `GET /status`                                                 | `{"object":"template","template":{…}}` (RELAY-10)                               |
+  | `POST /sync`                                                  | `{"object":"message","title":"Syncing complete.","message":null}` (RELAY-13)    |
+  | `POST /mcp/token`                                             | `{"object":"token","access_token":…}`, only when configured (RELAY-14)          |
+  | `GET /list/object/items?search=<term>`                        | `{"object":"list","data":[<item>…]}` (RELAY-6)                                  |
+  | `GET /object/item/<id or term>`                               | `<item>` (RELAY-7)                                                              |
+  | `GET /object/{username,password,notes,totp,uri}/<id or term>` | `{"object":"string","data":<value>}`; the empty string when the item holds none |
 
-| `POST /mcp/token` | `{"object":"token","access_token":…}`, only when configured (RELAY-14) |
-| `GET /list/object/items?search=<term>` | `{"object":"list","data":[<item>…]}` (RELAY-6) |
-| `GET /object/item/<id or term>` | `<item>` (RELAY-7) |
-| `GET /object/{username,password,notes,totp,uri}/<id or term>` | `{"object":"string","data":<value>}`; the empty string when the item holds none |
-
-Any other path or method, `/unlock`, `/lock`, writes, `/generate` and the folder and collection
-lists included, MUST be answered `404` with `{"success":false,"message":"Unknown route."}`.
+  Any other path or method, `/unlock`, `/lock`, writes, `/generate` and the folder and collection
+  lists included, MUST be answered `404` with `{"success":false,"message":"Unknown route."}`.
 
 - **RELAY-6** A term that is a UUID MUST read that item; any other term MUST be the vault's own
   search (name, username, URI) filtered to the scope. One match is the answer. Several matches of
@@ -138,8 +137,10 @@ already gave.
   other access token (OAUTH-32), its scopes are intersected with the scopes the deployment
   enables at use as every token's are (so `VAULTGATE_ENABLE_WRITE_SCOPE` and the connector
   switches still decide), and every action stays bound by that client's target grants, read-only
-  ceilings and target policy (ACT-9). When the client is unknown or revoked, or
-  has no live consent, the route MUST answer `503` `No consent to issue under.` and issue nothing.
+  ceilings and target policy (ACT-9). The consent's own scope list is deliberately not a ceiling:
+  the consent is the anchor that revocation and the token's subject (that consent's operator)
+  hang on, and the deployment's enabled scopes, grants and policy are the ceiling. When the
+  client is unknown or revoked, or has no live consent, the route MUST answer `503` `No consent to issue under.` and issue nothing.
   Revoking the consent (OAUTH-30) MUST make every relay token issued under it fail verification,
   as it does every other token of that consent; `/oauth/revoke` revokes one.
 - **RELAY-16** Every issue MUST be audited twice: `relay.mcp_token` in category `relay` with the
