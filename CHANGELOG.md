@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.29] - 2026-11-09
+
 ### Added
 
 - **Access tokens for `/mcp` from the credential relay.** With `VAULTGATE_RELAY_MCP_CLIENT` set to
@@ -754,7 +756,8 @@ Release candidates 0.1.0-rc.1 to 0.1.0-rc.9 are in
 [`docs/changelog-archive.md`](docs/changelog-archive.md). They are kept verbatim; this file holds
 the current release and the ones after it, so it stays inside the repository's 64 KiB file gate.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.28...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.29...HEAD
+[0.1.0-rc.29]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.28...v0.1.0-rc.29
 [0.1.0-rc.28]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.27...v0.1.0-rc.28
 [0.1.0-rc.27]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.26...v0.1.0-rc.27
 [0.1.0-rc.26]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.25...v0.1.0-rc.26
