@@ -12,6 +12,7 @@ import { type Clock, HOUR_MS, MINUTE_MS } from './clock.ts';
 import { type ClientTargetsRenderer, renderConnectedClients } from './connected-clients.ts';
 import { createConsentDecisionHandler } from './consent.ts';
 import { createRegisterHandler } from './register.ts';
+import { createRelayTokenIssuer, type IssueRelayToken } from './relay-token.ts';
 import { createOAuthRepos, type OAuthRepos } from './repositories/index.ts';
 import { clientIpResolver } from './request-context.ts';
 import {
@@ -45,7 +46,7 @@ type AuthorizationServerConfig = Pick<
   | 'oauthClients'
   | 'accessTokenTtlMs'
   | 'refreshTokenTtlMs'
->;
+> & { readonly relay: Pick<Config['relay'], 'mcpClient'> };
 
 export interface AuthorizationServerDependencies {
   readonly config: AuthorizationServerConfig;
@@ -80,6 +81,10 @@ export interface AuthorizationServer {
   readonly revokeConsent: (operatorId: string, consentId: string) => number | undefined;
   readonly listConnectedClients: (operatorId: string) => readonly ConnectedClient[];
   readonly renderConnectedClients: (session: SessionState) => Html;
+  /**
+  RELAY-14: issues relay access tokens; `undefined` unless `VAULTGATE_RELAY_MCP_CLIENT` is set.
+  */
+  readonly issueRelayToken: IssueRelayToken | undefined;
 }
 
 /**
@@ -127,6 +132,18 @@ function connectedClientsSection(
 ): (session: SessionState) => Html {
   return (session) =>
     renderConnectedClients(listConnectedClients({ repos }, session.operatorId), session, targets);
+}
+
+/**
+RELAY-14: the relay's token issuer, only when a client is configured for it.
+*/
+function relayTokenIssuer(
+  shared: Omit<Parameters<typeof createRelayTokenIssuer>[0], 'clientId'> & {
+    readonly relay: AuthorizationServerConfig['relay'];
+  },
+): IssueRelayToken | undefined {
+  const clientId = shared.relay.mcpClient;
+  return clientId === undefined ? undefined : createRelayTokenIssuer({ ...shared, clientId });
 }
 
 /**
@@ -190,5 +207,6 @@ export function createAuthorizationServer(
     revokeConsent: (operatorId, consentId) => revokeConsent(shared, operatorId, consentId),
     listConnectedClients: (operatorId) => listConnectedClients(shared, operatorId),
     renderConnectedClients: connectedClientsSection(repos, dependencies.clientTargets),
+    issueRelayToken: relayTokenIssuer(shared),
   });
 }

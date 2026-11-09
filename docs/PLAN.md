@@ -317,6 +317,18 @@ Zoho sends with a `200`, and the ACT-53 canary on an `oauth2` target; a live cal
 maintainer's Proxmox VE, Power BI, Fabric, Resource Manager and Zoho Books targets is recorded
 after the release that carries them.
 
+### Relay access tokens for `/mcp` (RELAY-14…16)
+
+1. `feat(relay)`: `POST /mcp/token` issues an admitted tailnet node an ordinary one-hour access
+   token under the newest live consent of the client named by `VAULTGATE_RELAY_MCP_CLIENT`, with
+   no refresh token, so many concurrent agent sandboxes can use `/mcp` without sharing a rotating
+   refresh family (OAUTH-25). The token carries every scope, cut to the enabled set at use, and stays bound by that client's grants and target policy (RELAY-15) and every
+   issue is audited in both the `relay` and `oauth` categories with the node name (RELAY-16).
+
+Exit: issue, verification as the configured client, refusal without a live consent, revocation,
+expiry, the wrong-resource and malformed cases and both audit events are covered by tests; a
+live issue and an `/mcp` call with the token are recorded after the release that carries it.
+
 ### Post-1.0 candidates
 
 - Passkey (WebAuthn) operator login.

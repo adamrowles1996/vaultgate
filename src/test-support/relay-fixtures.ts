@@ -13,6 +13,7 @@ import { captureLogger } from './logging.ts';
 
 import type { StoredItem } from './vault-fixture.ts';
 import type { AuditEvent, AuditSink } from '../audit/event.ts';
+import type { IssueMcpToken } from '../relay/mcp-token.ts';
 import type { TailnetPeer, WhoIs } from '../relay/whois.ts';
 import type { ItemSummary } from '../vault/client.ts';
 
@@ -168,6 +169,10 @@ export interface RelayHarnessOptions {
   readonly requestSync?: RequestSync;
   readonly peerAddress?: string | undefined;
   readonly listen?: { readonly host: string; readonly port: number };
+  /**
+  RELAY-14: the `/mcp/token` issuer; absent, the route does not exist.
+  */
+  readonly issueMcpToken?: IssueMcpToken;
 }
 
 export function relayHarness(options: RelayHarnessOptions = {}): RelayHarness {
@@ -187,6 +192,7 @@ export function relayHarness(options: RelayHarnessOptions = {}): RelayHarness {
     audit,
     logger,
     now: () => nowMs,
+    issueMcpToken: options.issueMcpToken,
   });
   return {
     app,

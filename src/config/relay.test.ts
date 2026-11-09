@@ -56,6 +56,7 @@ describe('relay configuration', () => {
       items: [],
       allItems: false,
       tailscaleSocket: DEFAULT_TAILSCALE_SOCKET,
+      mcpClient: undefined,
     });
   });
 
@@ -74,7 +75,27 @@ describe('relay configuration', () => {
       items: [ITEM],
       allItems: false,
       tailscaleSocket: '/run/tailscale/tailscaled.sock',
+      mcpClient: undefined,
     });
+  });
+
+  it('RELAY-14 reads the client /mcp/token issues under, and treats a blank one as unset', () => {
+    const client = 'https://client.example/metadata.json';
+    const configured = unwrapOk(
+      loadConfig({ ...ENABLED, VAULTGATE_RELAY_MCP_CLIENT: ` ${client} ` }),
+    );
+    expect(configured.config.relay.mcpClient).toBe(client);
+    const blank = unwrapOk(loadConfig({ ...ENABLED, VAULTGATE_RELAY_MCP_CLIENT: '  ' }));
+    expect(blank.config.relay.mcpClient).toBeUndefined();
+  });
+
+  it('RELAY-14 refuses a client id with whitespace or longer than 512 characters', () => {
+    expect(issues({ ...ENABLED, VAULTGATE_RELAY_MCP_CLIENT: 'two ids' })).toContain(
+      'VAULTGATE_RELAY_MCP_CLIENT: must be one OAuth client id',
+    );
+    expect(issues({ ...ENABLED, VAULTGATE_RELAY_MCP_CLIENT: 'c'.repeat(513) })).toContain(
+      'VAULTGATE_RELAY_MCP_CLIENT: must be one OAuth client id',
+    );
   });
 
   it('RELAY-1 requires a tag and something in scope once a listen address is set', () => {

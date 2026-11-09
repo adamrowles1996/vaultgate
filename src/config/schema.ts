@@ -14,6 +14,7 @@ import {
   DEFAULT_TAILSCALE_SOCKET,
   relayIdsSchema,
   relayListenSchema,
+  relayMcpClientSchema,
   relayTagsSchema,
 } from './relay.ts';
 
@@ -88,6 +89,7 @@ const baseEnvironmentSchema = z.object({
   VAULTGATE_RELAY_ITEMS: relayIdsSchema,
   VAULTGATE_RELAY_ALL_ITEMS: booleanSchema('false'),
   VAULTGATE_RELAY_TAILSCALE_SOCKET: z.string().startsWith('/').default(DEFAULT_TAILSCALE_SOCKET),
+  VAULTGATE_RELAY_MCP_CLIENT: relayMcpClientSchema,
 });
 
 type BaseEnvironment = z.output<typeof baseEnvironmentSchema>;

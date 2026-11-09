@@ -128,6 +128,7 @@ function toConfig(data: ParsedEnvironment): Config {
       items: data.VAULTGATE_RELAY_ITEMS,
       allItems: data.VAULTGATE_RELAY_ALL_ITEMS,
       tailscaleSocket: data.VAULTGATE_RELAY_TAILSCALE_SOCKET,
+      mcpClient: data.VAULTGATE_RELAY_MCP_CLIENT,
     },
     secrets: {
       secretKey: data.VAULTGATE_SECRET_KEY,

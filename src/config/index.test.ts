@@ -86,6 +86,7 @@ describe('loadConfig', () => {
         items: [],
         allItems: false,
         tailscaleSocket: '/var/run/tailscale/tailscaled.sock',
+        mcpClient: undefined,
       },
       secrets: {
         secretKey: KEY_BYTES,
@@ -179,6 +180,7 @@ describe('loadConfig', () => {
         items: [],
         allItems: false,
         tailscaleSocket: '/var/run/tailscale/tailscaled.sock',
+        mcpClient: undefined,
       },
       secrets: {
         secretKey: KEY_BYTES,

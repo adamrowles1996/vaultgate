@@ -27,6 +27,7 @@ const CONFIG: RelayConfig = {
   items: [],
   allItems: false,
   tailscaleSocket: '/nonexistent/vaultgate-test/tailscaled.sock',
+  mcpClient: undefined,
 };
 
 /**

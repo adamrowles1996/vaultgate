@@ -48,6 +48,7 @@ problem, not just the first.
 | `VAULTGATE_RELAY_ITEMS`               | with the relay¹ |                                      | Comma-separated item ids the relay answers whatever their collections (RELAY-4).                                                                                                                   |
 | `VAULTGATE_RELAY_ALL_ITEMS`           | no              | `false`                              | Puts every live login and secure note in scope, whatever its collections (RELAY-12); start-up logs a warning.                                                                                      |
 | `VAULTGATE_RELAY_TAILSCALE_SOCKET`    | no              | `/var/run/tailscale/tailscaled.sock` | The local Tailscale daemon's LocalAPI socket, asked who each caller is (RELAY-3).                                                                                                                  |
+| `VAULTGATE_RELAY_MCP_CLIENT`          | no              |                                      | The OAuth `client_id` whose newest live consent the relay's `/mcp/token` issues access tokens under (RELAY-14); unset, the route does not exist.                                                   |
 
 ¹ At least one of `VAULTGATE_RELAY_COLLECTIONS` and `VAULTGATE_RELAY_ITEMS` when `VAULTGATE_RELAY_LISTEN` is set, unless `VAULTGATE_RELAY_ALL_ITEMS` is true.
 

@@ -245,6 +245,7 @@ const relayListener =
             logger,
             now: Date.now,
             peerAddress: (context) => getConnInfo(context).remote.address,
+            issueMcpToken: authorization.issueRelayToken,
           }).fetch,
         }),
         listen: relayListen,
