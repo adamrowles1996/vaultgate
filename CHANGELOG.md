@@ -6,6 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Access tokens for `/mcp` from the credential relay.** With `VAULTGATE_RELAY_MCP_CLIENT` set to
+  a connected client's id, an admitted tailnet node can `POST /mcp/token` for an ordinary
+  one-hour access token under that client's live consent, with no refresh token, so many agent
+  sandboxes can use `/mcp` at once without sharing a rotating refresh family. The token carries
+  every scope (the enabled set still applies) and stays bound by the client's grants and target
+  policy, ends when the consent is revoked, and every
+  issue is audited with the node name (spec 15.5a, RELAY-14 to RELAY-16;
+  [guide](docs/guides/credential-relay.md#access-tokens-for-mcp)).
+
+### Upgrading
+
+No schema change. The route is off until `VAULTGATE_RELAY_MCP_CLIENT` is set; rolling back to
+rc.28 needs only the previous binaries, and any relay token already issued expires within the
+hour.
+
 ## [0.1.0-rc.28] - 2026-11-05
 
 ### Added

@@ -43,6 +43,10 @@ export interface HarnessOptions {
   ACT-10: what the composition layer wires to the actions layer; absent by default.
   */
   readonly onConsentRevoked?: (clientId: string) => void;
+  /**
+  RELAY-14: `VAULTGATE_RELAY_MCP_CLIENT`; unset by default.
+  */
+  readonly relayMcpClient?: string;
 }
 
 export interface SignedIn {
@@ -115,6 +119,9 @@ function harnessConfig(options: HarnessOptions): Config {
     VAULTGATE_ENABLE_WRITE_SCOPE: options.enableWriteScope === true ? 'true' : 'false',
     VAULTGATE_TRUST_PROXY: options.trustProxy === true ? 'true' : 'false',
     VAULTGATE_OAUTH_CLIENTS: JSON.stringify(clients),
+    ...(options.relayMcpClient !== undefined && {
+      VAULTGATE_RELAY_MCP_CLIENT: options.relayMcpClient,
+    }),
   });
   return unwrapOk(loaded).config;
 }

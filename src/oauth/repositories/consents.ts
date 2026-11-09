@@ -37,6 +37,10 @@ export interface ConnectedClient extends ConsentRecord {
 export interface ConsentsRepo {
   findById(id: string): ConsentRecord | undefined;
   findActive(operatorId: string, clientId: string): ConsentRecord | undefined;
+  /**
+  RELAY-14: the newest live consent any operator gave the client.
+  */
+  findNewestActiveForClient(clientId: string): ConsentRecord | undefined;
   insert(record: ConsentRecord): void;
   /**
   Widens an active consent to the scopes the operator has now approved.
@@ -63,6 +67,23 @@ function toRecord(row: z.output<typeof consentRow>): ConsentRecord {
   };
 }
 
+/**
+The newest unrevoked consent matching `where`, a fixed clause whose values are bound.
+*/
+function newestActive(
+  database: DatabaseSync,
+  where: string,
+  ...values: readonly string[]
+): ConsentRecord | undefined {
+  const row = get(
+    database,
+    `SELECT * FROM consents WHERE ${where} AND revoked_at IS NULL ORDER BY granted_at DESC LIMIT 1`,
+    consentRow,
+    ...values,
+  );
+  return row === undefined ? undefined : toRecord(row);
+}
+
 export function createConsentsRepo(database: DatabaseSync): ConsentsRepo {
   return {
     findById(id) {
@@ -70,15 +91,10 @@ export function createConsentsRepo(database: DatabaseSync): ConsentsRepo {
       return row === undefined ? undefined : toRecord(row);
     },
     findActive(operatorId, clientId) {
-      const row = get(
-        database,
-        `SELECT * FROM consents WHERE operator_id = ? AND client_id = ? AND revoked_at IS NULL
-          ORDER BY granted_at DESC LIMIT 1`,
-        consentRow,
-        operatorId,
-        clientId,
-      );
-      return row === undefined ? undefined : toRecord(row);
+      return newestActive(database, 'operator_id = ? AND client_id = ?', operatorId, clientId);
+    },
+    findNewestActiveForClient(clientId) {
+      return newestActive(database, 'client_id = ?', clientId);
     },
     insert(record) {
       run(

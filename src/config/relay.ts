@@ -40,6 +40,10 @@ export interface RelayConfig {
   The local Tailscale daemon's LocalAPI socket, asked who each caller is.
   */
   readonly tailscaleSocket: string;
+  /**
+  RELAY-14: the OAuth client whose live consent `/mcp/token` issues under; `undefined` means the route does not exist.
+  */
+  readonly mcpClient: string | undefined;
 }
 
 export const DEFAULT_TAILSCALE_SOCKET = '/var/run/tailscale/tailscaled.sock';
@@ -119,6 +123,29 @@ function listSchema(
       return [...new Set(entries.map((entry) => entry.toLowerCase()))];
     });
 }
+
+/**
+RELAY-14: the longest client id accepted; a CIMD client id is a URL, a registered one far shorter.
+*/
+export const MAX_MCP_CLIENT_LENGTH = 512;
+
+export const relayMcpClientSchema: z.ZodType<string | undefined, string | undefined> = z
+  .string()
+  .optional()
+  .transform((text, context) => {
+    const trimmed = text?.trim() ?? '';
+    if (trimmed.length === 0) {
+      return;
+    }
+    if (trimmed.length > MAX_MCP_CLIENT_LENGTH || /\s/.test(trimmed)) {
+      context.addIssue({
+        code: 'custom',
+        message: `must be one OAuth client id of at most ${String(MAX_MCP_CLIENT_LENGTH)} characters`,
+      });
+      return z.NEVER;
+    }
+    return trimmed;
+  });
 
 export const relayTagsSchema = listSchema(TAG, 'a Tailscale tag such as tag:servers');
 

@@ -102,11 +102,45 @@ name that matches several items answers the one whose name it is exactly, and ot
 `More than one result was found.`, as `bw serve` does. TOTP seeds are never returned; the `totp`
 route answers the current code.
 
+## Access tokens for `/mcp`
+
+An agent sandbox on the tailnet can also use vaultgate's MCP endpoint directly, without a client
+that holds an OAuth grant for it. Set `VAULTGATE_RELAY_MCP_CLIENT` to the `client_id` of a client
+you have already connected and approved (the Agents page lists them), and restart. An admitted
+node then asks for a token:
+
+```sh
+curl -s -X POST http://<address>:<port>/mcp/token
+# {"success":true,"data":{"object":"token","access_token":"vg_at_…","token_type":"Bearer",
+#  "expires_in":3600,"scope":"vault:read …","resource":"https://vault.example.com/mcp"}}
+```
+
+and sends it as `Authorization: Bearer …` to `/mcp`. What it gets:
+
+- **An ordinary access token**, the same as the token endpoint issues: one hour, stored only as a
+  hash, bound to this deployment. Ask again before it expires; there is no refresh token, so
+  nothing rotates and any number of sandboxes can hold tokens at once (RELAY-14).
+- **Every tool, within your controls.** The token carries every scope vaultgate has, so the whole
+  tool surface is available and a tool added in a later release needs nothing from you; the
+  scopes you have switched off (`VAULTGATE_ENABLE_WRITE_SCOPE`, the connector switches) stay off,
+  and every action stays bound by the client's target grants, read-only ceilings and target
+  policy. It is recorded against the client, so the Agents page shows its use (RELAY-15).
+- **Revocation.** Revoking the client's consent on the Agents page ends every relay token at
+  once; `/oauth/revoke` ends one. Until the client is approved again the route answers `503`
+  `No consent to issue under.`
+- **Audit.** Each issue records `relay.mcp_token` and `token_issued` with the node name and the
+  token's prefix, which is also the prefix on every `/mcp` call the token makes (RELAY-16).
+
+This extends what the relay already trusts its nodes with: a node that can read your secrets can
+now also act as that client. Choose the client, and its grants, with that in mind; a dedicated
+client with only the grants your sandboxes need is the narrowest choice.
+
 ## Operating it
 
 - **Remove an item from the scope** by taking it out of the collection. The relay sees the
   change at the vault's next sync (`VAULTGATE_BW_SYNC_INTERVAL`, or **Sync now** on the Vault page).
-- **Switch the relay off** by removing `VAULTGATE_RELAY_LISTEN` and restarting.
+- **Switch the relay off** by removing `VAULTGATE_RELAY_LISTEN` and restarting; remove only
+  `VAULTGATE_RELAY_MCP_CLIENT` to stop issuing `/mcp` tokens while keeping the relay.
 - **Shut out one node** by removing it, or its tag, in the Tailscale admin console; the relay
   refuses it from its next request.
 - Each node may make 300 requests a minute; past that the relay answers `429` with `Retry-After`.

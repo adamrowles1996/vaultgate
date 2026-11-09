@@ -22,6 +22,7 @@ describe('createAuthorizationServer', () => {
         ],
         accessTokenTtlMs: 1,
         refreshTokenTtlMs: 1,
+        relay: { mcpClient: undefined },
       },
       db: {} as DatabaseSync,
       guards: {
@@ -86,5 +87,32 @@ describe('createAuthorizationServer', () => {
       operatorId: OPERATOR_ID,
       clientId: 'vg_c_x',
     });
+  });
+
+  it('RELAY-14 offers the relay token issuer only when a client is configured', () => {
+    expect(createOAuthHarness().server.issueRelayToken).toBeUndefined();
+    const harness = createOAuthHarness({ relayMcpClient: 'vg_c_relay' });
+    harness.ensureOperator();
+    const issue = harness.server.issueRelayToken;
+    expect(issue?.({ node: 'n', ip: '100.64.0.2' })).toBeUndefined();
+    harness.repos.clients.upsert({
+      id: 'c',
+      clientId: 'vg_c_relay',
+      mode: 'dcr',
+      clientName: 'Relay',
+      redirectUris: ['https://x.example/cb'],
+      metadata: {},
+      createdAt: 0,
+      revokedAt: undefined,
+    });
+    harness.repos.consents.insert({
+      id: 'consent-r',
+      operatorId: OPERATOR_ID,
+      clientId: 'vg_c_relay',
+      scopes: ['vault:read'],
+      grantedAt: 1,
+      revokedAt: undefined,
+    });
+    expect(issue?.({ node: 'n', ip: '100.64.0.2' })?.token.scope).toContain('vault:read');
   });
 });

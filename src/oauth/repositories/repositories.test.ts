@@ -103,6 +103,22 @@ describe('cimd cache repository', () => {
 });
 
 describe('consents repository', () => {
+  it('RELAY-14 finds the newest live consent for a client, whichever operator gave it', () => {
+    const repos = seeded();
+    repos.consents.insert({
+      id: 'consent-2',
+      operatorId: TEST_OPERATOR_ID,
+      clientId: 'client-a',
+      scopes: ['vault:read', 'vault:reveal'],
+      grantedAt: 9,
+      revokedAt: undefined,
+    });
+    expect(repos.consents.findNewestActiveForClient('client-a')?.id).toBe('consent-2');
+    repos.consents.revoke('consent-2', 10);
+    expect(repos.consents.findNewestActiveForClient('client-a')?.id).toBe('consent-1');
+    expect(repos.consents.findNewestActiveForClient('other')).toBeUndefined();
+  });
+
   it('finds the active consent, widens it, revokes once and lists connected clients', () => {
     const repos = seeded();
     expect(repos.consents.findActive(TEST_OPERATOR_ID, 'client-a')?.id).toBe('consent-1');

@@ -11,6 +11,7 @@ import { createScope } from './scope.ts';
 import { createRelaySync, type RequestSync } from './sync.ts';
 import { createWhoIs } from './whois.ts';
 
+import type { IssueMcpToken } from './mcp-token.ts';
 import type { AuditSink } from '../audit/event.ts';
 import type { RelayConfig, RelayListen } from '../config/relay.ts';
 import type { Logger } from '../logger.ts';
@@ -18,6 +19,7 @@ import type { VaultClient } from '../vault/client.ts';
 import type { Context } from 'hono';
 
 export type { RelayApp } from './app.ts';
+export type { IssueMcpToken } from './mcp-token.ts';
 
 export interface RelayOptions {
   readonly config: RelayConfig;
@@ -35,6 +37,10 @@ export interface RelayOptions {
   `http.request` for the LocalAPI socket; replaceable for tests.
   */
   readonly request?: LocalRequestFunction;
+  /**
+  RELAY-14: mints `/mcp` access tokens; the composition layer passes it only when a client is configured.
+  */
+  readonly issueMcpToken?: IssueMcpToken | undefined;
 }
 
 export function createRelay(options: RelayOptions): RelayApp {
@@ -50,5 +56,6 @@ export function createRelay(options: RelayOptions): RelayApp {
     logger: options.logger,
     now: options.now,
     peerAddress: options.peerAddress,
+    issueMcpToken: options.issueMcpToken,
   });
 }

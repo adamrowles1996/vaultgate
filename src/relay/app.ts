@@ -20,6 +20,7 @@ import {
   type HandlerDependencies,
 } from './handlers.ts';
 import { SCALAR_KINDS, type ScalarKind } from './item-body.ts';
+import { handleMcpToken, type IssueMcpToken } from './mcp-token.ts';
 import { failure, FORBIDDEN, type RelayReply, UNKNOWN_ROUTE } from './responses.ts';
 import { admissionProblem, type WhoIs } from './whois.ts';
 
@@ -36,6 +37,10 @@ export interface RelayAppDependencies extends HandlerDependencies {
   readonly peerAddress: (context: Context) => string | undefined;
   readonly logger: Logger;
   readonly now: () => number;
+  /**
+  RELAY-14: present only when `VAULTGATE_RELAY_MCP_CLIENT` is set; otherwise `/mcp/token` is an unknown route.
+  */
+  readonly issueMcpToken?: IssueMcpToken | undefined;
 }
 
 interface RelayEnvironment {
@@ -123,6 +128,18 @@ function isScalarKind(kind: string): kind is ScalarKind {
   return (SCALAR_KINDS as readonly string[]).includes(kind);
 }
 
+/**
+RELAY-14: `POST /mcp/token` exists only when the composition layer passed an issuer.
+*/
+function addMcpTokenRoute(app: RelayApp, dependencies: RelayAppDependencies): void {
+  const { issueMcpToken, audit } = dependencies;
+  if (issueMcpToken !== undefined) {
+    app.post('/mcp/token', (context) =>
+      send(context, handleMcpToken({ audit, issueMcpToken }, context.var.caller)),
+    );
+  }
+}
+
 export function createRelayApp(dependencies: RelayAppDependencies): RelayApp {
   const app = new Hono<RelayEnvironment>();
   const hosts = expectedHosts(dependencies.listen);
@@ -173,6 +190,7 @@ export function createRelayApp(dependencies: RelayAppDependencies): RelayApp {
     const term = context.req.param('id');
     return send(context, await handleScalar(dependencies, context.var.caller, kind, term));
   });
+  addMcpTokenRoute(app, dependencies);
   app.notFound((context) => send(context, UNKNOWN_ROUTE));
   app.onError((error, context) => {
     dependencies.logger.error({ err: error }, 'relay request failed');
