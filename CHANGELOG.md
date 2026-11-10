@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.31] - 2026-11-10
+
 ### Security
 
 - **Metadata tools also withhold text custom fields whose values carry a credential.** A text
@@ -18,6 +20,10 @@ All notable changes to this project are documented here. The format follows
   headers), an address with a password (`scheme://user:pass@host`, `user:pass@host`,
   `user/pass@host`), a PEM private key, or more than 8,192 characters. `get_secret`
   `custom.<name>` still reads it, audited (spec 6.3, MCP-18).
+
+### Upgrading
+
+No schema change and no new setting. Rolling back to rc.30 needs only the previous binaries.
 
 ## [0.1.0-rc.30] - 2026-11-10
 
@@ -785,7 +791,8 @@ Release candidates 0.1.0-rc.1 to 0.1.0-rc.9 are in
 [`docs/changelog-archive.md`](docs/changelog-archive.md). They are kept verbatim; this file holds
 the current release and the ones after it, so it stays inside the repository's 64 KiB file gate.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.30...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.31...HEAD
+[0.1.0-rc.31]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.30...v0.1.0-rc.31
 [0.1.0-rc.30]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.29...v0.1.0-rc.30
 [0.1.0-rc.29]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.28...v0.1.0-rc.29
 [0.1.0-rc.28]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.27...v0.1.0-rc.28
