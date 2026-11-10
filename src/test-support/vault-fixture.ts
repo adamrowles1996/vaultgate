@@ -31,6 +31,7 @@ export const CANARY = {
   identityPassport: 'CANARY-IDENTITY-PASSPORT-88aa',
   sshPrivateKey: 'CANARY-SSH-PRIVATE-KEY-e6d2',
   hiddenField: 'CANARY-HIDDEN-FIELD-a1b2',
+  connectionStringPassword: 'CANARY-CONNECTION-STRING-PASSWORD-5e8f',
 } as const;
 
 export const CANARIES: readonly string[] = Object.values(CANARY);
@@ -124,6 +125,13 @@ export const FIXTURE_ITEMS: readonly StoredItem[] = [
       ...base('item-trashed', 'Old Login', 'login'),
       deletedDate: '2026-08-01T00:00:00.000Z',
       login: { username: 'old@example.com', uris: [], hasPassword: true, hasTotp: false },
+      customFields: [
+        {
+          name: 'Custom Field 1',
+          kind: 'text',
+          value: `Server=db.example.com;User ID=svc_old;Password=${CANARY.connectionStringPassword};`,
+        },
+      ],
     },
     secrets: { password: CANARY.password },
   },
