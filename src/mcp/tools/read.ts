@@ -122,7 +122,8 @@ const secretsPresence = z.strictObject({
   redacted_text_fields: z
     .array(z.string())
     .describe(
-      'Names of text custom fields whose names look secret, so their values are withheld here; ' +
+      'Names of text custom fields whose names or values look secret, so their values are ' +
+        'withheld here; ' +
         'readable via get_secret "custom.<name>".',
     ),
 });
@@ -162,8 +163,8 @@ export const toolGetItem: Tool = defineTool({
     'Returns one item’s metadata by id: name, type, username, URIs, folder, collections, ' +
     'favourite flag, dates and custom field names. Secret fields (password, TOTP, notes, card ' +
     'number and code, identity fields, SSH private key, hidden custom fields, and text custom ' +
-    'fields whose names look secret) are reported only as present or absent; call get_secret to ' +
-    'read a value. Use search_items first if you do not have an item id.',
+    'fields whose names or values look secret) are reported only as present or absent; call ' +
+    'get_secret to read a value. Use search_items first if you do not have an item id.',
   annotations: { ...READ_ONLY, title: 'Get item' },
   inputSchema: itemLookupInput,
   outputSchema: itemLookupOutput,

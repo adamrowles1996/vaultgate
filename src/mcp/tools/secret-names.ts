@@ -32,7 +32,10 @@ const SECRET_WORDS: ReadonlySet<string> = new Set(['key', 'keys', 'pat', 'pats',
 const CAMEL_BOUNDARY = /([a-z\d])([A-Z])/g;
 const NON_ALPHANUMERIC = /[^a-z\d]+/;
 
-function words(name: string): string[] {
+/**
+The lower-case words of a name, split at separators and camel-case boundaries.
+*/
+export function nameWords(name: string): string[] {
   return name
     .replaceAll(CAMEL_BOUNDARY, '$1 $2')
     .toLowerCase()
@@ -44,7 +47,7 @@ function words(name: string): string[] {
 True when a custom field called `name` looks like it holds a secret.
 */
 export function isSecretLookingName(name: string): boolean {
-  const parts = words(name);
+  const parts = nameWords(name);
   const compact = parts.join('');
   return (
     SECRET_FRAGMENTS.some((fragment) => compact.includes(fragment)) ||

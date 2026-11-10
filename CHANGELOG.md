@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **Metadata tools also withhold text custom fields whose values carry a credential.** A text
+  field named, say, `Custom Field 1` that holds `Server=…;Password=…` or
+  `postgresql://user:pass@host` was printed by `search_items` (live and trashed items alike)
+  and `get_item`, because MCP-18 judged only the name. Such a field is now reported with
+  `value: null` and `redacted: true` and listed under `secrets.redacted_text_fields`, whatever
+  its name, when its value holds a `key=value` or `key: value` pair with a secret-looking key
+  and a non-empty value (connection, PostgreSQL keyword, SAS and query strings, JSON, HTTP
+  headers), an address with a password (`scheme://user:pass@host`, `user:pass@host`,
+  `user/pass@host`), a PEM private key, or more than 8,192 characters. `get_secret`
+  `custom.<name>` still reads it, audited (spec 6.3, MCP-18).
+
 ## [0.1.0-rc.30] - 2026-11-10
 
 ### Security

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { fail } from '../../result.ts';
 import { InMemoryVaultClient } from '../../test-support/in-memory-vault-client.ts';
 import { failureCode, runOk } from '../../test-support/run-tool.ts';
-import { FIXTURE_ITEMS } from '../../test-support/vault-fixture.ts';
+import { CANARY, FIXTURE_ITEMS } from '../../test-support/vault-fixture.ts';
 import { type CustomFieldSummary, VaultError } from '../../vault/client.ts';
 
 import {
@@ -138,6 +138,19 @@ describe('search_items', () => {
     expect(await failureCode(toolSearchItems, downVault(), {})).toBe('vault_unavailable');
   });
 
+  it('MCP-18 withholds a credential-bearing text value in a trashed item, whatever its name', async () => {
+    const output = await runOk(toolSearchItems, new InMemoryVaultClient(), {
+      include_trash: true,
+      query: 'old',
+    });
+    const [item] = output['items'] as { id: string; custom_fields: unknown }[];
+    expect(item?.id).toBe('item-trashed');
+    expect(item?.custom_fields).toStrictEqual([
+      { name: 'Custom Field 1', kind: 'text', value: null, redacted: true },
+    ]);
+    expect(JSON.stringify(output)).not.toContain(CANARY.connectionStringPassword);
+  });
+
   it('MCP-18 withholds secret-named text fields in every summary', async () => {
     const output = await runOk(toolSearchItems, secretNamedVault(), { query: 'login' });
     const [item] = output['items'] as { custom_fields: unknown }[];
@@ -173,6 +186,15 @@ describe('get_item', () => {
       redacted_text_fields: ['Secret Value', 'client_secret'],
     });
     expect(JSON.stringify(output)).not.toContain(TEXT_CANARY);
+  });
+
+  it('MCP-18 withholds a credential-bearing text value on a trashed item', async () => {
+    const output = await runOk(toolGetItem, new InMemoryVaultClient(), { item_id: 'item-trashed' });
+    expect((output['item'] as { custom_fields: unknown }).custom_fields).toStrictEqual([
+      { name: 'Custom Field 1', kind: 'text', value: null, redacted: true },
+    ]);
+    expect(output['secrets']).toMatchObject({ redacted_text_fields: ['Custom Field 1'] });
+    expect(JSON.stringify(output)).not.toContain(CANARY.connectionStringPassword);
   });
 
   it('§6.2 handles items without a login section', async () => {

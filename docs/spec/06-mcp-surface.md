@@ -77,7 +77,17 @@ join this surface only on a deployment that enables the layer, for tokens with a
   `secrets.redacted_text_fields`. A name looks secret when, ignoring case and every
   non-alphanumeric character, it contains `secret`, `password`, `passwd`, `pwd`, `token`,
   `apikey`, `private`, `credential` or `connectionstring`, or has `key`, `keys`, `pat`, `pats`
-  or `conn` as a whole word (camel case splits words). People store secrets in text fields
+  or `conn` as a whole word (camel case splits words). A text field is treated the same way,
+  whatever its name, when its value embeds a credential: a `key=value` or `key: value` pair
+  (connection, PostgreSQL keyword, SAS and query strings, JSON, HTTP headers; a bare value ends
+  at whitespace, `;`, `&`, `?` or `,`) whose key looks secret by the rule above, or has `pass`,
+  `sig`, `signature`, `sas`, `auth`, `authorization`, `bearer` or `code` as a word, and whose
+  value is non-empty once quotes and braces are dropped; or an address with a password in it
+  (`scheme://user:password@host`, whose password may hold `;`, `=` and `,`, or
+  `user:password@host` and `user/password@host` at the start of the value or after a space, `:`,
+  `;`, `=` or `,`); or a PEM private-key armour line. A value longer than 8,192 characters is
+  withheld unread. Every pattern is bounded so the check is linear in the value's length. This
+  applies to trashed items exactly as to live ones. People store secrets in text fields
   (a "Secret Value" or "API Key" created visible), and metadata must never be able to print
   one; ordinary text values such as usernames, hosts and ids stay readable. `get_secret`
   `custom.<name>` still reads the value, audited.

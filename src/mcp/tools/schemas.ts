@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import { isSecretLookingName } from './secret-names.ts';
+import { isSecretLookingValue } from './secret-values.ts';
 
 import type { CustomFieldKind, ItemSummary, ItemType, VaultLockState } from '../../vault/client.ts';
 
@@ -55,23 +56,31 @@ const customFieldSummarySchema = z.strictObject({
     .nullable()
     .describe(
       'Present for text and boolean fields; always null for hidden and linked fields, and null ' +
-        'for a text field whose name looks secret (see redacted).',
+        'for a text field whose name or value looks secret (see redacted).',
     ),
   redacted: z
     .boolean()
     .describe(
       'True when this text field’s value was withheld because its name looks like it holds a ' +
-        'secret (secret, password, token, key and the like); read it with get_secret ' +
-        '"custom.<name>".',
+        'secret (secret, password, token, key and the like) or its value embeds one (a ' +
+        'connection string with a password, a URI with user:password@); read it with ' +
+        'get_secret "custom.<name>".',
     ),
 });
 
 /**
 True when a custom field's value is withheld from metadata because it is a text field whose
-name looks secret (MCP-18), as a hidden field's value always is.
+name or value looks secret (MCP-18), as a hidden field's value always is.
 */
-export function isRedactedField(field: { readonly name: string; readonly kind: string }): boolean {
-  return field.kind === 'text' && isSecretLookingName(field.name);
+export function isRedactedField(field: {
+  readonly name: string;
+  readonly kind: string;
+  readonly value: string | null;
+}): boolean {
+  return (
+    field.kind === 'text' &&
+    (isSecretLookingName(field.name) || (field.value !== null && isSecretLookingValue(field.value)))
+  );
 }
 
 export const itemSummarySchema = z.strictObject({
