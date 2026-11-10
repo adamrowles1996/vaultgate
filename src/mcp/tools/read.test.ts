@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { fail } from '../../result.ts';
 import { InMemoryVaultClient } from '../../test-support/in-memory-vault-client.ts';
 import { failureCode, runOk } from '../../test-support/run-tool.ts';
-import { VaultError } from '../../vault/client.ts';
+import { FIXTURE_ITEMS } from '../../test-support/vault-fixture.ts';
+import { type CustomFieldSummary, VaultError } from '../../vault/client.ts';
 
 import {
   toolGetItem,
@@ -14,6 +15,42 @@ import {
 } from './read.ts';
 
 const DOWN = new VaultError('vault_unavailable', 'bw serve is not running');
+
+/**
+A made-up value standing in for a secret someone stored in a text field.
+*/
+const TEXT_CANARY = 'TEXT-FIELD-CANARY-7c1e';
+
+/**
+The fixture login with secret-named text fields beside ordinary ones (MCP-18).
+*/
+function secretNamedVault(): InMemoryVaultClient {
+  const [login, ...rest] = FIXTURE_ITEMS;
+  if (login === undefined) {
+    throw new Error('fixture has no login');
+  }
+  const customFields: CustomFieldSummary[] = [
+    { name: 'Secret Value', kind: 'text', value: TEXT_CANARY },
+    { name: 'client_secret', kind: 'text', value: TEXT_CANARY },
+    { name: 'Host', kind: 'text', value: 'db.example.com' },
+    { name: 'username', kind: 'text', value: 'svc_reader' },
+    { name: 'API key', kind: 'hidden', value: null },
+    { name: 'Token enabled', kind: 'boolean', value: 'true' },
+  ];
+  return new InMemoryVaultClient([
+    { ...login, summary: { ...login.summary, customFields } },
+    ...rest,
+  ]);
+}
+
+const EXPECTED_SECRET_NAMED_FIELDS = [
+  { name: 'Secret Value', kind: 'text', value: null, redacted: true },
+  { name: 'client_secret', kind: 'text', value: null, redacted: true },
+  { name: 'Host', kind: 'text', value: 'db.example.com', redacted: false },
+  { name: 'username', kind: 'text', value: 'svc_reader', redacted: false },
+  { name: 'API key', kind: 'hidden', value: null, redacted: false },
+  { name: 'Token enabled', kind: 'boolean', value: 'true', redacted: false },
+];
 
 function downVault(): InMemoryVaultClient {
   const vault = new InMemoryVaultClient();
@@ -100,6 +137,13 @@ describe('search_items', () => {
   it('VAULT-5 maps a vault failure', async () => {
     expect(await failureCode(toolSearchItems, downVault(), {})).toBe('vault_unavailable');
   });
+
+  it('MCP-18 withholds secret-named text fields in every summary', async () => {
+    const output = await runOk(toolSearchItems, secretNamedVault(), { query: 'login' });
+    const [item] = output['items'] as { custom_fields: unknown }[];
+    expect(item?.custom_fields).toStrictEqual(EXPECTED_SECRET_NAMED_FIELDS);
+    expect(JSON.stringify(output)).not.toContain(TEXT_CANARY);
+  });
 });
 
 describe('get_item', () => {
@@ -113,8 +157,22 @@ describe('get_item', () => {
       identity: { present: false },
       ssh_private_key: { present: false },
       hidden_fields: ['API key'],
+      redacted_text_fields: [],
     });
     expect(JSON.stringify(output)).not.toContain('CANARY');
+  });
+
+  it('MCP-18 withholds secret-named text fields and keeps ordinary ones', async () => {
+    const vault = secretNamedVault();
+    const output = await runOk(toolGetItem, vault, { item_id: 'item-login' });
+    const item = output['item'] as { custom_fields: unknown; login: { username: unknown } };
+    expect(item.custom_fields).toStrictEqual(EXPECTED_SECRET_NAMED_FIELDS);
+    expect(item.login.username).not.toBeNull();
+    expect(output['secrets']).toMatchObject({
+      hidden_fields: ['API key'],
+      redacted_text_fields: ['Secret Value', 'client_secret'],
+    });
+    expect(JSON.stringify(output)).not.toContain(TEXT_CANARY);
   });
 
   it('§6.2 handles items without a login section', async () => {

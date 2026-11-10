@@ -58,6 +58,7 @@
     "collectionid",
     "compileall",
     "Conn",
+    "connectionstring",
     "conninfo",
     "Consolas",
     "CONSOLEMODE",

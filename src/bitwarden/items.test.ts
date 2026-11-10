@@ -124,6 +124,17 @@ describe('secretFromItem', () => {
     );
   });
 
+  it('MCP-18 still reads a text custom field whose name looks secret', () => {
+    const login = raw(FIXTURE_IDS.login);
+    const withText = itemSchema.parse({
+      ...login,
+      fields: [{ name: 'Secret Value', value: 'TEXT-FIELD-CANARY-7c1e', type: 0, linkedId: null }],
+    });
+    expect(secretFromItem(withText, { kind: 'customField', name: 'Secret Value' })).toBe(
+      'TEXT-FIELD-CANARY-7c1e',
+    );
+  });
+
   it('returns undefined for absent, empty or foreign fields', () => {
     const login = raw(FIXTURE_IDS.login);
     expect(secretFromItem(login, { kind: 'card', field: 'number' })).toBeUndefined();
