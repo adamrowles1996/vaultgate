@@ -8,6 +8,7 @@ import { ok } from '../../result.ts';
 import { defineTool, READ_ONLY, type Tool, type ToolRun } from './definition.ts';
 import {
   folderSchema,
+  isRedactedField,
   itemIdSchema,
   itemSummarySchema,
   itemTypeSchema,
@@ -118,6 +119,12 @@ const secretsPresence = z.strictObject({
   hidden_fields: z
     .array(z.string())
     .describe('Names of hidden custom fields readable via get_secret.'),
+  redacted_text_fields: z
+    .array(z.string())
+    .describe(
+      'Names of text custom fields whose names look secret, so their values are withheld here; ' +
+        'readable via get_secret "custom.<name>".',
+    ),
 });
 
 const itemLookupOutput = z.strictObject({ item: itemSummarySchema, secrets: secretsPresence });
@@ -142,6 +149,9 @@ const runGetItem: ToolRun<typeof itemLookupInput, typeof itemLookupOutput> = asy
       identity: { present: item.type === 'identity' },
       ssh_private_key: { present: item.type === 'sshKey' },
       hidden_fields: hiddenFields.map((field) => field.name),
+      redacted_text_fields: item.customFields
+        .filter((field) => isRedactedField(field))
+        .map((field) => field.name),
     },
   });
 };
@@ -151,9 +161,9 @@ export const toolGetItem: Tool = defineTool({
   description:
     'Returns one item’s metadata by id: name, type, username, URIs, folder, collections, ' +
     'favourite flag, dates and custom field names. Secret fields (password, TOTP, notes, card ' +
-    'number and code, identity fields, SSH private key, hidden custom fields) are reported only ' +
-    'as present or absent; call get_secret to read a value. Use search_items first if you do not ' +
-    'have an item id.',
+    'number and code, identity fields, SSH private key, hidden custom fields, and text custom ' +
+    'fields whose names look secret) are reported only as present or absent; call get_secret to ' +
+    'read a value. Use search_items first if you do not have an item id.',
   annotations: { ...READ_ONLY, title: 'Get item' },
   inputSchema: itemLookupInput,
   outputSchema: itemLookupOutput,

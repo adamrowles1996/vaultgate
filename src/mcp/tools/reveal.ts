@@ -48,7 +48,8 @@ export const toolGetSecret: Tool = defineTool({
     'one of: "password", "totp" (the current code and its remaining seconds, never the seed), ' +
     '"notes" (secure note body or login notes), "card.number", "card.code", ' +
     '"identity.<field>" (for example "identity.ssn"), "sshKey.privateKey", or ' +
-    '"custom.<name>" for a hidden custom field named in get_item. Use search_items or get_item ' +
+    '"custom.<name>" for a custom field named in get_item (hidden, or a text field whose value ' +
+    'get_item withheld). Use search_items or get_item ' +
     'first to find the item id and which fields are present.',
   annotations: { ...READ_ONLY, title: 'Get secret' },
   inputSchema: secretInput,

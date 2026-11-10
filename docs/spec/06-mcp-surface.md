@@ -71,6 +71,16 @@ join this surface only on a deployment that enables the layer, for tokens with a
   structurally incapable of carrying them (no free-form pass-through of vault objects), and
   contract tests assert that a fixture item full of canary strings yields no canary in any
   non-`get_secret` result.
+- **MCP-18** A text custom field whose name looks like it holds a secret is treated as one by
+  every tool but `get_secret`: its value is withheld (`value: null`, `redacted: true`) wherever
+  an item summary carries custom fields, and `get_item` lists its name under
+  `secrets.redacted_text_fields`. A name looks secret when, ignoring case and every
+  non-alphanumeric character, it contains `secret`, `password`, `passwd`, `pwd`, `token`,
+  `apikey`, `private`, `credential` or `connectionstring`, or has `key`, `keys`, `pat`, `pats`
+  or `conn` as a whole word (camel case splits words). People store secrets in text fields
+  (a "Secret Value" or "API Key" created visible), and metadata must never be able to print
+  one; ordinary text values such as usernames, hosts and ids stay readable. `get_secret`
+  `custom.<name>` still reads the value, audited.
 - **MCP-10** Tool inputs that may contain a secret (`update_item.password` and the values in
   `update_item.set_fields`) are marked and
   excluded from logs and audit payloads.

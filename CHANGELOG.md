@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **Metadata tools withhold text custom fields whose names look secret.** `get_item`,
+  `search_items` and the item that `create_item` and `update_item` return now report such a field with
+  `value: null` and `redacted: true`, and `get_item` lists it under
+  `secrets.redacted_text_fields`, as hidden fields already were. A name looks secret when it
+  contains secret, password, passwd, pwd, token, apikey, private, credential or connection
+  string, or has key, pat or conn as a whole word, ignoring case and separators. Read the value
+  with `get_secret` `custom.<name>`, which is audited (spec 6.3, MCP-18).
+
 ## [0.1.0-rc.29] - 2026-11-09
 
 ### Added
