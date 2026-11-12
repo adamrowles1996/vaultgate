@@ -19,7 +19,7 @@
 # ecosystem) can bump the digest; keep them identical.
 FROM ghcr.io/astral-sh/uv:0.11.8@sha256:3b7b60a81d3c57ef471703e5c83fd4aaa33abcd403596fb22ab07db85ae91347 AS uv
 
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS deps
+FROM python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3 AS deps
 WORKDIR /build
 COPY --from=uv /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./
@@ -30,7 +30,7 @@ RUN uv export --frozen --no-dev --no-emit-project --format requirements-txt -o r
   && /opt/venv/bin/pip install --no-cache-dir --disable-pip-version-check \
     --require-hashes --no-deps --only-binary :all: -r requirements.txt
 
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS model
+FROM python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3 AS model
 WORKDIR /build
 COPY src ./src
 # The standard library alone: fetch_model downloads each pinned file at the
@@ -38,7 +38,7 @@ COPY src ./src
 RUN PYTHONPATH=/build/src python3 -m vaultgate_code.fetch_model --dest /opt/vaultgate-code/model \
   && chmod 0755 /opt/vaultgate-code/model
 
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS grammars
+FROM python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3 AS grammars
 WORKDIR /build
 COPY --from=deps /opt/venv /opt/venv
 COPY src ./src
@@ -48,7 +48,7 @@ COPY src ./src
 RUN PYTHONPATH=/build/src /opt/venv/bin/python -m vaultgate_code.grammars \
   --dest /opt/vaultgate-code/grammars
 
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS runtime
+FROM python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3 AS runtime
 LABEL org.opencontainers.image.title="vaultgate-code" \
   org.opencontainers.image.description="The code-search sidecar of vaultgate's code connector (semble)" \
   org.opencontainers.image.source="https://github.com/adamrowles1996/vaultgate" \
