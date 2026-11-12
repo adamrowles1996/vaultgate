@@ -136,4 +136,9 @@ body.plain {
 .plain-card form > button {
   justify-self: stretch;
 }
+.enrolment-qr {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
 `;

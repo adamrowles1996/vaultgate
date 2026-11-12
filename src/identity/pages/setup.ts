@@ -1,4 +1,6 @@
-import { document, errorBanner, hidden, html } from './template.ts';
+import { encodeQR } from 'qr';
+
+import { document, EMPTY, errorBanner, hidden, html } from './template.ts';
 
 import type { Enrolment } from '../totp.ts';
 
@@ -19,14 +21,32 @@ export interface SetupFormView {
 }
 
 /**
-The enrolment key is shown as the otpauth URI and as text; no QR image in v1 (see spec 04).
+ID-9: encode locally and embed in the protected, no-store page; never send the URI to a service.
 */
 export function renderEnrolmentDetails(enrolment: Enrolment): ReturnType<typeof html> {
-  return html`<p>
+  return html`${renderEnrolmentQr(enrolment.uri)}
+    <p>
       Add vaultgate to your authenticator app by entering this key manually:
       <code>${enrolment.secretBase32}</code>
     </p>
     <p>Or paste the full URI: <code>${enrolment.uri}</code></p>`;
+}
+
+/**
+An oversized label must not prevent the text fallbacks or validation errors rendering.
+*/
+function renderEnrolmentQr(uri: string): ReturnType<typeof html> {
+  try {
+    const source = encodeQR(uri, 'data-url', { border: 4, scale: 4 });
+    return html`<p>Scan this QR code with your authenticator app to add vaultgate.</p>
+      <img
+        class="enrolment-qr"
+        src="${source}"
+        alt="Scan to add vaultgate to your authenticator"
+      />`;
+  } catch {
+    return EMPTY;
+  }
 }
 
 export function renderSetupForm(view: SetupFormView): string {

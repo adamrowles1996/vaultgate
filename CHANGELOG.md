@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Initial TOTP setup and authenticator replacement now show a locally generated QR
+  code alongside the manual key and full URI. No third-party QR service receives the secret.
+
 ## [0.1.0-rc.31] - 2026-11-10
 
 ### Security

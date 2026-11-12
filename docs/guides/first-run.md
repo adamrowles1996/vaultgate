@@ -72,7 +72,8 @@ is never written anywhere in clear.
 
 ## 3. Enrol an authenticator
 
-The page shows the TOTP secret two ways and no QR image:
+Scan the QR code on the page with your authenticator app. It is generated locally; the
+enrolment secret is never sent to a QR service. Two text fallbacks remain available:
 
 - **Manual key**: the base32 secret, for the "enter a setup key" option in your authenticator.
 - **Full URI**: an `otpauth://totp/vaultgate:<name>?secret=…&issuer=vaultgate&algorithm=SHA1&digits=6&period=30`
@@ -81,7 +82,7 @@ The page shows the TOTP secret two ways and no QR image:
 Any RFC 6238 authenticator works: Bitwarden's own authenticator, Aegis, Google Authenticator,
 Microsoft Authenticator, 1Password, and hardware tokens that take a base32 seed. The parameters
 are the common defaults (SHA-1, six digits, 30 seconds). Enter the current code in the form and
-submit.
+submit. Authenticator replacement on **Account & security** shows the same QR and text options.
 
 Codes are accepted from the current 30-second step and one step either side, and a code is
 never accepted twice. If your device clock is more than a minute out, the code is rejected.

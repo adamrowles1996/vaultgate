@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { base32Decode } from '../test-support/base32.ts';
+import { enrolmentQrUriOf } from '../test-support/enrolment-qr.ts';
 import {
   createHarness,
   csrfOf,
@@ -14,6 +16,7 @@ import {
 
 import { hashBootstrapToken } from './bootstrap.ts';
 import { CONTENT_SECURITY_POLICY } from './browser.ts';
+import { describeEnrolment } from './totp.ts';
 
 describe('bootstrap', () => {
   it('ID-1 mints a 32-byte token, stores its hash with a 30 minute expiry and logs the URL once', () => {
@@ -64,9 +67,10 @@ describe('GET /setup', () => {
     expect(missingText).toBe(await wrong.text());
     expect(missingText).toContain('Open the setup link printed in the server log');
     expect(browser.cookies.size).toBe(0);
+    expect(missingText).not.toContain('data:image/');
   });
 
-  it('ID-9 ID-19 ID-20 shows the enrolment key and URI as text under a strict CSP', async () => {
+  it('ID-9 ID-19 ID-20 shows a local QR, manual key and URI under a strict CSP', async () => {
     const harness = createHarness();
     harness.identity.bootstrap.ensureToken();
     const browser = harness.browser();
@@ -78,6 +82,7 @@ describe('GET /setup', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('access-control-allow-origin')).toBeNull();
     expect(key).toMatch(/^[A-Z2-7]{32}$/);
+    expect(enrolmentQrUriOf(markup)).toBe(describeEnrolment(undefined, base32Decode(key)!).uri);
     expect(markup).toContain(
       `otpauth://totp/vaultgate%3Aoperator?secret=${key}&amp;issuer=vaultgate`,
     );
@@ -153,6 +158,11 @@ describe('POST /setup', () => {
     expect(responses[0]?.text).toContain('otpauth://totp/vaultgate%3Aoperator?');
     expect(responses[2]?.text).toContain('otpauth://totp/vaultgate%3Aada%40example.com?');
     expect(responses[2]?.text).toContain('name="email"');
+    expect(responses.map((r) => enrolmentQrUriOf(r.text))).toStrictEqual(
+      [undefined, 'ada.example.com', EMAIL, EMAIL, EMAIL].map(
+        (email) => describeEnrolment(email, base32Decode(key)!).uri,
+      ),
+    );
     expect(harness.stores.operators.count()).toBe(0);
   });
 

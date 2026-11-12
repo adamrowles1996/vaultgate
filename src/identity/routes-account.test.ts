@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { enrolmentQrUriOf } from '../test-support/enrolment-qr.ts';
 import {
   createHarness,
   csrfOf,
@@ -14,6 +15,7 @@ import {
   totpFor,
 } from '../test-support/identity-app.ts';
 
+import { CONTENT_SECURITY_POLICY } from './browser.ts';
 import { hashRecoveryCode } from './recovery-codes.ts';
 
 import type { Browser } from '../test-support/browser.ts';
@@ -208,7 +210,13 @@ describe('POST /account/totp/rotate', () => {
     const harness = createHarness();
     const { browser, csrf, key } = await confirmedBrowser(harness);
     const shown = await browser.submit('/account/totp/rotate', { csrf });
-    const newKey = enrolmentKeyOf(await shown.text());
+    const markup = await shown.text();
+    const newKey = enrolmentKeyOf(markup);
+    const uri = enrolmentQrUriOf(markup);
+    expect(uri).toContain(`secret=${newKey}&issuer=vaultgate`);
+    expect(markup).toContain(uri.replaceAll('&', '&amp;'));
+    expect(shown.headers.get('cache-control')).toBe('no-store');
+    expect(shown.headers.get('content-security-policy')).toBe(CONTENT_SECURITY_POLICY);
     const wrong = await browser.submit('/account/totp/rotate', {
       csrf,
       code: totpFor(key, harness.now()),
@@ -226,7 +234,9 @@ describe('POST /account/totp/rotate', () => {
     expect(shown.status).toBe(200);
     expect(newKey).not.toBe(key);
     expect(wrong.status).toBe(400);
-    expect(await wrong.text()).toContain('the code was not accepted');
+    const retryMarkup = await wrong.text();
+    expect(retryMarkup).toContain('the code was not accepted');
+    expect(enrolmentQrUriOf(retryMarkup)).toBe(uri);
     expect(right.status).toBe(303);
     expect(notice).toContain('Your authenticator has been replaced.');
     expect(browser.cookies.has('__Host-vg_state')).toBe(false);

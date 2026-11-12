@@ -103,6 +103,9 @@ docker compose up -d
 docker compose logs -f vaultgate
 ```
 
+Authenticator enrolment and replacement show a locally generated QR code, with the manual
+key and full URI available as fallbacks.
+
 First run: the log prints a one-time `/setup?token=…` URL. Open it and create the operator
 account with an e-mail address, a password and a code from your authenticator (TOTP). That
 password is vaultgate's own operator login; it is not, and never becomes, your Bitwarden master

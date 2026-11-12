@@ -40,9 +40,11 @@ added without touching the OAuth layer (see `PLAN.md`).
   dependency) and verified against the RFC 6238 Appendix B test vectors.
 - **ID-9** Enrolment shows an `otpauth://totp/vaultgate:<account>?secret=…&issuer=vaultgate` URI
   as text together with the base32 key for manual entry; `<account>` is the operator's e-mail
-  address, or `operator` at first run, when none has been submitted yet. (v1 renders no QR image: a QR encoder would
-  be a dependency, and every authenticator app accepts a manual key. A QR image is a post-1.0
-  option once an in-tree encoder is justified.) The secret is 20 random bytes, stored encrypted at rest with a key derived
+  address, or `operator` at first run, when none has been submitted yet. Initial setup and
+  authenticator replacement also show a QR image encoding that exact URI, generated locally
+  and embedded in the protected, no-store HTML page without contacting a third-party service.
+  The image has black modules on white with a four-module quiet zone. The text URI and manual
+  key remain available as fallbacks, including when a label exceeds QR capacity. The secret is 20 random bytes, stored encrypted at rest with a key derived
   from `VAULTGATE_SECRET_KEY` (HKDF, AES-256-GCM), never logged.
 - **ID-10** Verification accepts the current step and one step either side and MUST reject a code
   whose step is ≤ the last accepted step (replay protection), persisted per operator.
