@@ -18,6 +18,7 @@ import { driverModule } from '../drivers.ts';
 import { actionErrorOf, type FaultCodes } from '../failures.ts';
 import { toSqlScalar, type SqlRow, type SqlValue } from '../values.ts';
 
+import { clearActor, setActor } from './actor.ts';
 import { EXACT_TYPES, exactScalar } from './exact.ts';
 
 import type { SqlConnection, SqlRequest, SqlRows, SqlSession } from '../session.ts';
@@ -189,7 +190,8 @@ function toRows(result: MssqlResult, maxRows: number): SqlRows {
 /**
  * ACT-25: a write runs inside the driver's transaction, committed when the
  * statement succeeds and rolled back on any error, so a statement that fails
- * half way leaves nothing behind.
+ * half way leaves nothing behind. ACT-132: its caller tag is set around the
+ * statement (`actor.ts`).
  */
 async function inTransaction(
   pool: MssqlPool,
@@ -198,13 +200,16 @@ async function inTransaction(
 ): Promise<MssqlResult> {
   const transaction = pool.transaction();
   await transaction.begin();
+  await setActor(transaction, request.callerTag);
   const command = prepared(() => transaction.request(), request);
   running(command);
   try {
     const result = await command.query(request.text);
+    await clearActor(transaction, request.callerTag);
     await transaction.commit();
     return result;
   } catch (error) {
+    await clearActor(transaction, request.callerTag);
     await quietly(transaction.rollback());
     throw error;
   }

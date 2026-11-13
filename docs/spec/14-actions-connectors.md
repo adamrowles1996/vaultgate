@@ -301,6 +301,18 @@ the refresh token or the access token.
   the next call. `mssql` has no connection type outside its pool, so the SQL Server session is a
   pool of exactly one (`min: 0`, `max: 1`) created and closed with the call, which is the same
   thing from the database's point of view.
+- **ACT-132** Each statement runs with the call's caller tag (ACT-131). On PostgreSQL, after
+  `BEGIN` and before the statement, the session runs
+  `SELECT set_config('application_name', $1, true), set_config('app.actor_id', $1, true)` with
+  the tag bound as `$1`: `is_local = true` makes both settings end with the transaction, committed
+  or rolled back, so a reused connection never carries one caller's tag into another's
+  statement, while a trigger, a column default or `pg_stat_activity` sees it for as long as the
+  statement runs. On SQL Server a write sets the session context key `actor_id` with
+  `sp_set_session_context` inside its transaction before the statement and clears it to `NULL`
+  after, on success and on failure alike, because session context does not roll back. That is
+  best effort: a server that refuses it never fails the write. A SQL Server read is not tagged:
+  it runs outside a transaction, where the pool gives no promise that the set, the statement and
+  the clear share one connection. A call with no tag sets nothing.
 - `policy.statement_allowlist` is read by `sql_execute` only; `sql_query` is governed by the
   classification of ACT-37 and by the login of ACT-85. A `schemas` list was specified here and is
   withdrawn: deciding whether a qualified name in a statement is a schema or a table alias needs

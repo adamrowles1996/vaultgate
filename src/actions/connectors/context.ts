@@ -99,4 +99,8 @@ export interface RunContext<Destination, Credential, Policy> extends TargetDocum
   readonly signal: AbortSignal;
   readonly outputLimit: OutputLimit;
   readonly logger: Logger;
+  /**
+  ACT-131, ACT-132: the caller tag; `sql` hands it to the database, every other connector ignores it.
+  */
+  readonly callerTag?: string | undefined;
 }

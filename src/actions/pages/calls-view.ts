@@ -80,6 +80,7 @@ function toItem(call: StoredActionCall, live: ReadonlySet<string>, names: Client
     clientId: call.clientId,
     clientName: names.get(call.clientId) ?? call.clientId,
     argumentsExcerpt: excerpt(call),
+    callerTag: call.callerTag ?? '',
   };
 }
 

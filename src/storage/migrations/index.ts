@@ -4,6 +4,7 @@ import { vaultSettings } from './003-vault-settings.ts';
 import { actions } from './004-actions.ts';
 import { codeConnector } from './005-code-connector.ts';
 import { readOnlyGrants } from './006-read-only-grants.ts';
+import { callerTag } from './007-caller-tag.ts';
 
 import type { Migration } from './types.ts';
 
@@ -19,4 +20,5 @@ export const MIGRATIONS: readonly Migration[] = [
   actions,
   codeConnector,
   readOnlyGrants,
+  callerTag,
 ];

@@ -185,6 +185,7 @@ function serve(gate: Gate, context: McpContext, exchange: Exchange): Promise<Res
     scopes: exchange.verdict.scopes,
     requestId: context.get('requestId'),
     sourceIp: resolveSourceIp(context.req.raw, context.env, config),
+    mcpSessionId: context.req.raw.headers.get('mcp-session-id') ?? undefined,
   };
   const server = {
     vault: gate.dependencies.vaultClient,

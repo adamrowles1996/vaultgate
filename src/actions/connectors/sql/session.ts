@@ -31,6 +31,10 @@ export interface SqlRequest {
   At most this many rows are collected; `run` asks for one more than the policy allows.
   */
   readonly maxRows: number;
+  /**
+  ACT-132: set inside the statement's own transaction before it runs; absent, nothing is set.
+  */
+  readonly callerTag?: string | undefined;
 }
 
 export interface SqlSession {

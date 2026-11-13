@@ -209,6 +209,10 @@ export interface ConnectorCall {
   readonly credential: Credential;
   readonly pinned: readonly PinnedEndpoint[];
   readonly support: RunSupport;
+  /**
+  ACT-131: the caller's tag, passed to the connector as it is.
+  */
+  readonly callerTag?: string | undefined;
 }
 
 /**
@@ -248,6 +252,7 @@ export async function runConnector(
       },
     },
     logger: dependencies.logger,
+    callerTag: call.callerTag,
   };
   const startedAt = now();
   try {

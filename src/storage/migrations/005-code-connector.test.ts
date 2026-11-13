@@ -67,8 +67,8 @@ describe('migration 005: the code connector (13.13, ADR 0008)', () => {
       insertTarget(store, 'too-early', 'code');
     }).toThrow(/CHECK constraint failed/u);
     expect(unwrapOk(migrate(store, MIGRATIONS, NOW))).toStrictEqual({
-      applied: [5, 6],
-      version: 6,
+      applied: [5, 6, 7],
+      version: 7,
     });
     insertTarget(store, 'target-2', 'code');
     expect(

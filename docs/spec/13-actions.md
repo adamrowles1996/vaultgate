@@ -264,6 +264,21 @@ right default. Every `browser_*` tool carries them because a signed-in session i
 user whatever the individual tool does. Read-only HTTP targets that want silent calls are a
 post-M15 candidate (`http_get` with `readOnlyHint: true`), not a reason to weaken the hint.
 
+- **ACT-131** Every `tools/call` carries a **caller tag** built from what reaches vaultgate with
+  the request, and never from a credential: `vg:<client>:<operator>:t=<token id>[:s=<session>]`.
+  `client` is the OAuth client's registered name and `operator` the token's subject (the operator
+  who approved the consent), each reduced to `[A-Za-z0-9._-]` and cut to 16 and 8 characters;
+  `t=` is the MCP-13 token id (the first 12 hex characters of the token's SHA-256, already in
+  every audit row), and any other value in its place is hashed again, so nothing longer than an
+  audit id can pass through it; `s=` is the first 12 hex characters of the SHA-256 of the
+  `Mcp-Session-Id` header, present only when the client sends one. The tag is printable ASCII
+  of at most 63 bytes, PostgreSQL's limit for `application_name`, so it is never cut. On a
+  stateless `/mcp` no session id is issued, so the token id is the most specific part in
+  practice: it tells two holders of one client apart whenever they hold different tokens, as the
+  credential relay's per-node tokens do (RELAY-14). The MCP `initialize` `clientInfo` is not
+  part of it, because a stateless server keeps nothing from the `initialize` request to the
+  `tools/call` that follows.
+
 ### 13.6.2 `actions_list_targets`
 
 - **ACT-19** Input: none. Output: `targets`, an array of `{ name, description, connector,

@@ -113,6 +113,7 @@ function insertRow(dependencies: RecordDependencies, facts: CallFacts, ending: E
     outcome: ending.outcome,
     requestId: facts.caller.requestId,
     ip: facts.caller.ip,
+    callerTag: facts.caller.tag,
   });
   return id;
 }
@@ -136,6 +137,7 @@ function auditEvent(
       clientName: facts.caller.clientName,
       target: facts.invocation.target,
       outcome,
+      ...(facts.caller.tag !== undefined && { callerTag: facts.caller.tag }),
     },
   });
 }

@@ -69,11 +69,17 @@
   the rest against — `ssh` and `winrm` also have ACT-88's full command in `classification`, and
   a 64 KiB `sql` statement has nothing else), `output_bytes`,
   `output_truncated`, `duration_ms`, `outcome` (`ok` \| `denied:<code>` \| `error:<code>`),
-  `elicitation`, `confirmation_nonce`, `request_id`, `ip`. Results, snapshots and screenshots are
+  `elicitation`, `confirmation_nonce`, `request_id`, `ip`, `caller_tag` (ACT-133). Results, snapshots and screenshots are
   never stored. `elicitation` and `confirmation_nonce` belong to the withdrawn confirmation of
   13.8: a call recorded now has `not_required` and no nonce, and a row written before it was
   withdrawn keeps what it recorded (`accepted`, `declined`, `cancelled`, `unavailable` or
   `invalid`), in the table and in the export.
+- **ACT-133** The `action_calls` row keeps the call's caller tag (ACT-131) in `caller_tag`, the
+  MCP-13 event carries it as `details.callerTag`, the export carries it as `callerTag`, and the
+  Writes and Activity views show it in a **Caller tag** column, so a write found in a database by
+  its `app.actor_id` or `application_name` (ACT-132) leads to its row here, and from the token id
+  to the consent and, for a relay token, the node it was issued to. A row written before the tag
+  existed has none.
 - **ACT-61** Arguments are stored because an operator reviewing a write needs to see
   the statement, command or typed text that ran, and because the agent supplied them in the
   clear; the scrubber still runs over them (a prompt-injected agent could echo a value it obtained
@@ -101,13 +107,13 @@ a moved ref is still answered from it with `stale: true` (ACT-108). Nothing else
 repository, snapshot or index, and nothing of a repository's content, is stored in vaultgate's
 database:
 
-| Table                   | Columns                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `action_targets`        | `id`, `name` (unique), `description`, `connector`, `destination` (JSON), `internal`, `credential` (JSON: item id and field names only), `policy` (JSON), `enabled`, `revision`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                   |
-| `action_grants`         | `target_id` (FK, cascade), `client_id` (FK `oauth_clients.client_id`), `granted_at`, `granted_by`, `revoked_at`, `read_only` (boolean, default false); primary key (`target_id`, `client_id`)                                                                                                                                                                              |
-| `action_calls`          | `id`, `at`, `target_id` (no FK; outlives the target), `target_name`, `connector`, `revision`, `tool`, `session_id_hash`, `client_id`, `token_prefix`, `operation`, `classification`, `arguments` (JSON), `arguments_truncated`, `output_bytes`, `output_truncated`, `duration_ms`, `outcome`, `elicitation`, `confirmation_nonce` (unique, nullable), `request_id`, `ip`   |
-| `action_sessions`       | `id_hash` (SHA-256 of the session id), `target_id`, `client_id`, `token_prefix`, `opened_at`, `last_used_at`, `expires_at`, `closed_at`, `close_reason` (`agent` \| `idle` \| `absolute` \| `revoked` \| `target_changed` \| `operator` \| `shutdown` \| `error`), `calls`; the live context lives in the sidecar, this row is the record and the revocation handle (14.7) |
-| `action_code_snapshots` | `target_id` (primary key, FK `action_targets.id`, cascade), `snapshot_key`, `fingerprint` (of the extraction policy), `commit_sha`, `ref` (the name it was resolved from), `indexed_at`; rewritten as the configured ref moves on, deleted with the target's snapshots                                                                                                     |
+| Table                   | Columns                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `action_targets`        | `id`, `name` (unique), `description`, `connector`, `destination` (JSON), `internal`, `credential` (JSON: item id and field names only), `policy` (JSON), `enabled`, `revision`, `created_at`, `updated_at`, `updated_by`                                                                                                                                                               |
+| `action_grants`         | `target_id` (FK, cascade), `client_id` (FK `oauth_clients.client_id`), `granted_at`, `granted_by`, `revoked_at`, `read_only` (boolean, default false); primary key (`target_id`, `client_id`)                                                                                                                                                                                          |
+| `action_calls`          | `id`, `at`, `target_id` (no FK; outlives the target), `target_name`, `connector`, `revision`, `tool`, `session_id_hash`, `client_id`, `token_prefix`, `operation`, `classification`, `arguments` (JSON), `arguments_truncated`, `output_bytes`, `output_truncated`, `duration_ms`, `outcome`, `elicitation`, `confirmation_nonce` (unique, nullable), `request_id`, `ip`, `caller_tag` |
+| `action_sessions`       | `id_hash` (SHA-256 of the session id), `target_id`, `client_id`, `token_prefix`, `opened_at`, `last_used_at`, `expires_at`, `closed_at`, `close_reason` (`agent` \| `idle` \| `absolute` \| `revoked` \| `target_changed` \| `operator` \| `shutdown` \| `error`), `calls`; the live context lives in the sidecar, this row is the record and the revocation handle (14.7)             |
+| `action_code_snapshots` | `target_id` (primary key, FK `action_targets.id`, cascade), `snapshot_key`, `fingerprint` (of the extraction policy), `commit_sha`, `ref` (the name it was resolved from), `indexed_at`; rewritten as the configured ref moves on, deleted with the target's snapshots                                                                                                                 |
 
 - **ACT-64** No column holds an injected value, a vault secret, a token or a raw session id
   (STORE-4 extended). `credential` holds the item id and field names; the vault

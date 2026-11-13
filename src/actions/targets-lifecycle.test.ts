@@ -209,6 +209,7 @@ describe('target lifecycle', () => {
       outcome: INTERRUPTED_OUTCOME,
       requestId: undefined,
       ip: undefined,
+      callerTag: undefined,
     });
     harness.audit.length = 0;
     unwrapOk(harness.engine.targets.remove(created.id, OPERATOR_ID));

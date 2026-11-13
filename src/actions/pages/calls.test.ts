@@ -161,6 +161,19 @@ describe('GET /account/actions/writes', () => {
     expect(markup).toContain('…</code>');
     expect(markup).not.toContain('z'.repeat(400));
   });
+
+  it('ACT-133 shows each write’s caller tag, and an empty cell for a call that carried none', async () => {
+    const harness = createPagesHarness();
+    await createHttpTarget(harness.actions, WRITABLE);
+    const tag = 'vg:Agent-One:operator:t=0123456789ab';
+    await harness.actions.engine.call(caller({ tag }), httpInvocation({ method: 'POST' }));
+    await harness.actions.clock.advance(1000);
+    await harness.actions.engine.call(caller(), httpInvocation({ method: 'POST' }));
+    const { browser } = await signedInOperator(harness);
+    const markup = await pageMarkup(browser, '/account/actions/writes');
+    expect(markup).toContain(`data-label="Caller tag"><span class="mono">${tag}</span></td>`);
+    expect(markup).toContain('data-label="Caller tag"><span class="mono"></span></td>');
+  });
 });
 
 describe('the older-calls cursor', () => {

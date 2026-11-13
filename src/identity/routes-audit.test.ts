@@ -170,7 +170,7 @@ describe('POST /account/audit/export', () => {
       'attachment; filename="vaultgate-actions-20260901T000000Z-20261001T000000Z.csv"',
     );
     expect(rows.split('\r\n', 1)[0]).toBe(
-      'id,at,targetId,targetName,connector,revision,tool,sessionIdHash,clientId,tokenPrefix,operation,classification,arguments,argumentsTruncated,outputBytes,outputTruncated,durationMs,outcome,elicitation,confirmationNonce,requestId,ip',
+      'id,at,targetId,targetName,connector,revision,tool,sessionIdHash,clientId,tokenPrefix,operation,classification,arguments,argumentsTruncated,outputBytes,outputTruncated,durationMs,outcome,elicitation,confirmationNonce,requestId,ip,callerTag',
     );
     expect(rows.split('\r\n')).toHaveLength(3);
     const unknown = await browser.submit('/account/audit/export', {

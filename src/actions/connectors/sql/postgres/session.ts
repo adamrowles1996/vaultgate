@@ -5,7 +5,8 @@
  * and closed when the call ends (ACT-86). The statement always runs inside a
  * transaction of its own, committed when it succeeds and rolled back on any
  * error (ACT-25); a read session opens it `READ ONLY` and sets
- * `default_transaction_read_only` besides (ACT-85). The driver is loaded
+ * `default_transaction_read_only` besides (ACT-85). The caller tag is set
+ * transaction-locally before the statement (ACT-132). The driver is loaded
  * through a dynamic import, so a deployment that never enables `sql` never
  * loads it (ACT-73).
  */
@@ -73,6 +74,18 @@ const BEGIN: Readonly<Record<SqlConnection['mode'], string>> = {
   read: 'BEGIN READ ONLY',
   write: 'BEGIN',
 };
+
+/**
+ * ACT-132: the caller tag as `application_name` and `app.actor_id`, each set
+ * with `is_local = true`, so both end with the transaction — committed or
+ * rolled back — and a connection used again never carries one caller's tag
+ * into another's statement. The tag is a bound parameter, never statement
+ * text, and it is set after `BEGIN` and before the agent's statement, so a
+ * trigger, a column default or `pg_stat_activity` sees it while that
+ * statement runs.
+ */
+export const SET_CALLER_TAG =
+  "SELECT set_config('application_name', $1, true), set_config('app.actor_id', $1, true)";
 
 /**
  * ACT-55, ACT-57: the host name is the TLS server name, and only a name can
@@ -155,6 +168,9 @@ function createSession(client: PostgresClient, connection: SqlConnection): SqlSe
     async query(request) {
       try {
         await client.query({ text: BEGIN[connection.mode] });
+        if (request.callerTag !== undefined) {
+          await client.query({ text: SET_CALLER_TAG, values: [request.callerTag] });
+        }
         const result = await client.query({
           text: request.text,
           values: [...request.params],
