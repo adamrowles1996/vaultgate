@@ -171,6 +171,7 @@ export function createRun(sessions: SqlSessions): SqlRun {
         text: operation.statement,
         params: operation.params,
         maxRows: context.policy.max_rows + 1,
+        ...(context.callerTag !== undefined && { callerTag: context.callerTag }),
       });
       return ok(toOutput(context, rows));
     } catch (error) {

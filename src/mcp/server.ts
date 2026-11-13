@@ -57,6 +57,10 @@ export interface CallContext {
   readonly scopes: readonly Scope[];
   readonly requestId: string;
   readonly sourceIp: string;
+  /**
+  ACT-131: the `Mcp-Session-Id` header, when the client sends one.
+  */
+  readonly mcpSessionId?: string | undefined;
 }
 
 export interface ServerDependencies {

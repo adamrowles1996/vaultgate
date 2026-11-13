@@ -48,6 +48,7 @@ const rowSchema = z.object({
   confirmation_nonce: optional,
   request_id: optional,
   ip: optional,
+  caller_tag: optional,
 });
 
 type Row = z.output<typeof rowSchema>;
@@ -78,6 +79,10 @@ export interface StoredActionCall {
   readonly confirmationNonce: string | undefined;
   readonly requestId: string | undefined;
   readonly ip: string | undefined;
+  /**
+  ACT-133: absent on rows written before the caller tag existed.
+  */
+  readonly callerTag: string | undefined;
 }
 
 const FIELDS = [
@@ -103,6 +108,7 @@ const FIELDS = [
   'confirmationNonce',
   'requestId',
   'ip',
+  'callerTag',
 ] as const;
 
 function toRecord(row: Row): StoredActionCall {
@@ -129,6 +135,7 @@ function toRecord(row: Row): StoredActionCall {
     confirmationNonce: row.confirmation_nonce,
     requestId: row.request_id,
     ip: row.ip,
+    callerTag: row.caller_tag,
   };
 }
 

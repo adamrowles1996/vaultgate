@@ -123,8 +123,8 @@ describe('migrate', () => {
   it('STORE-5 STORE-9 ACT-65 creates the current schema with every table and hot-path index', () => {
     const database = new DatabaseSync(':memory:');
     expect(unwrapOk(migrate(database, MIGRATIONS, NOW))).toStrictEqual({
-      applied: [1, 2, 3, 4, 5, 6],
-      version: 6,
+      applied: [1, 2, 3, 4, 5, 6, 7],
+      version: 7,
     });
     expect(tables(database)).toStrictEqual([
       'action_calls',
@@ -229,6 +229,7 @@ describe('migrate', () => {
       'confirmation_nonce',
       'request_id',
       'ip',
+      'caller_tag',
     ]);
     expect(columns(database, 'action_sessions')).toStrictEqual([
       'id_hash',

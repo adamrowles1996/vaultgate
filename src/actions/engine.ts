@@ -70,6 +70,7 @@ async function execute(
     credential: credential.value,
     pinned: pinned.value,
     support,
+    callerTag: facts.caller.tag,
   });
   if (!output.ok) {
     const error = new ActionError(

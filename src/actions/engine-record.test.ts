@@ -56,6 +56,7 @@ describe('what a call leaves behind', () => {
         confirmationNonce: undefined,
         requestId: 'req-1',
         ip: '203.0.113.9',
+        callerTag: undefined,
       },
     ]);
     expect(harness.audit.at(-1)).toStrictEqual({

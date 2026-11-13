@@ -47,6 +47,10 @@ export interface CallRow {
   readonly outcome: CallOutcome;
   readonly requestId: string | undefined;
   readonly ip: string | undefined;
+  /**
+  ACT-133: the caller tag (ACT-131) the call ran under.
+  */
+  readonly callerTag: string | undefined;
 }
 
 export interface CallCompletion {
@@ -67,7 +71,8 @@ const INSERT =
   'INSERT INTO action_calls (id, at, target_id, target_name, connector, revision, tool, ' +
   'session_id_hash, client_id, token_prefix, operation, classification, arguments, ' +
   'arguments_truncated, output_bytes, output_truncated, duration_ms, outcome, elicitation, ' +
-  'confirmation_nonce, request_id, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)';
+  'confirmation_nonce, request_id, ip, caller_tag) ' +
+  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)';
 
 /**
  * ACT-60: the arguments as JSON, cut at 4 KiB. What is cut is named: the
@@ -130,6 +135,7 @@ export function recordCall(database: DatabaseSync, row: CallRow): void {
     NOT_REQUIRED,
     orNull(row.requestId),
     orNull(row.ip),
+    orNull(row.callerTag),
   );
 }
 

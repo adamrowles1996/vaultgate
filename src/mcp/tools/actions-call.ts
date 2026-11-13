@@ -5,6 +5,8 @@
  * asks no one to approve a call; a client that wants a person to approve
  * writes does so itself, before the call, from the tool annotations (ACT-18).
  */
+import { callerTagOf } from '../../actions/caller-tag.ts';
+
 import { failureResult } from './definition.ts';
 
 import type { Caller } from '../../actions/caller.ts';
@@ -21,6 +23,10 @@ export interface ActionsCallContext {
   readonly scopes: readonly Scope[];
   readonly requestId: string;
   readonly sourceIp: string;
+  /**
+  ACT-131: the request's `Mcp-Session-Id` header, if the client sent one; only its hash goes further.
+  */
+  readonly mcpSessionId?: string | undefined;
 }
 
 export function callerFor(context: ActionsCallContext): Caller {
@@ -31,6 +37,12 @@ export function callerFor(context: ActionsCallContext): Caller {
     scopes: context.scopes,
     requestId: context.requestId,
     ip: context.sourceIp,
+    tag: callerTagOf({
+      clientName: context.token.clientName,
+      operatorId: context.token.subject,
+      tokenId: context.token.tokenId,
+      mcpSessionId: context.mcpSessionId,
+    }),
   };
 }
 

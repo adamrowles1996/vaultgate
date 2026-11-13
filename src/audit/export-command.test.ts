@@ -167,8 +167,8 @@ describe('writeAuditExport', () => {
     expect(jsonl.endsWith('\n')).toBe(true);
     const csv = await collect({ ...REQUEST, stream: 'actions', format: 'csv' }, true);
     expect(csv.split('\r\n')).toStrictEqual([
-      'id,at,targetId,targetName,connector,revision,tool,sessionIdHash,clientId,tokenPrefix,operation,classification,arguments,argumentsTruncated,outputBytes,outputTruncated,durationMs,outcome,elicitation,confirmationNonce,requestId,ip',
-      'call-1,2026-09-22T12:00:00.000Z,target-1,api,http,3,http_request,,client,aabbccdd0011,read,GET,"{""path"":""/v1/me""}",false,42,false,7,ok,not_required,,req-1,203.0.113.9',
+      'id,at,targetId,targetName,connector,revision,tool,sessionIdHash,clientId,tokenPrefix,operation,classification,arguments,argumentsTruncated,outputBytes,outputTruncated,durationMs,outcome,elicitation,confirmationNonce,requestId,ip,callerTag',
+      'call-1,2026-09-22T12:00:00.000Z,target-1,api,http,3,http_request,,client,aabbccdd0011,read,GET,"{""path"":""/v1/me""}",false,42,false,7,ok,not_required,,req-1,203.0.113.9,',
       '',
     ]);
   });
@@ -180,7 +180,7 @@ describe('writeAuditExport', () => {
     );
     expect(await collect({ ...REQUEST, stream: 'actions' }, false)).toBe('');
     expect(await collect({ ...REQUEST, stream: 'actions', format: 'csv' }, false)).toMatch(
-      /^id,at,targetId,.*,ip\r\n$/,
+      /^id,at,targetId,.*,ip,callerTag\r\n$/,
     );
   });
 });

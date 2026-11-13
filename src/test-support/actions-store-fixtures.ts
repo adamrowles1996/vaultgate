@@ -103,6 +103,7 @@ export function insertCallRow(database: DatabaseSync, overrides: Partial<CallRow
     outcome: 'ok',
     requestId: 'req-1',
     ip: '203.0.113.9',
+    callerTag: undefined,
     ...overrides,
   };
   recordCall(database, row);

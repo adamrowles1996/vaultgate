@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- ACT-131, ACT-132, ACT-133: **every `sql` call now tells the database who made it.** Each
+  `tools/call` gets a caller tag, `vg:<client>:<operator>:t=<token id>[:s=<session>]`, built
+  from the OAuth client name, the operator who approved the consent, the MCP-13 token id and,
+  when the client sends one, the hash of its `Mcp-Session-Id`; never from a credential, and at
+  most 63 bytes. A PostgreSQL statement runs with it as `application_name` and
+  `app.actor_id`, both set transaction-locally (`set_config(…, true)`) after `BEGIN`, so a
+  trigger or column default can record it and a reused connection never carries it into
+  another call. A SQL Server write sets `actor_id` with `sp_set_session_context` around the
+  statement, best effort. The `action_calls` row (new column `caller_tag`), the audit event
+  (`details.callerTag`), the export (`callerTag`) and the Writes and Activity views record the
+  same tag, so a write found in a database leads straight to the call that made it.
+
+### Upgrading
+
+Schema migration 7 adds the nullable `action_calls.caller_tag` column. An earlier release
+refuses to start on the migrated database (OPS-8): to go back, stop the service and drop the
+column and the migration's row, or restore the pre-upgrade backup, before starting the older
+release.
+
 ## [0.1.0-rc.32] - 2026-11-13
 
 ### Fixed

@@ -31,6 +31,10 @@ export interface CallItem {
   */
   readonly clientName: string;
   readonly argumentsExcerpt: string;
+  /**
+  ACT-133: the caller tag the call ran under; empty on rows written before it existed.
+  */
+  readonly callerTag: string;
 }
 
 /**
@@ -67,6 +71,7 @@ const TRAIL_COLUMNS = [
   'Time',
   'Connection',
   'Agent',
+  'Caller tag',
   'Tool',
   'Classification',
   'Outcome',
@@ -170,10 +175,11 @@ function trailRow(call: CallItem): Html {
   return html`<tr>
     ${cell(TRAIL_COLUMNS[0], call.at)} ${cell(TRAIL_COLUMNS[1], computer)}
     ${cell(TRAIL_COLUMNS[2], call.clientName)}
-    ${cell(TRAIL_COLUMNS[3], html`<span class="mono">${call.tool}</span>`)}
-    ${cell(TRAIL_COLUMNS[4], call.classification)}
-    ${cell(TRAIL_COLUMNS[5], outcomeTag(call.outcome))}
-    ${cell(TRAIL_COLUMNS[6], html`<code>${call.argumentsExcerpt}</code>`)}
+    ${cell(TRAIL_COLUMNS[3], html`<span class="mono">${call.callerTag}</span>`)}
+    ${cell(TRAIL_COLUMNS[4], html`<span class="mono">${call.tool}</span>`)}
+    ${cell(TRAIL_COLUMNS[5], call.classification)}
+    ${cell(TRAIL_COLUMNS[6], outcomeTag(call.outcome))}
+    ${cell(TRAIL_COLUMNS[7], html`<code>${call.argumentsExcerpt}</code>`)}
   </tr>`;
 }
 

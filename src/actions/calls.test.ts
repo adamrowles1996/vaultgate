@@ -35,6 +35,7 @@ const ROW: CallRow = {
   outcome: INTERRUPTED_OUTCOME,
   requestId: 'req-1',
   ip: '203.0.113.9',
+  callerTag: 'vg:Agent-One:op-1:t=aabbccdd0011',
 };
 
 function rows(database: DatabaseSync): readonly StoredActionCall[] {
@@ -86,6 +87,7 @@ describe('recordCall', () => {
         confirmationNonce: undefined,
         requestId: 'req-1',
         ip: '203.0.113.9',
+        callerTag: 'vg:Agent-One:op-1:t=aabbccdd0011',
       },
     ]);
     completeCall(database, 'call-1', {

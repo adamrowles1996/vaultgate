@@ -13,4 +13,8 @@ export interface Caller {
   readonly scopes: readonly string[];
   readonly requestId: string;
   readonly ip: string;
+  /**
+  ACT-131: the caller tag a `sql` call hands the database and the call's row keeps; absent when nothing names the caller.
+  */
+  readonly tag?: string | undefined;
 }
