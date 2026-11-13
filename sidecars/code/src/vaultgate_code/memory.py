@@ -4,6 +4,10 @@ Each entry's size is the growth in resident memory measured while it was loaded 
 serialised so the measurement is its own), floored at its size on disk, because memory freed
 by an earlier eviction can be reused without the resident size growing. After a drop,
 `malloc_trim(0)` hands freed heap back to the operating system.
+
+A query may hold more than the budget while it runs, because the indexes it reads cannot be
+dropped under it. Room is made before each load or merge (`reserve`), and once the query has
+answered the budget holds again (`settle`), so no overshoot outlives the query that caused it.
 """
 
 from __future__ import annotations
@@ -79,19 +83,46 @@ class Loaded:
 
         Nothing in `protect` is dropped. An entry larger than the whole budget stays, alone.
         """
-        dropped = False
         with self._lock:
             self._entries[name] = _Entry(index, size)
             self._entries.move_to_end(name)
-            keep = protect | {name}
-            for victim in [n for n in self._entries if n not in keep]:
-                if self._total() <= self.budget:
-                    break
-                if victim in self._entries:
-                    self._drop(victim)
-                    dropped = True
+            dropped = self._shed(self.budget, protect | {name})
         if dropped:
             self._trim()
+
+    def reserve(self, size: int, protect: set[Name]) -> None:
+        """Before loading or merging about `size` bytes, drop the least recently used to fit it.
+
+        Nothing in `protect` is dropped, so the peak of a query is what it reads, not that plus
+        everything an earlier query left loaded.
+        """
+        with self._lock:
+            dropped = self._shed(self.budget - size, protect)
+        if dropped:
+            self._trim()
+
+    def settle(self) -> None:
+        """Once a query has answered, drop the least recently used until the budget holds again.
+
+        The most recently used variant stays even when it alone is larger than the budget, so a
+        variant larger than the whole budget is still served, alone, without loading it again.
+        """
+        with self._lock:
+            newest = next((n for n in reversed(self._entries) if is_variant(n)), None)
+            dropped = self._shed(self.budget, set() if newest is None else {newest})
+        if dropped:
+            self._trim()
+
+    def _shed(self, limit: int, keep: set[Name]) -> bool:
+        """Drop the least recently used entries outside `keep` until the total is within `limit`."""
+        dropped = False
+        for victim in [n for n in self._entries if n not in keep]:
+            if self._total() <= limit:
+                break
+            if victim in self._entries:
+                self._drop(victim)
+                dropped = True
+        return dropped
 
     def _total(self) -> int:
         return sum(entry.size for entry in self._entries.values())

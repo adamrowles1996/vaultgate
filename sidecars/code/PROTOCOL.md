@@ -311,7 +311,11 @@ excluded, whether or not the repository has it.
 - **Memory:** loaded variants (and the cached merge) stay in memory while their estimated size
   (the growth in resident memory measured when each was loaded, and at least its size on disk)
   sums to at most `max_memory_bytes`; the least recently used are dropped first, and
-  `malloc_trim` is called after a drop. A variant larger than the whole budget is still served,
-  alone.
+  `malloc_trim` is called after a drop. A search or related query may hold more while it runs,
+  because the variants it reads (and their merge) are never dropped under it: before each load
+  or merge the sidecar first drops what the query does not read to make room, and once the
+  query has answered, whether or not it succeeded, it drops the least recently used until the
+  budget holds again. A variant larger than the whole budget is still served, alone, and the most
+  recently used variant stays loaded after its query even then.
 - Start-up reconciles: temporary directories are removed, snapshots with unreadable metadata are
   deleted, and the caps are enforced once.

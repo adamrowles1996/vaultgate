@@ -83,3 +83,43 @@ def test_dropping_a_key_with_nothing_loaded_trims_nothing() -> None:
     loaded.put(A, index("a"), 10, set())
     loaded.drop_key("a")
     assert (loaded.usage(), trims) == ((0, 0), [1])
+
+
+def test_reserving_makes_room_before_a_load() -> None:
+    """ACT-107: room for a load is made first, from what the query does not read."""
+    trims: list[int] = []
+    loaded = Loaded(budget=30, trim=lambda: trims.append(1))
+    loaded.put(A, index("a"), 10, set())
+    loaded.put(B, index("b"), 10, set())
+    loaded.reserve(5, set())  # 25 of 30: it fits, nothing goes
+    assert (loaded.usage(), trims) == ((2, 20), [])
+    loaded.reserve(15, {A})  # 35 of 30: b goes, a is read by the query
+    assert (label(loaded.get(A)), loaded.get(B), trims) == ("a", None, [1])
+    loaded.reserve(100, {A})  # nothing but what the query reads is left to drop
+    assert (loaded.usage(), trims) == ((1, 10), [1])
+
+
+def test_settling_restores_the_budget_after_a_query() -> None:
+    """ACT-107: once a query has answered, what it held beyond the budget is dropped."""
+    trims: list[int] = []
+    loaded = Loaded(budget=15, trim=lambda: trims.append(1))
+    loaded.settle()  # nothing loaded: nothing to do
+    loaded.put(A, index("a"), 10, {A, B})
+    loaded.put(B, index("b"), 10, {A, B})
+    loaded.put(MERGE, index("merged"), 5, {A, B})
+    assert (loaded.usage(), trims) == ((2, 25), [])
+    loaded.settle()  # a goes, and the merge with it; b, the newest variant, fits
+    assert (label(loaded.get(B)), loaded.get(A), loaded.get(MERGE)) == ("b", None, None)
+    assert (loaded.usage(), trims) == ((1, 10), [1])
+    loaded.settle()  # within the budget: nothing goes
+    assert trims == [1]
+
+
+def test_settling_keeps_the_newest_variant_larger_than_the_budget() -> None:
+    """ACT-107: a variant larger than the whole budget stays, alone, for the next query."""
+    loaded = Loaded(budget=5, trim=lambda: None)
+    loaded.put(A, index("a"), 10, {A, B})
+    loaded.put(B, index("b"), 10, {A, B})
+    loaded.put(MERGE, index("merged"), 5, {A, B})
+    loaded.settle()
+    assert (label(loaded.get(B)), loaded.usage()) == ("b", (1, 10))

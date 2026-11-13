@@ -87,6 +87,7 @@ def load(
     if known is not None:
         return known
     with service.loaded.measure_lock:
+        service.loaded.reserve(info["storage_bytes"], protect)
         before = resident_bytes()
         index = engine.load_variant(str(service.store.path(snapshot.key) / "variants" / name))
         size = max(resident_bytes() - before, info["storage_bytes"])
@@ -106,10 +107,11 @@ def combined(service: Service, parts: list[Part]) -> SembleIndex | None:
     if known is not None:
         return known
     protect: set[Name] = {((p.snapshot.key, p.variant),) for p, _ in present}
+    floor = sum(p.info["storage_bytes"] for p, _ in present)
     with service.loaded.measure_lock:
+        service.loaded.reserve(floor, protect)
         before = resident_bytes()
         merged = engine.merge([(p.label, index) for p, index in present])
-        floor = sum(p.info["storage_bytes"] for p, _ in present)
         size = max(resident_bytes() - before, floor)
     service.loaded.put(name, merged, size, protect)
     return merged
