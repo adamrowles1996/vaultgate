@@ -15,6 +15,10 @@ export interface IssueOptions {
   readonly subject?: string;
   readonly expiresAt?: number;
   readonly resource?: string;
+  /**
+  RELAY-17: issue it as a relay token for this node.
+  */
+  readonly relayNode?: string;
 }
 
 export interface InMemoryTokenVerifierOptions {
@@ -72,6 +76,7 @@ export class InMemoryTokenVerifier implements TokenVerifier {
       scopes: options.scopes,
       expiresAt: options.expiresAt ?? this.#now() + DEFAULT_TTL_MS,
       resource: options.resource ?? this.#resource,
+      ...(options.relayNode !== undefined && { relayNode: options.relayNode }),
     });
     return token;
   }

@@ -26,7 +26,7 @@ export interface ActionsApp extends TestApp {
   /**
   A token for the granted agent client, with the given scopes.
   */
-  readonly issue: (scopes: readonly string[], clientId?: string) => string;
+  readonly issue: (scopes: readonly string[], clientId?: string, relayNode?: string) => string;
 }
 
 export interface ActionsAppOptions {
@@ -55,8 +55,13 @@ export function createActionsApp(options: ActionsAppOptions = {}): ActionsApp {
   return {
     ...app,
     harness,
-    issue: (scopes, clientId = CLIENT_ID) =>
-      app.verifier.issue({ scopes, clientId, clientName: 'Agent One' }),
+    issue: (scopes, clientId = CLIENT_ID, relayNode?: string) =>
+      app.verifier.issue({
+        scopes,
+        clientId,
+        clientName: 'Agent One',
+        ...(relayNode !== undefined && { relayNode }),
+      }),
   };
 }
 

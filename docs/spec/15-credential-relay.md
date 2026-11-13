@@ -147,6 +147,10 @@ already gave.
   node name and address, the client id and the token's 12-character prefix (or the refusal), and
   `token_issued` in category `oauth` with the same client, prefix and node, so a call on `/mcp`
   (MCP-13) traces back to the node the token was issued to. No event MAY carry the token.
+- **RELAY-17** The token row MUST keep the admitted node's name (`tokens.relay_node`), and the
+  verified token MUST carry it to `/mcp`, so the caller tag of every call made with a relay
+  token names that node (ACT-131 `n=`) without a join through the audit log. A token the token
+  endpoint issues MUST carry none.
 
 ## 15.6 Audit, limits and failures
 

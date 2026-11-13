@@ -63,4 +63,71 @@ describe('the caller tag', () => {
     expect(tag).not.toContain(token);
     expect(tag).not.toContain('vg_at_');
   });
+
+  it('RELAY-17 ACT-131 a relay token adds the machine name of the node it was issued to', () => {
+    const tag = callerTagOf({
+      clientName: 'Claude',
+      operatorId: 'operator-1',
+      tokenId: AUDIT_ID,
+      mcpSessionId: undefined,
+      relayNode: 'claude-cloud-sandbox-one.example.ts.net',
+    });
+    expect(tag).toBe('vg:Claude:operator:t=0123456789ab:n=claude-cloud-sandbox-one');
+    expect(tag).not.toContain('example');
+  });
+
+  it('RELAY-17 ACT-131 a token that is not a relay token has no n= field', () => {
+    for (const relayNode of [undefined, '']) {
+      expect(
+        callerTagOf({
+          clientName: 'Claude',
+          operatorId: 'operator',
+          tokenId: AUDIT_ID,
+          mcpSessionId: undefined,
+          relayNode,
+        }),
+      ).toBe('vg:Claude:operator:t=0123456789ab');
+    }
+  });
+
+  it('RELAY-17 ACT-131 a long node name is cut to the room left under 63 bytes, keeping its end', () => {
+    const longest = callerTagOf({
+      clientName: 'c'.repeat(40),
+      operatorId: 'o'.repeat(40),
+      tokenId: AUDIT_ID,
+      mcpSessionId: undefined,
+      relayNode: `${'claude-cloud-'.repeat(8)}sandbox-ten.example.ts.net`,
+    });
+    expect(longest).toHaveLength(CALLER_TAG_MAX_BYTES);
+    expect(longest).toBe(
+      `vg:${'c'.repeat(16)}:${'o'.repeat(8)}:t=0123456789ab:n=cloud-sandbox-ten`,
+    );
+    const withSession = callerTagOf({
+      clientName: 'c'.repeat(40),
+      operatorId: 'o'.repeat(40),
+      tokenId: AUDIT_ID,
+      mcpSessionId: 'session',
+      relayNode: 'claude-cloud-sandbox-ten',
+    });
+    expect(withSession).toHaveLength(CALLER_TAG_MAX_BYTES);
+    expect(withSession).toMatch(/:s=[0-9a-f]{12}:n=en$/u);
+    const hostile = callerTagOf({
+      clientName: 'Claude',
+      operatorId: 'op',
+      tokenId: AUDIT_ID,
+      mcpSessionId: undefined,
+      relayNode: `node "x"; DROP\u{0}\n${'\u{C4}'.repeat(3)}-end.example.ts.net`,
+    });
+    expect(hostile).toMatch(/^[\u{21}-\u{7E}]+$/u);
+    expect(hostile).toBe('vg:Claude:op:t=0123456789ab:n=node-x-DROP--end');
+    expect(
+      callerTagOf({
+        clientName: 'Claude',
+        operatorId: 'op',
+        tokenId: AUDIT_ID,
+        mcpSessionId: undefined,
+        relayNode: '.example.ts.net',
+      }),
+    ).toBe('vg:Claude:op:t=0123456789ab:n=unknown');
+  });
 });

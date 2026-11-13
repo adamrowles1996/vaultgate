@@ -5,6 +5,7 @@ import { actions } from './004-actions.ts';
 import { codeConnector } from './005-code-connector.ts';
 import { readOnlyGrants } from './006-read-only-grants.ts';
 import { callerTag } from './007-caller-tag.ts';
+import { relayNode } from './008-relay-node.ts';
 
 import type { Migration } from './types.ts';
 
@@ -21,4 +22,5 @@ export const MIGRATIONS: readonly Migration[] = [
   codeConnector,
   readOnlyGrants,
   callerTag,
+  relayNode,
 ];

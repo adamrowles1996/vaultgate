@@ -103,6 +103,7 @@ export function createRelayTokenIssuer(options: RelayTokenIssuerOptions): IssueR
       expiresAt,
       revokedAt: undefined,
       lastUsedAt: undefined,
+      relayNode: request.node,
     });
     const tokenId = tokenHash.slice(0, TOKEN_ID_LENGTH);
     options.audit.record({

@@ -5,7 +5,7 @@
  * `action_calls` row keeps it (ACT-133), so a write found in a database can be
  * matched to the call, and the call to the agent, without reading timestamps.
  *
- * `vg:<client>:<operator>:t=<token id>[:s=<session>]`
+ * `vg:<client>:<operator>:t=<token id>[:s=<session>][:n=<node>]`
  *
  * - `client` is the OAuth client's registered name, reduced to `[A-Za-z0-9._-]`;
  * - `operator` is the OAuth subject, the operator who approved the consent;
@@ -14,7 +14,12 @@
  *   one client that hold different tokens;
  * - `s=` is the first 12 hex characters of the SHA-256 of the
  *   `Mcp-Session-Id` header, the most specific identifier, present only when
- *   the client sends one.
+ *   the client sends one;
+ * - `n=` is the machine name of the tailnet node a relay token was issued to
+ *   (RELAY-17), which names the sandbox, and so the session, behind the call.
+ *   It is absent on every token the token endpoint issues. It fills what room
+ *   is left under the 63-byte bound, keeping the end of the name, where a
+ *   sandbox's own suffix sits, when it does not all fit.
  */
 import { createHash } from 'node:crypto';
 
@@ -32,6 +37,10 @@ export interface CallerTagParts {
   The raw `Mcp-Session-Id` header, hashed here and never used as it is.
   */
   readonly mcpSessionId: string | undefined;
+  /**
+  RELAY-17: the node a relay token was issued to, its MagicDNS name as the relay admitted it.
+  */
+  readonly relayNode?: string | undefined;
 }
 
 /**
@@ -45,6 +54,9 @@ const HASH_CHARACTERS = 12;
 const TOKEN_ID = /^[0-9a-f]{12}$/;
 const UNSAFE = /[^\w.-]+/g;
 const EDGE_DASHES = /^-+|-+$/g;
+const LEADING_DASHES = /^-+/;
+const FIRST_DOT_ONWARDS = /\..*$/su;
+const NODE_FIELD = ':n=';
 
 /**
 Printable ASCII the database shows as written: anything else becomes `-`, and the result is cut.
@@ -56,6 +68,23 @@ function safePart(text: string, characters: number): string {
 
 function shortHash(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex').slice(0, HASH_CHARACTERS);
+}
+
+/**
+ * ACT-131 RELAY-17: `:n=<node>` in the `room` bytes the rest of the tag
+ * leaves, or nothing for a token that is not a relay token. Only the machine
+ * name, the first label of the MagicDNS name, is used; when it is longer than
+ * the room, its end is kept, because that is where a sandbox's own suffix sits.
+ * The rest of the tag is at most 58 bytes, so the node always keeps at least
+ * two characters.
+ */
+function nodeField(relayNode: string | undefined, room: number): string {
+  if (relayNode === undefined || relayNode === '') {
+    return '';
+  }
+  const machine = safePart(relayNode.replace(FIRST_DOT_ONWARDS, ''), Number.MAX_SAFE_INTEGER);
+  const kept = machine.slice(-(room - NODE_FIELD.length)).replace(LEADING_DASHES, '');
+  return `${NODE_FIELD}${kept}`;
 }
 
 /**
@@ -72,5 +101,9 @@ export function callerTagOf(parts: CallerTagParts): string {
   const client = safePart(parts.clientName, CLIENT_CHARACTERS);
   const operator = safePart(parts.operatorId, OPERATOR_CHARACTERS);
   // ASCII by construction, so characters are bytes; the parts already fit, and this keeps it so.
-  return `vg:${client}:${operator}:t=${tokenId}${session}`.slice(0, CALLER_TAG_MAX_BYTES);
+  const tag = `vg:${client}:${operator}:t=${tokenId}${session}`.slice(0, CALLER_TAG_MAX_BYTES);
+  return `${tag}${nodeField(parts.relayNode, CALLER_TAG_MAX_BYTES - tag.length)}`.slice(
+    0,
+    CALLER_TAG_MAX_BYTES,
+  );
 }

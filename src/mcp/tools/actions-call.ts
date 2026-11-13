@@ -42,6 +42,7 @@ export function callerFor(context: ActionsCallContext): Caller {
       operatorId: context.token.subject,
       tokenId: context.token.tokenId,
       mcpSessionId: context.mcpSessionId,
+      relayNode: context.token.relayNode,
     }),
   };
 }

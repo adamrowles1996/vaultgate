@@ -83,6 +83,16 @@ describe('StoreTokenVerifier', () => {
     });
   });
 
+  it('RELAY-17 a relay token carries the node it was issued to; any other token has none', () => {
+    const relay = setup({ relayNode: 'sandbox-1.example.ts.net' });
+    expect(unwrapOk(relay.verifier.verify(relay.token)).relayNode).toBe('sandbox-1.example.ts.net');
+    const plain = setup();
+    expect(unwrapOk(plain.verifier.verify(plain.token))).not.toHaveProperty('relayNode');
+    expect(plain.repos.tokens.findByHash(hashCredential(plain.token))).not.toHaveProperty(
+      'relayNode',
+    );
+  });
+
   it('OAUTH-34 rejects anything without the vg_at_ prefix as malformed', () => {
     const { verifier } = setup();
     for (const candidate of [
