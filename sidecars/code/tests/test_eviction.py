@@ -152,7 +152,7 @@ def test_merges_are_cached_while_their_parts_stay(
         return real(parts)
 
     monkeypatch.setattr(engine, "merge", counted)
-    service = make_service(max_memory_bytes=1)
+    service = make_service()
     for key in ("a", "b", "c"):
         put(service, key, SMALL, variants=[["code"]])
     first = search(service, "a", "b")
@@ -161,10 +161,57 @@ def test_merges_are_cached_while_their_parts_stay(
     _, loaded_bytes = service.loaded.usage()
     assert service.health()["usage"]["loaded_variants"] == 2
     assert loaded_bytes > 0
+    service.loaded.budget = 1
     search(service, "c")  # over budget: a, b and their merge go
     assert service.health()["usage"]["loaded_variants"] == 1
     search(service, "a", "b")
     assert merges == [1, 1]
+
+
+def test_no_query_leaves_the_budget_exceeded(
+    make_service: ServiceFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ACT-107: what a query had to load beyond the budget is dropped once it has answered."""
+    monkeypatch.setattr(indexes, "resident_bytes", lambda: 0)
+    trims: list[int] = []
+    service = make_service(trim=lambda: trims.append(1))
+    for key in ("a", "b", "c"):
+        put(service, key, SMALL, variants=[["code"]])
+    search(service, "a")
+    _, one = service.loaded.usage()
+    # Two variants fit (their sizes differ by a few bytes); three, or two and a merge, do not.
+    service.loaded.budget = one * 2 + 1000
+    assert search(service, "a", "b", "c")["results"]
+    loaded, used = service.loaded.usage()
+    assert (loaded, used <= service.loaded.budget) == (2, True)
+    assert service.loaded.get((("c", "code"),)) is not None  # the newest stays
+    assert trims
+    trims.clear()
+    line = query.search(
+        service,
+        {
+            "indexes": [{"key": "a", "label": "a"}],
+            "content": ["code"],
+            "query": "invoice",
+            "top_k": 1,
+            "max_snippet_lines": 0,
+        },
+    )["results"][0]["start_line"]
+    assert query.related(
+        service,
+        {
+            "indexes": [{"key": k, "label": k} for k in ("a", "b", "c")],
+            "content": ["code"],
+            "file_path": "a/a.py",
+            "line": line,
+            "top_k": 1,
+            "max_snippet_lines": 0,
+        },
+    )
+    assert service.loaded.usage()[1] <= service.loaded.budget
+    with pytest.raises(ApiError):
+        query.search(service, {"indexes": []})  # a refused query settles too
+    assert service.loaded.usage()[1] <= service.loaded.budget
 
 
 def test_deleting_a_snapshot_drops_its_loaded_variants(make_service: ServiceFactory) -> None:

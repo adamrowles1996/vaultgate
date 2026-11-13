@@ -101,7 +101,8 @@ defaults to ACT-106's list.
   is shown to the operator. The sidecar keeps at most `max_snapshots` snapshots and
   `max_storage_bytes` bytes on disk and drops the least recently used first; it keeps loaded
   indexes in memory within `max_memory_bytes`, least recently used out first, and loads a dropped
-  one again from disk when it is next asked for. The limits belong to the sidecar's deployment
+  one again from disk when it is next asked for. A call may exceed that budget only while it
+  runs, by the indexes it reads; once it has answered, the budget holds again. The limits belong to the sidecar's deployment
   (ACT-114), not to a target.
 - **ACT-108** Builds happen at three points, never on a timer:
   - When an enabled target is saved, including by a new revision: the configured ref's snapshot

@@ -47,7 +47,22 @@ def _answer(parts: list[Part], rendered: list[dict[str, Any]]) -> dict[str, Any]
 
 
 def search(service: Service, body: object) -> dict[str, Any]:
-    """`POST /v1/search`."""
+    """`POST /v1/search`; once it has answered, the memory budget holds again."""
+    try:
+        return _search(service, body)
+    finally:
+        service.loaded.settle()
+
+
+def related(service: Service, body: object) -> dict[str, Any]:
+    """`POST /v1/related`; once it has answered, the memory budget holds again."""
+    try:
+        return _related(service, body)
+    finally:
+        service.loaded.settle()
+
+
+def _search(service: Service, body: object) -> dict[str, Any]:
     request = validate.search(body)
     with service.store.using(key for key, _ in request.indexes) as snapshots:
         parts = _parts(service, request, snapshots)
@@ -65,8 +80,8 @@ def search(service: Service, body: object) -> dict[str, Any]:
     return _answer(parts, engine.render(results, request.max_snippet_lines))
 
 
-def related(service: Service, body: object) -> dict[str, Any]:
-    """`POST /v1/related`: the chunk holding `line` (semble's rule), then `find_related`."""
+def _related(service: Service, body: object) -> dict[str, Any]:
+    """The chunk holding `line` (semble's rule), then `find_related`."""
     request = validate.related(body)
     with service.store.using(key for key, _ in request.indexes) as snapshots:
         parts = _parts(service, request, snapshots)

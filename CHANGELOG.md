@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- ACT-107: **the code sidecar could be killed for running out of memory, and code tools then
+  stalled.** The memory budget was applied only when the next index was loaded, never when a
+  query ended, and the indexes a query read were exempt. A search across several large
+  repositories therefore left all of them, and their merge, loaded at once, well beyond
+  `max_memory_bytes`, until some later load trimmed them; a build child started meanwhile (a
+  stale index is rebuilt in the background) pushed the process past its memory limit. Every
+  restart dropped every loaded index, so the next calls answered `index_unavailable` or took
+  minutes to load them again. The sidecar now makes room before each load or merge from what
+  the query does not read, and once the query has answered drops the least recently used until
+  the budget holds again, keeping the most recently used variant even when it alone is larger.
+
+### Upgrading
+
+No new setting. A deployment that raised `max_memory_bytes` to work around these restarts can
+return it to the default of 1 GiB.
+
 ## [0.1.0-rc.31] - 2026-11-10
 
 ### Security
