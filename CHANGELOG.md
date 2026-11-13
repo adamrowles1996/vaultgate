@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.33] - 2026-11-13
+
 ### Added
 
 - ACT-131, ACT-132, ACT-133: **every `sql` call now tells the database who made it.** Each
@@ -832,7 +834,8 @@ Release candidates 0.1.0-rc.1 to 0.1.0-rc.9 are in
 [`docs/changelog-archive.md`](docs/changelog-archive.md). They are kept verbatim; this file holds
 the current release and the ones after it, so it stays inside the repository's 64 KiB file gate.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.32...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.33...HEAD
+[0.1.0-rc.33]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.32...v0.1.0-rc.33
 [0.1.0-rc.32]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.31...v0.1.0-rc.32
 [0.1.0-rc.31]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.30...v0.1.0-rc.31
 [0.1.0-rc.30]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.29...v0.1.0-rc.30
