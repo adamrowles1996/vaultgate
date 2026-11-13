@@ -128,6 +128,13 @@ describe('relay access tokens', () => {
     expect(issued(context)).not.toBe(token);
   });
 
+  it('RELAY-17 keeps the admitted node on the token row, and /mcp sees it on the verified token', () => {
+    const context = setup();
+    const token = issued(context);
+    expect(context.repos.tokens.findByHash(hashCredential(token))?.relayNode).toBe(NODE.node);
+    expect(unwrapOk(context.verifier().verify(token)).relayNode).toBe(NODE.node);
+  });
+
   it('RELAY-15 refuses to issue for an unknown or revoked client, or one with no live consent', () => {
     expect(setup({ client: false }).issue(NODE)).toBeUndefined();
     expect(setup({ clientRevokedAt: 5 }).issue(NODE)).toBeUndefined();

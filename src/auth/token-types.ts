@@ -26,6 +26,10 @@ export interface VerifiedToken {
   The RFC 8707 resource the token was issued for; must equal this deployment's canonical resource.
   */
   readonly resource: string;
+  /**
+  RELAY-17: the tailnet node a relay token was issued to; absent on every token the token endpoint issues.
+  */
+  readonly relayNode?: string;
 }
 
 export type TokenRejectionReason = 'malformed' | 'unknown' | 'revoked' | 'expired';

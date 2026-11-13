@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- RELAY-17, ACT-131: **a call made with a credential-relay token now names its node.** When
+  `/mcp/token` issues a relay token, the admitted node's MagicDNS name is kept on the token row
+  (new column `tokens.relay_node`) and reaches the verified token, and the caller tag gains
+  `:n=<node>`, the node's machine name (the first label, `claude-cloud-…` for a cloud
+  sandbox). It fills whatever room the rest of the tag leaves under 63 bytes, keeping the end
+  of the name, where a sandbox's own suffix sits, when it does not all fit. The database, the
+  `action_calls` row, the audit event and the Writes and Activity views therefore name the
+  session behind a write without a join through the audit log. Tokens from the token endpoint,
+  and relay tokens issued before the upgrade, keep the tag they had, with no `n=`.
+
+### Upgrading
+
+Schema migration 8 adds the nullable `tokens.relay_node` column. An earlier release refuses to
+start on the migrated database (OPS-8): to go back, stop the service and drop the column and the
+migration's row, or restore the pre-upgrade backup, before starting the older release.
+
 ## [0.1.0-rc.33] - 2026-11-13
 
 ### Added

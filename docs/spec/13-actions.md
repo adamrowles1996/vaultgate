@@ -265,7 +265,7 @@ user whatever the individual tool does. Read-only HTTP targets that want silent 
 post-M15 candidate (`http_get` with `readOnlyHint: true`), not a reason to weaken the hint.
 
 - **ACT-131** Every `tools/call` carries a **caller tag** built from what reaches vaultgate with
-  the request, and never from a credential: `vg:<client>:<operator>:t=<token id>[:s=<session>]`.
+  the request, and never from a credential: `vg:<client>:<operator>:t=<token id>[:s=<session>][:n=<node>]`.
   `client` is the OAuth client's registered name and `operator` the token's subject (the operator
   who approved the consent), each reduced to `[A-Za-z0-9._-]` and cut to 16 and 8 characters;
   `t=` is the MCP-13 token id (the first 12 hex characters of the token's SHA-256, already in
@@ -277,7 +277,11 @@ post-M15 candidate (`http_get` with `readOnlyHint: true`), not a reason to weake
   practice: it tells two holders of one client apart whenever they hold different tokens, as the
   credential relay's per-node tokens do (RELAY-14). The MCP `initialize` `clientInfo` is not
   part of it, because a stateless server keeps nothing from the `initialize` request to the
-  `tools/call` that follows.
+  `tools/call` that follows. `n=` is present only for a credential-relay token (RELAY-17): the
+  machine name (the first label of the MagicDNS name) of the node it was issued to, reduced to
+  `[A-Za-z0-9._-]`, which names the sandbox, and so the session, behind the call. It takes the
+  room the rest of the tag leaves under 63 bytes (at least two characters, since the rest is at
+  most 58), keeping the end of the name when it does not all fit.
 
 ### 13.6.2 `actions_list_targets`
 

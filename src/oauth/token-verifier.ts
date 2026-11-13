@@ -94,6 +94,7 @@ export class StoreTokenVerifier implements TokenVerifier {
       scopes: record.scopes,
       expiresAt: record.expiresAt,
       resource: this.#resource,
+      ...(record.relayNode !== undefined && { relayNode: record.relayNode }),
     });
   }
 }

@@ -74,4 +74,31 @@ describe('the caller tag from the MCP request to the database and the Writes row
     expect(tag).not.toContain(session);
     expect(storedCalls(harness.database)[0]?.callerTag).toBe(tag);
   });
+
+  it('RELAY-17 ACT-131 ACT-133 a relay token names its node in the statement, the row and the audit event, never the token', async () => {
+    const fake = fakeSqlSessions({ answers: [rowsOf(['n'], [[1]])] });
+    const { app, harness, issue, audit } = appOver(fake);
+    await createSqlTarget(harness, { policy: WRITE_POLICY });
+    const token = issue(
+      ['actions:sql.read', 'actions:sql.write'],
+      undefined,
+      'claude-cloud-sandbox-one.example.ts.net',
+    );
+    const client = await connectSdkClient(app, { token });
+    const result = await client.callTool({
+      name: 'sql_execute',
+      arguments: { target: 'warehouse', statement: 'DELETE FROM t WHERE id = $1', params: [1] },
+    });
+    await client.close();
+    expect(result.isError).toBeFalsy();
+    const tag = fake.requests[0]?.callerTag;
+    expect(tag).toBe(`vg:Agent-One:operator:t=${tokenIdOf(token)}:n=claude-cloud-sandbox-one`);
+    const [row] = storedCalls(harness.database);
+    expect(row).toMatchObject({ tool: 'sql_execute', callerTag: tag });
+    const event = audit.events.findLast((entry) => entry.action === 'sql_execute');
+    expect(event?.details).toMatchObject({ callerTag: tag });
+    for (const recorded of [tag, JSON.stringify(row), JSON.stringify(event)]) {
+      expect(recorded).not.toContain(token);
+    }
+  });
 });

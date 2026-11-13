@@ -21,6 +21,7 @@ const tokenRow = z.object({
   expires_at: timestamp,
   revoked_at: optionalTimestamp,
   last_used_at: optionalTimestamp,
+  relay_node: optionalText,
 });
 
 type TokenKind = z.output<typeof tokenRow>['kind'];
@@ -43,6 +44,10 @@ export interface TokenRecord {
   readonly expiresAt: number;
   readonly revokedAt: number | undefined;
   readonly lastUsedAt: number | undefined;
+  /**
+  RELAY-17: the tailnet node a relay token was issued to, as the relay admitted it; absent on every other token.
+  */
+  readonly relayNode?: string;
 }
 
 export interface TokensRepo {
@@ -74,6 +79,7 @@ function toRecord(row: z.output<typeof tokenRow>): TokenRecord {
     expiresAt: row.expires_at,
     revokedAt: row.revoked_at,
     lastUsedAt: row.last_used_at,
+    ...(row.relay_node !== undefined && { relayNode: row.relay_node }),
   };
 }
 
@@ -86,8 +92,8 @@ export function createTokensRepo(database: DatabaseSync): TokensRepo {
         database,
         `INSERT INTO tokens
             (id, token_hash, kind, family_id, parent_id, replaced_by_id, client_id, consent_id,
-            scopes, resource, issued_at, expires_at, revoked_at, last_used_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            scopes, resource, issued_at, expires_at, revoked_at, last_used_at, relay_node)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         record.id,
         record.tokenHash,
         record.kind,
@@ -102,6 +108,7 @@ export function createTokensRepo(database: DatabaseSync): TokensRepo {
         record.expiresAt,
         record.revokedAt ?? null,
         record.lastUsedAt ?? null,
+        record.relayNode ?? null,
       );
     },
     findByHash(tokenHash) {
