@@ -71,6 +71,10 @@ export interface ServerDependencies {
   Present only when the actions layer is enabled (ACT-73).
   */
   readonly engine?: ActionsEngine | undefined;
+  /**
+  MCP-19, MCP-20: `VAULTGATE_WRITE_ORGANIZATIONS`.
+  */
+  readonly writeOrganizations: readonly string[];
 }
 
 function toCallToolResult(result: Result<Record<string, unknown>, ToolFailure>): CallToolResult {
@@ -100,7 +104,9 @@ function registerVaultTool(
     },
     async (input) => {
       const startedAt = dependencies.now();
-      const result = await tool.run(dependencies.vault, input);
+      const result = await tool.run(dependencies.vault, input, {
+        writeOrganizations: dependencies.writeOrganizations,
+      });
       const reference = tool.auditReference(input);
       const event: AuditEvent = {
         category: 'mcp',

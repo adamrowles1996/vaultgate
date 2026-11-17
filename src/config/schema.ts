@@ -58,6 +58,8 @@ const baseEnvironmentSchema = z.object({
   VAULTGATE_BW_BIN: z.string().min(1).default('bw'),
   VAULTGATE_BW_SYNC_INTERVAL: durationSchema({ min: '1m', max: '24h', fallback: '15m' }),
   VAULTGATE_ENABLE_WRITE_SCOPE: booleanSchema('false'),
+  // MCP-19, MCP-20: the organisations items may be written into; none by default.
+  VAULTGATE_WRITE_ORGANIZATIONS: relayIdsSchema,
   VAULTGATE_OAUTH_CLIENTS: preregisteredClientsSchema,
   VAULTGATE_BOOTSTRAP_TOKEN: z.string().min(MIN_BOOTSTRAP_TOKEN_LENGTH).optional(),
   VAULTGATE_ACCESS_TOKEN_TTL: durationSchema({ min: '5m', max: '24h', fallback: '1h' }),

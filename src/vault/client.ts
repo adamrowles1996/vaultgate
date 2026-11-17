@@ -123,6 +123,10 @@ export interface NewItem {
   readonly notes?: string;
   readonly favorite?: boolean;
   readonly login?: NewLoginFields;
+  /**
+  MCP-19: create the item in this organisation collection instead of the account's own vault.
+  */
+  readonly collection?: Collection;
 }
 
 /**
@@ -199,5 +203,9 @@ export interface VaultClient {
   createItem(item: NewItem): VaultResult<ItemSummary>;
   updateItem(id: string, patch: ItemPatch): VaultResult<ItemSummary>;
   trashItem(id: string): VaultResult<void>;
+  /**
+  MCP-20: moves an item of the account's own vault into the collection's organisation.
+  */
+  moveItem(id: string, collection: Collection): VaultResult<ItemSummary>;
   createFolder(name: string): VaultResult<Folder>;
 }

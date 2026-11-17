@@ -9,11 +9,18 @@ import { ok, type Result } from '../result.ts';
 
 import { type Clock, sleep } from './clock.ts';
 import { newItemBody, patchedItemBody, summariseItem, withFieldEdits } from './items.ts';
-import { itemPath } from './requests.ts';
+import { itemPath, movePath } from './requests.ts';
 import { itemSchema, type RawItem } from './types.ts';
 
 import type { BwServeApi } from './api.ts';
-import type { Folder, ItemPatch, ItemSummary, NewItem, VaultError } from '../vault/client.ts';
+import type {
+  Collection,
+  Folder,
+  ItemPatch,
+  ItemSummary,
+  NewItem,
+  VaultError,
+} from '../vault/client.ts';
 
 const READ_AFTER_WRITE_BUDGET_MS = 5000;
 const READ_AFTER_WRITE_POLL_MS = 100;
@@ -121,6 +128,33 @@ export async function trashItem(
   }
   const visible = await awaitRevision(context, id, (raw) => raw.deletedDate != null);
   return visible.ok ? ok(undefined) : visible;
+}
+
+/**
+ * MCP-20: Bitwarden's "move to organisation" (`bw move`), then a wait until
+ * the item reads with that organisation (VAULT-10).
+ */
+export async function moveItem(
+  context: WriteContext,
+  id: string,
+  collection: Collection,
+): Promise<Result<ItemSummary, VaultError>> {
+  const moved = await context.api.call({
+    method: 'POST',
+    path: movePath(id, collection.organizationId),
+    body: [collection.id],
+    schema: anyDataSchema,
+    rejectedCode: 'invalid_item',
+  });
+  if (!moved.ok) {
+    return moved;
+  }
+  const visible = await awaitRevision(
+    context,
+    id,
+    (raw) => raw.organizationId === collection.organizationId,
+  );
+  return visible.ok ? ok(summariseItem(visible.value)) : visible;
 }
 
 export function createFolder(api: BwServeApi, name: string): Promise<Result<Folder, VaultError>> {

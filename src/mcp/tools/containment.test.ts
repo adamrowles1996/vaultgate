@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { SCOPES } from '../../scopes/registry.ts';
 import { callTool } from '../../test-support/mcp-client.ts';
-import { createTestApp } from '../../test-support/test-app.ts';
+import { createTestApp, testConfig } from '../../test-support/test-app.ts';
 import { CANARIES, CANARY } from '../../test-support/vault-fixture.ts';
 import { TOOL_NAMES } from '../scopes.ts';
 
@@ -18,11 +18,22 @@ const CALLS: Readonly<Record<string, unknown>> = {
   get_secret: { item_id: 'item-login', field: 'password' },
   generate_password: {},
   generate_passphrase: {},
-  create_item: { type: 'login', name: 'Fresh', generate_password: true },
+  create_item: {
+    type: 'login',
+    name: 'Fresh',
+    generate_password: true,
+    collection_id: 'collection-infra',
+  },
   update_item: { item_id: 'item-login', name: 'Renamed', generate_password: true },
+  move_item_to_collection: { item_id: 'item-note', collection_id: 'collection-infra' },
   trash_item: { item_id: 'item-note' },
   create_folder: { name: 'Fresh folder' },
 };
+
+/**
+The fixture's organisation is writable, so the organisation writes run end to end (MCP-19, MCP-20).
+*/
+const WRITABLE = { ...testConfig(), writeOrganizations: ['org-acme'] };
 
 const NON_SECRET_TOOLS = TOOL_NAMES.filter((name) => name !== 'get_secret');
 
@@ -36,7 +47,7 @@ describe('MCP-9 secret containment', () => {
   it.each(NON_SECRET_TOOLS)(
     'MCP-9 %s yields no canary anywhere in the HTTP response',
     async (name) => {
-      const { app, verifier } = createTestApp();
+      const { app, verifier } = createTestApp({ config: WRITABLE });
       const token = verifier.issue({ scopes: [...SCOPES] });
       const outcome = await callTool(app, name, CALLS[name], { token });
       expect(outcome.status).toBe(200);
@@ -67,7 +78,7 @@ describe('MCP-9 secret containment', () => {
   });
 
   it('MCP-9 the tools/list advertisement carries no canary either', async () => {
-    const { app, verifier, logged } = createTestApp();
+    const { app, verifier, logged } = createTestApp({ config: WRITABLE });
     const token = verifier.issue({ scopes: [...SCOPES] });
     await Promise.all(NON_SECRET_TOOLS.map((name) => callTool(app, name, CALLS[name], { token })));
     expect(CANARIES.filter((canary) => logged().includes(canary))).toStrictEqual([]);

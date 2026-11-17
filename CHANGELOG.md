@@ -6,6 +6,25 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- MCP-19, MCP-20: **items can be written into an organisation collection.** `create_item` takes
+  an optional `collection_id` and creates the item in that collection's organisation, and the
+  new `move_item_to_collection` (`vault:write`) moves an item from the account's own vault into
+  one (Bitwarden's "move to organisation", `bw serve` `POST /move/{id}/{organizationId}`). The
+  organisation must be listed in the new `VAULTGATE_WRITE_ORGANIZATIONS` (comma-separated
+  organisation ids); with it empty, the default, both refuse with `policy_denied` and write
+  nothing. A collection the account cannot see is `not_found`; `move_item_to_collection`
+  refuses an item already in an organisation (`item_in_organization`) or in the trash
+  (`item_in_trash`). Both return the item summary, never a secret value, and are audited like
+  the other writes; the move records its item id.
+
+### Upgrading
+
+To use the new tools, set `VAULTGATE_WRITE_ORGANIZATIONS` to the organisation ids agents may
+write into and restart. A client connected before the upgrade sees the new tool and input only
+after it reconnects and lists the tools again.
+
 ## [0.1.0-rc.34] - 2026-11-13
 
 ### Added

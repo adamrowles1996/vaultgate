@@ -254,6 +254,24 @@ export class FakeBwServe {
       this.#markWritten(id, previous);
       return context.json(success());
     });
+    this.#app.post('/move/:id/:organizationId', async (context) => {
+      const id = context.req.param('id');
+      const previous = this.items.get(id);
+      if (previous === undefined) {
+        return context.json(failure('Not found.'), 404);
+      }
+      const { organizationId } = context.req.param();
+      const collectionIds: unknown = await context.req.json();
+      const item = {
+        ...previous,
+        organizationId,
+        collectionIds,
+        revisionDate: this.#nextRevision(),
+      };
+      this.items.set(id, item);
+      this.#markWritten(id, previous);
+      return context.json(success(item));
+    });
     this.#app.post('/object/folder', async (context) => {
       const body = await readBody(context);
       const name = asString(body['name']);

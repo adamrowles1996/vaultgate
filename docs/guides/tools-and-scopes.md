@@ -11,7 +11,7 @@ never returns. Tool and scope names are stable within a major version. Specifica
 | `vault:read`     | Search and list items, folders and collections; item summaries without secrets. | yes                |
 | `vault:reveal`   | Reveal one secret field at a time: passwords, TOTP codes, notes, hidden fields. | yes                |
 | `vault:generate` | Generate random passwords and passphrases; nothing is stored.                   | yes                |
-| `vault:write`    | Create, update and trash items; create folders.                                 | no                 |
+| `vault:write`    | Create, update, move and trash items; create folders.                           | no                 |
 
 No scope implies another. A token holds the scopes the operator ticked on the consent page, and
 a tool is usable only when the token holds its scope _and_ the deployment has that scope
@@ -127,17 +127,52 @@ Nothing is stored.
 
 Creates a login or a secure note.
 
-| Input                            | Meaning                                                                         |
-| -------------------------------- | ------------------------------------------------------------------------------- |
-| `type`                           | `login` or `secureNote`.                                                        |
-| `name`                           | Required.                                                                       |
-| `folder_id`, `notes`, `favorite` | Optional.                                                                       |
-| `username`, `uris`               | Login fields, optional.                                                         |
-| `generate_password: true`        | vaultgate generates a 24-character password and stores it without returning it. |
-| `password`                       | An explicit value. Needs `vault:reveal` as well as `vault:write`.               |
+| Input                            | Meaning                                                                               |
+| -------------------------------- | ------------------------------------------------------------------------------------- |
+| `type`                           | `login` or `secureNote`.                                                              |
+| `name`                           | Required.                                                                             |
+| `folder_id`, `notes`, `favorite` | Optional.                                                                             |
+| `username`, `uris`               | Login fields, optional.                                                               |
+| `generate_password: true`        | vaultgate generates a 24-character password and stores it without returning it.       |
+| `password`                       | An explicit value. Needs `vault:reveal` as well as `vault:write`.                     |
+| `collection_id`                  | From `list_collections`: create the item in that collection's organisation. Optional. |
 
 `password` and `generate_password` are mutually exclusive (`conflicting_arguments`). Returns
 `item`, the new item's summary; never the password or the notes.
+
+Without `collection_id` the item goes into the account's own vault. With one, it is created in
+that collection's organisation, in that one collection, provided the organisation is listed in
+`VAULTGATE_WRITE_ORGANIZATIONS` (below); otherwise the call fails with `policy_denied` and
+nothing is written. A collection the account cannot see is `not_found`.
+
+### `move_item_to_collection` (`vault:write`)
+
+Moves an item from the account's own vault into an organisation collection: Bitwarden's "move to
+organisation". Use it for an item that was created in the wrong place.
+
+| Input           | Meaning                                       |
+| --------------- | --------------------------------------------- |
+| `item_id`       | Required. An item in the account's own vault. |
+| `collection_id` | Required. From `list_collections`.            |
+
+The collection is checked as for `create_item`. An item already in an organisation fails with
+`item_in_organization` and a trashed one with `item_in_trash`; move those in Bitwarden itself.
+Returns `item`, the moved item's summary with its `organization_id` and `collection_ids`; never
+secret values. A moved item belongs to the organisation; vaultgate cannot move it back. If the
+call fails after Bitwarden has accepted the move (for example `vault_unavailable` while
+vaultgate waits to read the item back), read the item with `get_item` before trying again.
+
+### Writing into an organisation
+
+Both tools above write into an organisation only when the operator names it:
+
+```bash
+VAULTGATE_WRITE_ORGANIZATIONS=00000000-0000-0000-0000-000000000000
+```
+
+A comma-separated list of organisation ids (the `organization_id` that `list_collections`
+reports), read at start-up. Empty, the default, means no organisation is writable, so an agent
+with `vault:write` can still only write to the account's own vault.
 
 ### `update_item` (`vault:write`)
 
@@ -459,12 +494,15 @@ every code has one fixed message and `detail` is the only variable part.
 
 ## Error codes
 
-| Code                    | Meaning                                                                 |
-| ----------------------- | ----------------------------------------------------------------------- |
-| `vault_unavailable`     | `bw serve` is not running or not unlocked. Check `/readyz` and the log. |
-| `not_found`             | No such item, folder or secret field.                                   |
-| `ambiguous`             | A name matched more than one object.                                    |
-| `invalid_item`          | The vault rejected a write (validation).                                |
-| `vault_protocol_error`  | `bw serve` answered with an unexpected shape; the call failed closed.   |
-| `invalid_field`         | `get_secret` was given a field name it does not know.                   |
-| `conflicting_arguments` | `password` and `generate_password` were both given.                     |
+| Code                    | Meaning                                                                  |
+| ----------------------- | ------------------------------------------------------------------------ |
+| `vault_unavailable`     | `bw serve` is not running or not unlocked. Check `/readyz` and the log.  |
+| `not_found`             | No such item, folder or secret field.                                    |
+| `ambiguous`             | A name matched more than one object.                                     |
+| `invalid_item`          | The vault rejected a write (validation).                                 |
+| `vault_protocol_error`  | `bw serve` answered with an unexpected shape; the call failed closed.    |
+| `invalid_field`         | `get_secret` was given a field name it does not know.                    |
+| `conflicting_arguments` | `password` and `generate_password` were both given.                      |
+| `policy_denied`         | The collection's organisation is not in `VAULTGATE_WRITE_ORGANIZATIONS`. |
+| `item_in_organization`  | `move_item_to_collection` was given an item already in an organisation.  |
+| `item_in_trash`         | `move_item_to_collection` was given a trashed item.                      |

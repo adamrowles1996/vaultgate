@@ -57,6 +57,7 @@ describe('loadConfig', () => {
       allowedOrigins: [],
       dataDir: './data',
       enableWriteScope: false,
+      writeOrganizations: [],
       oauthClients: [],
       accessTokenTtlMs: 3_600_000,
       refreshTokenTtlMs: 2_592_000_000,
@@ -140,6 +141,7 @@ describe('loadConfig', () => {
       allowedOrigins: ['https://claude.ai', 'https://ide.example'],
       dataDir: '/var/lib/vaultgate',
       enableWriteScope: true,
+      writeOrganizations: [],
       oauthClients: [
         {
           clientId: 'inspector',

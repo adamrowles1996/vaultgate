@@ -1,4 +1,5 @@
 import { toolGeneratePassphrase, toolGeneratePassword } from './generate.ts';
+import { toolMoveItemToCollection } from './organization.ts';
 import {
   toolGetItem,
   toolListCollections,
@@ -25,6 +26,7 @@ export const ALL_TOOLS: readonly Tool[] = [
   toolGeneratePassphrase,
   toolCreateItem,
   toolUpdateItem,
+  toolMoveItemToCollection,
   toolTrashItem,
   toolCreateFolder,
 ];

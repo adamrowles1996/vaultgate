@@ -49,9 +49,20 @@ Every tool result is an object, which is what the SDK's `structuredContent` requ
 */
 export type OutputSchema = z.ZodType<Record<string, unknown>>;
 
+/**
+What the operator's configuration tells a tool, beyond the vault itself.
+*/
+export interface ToolSettings {
+  /**
+  MCP-19, MCP-20: organisation ids `VAULTGATE_WRITE_ORGANIZATIONS` lets items be written into.
+  */
+  readonly writeOrganizations: readonly string[];
+}
+
 export type ToolRun<Input extends z.ZodType, Output extends OutputSchema> = (
   vault: VaultClient,
   input: z.output<Input>,
+  settings: ToolSettings,
 ) => Promise<Result<z.output<Output>, ToolFailure>>;
 
 export interface ToolDefinition<Input extends z.ZodType, Output extends OutputSchema> {
@@ -77,6 +88,7 @@ export interface Tool {
   readonly run: (
     vault: VaultClient,
     input: unknown,
+    settings: ToolSettings,
   ) => Promise<Result<Record<string, unknown>, ToolFailure>>;
 }
 
@@ -87,7 +99,7 @@ export function defineTool<Input extends z.ZodType, Output extends OutputSchema>
   return {
     ...rest,
     auditReference: (input) => auditReference?.(input as z.output<Input>) ?? {},
-    run: (vault, input) => run(vault, input as z.output<Input>),
+    run: (vault, input, settings) => run(vault, input as z.output<Input>, settings),
   };
 }
 
