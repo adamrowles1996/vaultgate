@@ -88,7 +88,8 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 - **VAULT-10** Write tools trigger no sync; they poll `GET /object/item/<id>` every 100 ms until
   the new `revisionDate` (or, for trash, the `deletedDate`) is visible, bounded to 5 s, so a
   read-after-write is consistent. If the bound elapses the write has still succeeded, so the last
-  observed item is returned rather than an error.
+  observed item is returned rather than an error. A move to an organisation (MCP-20) polls
+  until the item reads with that organisation.
 - **VAULT-17** A `POST /sync` answered with something other than the JSON envelope (a protocol
   error) while `bw serve` is still running is retried once after 2 s before it is reported as a
   failed sync; a server-side sync can complete even when the reply is malformed. A protocol error
@@ -121,9 +122,10 @@ bitwarden.com (US and EU), self-hosted Bitwarden and Vaultwarden.
 | list folders     | `GET /list/object/folders`                                                                   |
 | list collections | `GET /list/object/collections`                                                               |
 | generate         | `GET /generate?length=&uppercase=&lowercase=&number=&special=&passphrase=&words=&separator=` |
-| create item      | `POST /object/item`                                                                          |
+| create item      | `POST /object/item` (with `organizationId` and `collectionIds` for an organisation item)     |
 | update item      | `PUT /object/item/{id}`                                                                      |
 | trash item       | `DELETE /object/item/{id}`                                                                   |
+| move item        | `POST /move/{id}/{organizationId}` with the collection ids as the JSON body                  |
 | create folder    | `POST /object/folder`                                                                        |
 | unlock / lock    | `POST /unlock`, `POST /lock`                                                                 |
 

@@ -16,6 +16,7 @@ import {
   WRITE,
 } from './definition.ts';
 import { DEFAULT_PASSWORD_LENGTH } from './generate.ts';
+import { collectionIdSchema, writableCollection } from './organization.ts';
 import { folderSchema, itemIdSchema, itemSummarySchema, toItemSummaryOutput } from './schemas.ts';
 
 import type {
@@ -88,9 +89,23 @@ const newItemInput = z.strictObject({
   username: z.string().optional(),
   uris: z.array(z.string()).optional(),
   ...passwordInputs,
+  collection_id: collectionIdSchema
+    .optional()
+    .describe("Create the item in this organisation collection instead of the account's vault."),
 });
 
-const runCreateItem: ToolRun<typeof newItemInput, typeof itemOutput> = async (vault, input) => {
+const runCreateItem: ToolRun<typeof newItemInput, typeof itemOutput> = async (
+  vault,
+  input,
+  settings,
+) => {
+  const collection =
+    input.collection_id === undefined
+      ? ok(undefined)
+      : await writableCollection(vault, settings, input.collection_id);
+  if (!collection.ok) {
+    return collection;
+  }
   const password = await resolvePassword(vault, input);
   if (!password.ok) {
     return password;
@@ -99,6 +114,7 @@ const runCreateItem: ToolRun<typeof newItemInput, typeof itemOutput> = async (va
     type: input.type,
     name: input.name,
     favorite: input.favorite,
+    ...(collection.value !== undefined && { collection: collection.value }),
     ...(input.folder_id !== undefined && { folderId: input.folder_id }),
     ...(input.notes !== undefined && { notes: input.notes }),
     ...(input.type === 'login' && { login: loginFields(input, password.value) }),
@@ -113,7 +129,9 @@ export const toolCreateItem: Tool = defineTool({
     'Creates a login or a secure note and returns its summary (id, name, type, folder; never the ' +
     'password or notes). For a login, set generate_password: true to have a strong password ' +
     'generated and stored without it ever being returned; an explicit password also needs the ' +
-    'vault:reveal scope. Use list_folders for a folder_id.',
+    'vault:reveal scope. Use list_folders for a folder_id. With a collection_id from ' +
+    "list_collections the item is created in that collection's organisation, if the operator " +
+    'lets items be written into it (policy_denied otherwise).',
   annotations: { ...WRITE, title: 'Create item' },
   inputSchema: newItemInput,
   outputSchema: itemOutput,

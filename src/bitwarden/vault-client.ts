@@ -26,7 +26,7 @@ import {
   statusDataSchema,
   stringDataSchema,
 } from './types.ts';
-import { createFolder, createItem, trashItem, updateItem } from './writes.ts';
+import { createFolder, createItem, moveItem, trashItem, updateItem } from './writes.ts';
 
 import type { Clock } from './clock.ts';
 import type {
@@ -229,6 +229,10 @@ export class BwServeVaultClient implements VaultClient {
 
   trashItem(id: string): VaultResult<void> {
     return trashItem({ api: this.#api, clock: this.#clock }, id);
+  }
+
+  moveItem(id: string, collection: Collection): VaultResult<ItemSummary> {
+    return moveItem({ api: this.#api, clock: this.#clock }, id, collection);
   }
 
   createFolder(name: string): VaultResult<Folder> {

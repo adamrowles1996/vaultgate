@@ -158,8 +158,8 @@ export class InMemoryVaultClient implements VaultClient {
       name: item.name,
       type: item.type,
       folderId: item.folderId ?? null,
-      organizationId: null,
-      collectionIds: [],
+      organizationId: item.collection?.organizationId ?? null,
+      collectionIds: item.collection === undefined ? [] : [item.collection.id],
       favorite: item.favorite ?? false,
       revisionDate: FIXED_NOW,
       deletedDate: null,
@@ -207,6 +207,21 @@ export class InMemoryVaultClient implements VaultClient {
       summary: { ...existing.summary, deletedDate: FIXED_NOW },
     });
     return this.#respond(undefined);
+  }
+
+  moveItem(id: string, collection: Collection): VaultResult<ItemSummary> {
+    const existing = this.#items.get(id);
+    if (existing === undefined) {
+      return this.#notFound(id);
+    }
+    const summary: ItemSummary = {
+      ...existing.summary,
+      organizationId: collection.organizationId,
+      collectionIds: [collection.id],
+      revisionDate: FIXED_NOW,
+    };
+    this.#items.set(id, { ...existing, summary });
+    return this.#respond(summary);
   }
 
   createFolder(name: string): VaultResult<Folder> {

@@ -100,8 +100,8 @@ The `POST /object/item` body for a new login or secure note.
 */
 export function newItemBody(item: NewItem): Record<string, unknown> {
   const shared = {
-    organizationId: null,
-    collectionIds: null,
+    organizationId: item.collection?.organizationId ?? null,
+    collectionIds: item.collection === undefined ? null : [item.collection.id],
     folderId: item.folderId ?? null,
     name: item.name,
     notes: item.notes ?? null,

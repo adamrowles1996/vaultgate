@@ -36,6 +36,13 @@ export function itemPath(id: string): string {
   return `/object/item/${encodeURIComponent(id)}`;
 }
 
+/**
+`POST /move/{id}/{organizationId}`, the `bw serve` form of `bw move` (MCP-20).
+*/
+export function movePath(id: string, organizationId: string): string {
+  return `/move/${encodeURIComponent(id)}/${encodeURIComponent(organizationId)}`;
+}
+
 export function fieldPath(field: 'password' | 'notes' | 'totp', id: string): string {
   return `/object/${field}/${encodeURIComponent(id)}`;
 }

@@ -192,6 +192,7 @@ function serve(gate: Gate, context: McpContext, exchange: Exchange): Promise<Res
     audit: gate.dependencies.auditSink,
     now,
     engine: gate.dependencies.engine,
+    writeOrganizations: config.writeOrganizations,
   };
   const handler = createMcpHandler(() => createVaultMcpServer(server, callContext), {
     onerror: (error) => {

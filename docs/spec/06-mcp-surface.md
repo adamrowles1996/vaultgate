@@ -19,20 +19,21 @@
 All tools declare `inputSchema` and `outputSchema` with zod; every result also carries a
 human-readable `content` text. Names are stable API.
 
-| Tool                  | Scope            | Purpose                                                                                                                                                                                               |
-| --------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `vault_status`        | `vault:read`     | Server URL, account e-mail (masked), lock state, last sync time, item count.                                                                                                                          |
-| `search_items`        | `vault:read`     | Full-text search with optional `type`, `folder_id`, `collection_id`, `url`, `include_trash`; hard cap 50 results; returns id, name, type, username, URIs, folder, favourite, revision date.           |
-| `get_item`            | `vault:read`     | One item's metadata. Secret fields are reported as `{ present: true }`, never their value.                                                                                                            |
-| `list_folders`        | `vault:read`     | Folder ids and names.                                                                                                                                                                                 |
-| `list_collections`    | `vault:read`     | Collection ids, names and organisation ids.                                                                                                                                                           |
-| `get_secret`          | `vault:reveal`   | The value of exactly one secret field: `password`, `totp` (current code + seconds remaining), `notes`, `card.number`, `card.code`, `identity.*`, `sshKey.privateKey`, or a named hidden custom field. |
-| `generate_password`   | `vault:generate` | Random password with length and character-class options; nothing is stored.                                                                                                                           |
-| `generate_passphrase` | `vault:generate` | Diceware-style passphrase with word count and separator options.                                                                                                                                      |
-| `create_item`         | `vault:write`    | Create a login or secure note. Accepts an optional `generate_password: true` to have vaultgate fill the password without the agent ever seeing it.                                                    |
-| `update_item`         | `vault:write`    | Partial update of name, username, URIs, notes, folder, favourite and custom fields (MCP-17); `password` only via `generate_password: true` or explicit value with `vault:reveal` also held.           |
-| `trash_item`          | `vault:write`    | Soft delete (moves to trash). There is no permanent delete tool.                                                                                                                                      |
-| `create_folder`       | `vault:write`    | Create a folder.                                                                                                                                                                                      |
+| Tool                      | Scope            | Purpose                                                                                                                                                                                               |
+| ------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vault_status`            | `vault:read`     | Server URL, account e-mail (masked), lock state, last sync time, item count.                                                                                                                          |
+| `search_items`            | `vault:read`     | Full-text search with optional `type`, `folder_id`, `collection_id`, `url`, `include_trash`; hard cap 50 results; returns id, name, type, username, URIs, folder, favourite, revision date.           |
+| `get_item`                | `vault:read`     | One item's metadata. Secret fields are reported as `{ present: true }`, never their value.                                                                                                            |
+| `list_folders`            | `vault:read`     | Folder ids and names.                                                                                                                                                                                 |
+| `list_collections`        | `vault:read`     | Collection ids, names and organisation ids.                                                                                                                                                           |
+| `get_secret`              | `vault:reveal`   | The value of exactly one secret field: `password`, `totp` (current code + seconds remaining), `notes`, `card.number`, `card.code`, `identity.*`, `sshKey.privateKey`, or a named hidden custom field. |
+| `generate_password`       | `vault:generate` | Random password with length and character-class options; nothing is stored.                                                                                                                           |
+| `generate_passphrase`     | `vault:generate` | Diceware-style passphrase with word count and separator options.                                                                                                                                      |
+| `create_item`             | `vault:write`    | Create a login or secure note. Accepts an optional `generate_password: true` to have vaultgate fill the password without the agent ever seeing it, and an optional `collection_id` (MCP-19).          |
+| `update_item`             | `vault:write`    | Partial update of name, username, URIs, notes, folder, favourite and custom fields (MCP-17); `password` only via `generate_password: true` or explicit value with `vault:reveal` also held.           |
+| `move_item_to_collection` | `vault:write`    | Move an item from the account's own vault into an organisation collection (MCP-20).                                                                                                                   |
+| `trash_item`              | `vault:write`    | Soft delete (moves to trash). There is no permanent delete tool.                                                                                                                                      |
+| `create_folder`           | `vault:write`    | Create a folder.                                                                                                                                                                                      |
 
 The actions tools (`actions_list_targets` and the connector tools) live in section 13 (13.6) and
 join this surface only on a deployment that enables the layer, for tokens with an `actions:*` scope.
@@ -64,6 +65,23 @@ join this surface only on a deployment that enables the layer, for tokens with a
   whose `kind` is neither `text` nor `boolean` is secret material and, like an explicit password,
   needs `vault:reveal` as well; renaming or removing a field does not. A call makes at most 50
   changes of each kind.
+- **MCP-19** `create_item` with a `collection_id` creates the item in an organisation: vaultgate
+  looks the collection up in `list_collections` and creates the item in that collection's
+  organisation with that one collection. The organisation must be one the operator lists in
+  `VAULTGATE_WRITE_ORGANIZATIONS`; with the setting empty (the default) no organisation is
+  writable. A collection the account cannot see is `not_found`, and one in an organisation the
+  operator has not listed is `policy_denied`; either way nothing is written. Without a
+  `collection_id` the item is created in the account's own vault, as before. An organisation
+  is where a team keeps shared items, so the operator decides which one an agent may add to,
+  not the agent.
+- **MCP-20** `move_item_to_collection` takes an `item_id` and a `collection_id` and moves the
+  item from the account's own vault into that collection's organisation, in that one
+  collection (Bitwarden's "move to organisation"). The collection is checked exactly as in
+  MCP-19, first. An item already in an organisation is refused with `item_in_organization`,
+  because moving between organisations or collections is managed in the organisation itself,
+  and a trashed item is refused with `item_in_trash`; neither changes anything. The result is
+  the moved item's summary, never a secret value. A moved item belongs to the organisation and
+  cannot be moved back by vaultgate.
 
 ## 6.3 Secret-handling rules
 
@@ -104,7 +122,8 @@ join this surface only on a deployment that enables the layer, for tokens with a
 - **MCP-13** Every tool call appends one audit event: timestamp, client id, client name, operator
   id, token id (first 12 hex of the hash), tool, outcome (`ok` | `denied` | `error:<code>`),
   item id if any, field name for `get_secret`, duration in ms, request id, source IP. Never the
-  arguments or results.
+  arguments or results. `move_item_to_collection` records its item id like `update_item` and
+  `trash_item`.
 - **MCP-14** Authorization events are audited too: login success/failure, consent granted/denied,
   token issued/refreshed/revoked, client registered, recovery code used, bootstrap consumed.
 - **MCP-15** Audit rows are append-only from the application's point of view (no update/delete

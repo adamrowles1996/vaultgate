@@ -21,6 +21,7 @@ export const TOOL_NAMES = [
   'generate_passphrase',
   'create_item',
   'update_item',
+  'move_item_to_collection',
   'trash_item',
   'create_folder',
 ] as const;
@@ -38,6 +39,7 @@ export const TOOL_SCOPES: Readonly<Record<ToolName, Scope>> = {
   generate_passphrase: 'vault:generate',
   create_item: 'vault:write',
   update_item: 'vault:write',
+  move_item_to_collection: 'vault:write',
   trash_item: 'vault:write',
   create_folder: 'vault:write',
 };

@@ -49,6 +49,10 @@ export interface Config {
   readonly allowedOrigins: readonly string[];
   readonly dataDir: string;
   readonly enableWriteScope: boolean;
+  /**
+  MCP-19, MCP-20: organisation ids `create_item` and `move_item_to_collection` may write into.
+  */
+  readonly writeOrganizations: readonly string[];
   readonly oauthClients: readonly PreregisteredClient[];
   readonly accessTokenTtlMs: number;
   readonly refreshTokenTtlMs: number;
@@ -94,6 +98,7 @@ function toConfig(data: ParsedEnvironment): Config {
     allowedOrigins: data.VAULTGATE_ALLOWED_ORIGINS,
     dataDir: data.VAULTGATE_DATA_DIR,
     enableWriteScope: data.VAULTGATE_ENABLE_WRITE_SCOPE,
+    writeOrganizations: data.VAULTGATE_WRITE_ORGANIZATIONS,
     oauthClients: data.VAULTGATE_OAUTH_CLIENTS,
     accessTokenTtlMs: data.VAULTGATE_ACCESS_TOKEN_TTL,
     refreshTokenTtlMs: data.VAULTGATE_REFRESH_TOKEN_TTL,
