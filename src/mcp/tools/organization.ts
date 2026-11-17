@@ -42,7 +42,8 @@ export async function writableCollection(
   if (!collections.ok) {
     return collections;
   }
-  const collection = collections.value.find((candidate) => candidate.id === collectionId);
+  const wanted = collectionId.toLowerCase();
+  const collection = collections.value.find((candidate) => candidate.id.toLowerCase() === wanted);
   if (collection === undefined) {
     return fail(new VaultError('not_found', 'no collection with that id'));
   }

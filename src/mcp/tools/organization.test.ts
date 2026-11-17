@@ -19,7 +19,7 @@ describe('create_item with a collection_id', () => {
     const output = await runOk(
       toolCreateItem,
       vault,
-      { ...NOTE, collection_id: 'collection-infra' },
+      { ...NOTE, collection_id: 'COLLECTION-INFRA' },
       WRITABLE,
     );
     expect(output['item']).toMatchObject({ id: 'item-new-1', ...IN_INFRA });

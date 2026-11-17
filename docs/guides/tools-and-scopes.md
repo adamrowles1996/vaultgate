@@ -158,7 +158,9 @@ organisation". Use it for an item that was created in the wrong place.
 The collection is checked as for `create_item`. An item already in an organisation fails with
 `item_in_organization` and a trashed one with `item_in_trash`; move those in Bitwarden itself.
 Returns `item`, the moved item's summary with its `organization_id` and `collection_ids`; never
-secret values. A moved item belongs to the organisation; vaultgate cannot move it back.
+secret values. A moved item belongs to the organisation; vaultgate cannot move it back. If the
+call fails after Bitwarden has accepted the move (for example `vault_unavailable` while
+vaultgate waits to read the item back), read the item with `get_item` before trying again.
 
 ### Writing into an organisation
 
