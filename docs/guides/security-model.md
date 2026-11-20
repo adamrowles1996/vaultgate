@@ -43,7 +43,8 @@ Only what its token's scopes allow, and the operator picks those on the consent 
 - **Hold credentials.** Tokens are opaque random strings; vaultgate stores only their hashes and
   accepts nothing it did not issue. A token cannot be turned into the master password or the API
   key, and vaultgate never forwards a bearer token anywhere.
-- **Read secrets in bulk.** Search returns at most 50 summaries with no secret values. Each secret
+- **Read secrets in bulk.** Search pages through item summaries, at most 100 at a time, with no
+  secret values. Each secret
   is a separate, audited `get_secret` call for one field, and a token may make 120 calls a minute.
 - **Read a TOTP seed.** Only the current code is returned.
 - **Delete permanently.** `trash_item` moves items to the trash, where you can restore them.

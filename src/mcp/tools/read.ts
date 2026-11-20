@@ -3,9 +3,9 @@
  */
 import { z } from 'zod';
 
-import { ok } from '../../result.ts';
+import { fail, ok } from '../../result.ts';
 
-import { defineTool, READ_ONLY, type Tool, type ToolRun } from './definition.ts';
+import { defineTool, READ_ONLY, type Tool, ToolError, type ToolRun } from './definition.ts';
 import {
   folderSchema,
   isRedactedField,
@@ -15,10 +15,18 @@ import {
   LOCK_STATES,
   toItemSummaryOutput,
 } from './schemas.ts';
+import { compareIds, decodeCursor, encodeCursor, type SearchFilters } from './search-cursor.ts';
 
-const SEARCH_CAP = 50;
+import type { SearchQuery } from '../../vault/client.ts';
+
 /**
-Upper bound when counting items for `vault_status`; a personal vault is far smaller.
+MCP-21: the largest page `search_items` returns; 50 stays the default page.
+*/
+const SEARCH_CAP = 100;
+const SEARCH_DEFAULT = 50;
+/**
+Upper bound when counting items for `vault_status` or ordering a search for paging; a personal
+vault is far smaller.
 */
 const COUNT_BOUND = 100_000;
 
@@ -67,38 +75,99 @@ const searchInput = z.strictObject({
   collection_id: z.string().optional(),
   url: z.string().optional().describe('Match login items whose URIs contain this text.'),
   include_trash: z.boolean().default(false),
-  limit: z.number().int().min(1).max(SEARCH_CAP).default(SEARCH_CAP),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(SEARCH_CAP)
+    .default(SEARCH_DEFAULT)
+    .describe('Items per page, at most 100.'),
+  cursor: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'The next_cursor of the previous page of this same search, to read the page after it. ' +
+        'Omit for the first page.',
+    ),
 });
 
 const searchOutput = z.strictObject({
   items: z.array(itemSummarySchema),
-  truncated: z.boolean().describe('True when the limit cut the result set short.'),
+  truncated: z.boolean().describe('True when more matching items follow this page.'),
+  next_cursor: z
+    .string()
+    .nullable()
+    .describe(
+      'Pass as cursor, with the same search, to read the next page; null on the last page.',
+    ),
 });
 
-const runSearchItems: ToolRun<typeof searchInput, typeof searchOutput> = async (vault, input) => {
-  const result = await vault.searchItems({
+function filtersOf(input: z.output<typeof searchInput>): SearchFilters {
+  return {
+    query: input.query ?? null,
+    type: input.type ?? null,
+    folder_id: input.folder_id ?? null,
+    collection_id: input.collection_id ?? null,
+    url: input.url ?? null,
+    include_trash: input.include_trash,
+  };
+}
+
+/**
+MCP-21: the whole match set, so that every page is cut from the same id order whatever order
+the vault lists items in.
+*/
+function wholeSearch(input: z.output<typeof searchInput>): SearchQuery {
+  return {
     ...(input.query !== undefined && { text: input.query }),
     ...(input.type !== undefined && { type: input.type }),
     ...(input.folder_id !== undefined && { folderId: input.folder_id }),
     ...(input.collection_id !== undefined && { collectionId: input.collection_id }),
     ...(input.url !== undefined && { url: input.url }),
     includeTrash: input.include_trash,
-    limit: input.limit + 1,
-  });
+    limit: COUNT_BOUND,
+  };
+}
+
+const INVALID_CURSOR = new ToolError(
+  'invalid_cursor',
+  'the cursor is not a next_cursor from this search; repeat the search without a cursor',
+);
+
+const runSearchItems: ToolRun<typeof searchInput, typeof searchOutput> = async (vault, input) => {
+  const filters = filtersOf(input);
+  const after = input.cursor === undefined ? undefined : decodeCursor(input.cursor, filters);
+  if (after === undefined && input.cursor !== undefined) {
+    return fail(INVALID_CURSOR);
+  }
+  const result = await vault.searchItems(wholeSearch(input));
   if (!result.ok) {
     return result;
   }
-  const items = result.value.slice(0, input.limit).map((item) => toItemSummaryOutput(item));
-  return ok({ items, truncated: result.value.length > input.limit });
+  const ordered = result.value
+    .filter((item) => after === undefined || compareIds(item.id, after) > 0)
+    .toSorted((left, right) => compareIds(left.id, right.id));
+  const page = ordered.slice(0, input.limit);
+  const isTruncated = ordered.length > input.limit;
+  const last = page.at(-1);
+  return ok({
+    items: page.map((item) => toItemSummaryOutput(item)),
+    truncated: isTruncated,
+    next_cursor: isTruncated && last !== undefined ? encodeCursor(last.id, filters) : null,
+  });
 };
 
 export const toolSearchItems: Tool = defineTool({
   name: 'search_items',
   description:
-    'Finds vault items by free text (matched against name, username and URIs) with optional filters. ' +
-    'Returns at most 50 item summaries: id, name, type, username, URIs, folder, favourite flag and ' +
-    'revision date. Never returns passwords, notes or other secret values; use get_secret with an ' +
-    'item id from these results to read one secret field. Narrow the query rather than paging.',
+    'Finds vault items by free text (matched against name, username and URIs) with optional filters, ' +
+    'ordered by item id. Returns one page of item summaries (50 by default, at most 100): id, name, ' +
+    'type, username, URIs, folder, favourite flag, revision date and custom field names, with the ' +
+    'values of non-secret text fields. Never returns passwords, notes or other secret values; use ' +
+    'get_secret with an item id from these results to read one secret field. When truncated is ' +
+    'true, call again with the same filters and cursor set to next_cursor for the next page; omit ' +
+    'every filter to page through the whole vault.',
   annotations: { ...READ_ONLY, title: 'Search items' },
   inputSchema: searchInput,
   outputSchema: searchOutput,

@@ -93,13 +93,13 @@ describe('search_items', () => {
     expect(output['truncated']).toBe(false);
     const items = output['items'] as { id: string; login: unknown }[];
     expect(items.map((item) => item.id)).toStrictEqual([
-      'item-login',
-      'item-note',
       'item-card',
       'item-identity',
+      'item-login',
+      'item-note',
       'item-ssh',
     ]);
-    expect(items[0]?.login).toStrictEqual({
+    expect(items.find((item) => item.id === 'item-login')?.login).toStrictEqual({
       username: 'alice@example.com',
       uris: ['https://app.example.com/login'],
       has_password: true,
@@ -111,8 +111,8 @@ describe('search_items', () => {
   it('§6.2 honours every filter', async () => {
     const vault = new InMemoryVaultClient();
     expect(await searchIds(vault, { query: 'alice' })).toStrictEqual([
-      'item-login',
       'item-identity',
+      'item-login',
     ]);
     expect(await searchIds(vault, { query: 'alice@' })).toStrictEqual(['item-login']);
     expect(await searchIds(vault, { type: 'card' })).toStrictEqual(['item-card']);
@@ -127,11 +127,14 @@ describe('search_items', () => {
     ]);
   });
 
-  it('MCP-5 caps at 50 and flags truncation', async () => {
+  it('MCP-21 pages at most 100 items, 50 by default, and flags truncation', async () => {
     const output = await runOk(toolSearchItems, new InMemoryVaultClient(), { limit: 2 });
     expect((output['items'] as unknown[]).length).toBe(2);
     expect(output['truncated']).toBe(true);
-    expect(() => toolSearchItems.inputSchema.parse({ limit: 51 })).toThrow('50');
+    expect(typeof output['next_cursor']).toBe('string');
+    expect(toolSearchItems.inputSchema.parse({})).toMatchObject({ limit: 50 });
+    expect(toolSearchItems.inputSchema.parse({ limit: 100 })).toMatchObject({ limit: 100 });
+    expect(() => toolSearchItems.inputSchema.parse({ limit: 101 })).toThrow('100');
   });
 
   it('VAULT-5 maps a vault failure', async () => {
