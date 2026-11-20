@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-rc.36] - 2026-11-20
+
 ### Added
 
 - MCP-21: **`search_items` pages through every matching item.** Results are ordered by item id;
@@ -896,7 +898,8 @@ Release candidates 0.1.0-rc.1 to 0.1.0-rc.9 are in
 [`docs/changelog-archive.md`](docs/changelog-archive.md). They are kept verbatim; this file holds
 the current release and the ones after it, so it stays inside the repository's 64 KiB file gate.
 
-[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.35...HEAD
+[Unreleased]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.36...HEAD
+[0.1.0-rc.36]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.35...v0.1.0-rc.36
 [0.1.0-rc.35]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.34...v0.1.0-rc.35
 [0.1.0-rc.34]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.33...v0.1.0-rc.34
 [0.1.0-rc.33]: https://github.com/adamrowles1996/vaultgate/compare/v0.1.0-rc.32...v0.1.0-rc.33
