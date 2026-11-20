@@ -22,7 +22,7 @@ human-readable `content` text. Names are stable API.
 | Tool                      | Scope            | Purpose                                                                                                                                                                                               |
 | ------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `vault_status`            | `vault:read`     | Server URL, account e-mail (masked), lock state, last sync time, item count.                                                                                                                          |
-| `search_items`            | `vault:read`     | Full-text search with optional `type`, `folder_id`, `collection_id`, `url`, `include_trash`; hard cap 50 results; returns id, name, type, username, URIs, folder, favourite, revision date.           |
+| `search_items`            | `vault:read`     | Full-text search with optional `type`, `folder_id`, `collection_id`, `url`, `include_trash`; pages of 100 (MCP-21); returns id, name, type, username, URIs, folder, favourite, revision date.         |
 | `get_item`                | `vault:read`     | One item's metadata. Secret fields are reported as `{ present: true }`, never their value.                                                                                                            |
 | `list_folders`            | `vault:read`     | Folder ids and names.                                                                                                                                                                                 |
 | `list_collections`        | `vault:read`     | Collection ids, names and organisation ids.                                                                                                                                                           |
@@ -82,6 +82,19 @@ join this surface only on a deployment that enables the layer, for tokens with a
   and a trashed item is refused with `item_in_trash`; neither changes anything. The result is
   the moved item's summary, never a secret value. A moved item belongs to the organisation and
   cannot be moved back by vaultgate.
+- **MCP-21** `search_items` pages through every item a search matches. Results are ordered by
+  item id, compared code unit by code unit; `limit` sets the page size (default 50, at most
+  100). When more items match, the result has `truncated: true` and a `next_cursor`; calling
+  again with the same filters and that `cursor` returns the matching items whose id sorts after
+  the last one returned, and the last page has `next_cursor: null`. The cursor is opaque to the
+  caller and carries only that item id and the search it belongs to: with any other filters, or
+  if it is malformed, it is refused with `invalid_cursor`. Because each page is computed afresh
+  from the vault's current contents, a sweep always terminates, never returns an item twice and
+  never skips an item that existed for the whole sweep; an item added behind the cursor is not
+  seen, and one removed ahead of it is not returned. Search filters are the only narrowing:
+  every token with `vault:read` sees the whole vault, so the union of the pages of an unfiltered
+  search equals `vault_status`'s `item_count`. Items carry the same summary as before, with the
+  MCP-18 redaction, so paging reveals no value a single search could not.
 
 ## 6.3 Secret-handling rules
 

@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- MCP-21: **`search_items` pages through every matching item.** Results are ordered by item id;
+  `limit` now takes up to 100 (default still 50), and a result with more to come has
+  `truncated: true` and a new `next_cursor`. Calling again with the same filters and
+  `cursor: <next_cursor>` returns the next page, and the last page has `next_cursor: null`. A
+  cursor carries only the last item id and its search; one from another search, or a malformed
+  one, is refused with `invalid_cursor`. A sweep terminates, never repeats an item and never skips
+  one that existed throughout, even if the vault changes between pages. Pages carry the same
+  metadata summary as before (MCP-18 redaction unchanged), so a whole-vault metadata sweep, such
+  as an expiry census, no longer stops at 50 items.
+
+### Changed
+
+- `search_items` now returns items in id order rather than in the order `bw serve` lists them.
+
+### Upgrading
+
+A client connected before the upgrade sees the new `cursor` input and `next_cursor` output only
+after it reconnects and lists the tools again.
+
 ## [0.1.0-rc.35] - 2026-11-17
 
 ### Added
