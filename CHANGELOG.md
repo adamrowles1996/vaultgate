@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- DEP-13: `install.sh --cap-login-sessions` caps each login user's sessions (`sudo` included) at
+  `MemoryHigh=768M`, `MemoryMax=1G`, `CPUWeight=25` on a dedicated host, so a runaway SSH
+  command is OOM-killed in its own slice instead of exhausting the host. Re-runs keep it current.
+
 ## [0.1.0-rc.36] - 2026-11-20
 
 ### Added
