@@ -41,6 +41,16 @@ private interface.
   the scratch directory) and stops if either fails. It reads `/etc/os-release` field by field
   rather than sourcing it, so the file's own `VERSION` cannot replace the release being installed;
   `scripts/test-install-sh.sh` checks this against a fake os-release in CI.
+- **DEP-13** With `--cap-login-sessions`, for a host that runs nothing but vaultgate, the script
+  installs `deploy/systemd/user-.slice.d/50-vaultgate-headroom.conf` as
+  `/etc/systemd/system/user-.slice.d/50-vaultgate-headroom.conf` (`MemoryHigh=768M`,
+  `MemoryMax=1G`, `CPUWeight=25`). That is one budget per login user, shared by all of that
+  user's sessions, `sudo` children included. A runaway command run over SSH is throttled and
+  OOM-killed inside its own slice, so it cannot push the host into a global OOM. vaultgate, the
+  code sidecar, cron and timers run in `system.slice` and are not capped. The cap applies to
+  running slices on the installer's `daemon-reload`, without restarting anything. Once
+  installed, every re-run keeps it current. A release without the drop-in refuses the flag and
+  leaves an installed one as it is.
 
 ## 9.3 Azure Container App (ARM)
 

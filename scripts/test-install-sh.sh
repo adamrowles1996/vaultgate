@@ -173,6 +173,49 @@ expect_equal "the staged tree replaces the installed one" "$(<"$CODE_ROOT/curren
 expect_equal "no staging or previous tree is left behind" \
   "$(find "$CODE_ROOT" -mindepth 1 -maxdepth 1 -name '.staging-*' -o -mindepth 1 -maxdepth 1 -name '*.previous' | wc -l)" "0"
 
+# The login-session cap (DEP-13): the flag, the keep-it-once-installed rule and the drop-in's
+# contents.
+SESSION_CAP_FILE="$work/etc-systemd/user-.slice.d/50-vaultgate-headroom.conf"
+# shellcheck source=deploy/lib/session-cap.sh
+. "$root/deploy/lib/session-cap.sh"
+CAP_LOGIN_SESSIONS=0
+parse_arguments --cap-login-sessions --version 1.2.3
+expect_equal "--cap-login-sessions sets CAP_LOGIN_SESSIONS" "$CAP_LOGIN_SESSIONS" "1"
+if wants_session_cap; then pass "the flag asks for the cap"; else fail "the flag asks for the cap"; fi
+CAP_LOGIN_SESSIONS=0
+if wants_session_cap; then
+  fail "without the flag or an installed cap, none is installed"
+else
+  pass "without the flag or an installed cap, none is installed"
+fi
+expect_equal "without the flag or an installed cap, nothing is written" \
+  "$(cap_login_sessions)$([ -e "$SESSION_CAP_FILE" ] && echo written)" ""
+# install(1) without -o/-g, so the check needs no root; install_session_cap calls it.
+# shellcheck disable=SC2329
+install() {
+  local args=() skip=0 arg
+  for arg in "$@"; do
+    if [ "$skip" -eq 1 ]; then
+      skip=0
+      continue
+    fi
+    case "$arg" in -o | -g) skip=1 ;; *) args+=("$arg") ;; esac
+  done
+  command install "${args[@]}"
+}
+RELEASE_DIR="$root"
+cap_output=$(CAP_LOGIN_SESSIONS=1 cap_login_sessions)
+expect_contains "the cap is announced" "$cap_output" "Capping login sessions"
+cap_file=$(<"$SESSION_CAP_FILE")
+expect_contains "the drop-in is a slice section" "$cap_file" "[Slice]"
+expect_contains "the drop-in caps memory at 1G" "$cap_file" $'\nMemoryMax=1G\n'
+expect_contains "the drop-in throttles from 768M" "$cap_file" $'\nMemoryHigh=768M\n'
+expect_contains "the drop-in lowers CPU weight" "$cap_file" "CPUWeight=25"
+if wants_session_cap; then pass "an installed cap is kept by a re-run"; else fail "an installed cap is kept by a re-run"; fi
+expect_contains "a re-run without the flag refreshes an installed cap" \
+  "$(CAP_LOGIN_SESSIONS=0 cap_login_sessions)" "Capping login sessions"
+unset -f install
+
 # A group left behind by an earlier userdel is reused.
 getent() { [ "$1" = group ]; }
 useradd() { printf 'useradd %s\n' "$*"; }

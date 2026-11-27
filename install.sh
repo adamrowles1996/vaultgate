@@ -1,23 +1,21 @@
 #!/usr/bin/env bash
 # vaultgate installer for Debian and Ubuntu (docs/spec/09-deployment.md, DEP-4 and DEP-5).
 #
-# Read it before you run it; every step is printed. Node 26 and the Bitwarden
-# CLI come from their official release archives with SHA-256 verification (no
-# distribution package of either is installed), the vaultgate release tarball
-# is verified against the checksum published beside it, and the service runs
-# as its own system user under a hardened systemd unit.
+# Read it before you run it; every step is printed. Node 26 and the Bitwarden CLI come from their
+# official release archives with SHA-256 verification (no distribution package of either is
+# installed), the vaultgate release tarball is verified against the checksum published beside it,
+# and the service runs as its own system user under a hardened systemd unit.
 #
 #   curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh | sudo bash
 #   curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh | sudo bash -s -- --version 0.1.0
 #   curl -fsSL https://raw.githubusercontent.com/adamrowles1996/vaultgate/main/install.sh | sudo bash -s -- --with-code-sidecar
 #
-# --with-code-sidecar also installs the code connector's sidecar (ACT-114) as its own
-# service; once installed, every re-run upgrades it with the core.
-#
+# --with-code-sidecar also installs the code connector's sidecar (ACT-114) as its own service and
+# --cap-login-sessions caps login sessions on a dedicated host (DEP-13); re-runs keep both current.
 # Re-running upgrades in place. An existing /etc/vaultgate/vaultgate.env is never overwritten;
 # --with-code-sidecar only appends the two code connector settings when they are absent.
-# scripts/test-install-sh.sh sources this file (the guard at the end keeps main
-# from running) to check the argument and operating-system logic.
+# scripts/test-install-sh.sh sources this file (the guard at the end keeps main from running) to
+# check the argument and operating-system logic.
 set -euo pipefail
 
 REPO="adamrowles1996/vaultgate"
@@ -55,8 +53,9 @@ parse_arguments() {
         WITH_CODE_SIDECAR=1
         shift
         ;;
+      --cap-login-sessions) CAP_LOGIN_SESSIONS=1 && shift ;;
       -h | --help)
-        echo "usage: install.sh [--version X.Y.Z] [--with-code-sidecar]   (VAULTGATE_VERSION=X.Y.Z also works)"
+        echo "usage: install.sh [--version X.Y.Z] [--with-code-sidecar] [--cap-login-sessions]   (VAULTGATE_VERSION=X.Y.Z also works)"
         exit 0
         ;;
       *) die "unknown argument: $1" ;;
@@ -168,10 +167,9 @@ install_release() {
   ln -sfn "${INSTALL_ROOT}/${VERSION}" "${INSTALL_ROOT}/current"
 }
 
-# /etc/vaultgate is root-owned but traversable by the service group, so the
-# service user can read its own secret files under secrets/ (DEP-4). The
-# environment file itself stays root-only: systemd reads it before dropping
-# privileges. A re-run corrects the modes of an earlier install.
+# /etc/vaultgate is root-owned but traversable by the service group, so the service user can read
+# its own secret files under secrets/ (DEP-4). The environment file itself stays root-only:
+# systemd reads it before dropping privileges. A re-run corrects the modes of an earlier install.
 write_environment_file() {
   step "Configuration ${CONFIG_DIR}/vaultgate.env and ${CONFIG_DIR}/secrets/"
   install -d "$CONFIG_DIR" "${CONFIG_DIR}/secrets"
@@ -191,9 +189,8 @@ write_environment_file() {
   info "written (mode 0600) with a generated VAULTGATE_SECRET_KEY"
 }
 
-# True while the two settings the service cannot start without still hold their
-# placeholders. The Bitwarden connection is not checked: it is made from the
-# account page after the first sign-in (or seeded through VAULTGATE_BW_*).
+# True while the two settings the service cannot start without still hold their placeholders; the
+# Bitwarden connection is made from the account page after first sign-in (or VAULTGATE_BW_*).
 has_placeholders() {
   grep -Eq '^VAULTGATE_(PUBLIC_URL|SECRET_KEY)=.*(replace-with|@SECRET_KEY@)' "$1"
 }
@@ -290,6 +287,9 @@ main() {
   install_release
   write_environment_file
   [ "$CODE_SIDECAR" -eq 0 ] || activate_code_sidecar
+  [ -f "${RELEASE_DIR}/deploy/lib/session-cap.sh" ] || [ "${CAP_LOGIN_SESSIONS:-0}" -eq 0 ] || die "vaultgate ${VERSION} has no login-session cap (DEP-13); it arrived after 0.1.0-rc.36"
+  # shellcheck source=deploy/lib/session-cap.sh
+  [ ! -f "${RELEASE_DIR}/deploy/lib/session-cap.sh" ] || { . "${RELEASE_DIR}/deploy/lib/session-cap.sh" && cap_login_sessions; }
   install_service
   print_next_steps
 }

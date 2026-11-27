@@ -121,6 +121,26 @@ sudo journalctl -u vaultgate-code -n 50
 systemd-analyze security vaultgate-code
 ```
 
+## 6. Capping login sessions (optional, dedicated host)
+
+On a host that runs nothing but vaultgate, add `--cap-login-sessions` (spec
+[DEP-13](../spec/09-deployment.md)). The installer then puts
+`/etc/systemd/system/user-.slice.d/50-vaultgate-headroom.conf` in place: `MemoryHigh=768M`,
+`MemoryMax=1G` and `CPUWeight=25` on each `user-<UID>.slice`. That is **one budget per login
+user**, shared by all of that user's SSH sessions, `sudo` commands included. A runaway command is
+throttled and then OOM-killed inside its own slice, so it cannot drive the host into a global OOM
+beside a sidecar build at its cap. This matters because a command left running after its SSH
+client gave up can outlive the connection: a root `sudo` child cannot be signalled by the
+unprivileged session. vaultgate, the sidecar, cron and timers run in `system.slice` and are not
+capped; start a long administrative job, an unattended upgrade for example, with `systemd-run` to
+run it there too.
+The cap applies to running sessions at once. Every re-run of the installer keeps the file current,
+so change a value in a later drop-in beside it (for example `60-local.conf`).
+
+```bash
+systemctl show user-$(id -u).slice -p MemoryHigh -p MemoryMax -p CPUWeight
+```
+
 ## Layout
 
 | Path                                    | Purpose                                              |
@@ -144,6 +164,9 @@ With `--with-code-sidecar`:
 | `/var/lib/vaultgate-code`                    | Snapshots and indexes; losing it costs only the time to rebuild   |
 | `/run/vaultgate-code/code.sock`              | The socket vaultgate reaches it on (group `vaultgate-code`, 0660) |
 | `/etc/systemd/system/vaultgate-code.service` | The unit from `deploy/systemd/`                                   |
+
+With `--cap-login-sessions`, `/etc/systemd/system/user-.slice.d/50-vaultgate-headroom.conf`, the
+drop-in from `deploy/systemd/user-.slice.d/`.
 
 ## Upgrading and rolling back
 
